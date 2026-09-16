@@ -23,6 +23,23 @@ Map<String, dynamic> result(LabOptions config, num time) => {
     };
 
 void main() {
+  test('list rebuild results require every update and key scan', () {
+    final config = LabOptions(scenario: 'keyed-list', samples: 10);
+    final r = result(config, 10);
+    final checks = <String, Object>{
+      'verifiedUpdates': 10,
+      'keysRead': 1000000,
+      'visibleRowsVerifiedPerUpdate': 20,
+    };
+    r['checks'] = checks;
+    validateResult(r, config.toJson());
+    for (final key in checks.keys) {
+      final valid = checks[key]!;
+      checks[key] = 0;
+      expect(() => validateResult(r, config.toJson()), throwsStateError);
+      checks[key] = valid;
+    }
+  });
   test('percentiles retain precision and do not mutate raw samples', () {
     final values = [4, 1, 3, 2];
     expect(percentile(values, .5), 2.5);

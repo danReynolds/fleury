@@ -2,6 +2,12 @@
 
 ## 0.1.0
 
+- Repaint caches remain invalid after a paint exception, including nested
+  caches. Focus and semantic geometry now honor the cache's layout-size clip,
+  including when caching is enabled or disabled at runtime.
+- Keyed `ListView.builder` and `.separated` reuse their reverse lookup when
+  a parent rebuild leaves the ordered keys unchanged. Every key is still
+  checked, including offscreen duplicates, and visible row content updates.
 - `Align` and `Center` loosen child constraints even when one axis is
   unbounded. Links in stretching columns retain their content width, and
   alignment still applies on the bounded axis.

@@ -14,6 +14,7 @@ library;
 
 import 'package:fleury/fleury.dart';
 import 'package:fleury/fleury_internal.dart';
+import 'package:fleury/src/rendering/render_repaint_boundary.dart';
 import 'package:test/test.dart';
 
 import '../support/harness.dart';
@@ -96,6 +97,91 @@ void expectPlaced(
 }
 
 void main() {
+  testWidgets('cache clipping matches geometry across hits and mode changes', (
+    tester,
+  ) {
+    final hidden = Probe('HIDDEN');
+    final partial = Probe('PARTIAL');
+    final boundaryKey = GlobalKey();
+    tester.pumpWidget(
+      RepaintBoundary(
+        child: Stack(
+          children: [
+            const SizedBox(width: 20, height: 4),
+            Positioned(
+              left: 0,
+              top: 0,
+              width: 3,
+              height: 2,
+              child: RepaintBoundary(
+                key: boundaryKey,
+                child: Stack(
+                  children: [
+                    Positioned(
+                      left: 2,
+                      top: 0,
+                      width: 8,
+                      height: 1,
+                      child: Padding(
+                        padding: const EdgeInsets.only(left: 2),
+                        child: hidden.widget(),
+                      ),
+                    ),
+                    Positioned(
+                      left: 1,
+                      top: 1,
+                      width: 7,
+                      height: 1,
+                      child: partial.widget(),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+    final boundary =
+        boundaryKey.currentContext!.findRenderObject()!
+            as RenderRepaintBoundary;
+
+    void expectClipped() {
+      expect(hidden.pointer!.screenGeometry()!.visible, isNull);
+      expect(hidden.node.rect, isNull);
+      expect(tester.semantics().nodeById(hidden.id)?.bounds, isNull);
+      expect(
+        partial.pointer!.screenGeometry()!.visible,
+        CellRect.fromLTWH(1, 1, 2, 1),
+      );
+      expect(
+        tester.semantics().nodeById(partial.id)?.bounds,
+        CellRect.fromLTWH(1, 1, 2, 1),
+      );
+    }
+
+    for (var pass = 0; pass < 2; pass++) {
+      final lines = frame(tester, size: const CellSize(20, 4));
+      expect(lines[0].trim(), isEmpty);
+      expect(lines[1].trim(), 'PA');
+      expectClipped();
+    }
+
+    boundary.cachingEnabled = false;
+    // The mode setter must invalidate already memoized geometry immediately.
+    expect(hidden.node.rect, CellRect.fromLTWH(4, 0, 6, 1));
+    var lines = frame(tester, size: const CellSize(20, 4));
+    expectPlaced(tester, lines, hidden);
+    expectPlaced(tester, lines, partial);
+
+    boundary.cachingEnabled = true;
+    expect(hidden.node.rect, isNull);
+    lines = frame(tester, size: const CellSize(20, 4));
+    expect(lines[0].trim(), isEmpty);
+    expect(lines[1].trim(), 'PA');
+    expectClipped();
+  });
+
   testWidgets('flex, padding, border, align', (tester) async {
     final a = Probe('AAAA');
     final b = Probe('BB');

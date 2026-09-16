@@ -8,6 +8,11 @@ import 'framework.dart';
 /// walking the subtree's paint methods — a single bulk copy instead of a
 /// recursive paint chain.
 ///
+/// The cache covers the child's layout size. Content outside that rectangle
+/// is clipped, including its focus and semantic bounds. Give overflowing
+/// content enough layout space, or place it in an [Overlay] outside the
+/// boundary instead.
+///
 /// Wrap a subtree whose paint you want isolated from a neighbour's churn (a
 /// sidebar beside a live log, a static header above an animating body). Direct
 /// use is opt-in, like Flutter's `RepaintBoundary`.

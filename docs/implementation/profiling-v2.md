@@ -154,3 +154,32 @@ input differences. Legacy `fps` fields mean observed scenario update cadence
 
 CI runs the profiling correctness/smoke tests and existing structural gates.
 It does not gate machine-sensitive lab timing percentages.
+
+## Keyed-list parent rebuilds
+
+The `list` scenario measures arrow input. The `keyed-list` scenarios measure
+parent rebuilds with 20 visible rows and changing labels:
+
+```sh
+dart tool/fleury_dev.dart benchmark lab compare \
+  --baseline=origin/main --candidate=HEAD \
+  --scenario=keyed-list-1k,keyed-list,keyed-list-strings,keyed-list-reorder,keyed-list-replace,unkeyed-list-rebuild \
+  --runs=5 --samples=150 --warmup=30 --out=/tmp/keyed-list-comparison
+```
+
+`keyed-list-1k` uses 1,000 integer keys; the other keyed cases use 100,000.
+`keyed-list` and `keyed-list-strings` leave ordered keys unchanged. The reorder
+case swaps the first two items each time; the replace case changes the final
+key. `unkeyed-list-rebuild` is the control without identity lookup.
+
+Each sample measures parent `setState` through `FleuryTester.pump()`. Outside
+the timed operation, the workload verifies all 20 visible labels on every
+update, and checks total key calls after the run. These cases exclude initial
+mount, encoding, transport and display. They use the same frozen workload,
+paired AOT runner and report validation as the other lab scenarios.
+
+To explain key-comparison or map-building costs, use the same scenario with
+`benchmark lab trace`. Diagnostic JIT timings are separate from AOT comparison
+results. Every keyed parent update still checks all keys; unchanged keys reuse
+the reverse lookup automatically. Callback identity alone cannot establish
+that captured mutable data stayed unchanged.

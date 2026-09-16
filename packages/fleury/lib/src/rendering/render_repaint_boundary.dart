@@ -187,6 +187,10 @@ class RenderRepaintBoundary extends RenderObject
       // would keep blitting stale cells.
       markAncestorRepaintBoundariesDirty();
     }
+    // Switching between the finite cache and pass-through changes both paint
+    // and the descendant clip. Invalidate geometry and enclosing caches in
+    // either direction, even when the child's configuration is unchanged.
+    markNeedsPaintOnly();
     // Disengaging keeps the cache buffer: engagement flaps with structure
     // (an overlay entry appearing and vanishing), and freeing would cost a
     // screen-sized realloc plus warm-up repaint on every re-engage. The
@@ -196,6 +200,10 @@ class RenderRepaintBoundary extends RenderObject
 
   @override
   bool get isRepaintBoundary => _cachingEnabled;
+
+  @override
+  CellRect? childClipOf(RenderObject child) =>
+      _cachingEnabled ? CellRect(offset: CellOffset.zero, size: size) : null;
 
   @override
   RenderObject? get child => _child;
@@ -259,7 +267,18 @@ class RenderRepaintBoundary extends RenderObject
       // The subtree paints at a cache-local origin. Its position on screen is
       // derived from layout by whoever needs it, so a cache hit — which skips
       // this walk entirely — leaves nothing stale behind.
-      c.paint(targetCache, CellOffset.zero);
+      try {
+        c.paint(targetCache, CellOffset.zero);
+      } catch (_) {
+        // The cache has already been cleared and may contain partial writes.
+        // Never publish it as a clean cache, including through an outer cache
+        // whose ErrorBoundary absorbs this exception. Do not schedule retries:
+        // the host/error boundary owns recovery from a persistent paint error.
+        _cacheBounds = null;
+        needsPaint = true;
+        markAncestorRepaintBoundariesDirty();
+        rethrow;
+      }
       // Tighten the blit to just the non-empty cells, using the damage rect
       // as the scan window. Damage is a conservative superset (grapheme
       // writes pad the wide-cell guard columns), and tightness matters: the

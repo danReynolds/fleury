@@ -519,8 +519,10 @@ class ListView extends StatefulWidget {
   /// item-widget layer when the application needs either contract.
   ///
   /// Fleury reads all item keys once on mount and whenever the parent supplies
-  /// an updated ListView, building its own reverse lookup in O(itemCount) time
-  /// and space. The row widgets are still built and laid out only as needed.
+  /// an updated ListView. Checking keys takes O(itemCount) time; unchanged
+  /// ordered keys reuse the existing reverse lookup. Changed keys rebuild it
+  /// in O(itemCount) time and space. Row widgets are still built and laid out
+  /// only as needed.
   /// Keys must have stable equality and hash codes; duplicates are an error.
   final ListItemKeyBuilder? itemKeyBuilder;
 
@@ -578,24 +580,47 @@ class ListView extends StatefulWidget {
   State<ListView> createState() => _ListViewState();
 }
 
-/// A single data revision's identities; widget creation stays lazy.
+/// A validated ordered key snapshot; widget creation stays lazy.
 class _ListItemIdentities {
   _ListItemIdentities(this.keys, this.indexByKey);
 
   final List<Object> keys;
   final Map<Object, int> indexByKey;
 
-  static _ListItemIdentities? capture(ListView widget) {
+  static _ListItemIdentities? capture(
+    ListView widget, [
+    _ListItemIdentities? previous,
+  ]) {
     final keyBuilder = widget.itemKeyBuilder;
     if (keyBuilder == null) return null;
-    final keys = <Object>[];
+    final count = widget.effectiveItemCount;
+    var index = 0;
+    Object? changedKey;
+    if (previous != null && previous.keys.length == count) {
+      for (; index < count; index++) {
+        final key = keyBuilder(index);
+        if (key != previous.keys[index]) {
+          changedKey = key;
+          break;
+        }
+      }
+      // Every key was checked, including offscreen keys. The previously
+      // validated lookup still applies; no key array or map was allocated.
+      if (index == count) return previous;
+    }
+    final keys = index == 0 ? <Object>[] : previous!.keys.sublist(0, index);
     final indexByKey = <Object, int>{};
-    for (var index = 0; index < widget.effectiveItemCount; index++) {
-      final key = keyBuilder(index);
-      final previous = indexByKey[key];
-      if (previous != null) {
+    // This prefix was already validated, so it needs no duplicate lookups.
+    for (var prefix = 0; prefix < index; prefix++) {
+      indexByKey[keys[prefix]] = prefix;
+    }
+    for (; index < count; index++) {
+      final key = changedKey ?? keyBuilder(index);
+      changedKey = null;
+      final prior = indexByKey[key];
+      if (prior != null) {
         throw StateError(
-          'Duplicate ListView item key $key at indices $previous and $index. '
+          'Duplicate ListView item key $key at indices $prior and $index. '
           'itemKeyBuilder must return a unique, stable key for each item.',
         );
       }
@@ -635,7 +660,9 @@ class _ListViewState extends State<ListView> {
   @override
   void didUpdateWidget(ListView oldWidget) {
     super.didUpdateWidget(oldWidget);
-    _identities = _ListItemIdentities.capture(widget);
+    // Publish only after all callbacks and duplicate checks succeed. Failed
+    // updates must leave the previous snapshot available for a valid retry.
+    _identities = _ListItemIdentities.capture(widget, _identities);
     _dataRevision++;
     final oldCount = oldWidget.effectiveItemCount;
     final oldCurrentKey = _currentItemKey;
