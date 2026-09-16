@@ -29,6 +29,7 @@ export 'src/completion_text_input.dart'
 export 'src/controls.dart'
     show
         Button,
+        ButtonAppearance,
         ButtonVariant,
         Checkbox,
         Radio,
