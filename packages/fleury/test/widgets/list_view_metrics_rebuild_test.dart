@@ -19,6 +19,20 @@ class _ObservedController extends ListController {
   }
 }
 
+class _RedirectingController extends ListController {
+  bool redirected = false;
+
+  @override
+  void notifyListeners() {
+    if (visibleRange?.first == 20 && !redirected) {
+      redirected = true;
+      jumpToIndex(60);
+      return; // The nested command already notified listeners.
+    }
+    super.notifyListeners();
+  }
+}
+
 void main() {
   testWidgets(
     'reported viewport metrics do not schedule a second list build',
@@ -52,6 +66,58 @@ void main() {
   );
 
   testWidgets(
+    'subclass content changes during metrics still rebuild the rows',
+    (tester) {
+      final controller = _ObservedController();
+      addTearDown(controller.dispose);
+      var label = 'before';
+      controller.onNotification = () {
+        if (controller.visibleRange?.first == 40) label = 'after';
+      };
+      tester.pumpWidget(
+        ListView.builder(
+          controller: controller,
+          itemCount: 100,
+          itemBuilder: (_, index, highlighted) => Text('$label $index'),
+        ),
+      );
+      controller.jumpToIndex(40);
+      tester.pump();
+      expect(label, 'after');
+      expect(tester.owner.hasScheduledBuilds, isTrue);
+      tester.pump();
+      expect(tester.renderToString(), contains('after 40'));
+      expect(tester.owner.hasScheduledBuilds, isFalse);
+    },
+    viewportSize: const CellSize(16, 4),
+  );
+
+  testWidgets(
+    'a redirecting override can suppress the outer metrics notification',
+    (tester) {
+      final controller = _RedirectingController();
+      addTearDown(controller.dispose);
+      tester.pumpWidget(
+        ListView.builder(
+          controller: controller,
+          itemCount: 100,
+          itemBuilder: (_, index, highlighted) => Text('row $index'),
+        ),
+      );
+      controller.jumpToIndex(20);
+      tester.pump();
+      expect(controller.redirected, isTrue);
+      expect(tester.owner.hasScheduledBuilds, isTrue);
+      tester.pump();
+      expect(controller.visibleRange, (first: 60, last: 63));
+      tester.pump();
+      expect(tester.renderToString(), contains('row 60'));
+      expect(tester.owner.hasScheduledBuilds, isFalse);
+    },
+    viewportSize: const CellSize(16, 4),
+  );
+
+  testWidgets(
     'controller subclasses observe the completed viewport',
     (tester) {
       final controller = _ObservedController();
@@ -67,6 +133,9 @@ void main() {
       controller.jumpToIndex(40);
       tester.pump();
       expect(controller.notifications.last, (first: 40, last: 43));
+      // A subclass can change visible data in its override; keep its refresh.
+      expect(tester.owner.hasScheduledBuilds, isTrue);
+      tester.pump();
       expect(tester.owner.hasScheduledBuilds, isFalse);
     },
     viewportSize: const CellSize(16, 4),
@@ -98,6 +167,7 @@ void main() {
         tester.pump();
         expect(controller.visibleRange, (first: 60, last: 63));
         expect(tester.renderToString(), contains('row 60'));
+        tester.pump();
         expect(tester.owner.hasScheduledBuilds, isFalse);
       },
       viewportSize: const CellSize(16, 4),

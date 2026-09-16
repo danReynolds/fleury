@@ -767,7 +767,13 @@ class _ListViewState extends State<ListView> {
   }
 
   void _onControllerChange() {
-    if (_lastViewRevision == _controller._viewRevision) return;
+    // Only the built-in controller guarantees a metrics-only notification.
+    // A subclass can update row data or replace this notification with a nested
+    // command before calling super, so retain its ordinary invalidation path.
+    if (_controller.runtimeType == ListController &&
+        _lastViewRevision == _controller._viewRevision) {
+      return;
+    }
     _lastViewRevision = _controller._viewRevision;
     _captureCurrentItemKey();
     setState(() {});

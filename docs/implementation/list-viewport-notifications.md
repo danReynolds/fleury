@@ -8,9 +8,17 @@ and other surrounding UI.
 
 ## Implementation
 
-The controller keeps a private view revision. Commands and explicit notifications
-advance it; a notification of completed viewport metrics does not. The owning
-list remembers the last revision it handled and skips an unchanged revision.
+The built-in controller keeps a private view revision. Commands and explicit
+notifications advance it; a notification of completed viewport metrics does not.
+The owning list remembers the last revision it handled and skips an unchanged
+revision when using the built-in `ListController`.
+
+Subclasses retain their original invalidation behavior. An override can update
+row data inside metric delivery, or replace the outer notification with a nested
+scroll command. Its notification cannot be assumed to contain only metrics.
+The runtime-type guard deliberately also preserves the behavior of subclasses
+that currently inherit the default implementation; no subclass opt-in API is
+introduced for this optimization.
 
 Metric delivery still calls the virtual `notifyListeners` method, preserving
 subclass observation. The metric marker is consumed before listeners run, so
@@ -19,16 +27,18 @@ marker is cleared on return even if a subclass suppresses delivery or throws.
 Attaching another controller initializes the list's remembered revision from that
 controller. There is no new public API or caller-managed invalidation token.
 
-The regression suite checks that metrics reach ordinary listeners and subclass
-overrides without scheduling a second build. It also exercises commands and
-refreshes during delivery, both listener registration orders, commands before
-and after `super` in an override, and recovery after suppressed metric delivery.
+The regression suite checks that built-in-controller metrics reach ordinary
+listeners without scheduling a second build, while subclass overrides still
+refresh their rows. It also exercises commands and refreshes during delivery,
+both listener registration orders, commands before and after `super` in an
+override, content changes in an override, replacement of the outer notification,
+and recovery after suppressed metric delivery.
 The redundant-build test fails on baseline; the subclass-observation test fails
 on the original prototype that bypassed overrides with `super.notifyListeners`.
 
 ## Measurement
 
-The final implementation was compared against
+The candidate before the subclass compatibility fallback was compared against
 `1f967547` on Dart 3.12.2. Both AOT binaries used the same frozen fixture and
 dependencies. Five fresh process pairs alternated which side ran first; builds
 and tests were kept outside the measurement period.
@@ -50,6 +60,12 @@ It does not measure a physical terminal, browser display, or network transport.
 All ten runs passed: **41.5–41.8% fewer output plans**. Two additional two-second
 blocked-output runs (one per side) also passed, with 80 edits, 200 appends, eight
 resizes, and ten artificial stall windows each.
+
+After adding the subclass fallback, a one-second AOT diagnostic with the built-in
+controller again produced 144 plans and zero empty plans for 40 edits, 100
+appends, and four resizes. Final input, semantics, tail, and idle checks passed.
+The diagnostic receipt is `/tmp/fleury-notification-reviewed-plans.json` on the
+investigation machine. No new CPU improvement is claimed from this diagnostic.
 
 CPU is user+system time for the entire process, including startup, warmup, peer
 decoding, and teardown. Other work loaded the host; CPU results were mixed and
