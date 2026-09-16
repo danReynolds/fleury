@@ -8,6 +8,9 @@
 - `ListView.builder` and `.separated` accept an optional `itemKeyRevision` to
   reuse their key lookup across unrelated parent rebuilds. Change it whenever
   the ordered keys change. Omitting it preserves automatic key rescanning.
+- `Align` and `Center` loosen child constraints even when one axis is
+  unbounded. Links in stretching columns retain their content width, and
+  alignment still applies on the bounded axis.
 
 - **Breaking:** `Focus.of` / `Focus.maybeOf` now return the nearest enclosing
   `FocusNode` instead of the `FocusManager`. The manager moved to
