@@ -1,4 +1,4 @@
-import 'package:fleury/fleury.dart' hide Button, ButtonVariant;
+import 'package:fleury/fleury.dart' hide Button, ButtonAppearance, ButtonVariant;
 import 'package:fleury_test/fleury_test.dart';
 import 'package:fleury_widgets/fleury_widgets.dart';
 import 'package:test/test.dart';
@@ -8,6 +8,17 @@ String _text(FleuryTester tester, {int cols = 20}) =>
 
 void main() {
   group('Button', () {
+    testWidgets('reexports plain appearance for composed actions', (tester) {
+      tester.pumpWidget(
+        Button(
+          text: 'Save',
+          appearance: ButtonAppearance.plain,
+          onPressed: () {},
+        ),
+      );
+      expect(_text(tester), 'Save');
+    });
+
     testWidgets('renders the label inside brackets', (tester) {
       tester.pumpWidget(Button(text: 'Save', onPressed: () {}));
       expect(_text(tester), '[ Save ]');
