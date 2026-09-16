@@ -232,7 +232,7 @@ void main() {
           tabs: [
             TabItem(
               label: 'Edit',
-              content: Host((_) => Button(label: 'Save', onPressed: () {})),
+              content: Host((_) => Button(text: 'Save', onPressed: () {})),
             ),
             const TabItem(label: 'Preview', content: Text('Preview')),
           ],

@@ -6,6 +6,30 @@ import 'package:fleury/fleury_core.dart';
 /// neutral (uncolored); the rest color the dot.
 enum ToastSeverity { info, success, warning, error }
 
+/// Dismisses the exact toast returned by [Toaster.show].
+///
+/// Once the toast expires, is replaced or evicted, or its host is disposed,
+/// this handle becomes inert. Keeping an old handle cannot dismiss a newer
+/// toast that reused the same replacement ID.
+final class ToastHandle {
+  ToastHandle._();
+
+  void Function()? _dismiss;
+
+  /// Whether this exact toast is still retained by its host.
+  ///
+  /// False after dismissal, expiry, replacement, eviction or host disposal.
+  /// This is a snapshot, not a subscription.
+  bool get isActive => _dismiss != null;
+
+  /// Dismisses this toast. Safe to call repeatedly or after host disposal.
+  void dismiss() {
+    final dismiss = _dismiss;
+    _dismiss = null;
+    dismiss?.call();
+  }
+}
+
 /// A toast's leading status dot: one uniform, reliably monospace-width glyph for
 /// every severity. (Distinct per-severity shapes — ✓ ✗ ▲ — render at
 /// inconsistent widths in proportional browser fonts, which threw the text out
@@ -44,10 +68,10 @@ class ToastAction {
   final KeySequence key;
 }
 
-/// Hosts transient toast notifications. Place one high in the app
+/// Hosts toast notifications. Place one high in the app
 /// (wrapping your content); it floats toasts in a screen corner above
 /// everything — including modals — via an Overlay entry, stacking them
-/// and auto-dismissing each after a delay.
+/// and auto-dismissing each after a delay unless it is persistent.
 ///
 /// Fire one imperatively from anywhere below it:
 ///
@@ -60,7 +84,8 @@ class Toaster extends StatefulWidget {
     required this.child,
     this.alignment = Alignment.bottomRight,
     this.duration = const Duration(seconds: 5),
-  });
+    this.maxToasts,
+  }) : assert(maxToasts == null || maxToasts > 0);
 
   /// Application subtree over which toast overlays are presented.
   final Widget child;
@@ -71,20 +96,41 @@ class Toaster extends StatefulWidget {
   /// How long each toast stays before auto-dismissing.
   final Duration duration;
 
+  /// Maximum retained toasts. Null preserves unrestricted stacking.
+  ///
+  /// Adding a distinct toast while full evicts the oldest, even if persistent.
+  /// There is no pending queue. Replacing an ID retains its position and does
+  /// not consume another slot. Reducing the limit also evicts oldest toasts.
+  final int? maxToasts;
+
   /// Shows [message] as a toast via the nearest enclosing [Toaster].
   /// Throws if there is no Toaster above [context].
   ///
   /// [severity] picks a default color; [style] overrides it outright when
   /// supplied (merged over the severity's style). An optional [action]
   /// adds a hotkey affordance shown in the toast.
-  static void show(
+  /// Reusing a non-null [id] replaces that toast in place and starts a fresh
+  /// lifetime. IDs are scoped to this host and compared with `==`. Omitting an
+  /// ID creates a distinct toast. The returned handle belongs to this exact
+  /// instance, not to later replacements.
+  ///
+  /// [persistent] disables expiry; explicit dismissal, replacement, eviction
+  /// and host disposal still remove the toast. It cannot be combined with an
+  /// explicit [duration]. Otherwise null [duration] inherits the host default.
+  /// A transient toast must have a positive duration.
+  static ToastHandle show(
     BuildContext context,
     String message, {
     Duration? duration,
     ToastSeverity severity = ToastSeverity.info,
     CellStyle? style,
     ToastAction? action,
+    Object? id,
+    bool persistent = false,
   }) {
+    if (persistent && duration != null) {
+      throw ArgumentError('A persistent toast cannot have a duration.');
+    }
     // An action from a handler: locate the toaster without subscribing the
     // caller to anything (the state never changes identity or notifies).
     final state = context.findAncestorStateOfType<_ToasterState>();
@@ -93,17 +139,15 @@ class Toaster extends StatefulWidget {
         'No Toaster above this BuildContext. Wrap your app in a Toaster.',
       );
     }
+    final lifetime = persistent ? null : duration ?? state.widget.duration;
+    if (lifetime != null && lifetime <= Duration.zero) {
+      throw ArgumentError.value(lifetime, 'duration', 'Must be positive');
+    }
     final colors = Theme.of(context).colorScheme;
     final resolved = style == null
         ? _styleForSeverity(severity, colors)
         : _styleForSeverity(severity, colors).merge(style);
-    state._enqueue(
-      message,
-      duration ?? state.widget.duration,
-      resolved,
-      severity,
-      action,
-    );
+    return state._enqueue(message, lifetime, resolved, severity, action, id);
   }
 
   @override
@@ -118,14 +162,17 @@ class _Toast {
     required this.style,
     required this.duration,
     required this.action,
+    required this.replacementId,
   });
 
   final int id;
   final String message;
   final ToastSeverity severity;
   final CellStyle style;
-  final Duration duration;
+  final Duration? duration;
   final ToastAction? action;
+  final Object? replacementId;
+  final ToastHandle handle = ToastHandle._();
   FrameTicker? timer; // scheduler-driven auto-dismiss clock
 }
 
@@ -154,12 +201,46 @@ class _ToasterState extends State<Toaster> {
     _binding ??= TuiBinding.maybeOf(context);
   }
 
-  void _enqueue(
+  @override
+  void initState() {
+    super.initState();
+    _validateLimit();
+  }
+
+  void _validateLimit() {
+    final limit = widget.maxToasts;
+    if (limit != null && limit <= 0) {
+      throw ArgumentError.value(limit, 'maxToasts', 'Must be positive');
+    }
+  }
+
+  @override
+  void didUpdateWidget(Toaster oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    _validateLimit();
+    if (_trim()) {
+      // Widget update already schedules build; only the overlay needs marking.
+      _entry.markNeedsBuild();
+    }
+  }
+
+  bool _trim() {
+    final limit = widget.maxToasts;
+    var changed = false;
+    while (limit != null && _toasts.length > limit) {
+      _retire(_toasts.removeAt(0));
+      changed = true;
+    }
+    return changed;
+  }
+
+  ToastHandle _enqueue(
     String message,
-    Duration duration,
+    Duration? duration,
     CellStyle style,
     ToastSeverity severity,
     ToastAction? action,
+    Object? replacementId,
   ) {
     final toast = _Toast(
       id: ++_nextToastId,
@@ -168,32 +249,50 @@ class _ToasterState extends State<Toaster> {
       style: style,
       duration: duration,
       action: action,
+      replacementId: replacementId,
     );
-    _toasts.add(toast);
+    toast.handle._dismiss = () => _dismiss(toast);
+    final index = replacementId == null
+        ? -1
+        : _toasts.indexWhere((item) => item.replacementId == replacementId);
+    if (index < 0) {
+      _toasts.add(toast);
+    } else {
+      _retire(_toasts[index]);
+      _toasts[index] = toast;
+    }
+    _trim();
     // Synchronous (not the microtask path): show() runs from event/timer
     // contexts where setState is already legal, and the toast should be on
     // screen by the very next pump.
     _entrySync.updateNow();
     _refresh();
     final binding = _binding;
-    if (binding == null) return;
+    if (binding == null || duration == null) return toast.handle;
     // A one-shot timer on the shared scheduler (so it's FakeClock-driven
     // in tests): the first tick at +duration dismisses the toast.
     toast.timer =
         FrameTicker(interval: duration, scheduler: binding.tickerScheduler)
           ..addListener(() => _dismiss(toast))
           ..start();
+    return toast.handle;
   }
 
   void _dismiss(_Toast toast) {
     if (!_toasts.remove(toast)) return;
+    _retire(toast);
+    _entrySync.updateNow(); // last toast gone → the layer entry unmounts
+    _refresh();
+  }
+
+  void _retire(_Toast toast) {
+    toast.handle._dismiss = null;
     // The tick is firing right now (this runs from the ticker's listener);
     // defer disposal so we don't tear the ticker down mid-notify.
     final ticker = toast.timer;
     toast.timer = null;
+    ticker?.stop();
     scheduleMicrotask(() => ticker?.dispose());
-    _entrySync.updateNow(); // last toast gone → the layer entry unmounts
-    _refresh();
   }
 
   /// Rebuilds both the floating layer (an Overlay entry) and this widget's
@@ -215,7 +314,9 @@ class _ToasterState extends State<Toaster> {
               role: SemanticRole.notification,
               label: toast.message,
               hint: toast.action == null
-                  ? 'Transient notification'
+                  ? toast.duration == null
+                        ? 'Persistent notification'
+                        : 'Transient notification'
                   : '${toast.action!.label} (${toast.action!.key.hintLabel})',
               actions: <SemanticAction>{
                 SemanticAction.dismiss,
@@ -257,7 +358,8 @@ class _ToasterState extends State<Toaster> {
       'severity': toast.severity.name,
       'notificationIndex': _toasts.indexOf(toast) + 1,
       'notificationCount': _toasts.length,
-      'autoDismissMs': toast.duration.inMilliseconds,
+      if (toast.duration case final duration?)
+        'autoDismissMs': duration.inMilliseconds,
       if (toast.action case final action?) ...<String, Object?>{
         'notificationActionLabel': action.label,
         'notificationActionKey': action.key.hintLabel,
@@ -271,11 +373,11 @@ class _ToasterState extends State<Toaster> {
     // is neutral and the frame is plain. The action (if any) gets the one
     // interactive accent, so it's clearly the part you can act on.
     final dot = Text(_severityDot, style: toast.style);
-    final message = Text(' ${toast.message}');
+    final message = Flexible(child: Text(toast.message));
     if (action == null) {
       return Row(
         mainAxisSize: MainAxisSize.min,
-        children: <Widget>[dot, message],
+        children: <Widget>[dot, const SizedBox(width: 1), message],
       );
     }
     final theme = Theme.of(context);
@@ -283,6 +385,7 @@ class _ToasterState extends State<Toaster> {
       mainAxisSize: MainAxisSize.min,
       children: <Widget>[
         dot,
+        const SizedBox(width: 1),
         message,
         const Text('   '),
         GestureDetector(
@@ -309,8 +412,9 @@ class _ToasterState extends State<Toaster> {
   void dispose() {
     _entrySync.dispose(); // removes the entry if currently mounted
     for (final toast in _toasts) {
-      toast.timer?.dispose();
+      _retire(toast);
     }
+    _toasts.clear();
     super.dispose();
   }
 

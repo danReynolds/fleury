@@ -48,7 +48,7 @@ class _CounterState extends State<Counter> {
     children: [
       Text('Count: $count'),
       Button(
-        label: 'Add one',
+        text: 'Add one',
         autofocus: true,
         onPressed: () => setState(() => count++),
       ),
@@ -245,7 +245,7 @@ class _SaveStatusState extends State<SaveStatus> {
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Button(
-            label: 'Save',
+            text: 'Save',
             onPressed: saving
                 ? null
                 : () => setState(() => request = widget.save()),
@@ -332,7 +332,7 @@ class _AnimatedUploadState extends State<AnimatedUpload> {
         ),
       ),
       Button(
-        label: 'Animate',
+        text: 'Animate',
         onPressed: () => setState(() => target = target == 0 ? 1 : 0),
       ),
     ],

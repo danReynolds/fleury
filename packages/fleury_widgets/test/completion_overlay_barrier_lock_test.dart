@@ -25,7 +25,7 @@ void main() {
             height: 1,
             child: CompletionTextInput(provider: _provider, autofocus: true),
           ),
-          Button(label: 'DELETE ALL', onPressed: () => presses++),
+          Button(text: 'DELETE ALL', onPressed: () => presses++),
         ],
       ),
     );

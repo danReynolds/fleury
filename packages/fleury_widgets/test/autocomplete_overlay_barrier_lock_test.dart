@@ -22,7 +22,7 @@ void main() {
                 autofocus: true,
               ),
             ),
-            Button(label: 'DELETE ALL', onPressed: () => presses++),
+            Button(text: 'DELETE ALL', onPressed: () => presses++),
           ],
         ),
       );
@@ -110,7 +110,7 @@ void main() {
                 autofocus: true,
               ),
             ),
-            Button(label: 'DELETE ALL', onPressed: () => presses++),
+            Button(text: 'DELETE ALL', onPressed: () => presses++),
           ],
         ),
       );

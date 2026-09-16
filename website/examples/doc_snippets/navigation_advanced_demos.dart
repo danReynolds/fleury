@@ -66,7 +66,7 @@ class _PlacedDialog extends StatelessWidget {
       title: 'PLACED DIALOG',
       focused: true,
       child: Center(
-        child: Button(label: 'Close', autofocus: true, onPressed: context.pop),
+        child: Button(text: 'Close', autofocus: true, onPressed: context.pop),
       ),
     ),
   );
@@ -95,7 +95,7 @@ class _BackGuardHomeState extends State<BackGuardHome> {
         Text('saved: $_savedText'),
         const SizedBox(height: 1),
         Button(
-          label: 'Edit draft',
+          text: 'Edit draft',
           autofocus: true,
           onPressed: () => context.push<void>(
             GuardedEditor(
@@ -180,11 +180,11 @@ class _GuardedEditorState extends State<GuardedEditor> {
           ),
           const SizedBox(height: 1),
           Button(
-            label: 'Back',
+            text: 'Back',
             onPressed: () => Navigator.of(context).maybePop(),
           ),
-          Button(label: 'Save', onPressed: _save),
-          Button(label: 'Discard', onPressed: context.pop),
+          Button(text: 'Save', onPressed: _save),
+          Button(text: 'Discard', onPressed: context.pop),
         ],
       ),
     ),
@@ -232,7 +232,7 @@ class _TransitionDemoState extends State<TransitionDemo> {
           onChanged: (value) => setState(() => _kind = value),
         ),
         Button(
-          label: 'Preview push',
+          text: 'Preview push',
           onPressed: () => context.push<void>(
             TransitionScreen(kind: _kind),
             transition: _transition,
@@ -256,7 +256,7 @@ class TransitionScreen extends StatelessWidget {
       children: [
         Text('${kind.name.toUpperCase()} · PUSHED SCREEN'),
         const Spacer(),
-        Button(label: 'Preview pop', autofocus: true, onPressed: context.pop),
+        Button(text: 'Preview pop', autofocus: true, onPressed: context.pop),
       ],
     ),
   );
@@ -274,7 +274,7 @@ class ProjectsScreen extends StatelessWidget {
   Widget build(BuildContext context) => Padding(
     padding: const EdgeInsets.all(1),
     child: Button(
-      label: 'Start setup',
+      text: 'Start setup',
       onPressed: () => context.push<void>(const SetupFlow()),
     ),
   );
@@ -327,19 +327,19 @@ class SetupStep extends StatelessWidget {
         const Spacer(),
         if (step < 3)
           Button(
-            label: 'Next step',
+            text: 'Next step',
             autofocus: true,
             onPressed: () => context.push<void>(SetupStep(step: step + 1)),
           )
         else
           Button(
-            label: 'Finish setup',
+            text: 'Finish setup',
             autofocus: true,
             onPressed: () => context.rootNavigator.pushReplacement<void>(
               const ProjectReadyScreen(),
             ),
           ),
-        if (step > 1) Button(label: 'Previous', onPressed: context.pop),
+        if (step > 1) Button(text: 'Previous', onPressed: context.pop),
       ],
     ),
   );
@@ -349,9 +349,6 @@ class ProjectReadyScreen extends StatelessWidget {
   const ProjectReadyScreen({super.key});
 
   @override
-  Widget build(BuildContext context) => Button(
-    label: 'Back to projects',
-    autofocus: true,
-    onPressed: context.pop,
-  );
+  Widget build(BuildContext context) =>
+      Button(text: 'Back to projects', autofocus: true, onPressed: context.pop);
 }

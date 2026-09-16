@@ -18,7 +18,7 @@ void main() {
           SizedBox(
             width: 14,
             child: Button(
-              label: label,
+              text: label,
               focusNode: node,
               autofocus: autofocus,
               onPressed: () {},

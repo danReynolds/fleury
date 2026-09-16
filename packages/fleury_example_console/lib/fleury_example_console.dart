@@ -2045,7 +2045,7 @@ class _ConnectionScreenState extends State<_ConnectionScreen> {
           ListenableBuilder(
             listenable: widget.controller,
             builder: (context, child) => Button(
-              label: widget.controller.isSubmitting ? 'Connecting…' : 'Connect',
+              text: widget.controller.isSubmitting ? 'Connecting…' : 'Connect',
               onPressed: widget.controller.isSubmitting
                   ? null
                   : widget.controller.submit,

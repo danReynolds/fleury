@@ -409,7 +409,7 @@ class _SuccessScreen extends StatelessWidget {
         const SizedBox(height: 2),
         Button(
           autofocus: true,
-          label: 'Create another',
+          text: 'Create another',
           onPressed: () => _createAnother(context),
         ),
       ],
@@ -474,7 +474,7 @@ class _SubmitButton extends StatelessWidget {
   Widget build(BuildContext context) => ListenableBuilder(
     listenable: controller,
     builder: (context, child) => Button(
-      label: controller.isBusy ? 'Checking…' : label,
+      text: controller.isBusy ? 'Checking…' : label,
       onPressed: controller.isBusy ? null : controller.submit,
     ),
   );
@@ -498,10 +498,10 @@ class _FormActions extends StatelessWidget {
       canPop: !controller.isBusy,
       child: Row(
         children: <Widget>[
-          Button(label: 'Back', onPressed: controller.isBusy ? null : onBack),
+          Button(text: 'Back', onPressed: controller.isBusy ? null : onBack),
           const SizedBox(width: 2),
           Button(
-            label: controller.isBusy ? 'Working…' : nextLabel,
+            text: controller.isBusy ? 'Working…' : nextLabel,
             onPressed: controller.isBusy ? null : controller.submit,
           ),
         ],

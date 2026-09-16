@@ -316,7 +316,7 @@ class _ThemingShowcaseAppState extends State<ThemingShowcaseApp> {
             onChanged: _setPaletteColor,
           ),
           const SizedBox(height: 1),
-          Button(label: 'Reset custom theme', onPressed: _resetCustom),
+          Button(text: 'Reset custom theme', onPressed: _resetCustom),
         ],
       ),
     ),
@@ -448,12 +448,12 @@ class _ThemingShowcaseAppState extends State<ThemingShowcaseApp> {
             Row(
               children: <Widget>[
                 Button(
-                  label: 'Deploy',
+                  text: 'Deploy',
                   variant: ButtonVariant.primary,
                   onPressed: () => setState(() => _status = 'Deploy queued'),
                 ),
                 const SizedBox(width: 1),
-                const Button(label: 'Unavailable', onPressed: null),
+                const Button(text: 'Unavailable', onPressed: null),
               ],
             ),
           ),

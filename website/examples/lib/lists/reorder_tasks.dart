@@ -49,7 +49,7 @@ class _ReorderTasksState extends State<ReorderTasks> {
         const SizedBox(height: 1),
         // #docregion interaction
         Button(
-          label: 'Reverse order',
+          text: 'Reverse order',
           onPressed: () => setState(
             () => tasks = tasks.reversed.toList(),
           ),

@@ -18,7 +18,7 @@ class _HoverNotesState extends State<HoverNotes> {
       Expanded(
         child: Text('notes.md', style: CellStyle(inverse: overRow)),
       ),
-      Button(label: 'Pin', onPressed: () => setState(() => pins++)),
+      Button(text: 'Pin', onPressed: () => setState(() => pins++)),
     ],
   );
 

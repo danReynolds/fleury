@@ -645,20 +645,20 @@ class _Header extends StatelessWidget {
               const Expanded(child: SizedBox()),
               if (!compact) ...[
                 Button(
-                  label: storybookThemeLabel(themeMode),
+                  text: storybookThemeLabel(themeMode),
                   onPressed: onCycleTheme,
                 ),
                 const Text(' '),
                 Button(
-                  label: storybookViewportLabel(viewport),
+                  text: storybookViewportLabel(viewport),
                   onPressed: onCycleViewport,
                 ),
                 const Text(' '),
-                Button(label: 'Inspector', onPressed: onToggleInspector),
+                Button(text: 'Inspector', onPressed: onToggleInspector),
                 const Text(' '),
-                Button(label: 'Density', onPressed: onToggleDensity),
+                Button(text: 'Density', onPressed: onToggleDensity),
                 const Text(' '),
-                Button(label: 'Reset', onPressed: onResetStory),
+                Button(text: 'Reset', onPressed: onResetStory),
               ],
             ],
           ),
@@ -1083,7 +1083,7 @@ class _ControlRow extends StatelessWidget {
       StoryControlType.option || StoryControlType.toggle => Row(
         children: [
           label,
-          Button(label: '<', onPressed: onPrevious),
+          Button(text: '<', onPressed: onPrevious),
           const Text(' '),
           SizedBox(
             width: 10,
@@ -1096,7 +1096,7 @@ class _ControlRow extends StatelessWidget {
             ),
           ),
           const Text(' '),
-          Button(label: '>', onPressed: onNext),
+          Button(text: '>', onPressed: onNext),
         ],
       ),
     };

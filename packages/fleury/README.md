@@ -75,6 +75,39 @@ Ctrl+S, and open a compact delete confirmation. Tab/Shift+Tab traverse the
 controls; arrows connect search and the list. `Button` is part of core.
 See [sensitive input](doc/sensitive_input.md) for masking and lifetime choices.
 
+## Button content
+
+Supply exactly one of `text` and `child`. Use `text` for a plain label and
+`child` for composed content; both keep the same bracketed frame, focus and
+hover styling, disabled behavior, and Enter/Space/click activation.
+
+```dart
+Button(text: 'Copy', onPressed: copy);
+
+Button(
+  onPressed: copy,
+  semanticLabel: 'Copy',
+  child: Row(
+    mainAxisSize: MainAxisSize.min,
+    children: [
+      Text('[c] ', style: CellStyle(bold: true)),
+      Text('Copy'),
+    ],
+  ),
+);
+```
+
+`semanticLabel` names the action independently of decorative content. With
+`text`, it defaults to that text. Without an explicit name, a composed child's
+semantics remain available. Keep nested interactive controls outside buttons.
+Use `appearance: ButtonAppearance.plain` for an unframed action. It keeps the
+same interaction and accessibility behavior with left-aligned content. Its
+hover/focus style covers the allocated bounds; wrap it in
+`Align(alignment: Alignment.centerLeft, child: ...)` when a stretching layout
+should keep the hit target at the content width.
+
+Existing `Button(label: ...)` calls migrate to `Button(text: ...)`.
+
 ## What's in the box
 
 - **Framework**: `Widget` / `StatefulWidget` / `State`, `BuildContext`,

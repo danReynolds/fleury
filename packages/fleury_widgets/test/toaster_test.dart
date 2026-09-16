@@ -3,6 +3,8 @@ import 'package:fleury_test/fleury_test.dart';
 import 'package:fleury_widgets/fleury_widgets.dart';
 import 'package:test/test.dart';
 
+import '../example/toast_lifecycle.dart';
+
 class _Capture extends StatelessWidget {
   const _Capture(this.sink);
   final void Function(BuildContext) sink;
@@ -17,6 +19,340 @@ String _screen(FleuryTester tester, {int cols = 20, int rows = 8}) =>
     tester.renderToString(size: CellSize(cols, rows), emptyMark: ' ');
 
 void main() {
+  testWidgets(
+    'the lifecycle example replaces failures and cleans up on removal',
+    (tester) async {
+      tester.pumpWidget(const Toaster(maxToasts: 1, child: ToastDemo()));
+      tester.render(size: const CellSize(60, 12));
+      await tester
+          .target(role: SemanticRole.button, label: 'Copy fails')
+          .press();
+      tester.pump(const Duration(minutes: 1));
+      expect(
+        tester
+            .semantics()
+            .single(role: SemanticRole.notification)
+            .state
+            .severity,
+        'error',
+      );
+      await tester
+          .target(role: SemanticRole.button, label: 'Copy succeeds')
+          .press();
+      tester.pump();
+      expect(
+        tester.semantics().single(role: SemanticRole.notification).label,
+        'Copied',
+      );
+      tester.pumpWidget(const Toaster(maxToasts: 1, child: Text('next route')));
+      tester.pump();
+      expect(
+        tester.semantics().where(role: SemanticRole.notification),
+        isEmpty,
+      );
+    },
+  );
+  group('lifecycle', () {
+    for (final size in [const CellSize(40, 24), const CellSize(80, 20)]) {
+      testWidgets(
+        'a single persistent error wraps at $size without taking focus',
+        (tester) {
+          late BuildContext ctx;
+          final focus = FocusNode();
+          tester.pumpWidget(
+            Toaster(
+              maxToasts: 1,
+              child: Column(
+                children: [
+                  _Capture((c) => ctx = c),
+                  TextInput(focusNode: focus, autofocus: true),
+                ],
+              ),
+            ),
+          );
+          tester.render(size: size);
+          const message =
+              'Copy could not be confirmed. The clipboard may have changed. Try again.';
+          Toaster.show(
+            ctx,
+            message,
+            persistent: true,
+            severity: ToastSeverity.error,
+          );
+          tester.pump();
+          final screen = tester.renderToString(size: size, emptyMark: ' ');
+          expect(screen, contains('Copy could not be confirmed.'));
+          expect(screen, contains('Try'));
+          expect(screen, contains('again.'));
+          final toast = tester.semantics().single(label: message);
+          expect(toast.bounds!.left, greaterThanOrEqualTo(0));
+          expect(toast.bounds!.top, greaterThanOrEqualTo(0));
+          expect(toast.bounds!.right, lessThanOrEqualTo(size.cols));
+          expect(toast.bounds!.bottom, lessThanOrEqualTo(size.rows));
+          expect(focus.hasFocus, isTrue);
+          tester.pumpWidget(const EmptyBox());
+          focus.dispose();
+        },
+      );
+    }
+    testWidgets('replacement resets expiry and invalidates the old handle', (
+      tester,
+    ) {
+      late BuildContext ctx;
+      tester.pumpWidget(Toaster(child: _Capture((c) => ctx = c)));
+      final first = Toaster.show(
+        ctx,
+        'first',
+        id: 'operation',
+        duration: const Duration(seconds: 2),
+      );
+      expect(first.isActive, isTrue);
+      tester.pump(const Duration(seconds: 1));
+      final second = Toaster.show(
+        ctx,
+        'second',
+        id: 'operation',
+        duration: const Duration(seconds: 4),
+      );
+      expect(first.isActive, isFalse);
+      expect(second.isActive, isTrue);
+      first.dismiss();
+      tester.pump(const Duration(seconds: 1));
+      expect(
+        tester.semantics().where(role: SemanticRole.notification),
+        hasLength(1),
+      );
+      expect(_screen(tester), contains('second'));
+      tester.pump(const Duration(seconds: 2));
+      expect(_screen(tester), contains('second'));
+      tester.pump(const Duration(seconds: 1));
+      expect(_screen(tester), isNot(contains('second')));
+      expect(second.isActive, isFalse);
+      second.dismiss();
+      second.dismiss();
+    });
+
+    testWidgets(
+      'persistent replacement has no expiry and can become transient',
+      (tester) {
+        late BuildContext ctx;
+        tester.pumpWidget(Toaster(child: _Capture((c) => ctx = c)));
+        Toaster.show(
+          ctx,
+          'success',
+          id: 'copy',
+          duration: const Duration(seconds: 1),
+        );
+        Toaster.show(
+          ctx,
+          'failure',
+          id: 'copy',
+          persistent: true,
+          severity: ToastSeverity.error,
+        );
+        tester.pump(const Duration(minutes: 30));
+        final error = tester.semantics().single(label: 'failure');
+        expect(error.hint, 'Persistent notification');
+        expect(error.state['autoDismissMs'], isNull);
+        expect(error.state.severity, 'error');
+        Toaster.show(
+          ctx,
+          'recovered',
+          id: 'copy',
+          duration: const Duration(seconds: 2),
+        );
+        tester.pump();
+        expect(_screen(tester), isNot(contains('failure')));
+        tester.pump(const Duration(seconds: 2));
+        expect(
+          tester.semantics().where(role: SemanticRole.notification),
+          isEmpty,
+        );
+      },
+    );
+
+    testWidgets('capacity evicts oldest with no queued replay', (tester) {
+      late BuildContext ctx;
+      tester.pumpWidget(Toaster(maxToasts: 2, child: _Capture((c) => ctx = c)));
+      final evicted = Toaster.show(ctx, 'first', persistent: true);
+      Toaster.show(ctx, 'second', persistent: true);
+      final last = Toaster.show(ctx, 'third', persistent: true);
+      evicted.dismiss();
+      tester.pump();
+      expect(_screen(tester), isNot(contains('first')));
+      expect(_screen(tester), contains('second'));
+      expect(_screen(tester), contains('third'));
+      last.dismiss();
+      tester.pump(const Duration(minutes: 1));
+      expect(
+        tester.semantics().where(role: SemanticRole.notification),
+        hasLength(1),
+      );
+      expect(_screen(tester), contains('second'));
+      expect(_screen(tester), isNot(contains('first')));
+    });
+
+    testWidgets('a burst with the same ID remains one toast', (tester) {
+      late BuildContext ctx;
+      tester.pumpWidget(Toaster(maxToasts: 1, child: _Capture((c) => ctx = c)));
+      final id = Object();
+      for (var i = 0; i < 20; i++) {
+        Toaster.show(ctx, 'copy $i', id: id);
+      }
+      tester.pump();
+      expect(
+        tester.semantics().where(role: SemanticRole.notification),
+        hasLength(1),
+      );
+      expect(_screen(tester), contains('copy 19'));
+    });
+
+    testWidgets(
+      'replacements keep position and changed capacity trims oldest',
+      (tester) {
+        late BuildContext ctx;
+        Widget host(int limit) =>
+            Toaster(maxToasts: limit, child: _Capture((c) => ctx = c));
+        tester.pumpWidget(host(3));
+        Toaster.show(ctx, 'first', id: 1, persistent: true);
+        Toaster.show(ctx, 'second', id: 2, persistent: true);
+        Toaster.show(ctx, 'new first', id: 1, persistent: true);
+        tester.pump();
+        expect(
+          tester
+              .semantics()
+              .single(label: 'new first')
+              .state['notificationIndex'],
+          1,
+        );
+        tester.pumpWidget(host(1));
+        tester.pump();
+        expect(
+          tester.semantics().where(role: SemanticRole.notification),
+          hasLength(1),
+        );
+        expect(_screen(tester), contains('second'));
+      },
+    );
+
+    testWidgets('host disposal revokes handles and action callbacks', (tester) {
+      late BuildContext ctx;
+      tester.pumpWidget(Toaster(child: _Capture((c) => ctx = c)));
+      final handle = Toaster.show(ctx, 'old', id: 'id');
+      tester.pumpWidget(const Text('next'));
+      handle.dismiss();
+      tester.pump(const Duration(minutes: 1));
+      expect(_screen(tester), contains('next'));
+      expect(
+        tester.semantics().where(role: SemanticRole.notification),
+        isEmpty,
+      );
+    });
+
+    testWidgets('replacement revokes the previous action', (tester) {
+      late BuildContext ctx;
+      var actions = 0;
+      tester.pumpWidget(
+        Toaster(child: Focus(autofocus: true, child: _Capture((c) => ctx = c))),
+      );
+      Toaster.show(
+        ctx,
+        'old',
+        id: 'id',
+        action: ToastAction(
+          label: 'Undo',
+          key: KeySequence.alt.u,
+          onPressed: () => actions++,
+        ),
+      );
+      Toaster.show(ctx, 'new', id: 'id', persistent: true);
+      tester.pump();
+      tester.sendKey(
+        const KeyEvent(KeyCode.char('u'), modifiers: {KeyModifier.alt}),
+      );
+      expect(actions, 0);
+      expect(_screen(tester), contains('new'));
+    });
+
+    testWidgets(
+      'inner Escape takes precedence over persistent toast dismissal',
+      (tester) async {
+        late BuildContext ctx;
+        var intercept = true;
+        tester.pumpWidget(
+          Toaster(
+            child: KeyBindings(
+              bindings: [
+                KeyBinding(
+                  KeyCode.escape,
+                  onTrigger: (event) {
+                    if (intercept) {
+                      intercept = false;
+                    } else {
+                      event.bubble();
+                    }
+                  },
+                ),
+              ],
+              child: Focus(autofocus: true, child: _Capture((c) => ctx = c)),
+            ),
+          ),
+        );
+        Toaster.show(ctx, 'failure', persistent: true);
+        tester.pump();
+        tester.sendKey(const KeyEvent(KeyCode.escape));
+        tester.pump();
+        expect(_screen(tester), contains('failure'));
+        await tester
+            .target(role: SemanticRole.notification, label: 'failure')
+            .perform(SemanticAction.dismiss);
+        tester.pump();
+        expect(_screen(tester), isNot(contains('failure')));
+        Toaster.show(ctx, 'another', persistent: true);
+        tester.pump();
+        tester.sendKey(const KeyEvent(KeyCode.escape));
+        tester.pump();
+        expect(_screen(tester), isNot(contains('another')));
+      },
+    );
+
+    testWidgets('persistence and explicit duration are contradictory', (
+      tester,
+    ) {
+      late BuildContext ctx;
+      tester.pumpWidget(Toaster(child: _Capture((c) => ctx = c)));
+      expect(
+        () =>
+            Toaster.show(ctx, 'bad', persistent: true, duration: Duration.zero),
+        throwsArgumentError,
+      );
+    });
+
+    testWidgets('nonpositive expiry is rejected before showing a toast', (
+      tester,
+    ) {
+      late BuildContext ctx;
+      tester.pumpWidget(Toaster(child: _Capture((c) => ctx = c)));
+      expect(
+        () => Toaster.show(ctx, 'zero', duration: Duration.zero),
+        throwsArgumentError,
+      );
+      expect(
+        () => Toaster.show(
+          ctx,
+          'negative',
+          duration: const Duration(seconds: -1),
+        ),
+        throwsArgumentError,
+      );
+      tester.pump();
+      expect(
+        tester.semantics().where(role: SemanticRole.notification),
+        isEmpty,
+      );
+    });
+  });
+
   testWidgets('shows a toast and auto-dismisses after the duration', (
     tester,
   ) async {
@@ -58,7 +394,7 @@ void main() {
         child: Column(
           children: [
             _Capture((c) => ctx = c),
-            Button(label: 'x', autofocus: true, onPressed: () {}),
+            Button(text: 'x', autofocus: true, onPressed: () {}),
           ],
         ),
       ),

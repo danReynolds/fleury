@@ -66,7 +66,7 @@ Form(
         label: 'Private project',
         onChanged: (value) => setState(() => private = value),
       ),
-      Button(label: 'Create', onPressed: form.submit),
+      Button(text: 'Create', onPressed: form.submit),
     ],
   ),
 )
@@ -130,7 +130,7 @@ Use `isBusy` to disable submit and back actions throughout validation and submis
 ListenableBuilder(
   listenable: form,
   builder: (context, child) => Button(
-    label: form.isBusy ? 'Creating…' : 'Create',
+    text: form.isBusy ? 'Creating…' : 'Create',
     onPressed: form.isBusy ? null : form.submit,
   ),
 )

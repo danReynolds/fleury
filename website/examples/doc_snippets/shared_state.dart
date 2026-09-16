@@ -44,7 +44,7 @@ class _LocalCounterState extends State<LocalCounter> {
       crossAxisAlignment: CrossAxisAlignment.start,
       children: <Widget>[
         Text('Count: $count'),
-        Button(label: 'Increment', onPressed: () => setState(() => count++)),
+        Button(text: 'Increment', onPressed: () => setState(() => count++)),
       ],
     ),
   );
@@ -89,7 +89,7 @@ class CounterButton extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) =>
-      Button(label: 'Increment', onPressed: onPressed);
+      Button(text: 'Increment', onPressed: onPressed);
 }
 
 class CounterModel extends ChangeNotifier {
@@ -144,7 +144,7 @@ class CounterPanel extends StatelessWidget {
         crossAxisAlignment: CrossAxisAlignment.start,
         children: <Widget>[
           Text('Count: ${counter.count}'),
-          Button(label: 'Increment', onPressed: counter.increment),
+          Button(text: 'Increment', onPressed: counter.increment),
         ],
       ),
     );
@@ -184,7 +184,7 @@ class _ConnectionPanelState extends State<ConnectionPanel> {
         children: <Widget>[
           Text(online ? 'Online' : 'Offline'),
           Button(
-            label: online ? 'Disconnect' : 'Connect',
+            text: online ? 'Disconnect' : 'Connect',
             onPressed: connection.toggle,
           ),
         ],
@@ -248,9 +248,9 @@ class DeploymentView extends StatelessWidget {
           const Text('DEPLOYMENT', style: CellStyle(bold: true)),
           Text('${deployment.completed} of 3 complete'),
           Text(deployment.paused ? 'Paused' : 'Running'),
-          Button(label: 'Complete next', onPressed: deployment.completeNext),
+          Button(text: 'Complete next', onPressed: deployment.completeNext),
           Button(
-            label: deployment.paused ? 'Resume' : 'Pause',
+            text: deployment.paused ? 'Resume' : 'Pause',
             onPressed: deployment.togglePaused,
           ),
         ],

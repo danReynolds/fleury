@@ -151,12 +151,12 @@ class _CoreEditorState extends State<CoreEditor> {
                 spacing: 2,
                 children: [
                   Button(
-                    label: 'Cancel',
+                    text: 'Cancel',
                     autofocus: true,
                     onPressed: () => setState(() => _confirm = false),
                   ),
                   Button(
-                    label: 'Delete',
+                    text: 'Delete',
                     variant: ButtonVariant.error,
                     onPressed: () {
                       _items.remove(_editing);
@@ -196,13 +196,13 @@ class _CoreEditorState extends State<CoreEditor> {
             spacing: 2,
             children: [
               Button(
-                label: 'Ctrl+S Save',
+                text: 'Ctrl+S Save',
                 variant: ButtonVariant.primary,
                 onPressed: _save,
               ),
-              Button(label: 'Cancel', onPressed: _close),
+              Button(text: 'Cancel', onPressed: _close),
               Button(
-                label: 'Delete…',
+                text: 'Delete…',
                 variant: ButtonVariant.error,
                 onPressed: () => setState(() => _confirm = true),
               ),

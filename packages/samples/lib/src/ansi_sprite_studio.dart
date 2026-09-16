@@ -612,12 +612,12 @@ class _AnsiSpriteStudioBodyState extends State<_AnsiSpriteStudioBody> {
                     Row(
                       children: <Widget>[
                         Button(
-                          label: 'Import',
+                          text: 'Import',
                           variant: ButtonVariant.primary,
                           onPressed: () => _applyImport(_importController.text),
                         ),
                         const SizedBox(width: 1),
-                        Button(label: 'Cancel', onPressed: _cancelImport),
+                        Button(text: 'Cancel', onPressed: _cancelImport),
                       ],
                     ),
                   ],

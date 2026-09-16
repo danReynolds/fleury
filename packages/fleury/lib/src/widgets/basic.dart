@@ -816,7 +816,10 @@ final class Container extends StatelessWidget {
       result = Padding(padding: p, child: result);
     }
     final fill = color ?? (_themedFill ? resolveSurfaceColor(context) : null);
-    if (fill != null) {
+    // Keep the fill layer mounted when only its color changes. Inserting or
+    // removing a wrapper would recreate stateful descendants (editors, focus,
+    // scroll views). Preserve the existing childless unfilled sizing path.
+    if (fill != null || result != null) {
       result = _FilledBox(color: fill, child: result);
     }
     final b =
@@ -855,7 +858,7 @@ Color resolveSurfaceColor(BuildContext context) {
 
 class _FilledBox extends SingleChildRenderObjectWidget {
   const _FilledBox({required this.color, super.child});
-  final Color color;
+  final Color? color;
 
   @override
   RenderObject createRenderObject(BuildContext context) =>
@@ -871,8 +874,8 @@ class _RenderFilledBox extends RenderObject
     implements RenderObjectWithSingleChild {
   _RenderFilledBox(this._color);
 
-  Color _color;
-  set color(Color v) {
+  Color? _color;
+  set color(Color? v) {
     if (_color == v) return;
     _color = v;
     markNeedsPaintOnly();
@@ -902,8 +905,13 @@ class _RenderFilledBox extends RenderObject
 
   @override
   void performPaint(CellBuffer buffer, CellOffset offset) {
+    final color = _color;
+    if (color == null) {
+      _child?.paint(buffer, offset);
+      return;
+    }
     final s = size;
-    final fillStyle = CellStyle(background: _color);
+    final fillStyle = CellStyle(background: color);
     // Pre-fill every covered cell with our background — gives empty
     // cells a colored square (otherwise they'd render as terminal-
     // default).
@@ -916,7 +924,7 @@ class _RenderFilledBox extends RenderObject
     // merge our bg into any cell the child painted that didn't set
     // its own background.
     _child?.paint(buffer, offset);
-    applyCellBackground(buffer, CellRect(offset: offset, size: s), _color);
+    applyCellBackground(buffer, CellRect(offset: offset, size: s), color);
   }
 }
 

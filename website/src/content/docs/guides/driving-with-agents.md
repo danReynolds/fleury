@@ -53,7 +53,7 @@ class _CounterAppState extends State<CounterApp> {
 ```
 
 High-level widgets like `Button`, `TextInput`, `DataTable`, and `Select` already
-contribute their role, label, and actions — a `Button(label: …, onPressed: …)` is
+contribute their role, label, and actions — a `Button(text: …, onPressed: …)` is
 agent-drivable as-is. The one thing worth adding is a stable `id:` on nodes that
 matter (see [below](#make-your-app-drive-well)).
 

@@ -12,7 +12,7 @@ void main() {
         final app = runApp(
           Align(
             alignment: Alignment.topLeft,
-            child: Button(label: 'Save', onPressed: () {}),
+            child: Button(text: 'Save', onPressed: () {}),
           ),
           driver: driver,
           mode: const TerminalMode(mouseMotion: true),

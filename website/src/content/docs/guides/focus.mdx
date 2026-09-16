@@ -44,18 +44,18 @@ FleuryApp(
       Expanded(
         child: Column(
           children: [
-            Button(label: 'New file', autofocus: true, onPressed: createFile),
-            Button(label: 'Open file', onPressed: openFile),
-            Button(label: 'Settings', onPressed: openSettings),
+            Button(text: 'New file', autofocus: true, onPressed: createFile),
+            Button(text: 'Open file', onPressed: openFile),
+            Button(text: 'Settings', onPressed: openSettings),
           ],
         ),
       ),
       Expanded(
         child: Column(
           children: [
-            Button(label: 'Refresh', onPressed: refresh),
-            Button(label: 'Inspect', onPressed: inspect),
-            Button(label: 'Publish…', onPressed: publish),
+            Button(text: 'Refresh', onPressed: refresh),
+            Button(text: 'Inspect', onPressed: inspect),
+            Button(text: 'Publish…', onPressed: publish),
           ],
         ),
       ),
@@ -160,7 +160,7 @@ class _WorkspaceState extends State<Workspace> {
   @override
   Widget build(BuildContext context) => Row(
     children: [
-      Button(label: 'Focus search', onPressed: focusSearch),
+      Button(text: 'Focus search', onPressed: focusSearch),
       SizedBox(
         width: 24,
         child: TextInput(
@@ -208,12 +208,12 @@ FocusDetector(
   child: Column(
     children: [
       Button(
-        label: 'Title',
+        text: 'Title',
         autofocus: true,
         onPressed: editTitle,
       ),
       Button(
-        label: 'Body',
+        text: 'Body',
         onPressed: editBody,
       ),
     ],

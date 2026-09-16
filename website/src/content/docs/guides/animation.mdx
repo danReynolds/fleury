@@ -86,7 +86,7 @@ class _ManualRouteState extends State<ManualRoute> {
     return Column(
       children: [
         Button(
-          label: running ? 'Return now' : 'Run route',
+          text: running ? 'Return now' : 'Run route',
           onPressed: running ? returnNow : runRoute,
         ),
         Text('Package position: $position'),
@@ -137,7 +137,7 @@ class _PackageRouteState extends State<PackageRoute> {
   Widget build(BuildContext context) => Column(
     children: [
       Button(
-        label: delivered ? 'Return to depot' : 'Send to station',
+        text: delivered ? 'Return to depot' : 'Send to station',
         onPressed: () => setState(() => delivered = !delivered),
       ),
       AnimationBuilder<double>(

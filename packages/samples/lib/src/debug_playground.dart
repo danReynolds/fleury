@@ -235,7 +235,7 @@ class _DebugPlaygroundBodyState extends State<_DebugPlaygroundBody>
           _scenario(
             theme,
             Button(
-              label: 'Spike a slow frame',
+              text: 'Spike a slow frame',
               variant: ButtonVariant.warning,
               autofocus: true,
               onPressed: _spikeSlowFrame,
@@ -245,7 +245,7 @@ class _DebugPlaygroundBodyState extends State<_DebugPlaygroundBody>
           _scenario(
             theme,
             Button(
-              label: 'Throw in a handler',
+              text: 'Throw in a handler',
               variant: ButtonVariant.error,
               onPressed: _throwInHandler,
             ),
@@ -253,13 +253,13 @@ class _DebugPlaygroundBodyState extends State<_DebugPlaygroundBody>
           ),
           _scenario(
             theme,
-            Button(label: 'Emit a log burst', onPressed: _emitLogBurst),
+            Button(text: 'Emit a log burst', onPressed: _emitLogBurst),
             'prints 40 lines → Logs: press / to search',
           ),
           _scenario(
             theme,
             Button(
-              label: _streaming ? 'Stop live stream' : 'Toggle live stream',
+              text: _streaming ? 'Stop live stream' : 'Toggle live stream',
               variant: ButtonVariant.success,
               onPressed: _toggleStream,
             ),
@@ -268,7 +268,7 @@ class _DebugPlaygroundBodyState extends State<_DebugPlaygroundBody>
           _scenario(
             theme,
             Button(
-              label: 'Rebuild storm',
+              text: 'Rebuild storm',
               variant: ButtonVariant.primary,
               onPressed: _rebuildStorm,
             ),

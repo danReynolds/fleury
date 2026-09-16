@@ -104,7 +104,7 @@ class _DeploymentsScreen extends StatelessWidget {
             const Text('api · v1.12.0 · healthy', style: CellStyle(dim: true)),
             const SizedBox(height: 1),
             Button(
-              label: 'Open production',
+              text: 'Open production',
               autofocus: true,
               variant: ButtonVariant.primary,
               onPressed: () => _openProduction(context),
@@ -157,11 +157,11 @@ class _DeploymentScreenState extends State<_DeploymentScreen> {
             Text('refreshes: $_refreshCount'),
             const SizedBox(height: 1),
             Button(
-              label: 'Refresh status',
+              text: 'Refresh status',
               autofocus: true,
               onPressed: _refresh,
             ),
-            Button(label: 'Back', onPressed: () => context.pop()),
+            Button(text: 'Back', onPressed: () => context.pop()),
             const Spacer(),
             const AppStatusBar(),
             const KeyHintBar(style: CellStyle(dim: true)),

@@ -1,7 +1,7 @@
 # Cache recovery, geometry and keyed-list rebuilds
 
 Follow-up to the September 15 architecture audit, updated against main
-`f00a5b3182933501e1195ae47d2e245510b66919`.
+`2e5fd0e5ba1a1ea40c016c7eac0b66e7bb5cf7c3`.
 
 ## Changes
 
@@ -54,7 +54,11 @@ read counts. Validation receipts and final measurements are recorded below.
 ## Validation and measurements
 
 Measured runtime candidate: `b3fb70f7890f12d276a829dbc83f63286908f8fe`.
-Later review changes only strengthen a test assertion and record this summary.
+Later review changes strengthen a test assertion and integrate main PR #258
+(composed buttons, managed toasts and stable Container backgrounds). The list
+lookup and cache implementation are unchanged by that integration. The receipts
+below describe the original measured candidate; final combined-head checks and
+merge readiness are reported on PR #256.
 
 - 3,543 core tests passed with one skipped, using repaint-cache verification;
   real-process/PTY integration tests were excluded locally.
@@ -101,23 +105,24 @@ not an allocation profile. Expensive application key callbacks may dominate.
 
 ## Reproduction
 
-From a bootstrapped checkout, after committing the candidate:
+From a bootstrapped checkout:
 
 ```sh
 cd packages/fleury
 FLEURY_VERIFY_REPAINT_CACHE=1 dart test -x 'integration || pty'
 ```
 
-From the repository root:
+From the repository root, use the pinned refs to reproduce the recorded
+measurements. Use `origin/main` and `HEAD` for a new comparison:
 
 ```sh
 dart tool/fleury_dev.dart benchmark gates
 dart tool/fleury_dev.dart benchmark lab compare \
-  --baseline=f00a5b31 --candidate=HEAD \
+  --baseline=f00a5b31 --candidate=b3fb70f7 \
   --scenario=keyed-list-1k,keyed-list,keyed-list-strings,keyed-list-reorder,keyed-list-replace,unkeyed-list-rebuild \
   --runs=5 --samples=150 --warmup=30 --out=/tmp/keyed-list-comparison
 dart tool/fleury_dev.dart benchmark lab compare \
-  --baseline=f00a5b31 --candidate=HEAD \
+  --baseline=f00a5b31 --candidate=b3fb70f7 \
   --scenario=panes-40,dashboard-leaf,typing,list \
   --runs=5 --samples=500 --warmup=60 --out=/tmp/cache-list-comparison
 ```
