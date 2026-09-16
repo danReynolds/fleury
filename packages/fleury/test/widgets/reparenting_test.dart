@@ -323,8 +323,8 @@ void main() {
       expect(probeKey.currentState!.count, 2);
       expect(_ProbeState.initCount, 1);
       expect(_lines(tester), [
-        'count=2',
-        '-',
+        multiChild ? 'count=2' : '·count=2',
+        multiChild ? '-' : '····-',
       ], reason: 'probe starts in slot A');
 
       // A -> B. Slot A (built first) is the *old* parent: it deactivates the
@@ -345,7 +345,10 @@ void main() {
       expect(_ProbeState.disposeCount, 0, reason: 'not disposed mid-move');
       expect(_ProbeState.deactivateCount, 1);
       expect(_ProbeState.activateCount, 1);
-      expect(_lines(tester), ['-', 'count=2'], reason: 'probe now in slot B');
+      expect(_lines(tester), [
+        multiChild ? '-' : '····-',
+        multiChild ? 'count=2' : '·count=2',
+      ], reason: 'probe now in slot B');
 
       // Still live after the move.
       probe.bump();
@@ -363,7 +366,10 @@ void main() {
       expect(_ProbeState.disposeCount, 0);
       expect(_ProbeState.deactivateCount, 2);
       expect(_ProbeState.activateCount, 2);
-      expect(_lines(tester), ['count=3', '-']);
+      expect(_lines(tester), [
+        multiChild ? 'count=3' : '·count=3',
+        multiChild ? '-' : '····-',
+      ]);
 
       // Removing the host entirely finalizes the probe for good.
       tester.pumpWidget(const Text('gone'));
@@ -438,7 +444,7 @@ void main() {
     final probe = probeKey.currentState!;
     probe.bump();
     tester.pump();
-    expect(_lines(tester), ['count=1', '-'], reason: 'starts in the Row');
+    expect(_lines(tester), ['count=1', '····-'], reason: 'starts in the Row');
 
     hostKey.currentState!.swap(); // Row -> Center
     tester.pump();
@@ -446,13 +452,13 @@ void main() {
     expect(probeKey.currentState!.count, 1);
     expect(_ProbeState.initCount, 1);
     expect(_ProbeState.disposeCount, 0);
-    expect(_lines(tester), ['-', 'count=1'], reason: 'now in the Center');
+    expect(_lines(tester), ['-', '·count=1'], reason: 'now in the Center');
 
     hostKey.currentState!.swap(); // Center -> Row
     tester.pump();
     expect(identical(probeKey.currentState, probe), isTrue);
     expect(probeKey.currentState!.count, 1);
-    expect(_lines(tester), ['count=1', '-']);
+    expect(_lines(tester), ['count=1', '····-']);
   });
 
   testWidgets('a moved subtree re-registers a SKIPPED child\'s severed '
@@ -460,7 +466,10 @@ void main() {
     final wrapperKey = GlobalKey();
     final hostKey = GlobalKey<_CachedLbHostState>();
     tester.pumpWidget(_CachedLbHost(key: hostKey, wrapperKey: wrapperKey));
-    expect(_lines(tester), ['tag=A', '-'], reason: 'reads _Tag above slot A');
+    expect(_lines(tester), [
+      '··tag=A',
+      '····-',
+    ], reason: 'reads _Tag above slot A');
 
     // Move the wrapper A -> B. Its cached child (the LayoutBuilder) is the same
     // instance, so updateChild skips it — only reactivation forcing a rebuild
@@ -469,14 +478,14 @@ void main() {
     tester.pump();
     expect(
       _lines(tester),
-      ['-', 'tag=B'],
+      ['····-', '··tag=B'],
       reason: 'the skipped child re-resolved _Tag at its new position',
     );
 
     // And back, to prove the old _Tag no longer drives it.
     hostKey.currentState!.swap();
     tester.pump();
-    expect(_lines(tester), ['tag=A', '-']);
+    expect(_lines(tester), ['··tag=A', '····-']);
   });
 
   testWidgets('a GlobalKey child of a LayoutBuilder reclaimed by another slot '

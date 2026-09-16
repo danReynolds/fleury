@@ -102,6 +102,38 @@ void main() {
       expect(size, const CellSize(5, 1));
     });
 
+    test('unbounded height preserves horizontal alignment and child width', () {
+      final child = RenderText(text: 'hi', softWrap: false);
+      final align = RenderAlign(alignment: Alignment.topRight, child: child);
+      final size = align.layout(
+        const CellConstraints(minCols: 10, maxCols: 10),
+      );
+      expect(size, const CellSize(10, 1));
+      expect(child.size, const CellSize(2, 1));
+      expect(align.childOffsetOf(child), const CellOffset(8, 0));
+      final buffer = CellBuffer(size);
+      align.paint(buffer, CellOffset.zero);
+      expect(_rowContent(buffer, 0), '········hi');
+    });
+
+    test('unbounded width preserves vertical alignment and child height', () {
+      final child = RenderText(text: 'hi', softWrap: false);
+      final align = RenderAlign(alignment: Alignment.bottomLeft, child: child);
+      final size = align.layout(const CellConstraints(minRows: 3, maxRows: 3));
+      expect(size, const CellSize(2, 3));
+      expect(child.size, const CellSize(2, 1));
+      expect(align.childOffsetOf(child), const CellOffset(0, 2));
+    });
+
+    test('unbounded axes align within minimum constraints', () {
+      final child = RenderText(text: 'hi', softWrap: false);
+      final align = RenderAlign(alignment: Alignment.center, child: child);
+      final size = align.layout(const CellConstraints(minCols: 10, minRows: 3));
+      expect(size, const CellSize(10, 3));
+      expect(child.size, const CellSize(2, 1));
+      expect(align.childOffsetOf(child), const CellOffset(4, 1));
+    });
+
     test('Center widget is a sugar for Alignment.center', () {
       final owner = BuildOwner();
       final root = owner.mountRoot(

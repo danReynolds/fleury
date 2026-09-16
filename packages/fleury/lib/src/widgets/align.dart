@@ -37,8 +37,8 @@ enum Alignment {
 /// alignment offset. Cells around the child are left empty so any
 /// content beneath in a [Stack] shows through.
 ///
-/// With unbounded constraints `Align` collapses to the child's size
-/// — there's nothing to align inside an unbounded region.
+/// On each unbounded axis `Align` collapses to the child's size, subject to
+/// the minimum constraint. Bounded axes still expand and align normally.
 @immutable
 final class Align extends SingleChildRenderObjectWidget {
   const Align({
@@ -129,21 +129,14 @@ class RenderAlign extends RenderObject implements RenderObjectWithSingleChild {
     final c = _child;
     final maxCols = constraints.maxCols;
     final maxRows = constraints.maxRows;
-    if (c == null) {
-      return constraints.constrain(CellSize(maxCols ?? 0, maxRows ?? 0));
-    }
-    if (maxCols == null || maxRows == null) {
-      // No bounded region to align within — collapse to child size.
-      final childSize = c.layout(constraints);
-      _childOffset = CellOffset.zero;
-      return constraints.constrain(childSize);
-    }
-    // Lay out child with loosened constraints so it can be smaller
-    // than the parent. The result is the size we'll align within
-    // (maxCols x maxRows).
-    final childSize = c.layout(constraints.loosen());
-    _childOffset = _offsetFor(_alignment, maxCols, maxRows, childSize);
-    return constraints.constrain(CellSize(maxCols, maxRows));
+    // Always loosen the child's constraints, including inside a stretching
+    // Column (bounded width, unbounded height) or Row (the reverse).
+    final childSize = c?.layout(constraints.loosen()) ?? CellSize.zero;
+    final result = constraints.constrain(
+      CellSize(maxCols ?? childSize.cols, maxRows ?? childSize.rows),
+    );
+    _childOffset = _offsetFor(_alignment, result.cols, result.rows, childSize);
+    return result;
   }
 
   // Align reports its child's intrinsic size as its own — alignment only

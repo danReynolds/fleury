@@ -2,6 +2,10 @@
 
 ## 0.1.0
 
+- `Align` and `Center` loosen child constraints even when one axis is
+  unbounded. Links in stretching columns retain their content width, and
+  alignment still applies on the bounded axis.
+
 - **Breaking:** `Focus.of` / `Focus.maybeOf` now return the nearest enclosing
   `FocusNode` instead of the `FocusManager`. The manager moved to
   `FocusManager.of` / `FocusManager.maybeOf`. An item builder can now render
