@@ -291,3 +291,31 @@ result to an `Animation<RgbColor>` (or read it inside an
 `AnimationBuilder<RgbColor>`) to glide a color toward a target. Indexed ANSI
 colors aren't on a meaningful number line, so animate the RGB value rather
 than interpolating palette indices.
+
+### Bounded text fields
+
+Use a controller policy for short names, search terms, or confirmation fields:
+
+```dart
+bool printableAscii(int point) => point >= 32 && point <= 126;
+
+final controller = TextEditingController(
+  editPolicy: const TextEditPolicy(
+    maxCodeUnits: 120,
+    allowCodePoint: printableAscii,
+  ),
+  onEditRejected: (reason) {
+    // Show optional feedback without clearing the accepted text.
+  },
+);
+final field = TextInput(controller: controller);
+```
+
+The limit counts UTF-16 code units. It applies before normalization to typing,
+replacement, paste, IME updates/commits, semantic edits, and assignments. Invalid
+edits are rejected as a whole; text, selection and undo/redo are preserved.
+Deletion and empty text remain valid; validate required fields on submission.
+A segmented paste waits for its final marker and becomes one undo step. An
+interrupted or invalid paste is discarded completely, with no partial prefix.
+Unconstrained controllers keep their normal incremental paste behavior.
+This policy does not replace secret byte limits or erasure requirements.

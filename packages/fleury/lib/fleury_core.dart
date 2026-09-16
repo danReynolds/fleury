@@ -46,6 +46,8 @@ export 'src/editing/text_completion.dart'
     show TextCompletionController, TextCompletionOption, TextCompletionState;
 export 'src/editing/text_editing.dart'
     show TextEditingModel, TextEditingValue, TextRange, TextSelection;
+export 'src/editing/text_edit_policy.dart'
+    show TextEditPolicy, TextEditRejection;
 export 'src/editing/text_history.dart' show TextHistoryController;
 export 'src/editing/text_keymap.dart'
     show TextEditingKeyAction, TextEditingKeyBinding, TextEditingKeymap;

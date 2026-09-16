@@ -179,9 +179,14 @@ class _TextAreaState extends State<TextArea>
   FormControlRegistration? _formRegistration;
   late final TextPasteDriver _paste = TextPasteDriver(
     policy: () => widget.pastePolicy,
+    atomic: () => _controller.editPolicy != null,
+    checkSegment: (text, preceding) =>
+        _controller.checkInsertion(text, precedingCodeUnits: preceding),
+    onRejected: (reason) => _controller.onEditRejected?.call(reason),
     documentLength: () => _controller.text.length,
-    applyEdit: (text, {required coalesce}) =>
-        _edit(() => _controller.paste(text, coalesce: coalesce)),
+    applyEdit: (text, {required coalesce}) => _edit(
+      () => _controller.paste(text, singleLine: false, coalesce: coalesce),
+    ),
     isAttached: () => mounted,
     onProgressChanged: () => setState(() {}),
     schedulePostFrame: _schedulePasteStep,
@@ -284,7 +289,9 @@ class _TextAreaState extends State<TextArea>
   @override
   void didChangeDependencies() {
     super.didChangeDependencies();
-    FocusManager.maybeOf(context); // rebuild on focus change (cursor visibility)
+    FocusManager.maybeOf(
+      context,
+    ); // rebuild on focus change (cursor visibility)
     final registration = FormControlScope.maybeOf(context);
     if (!identical(registration, _formRegistration)) {
       _formRegistration?.release(this);
@@ -306,6 +313,7 @@ class _TextAreaState extends State<TextArea>
   }
 
   void _onChange() {
+    _paste.discardAtomic();
     setState(() {});
     final text = _controller.text;
     if (text != _lastNotifiedText) {
@@ -421,11 +429,13 @@ class _TextAreaState extends State<TextArea>
     // replacement glyph plus the tail of the sequence as literal text.
     _paste.start(
       PasteEvent(text),
-      TextEditingModel.prepareInput(
-        text,
-        singleLine: false,
-        preserveText: _controller.preserveText,
-      ),
+      _controller.editPolicy != null
+          ? text
+          : TextEditingModel.prepareInput(
+              text,
+              singleLine: false,
+              preserveText: _controller.preserveText,
+            ),
     );
     return KeyEventResult.handled;
   }
@@ -436,11 +446,13 @@ class _TextAreaState extends State<TextArea>
     if (widget.readOnly) return KeyEventResult.handled;
     _paste.start(
       event,
-      TextEditingModel.prepareInput(
-        event.text,
-        singleLine: false,
-        preserveText: _controller.preserveText,
-      ),
+      _controller.editPolicy != null
+          ? event.text
+          : TextEditingModel.prepareInput(
+              event.text,
+              singleLine: false,
+              preserveText: _controller.preserveText,
+            ),
     );
     return KeyEventResult.handled;
   }

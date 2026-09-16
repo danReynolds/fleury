@@ -23,6 +23,7 @@ import '../animation/animation_policy.dart';
 import '../animation/frame_ticker.dart';
 import '../editing/text_completion.dart';
 import '../editing/text_editing.dart';
+import '../editing/text_edit_policy.dart';
 import '../editing/text_history.dart';
 import '../editing/text_keymap.dart';
 import '../editing/text_paste.dart';
@@ -137,8 +138,79 @@ enum _EditTransaction { edit, typing, paste }
 /// Rendering replaces unsafe graphemes without changing the model or offsets.
 /// Masking, semantic redaction, and clipboard protection remain separate policies.
 class TextEditingController extends ChangeNotifier {
-  TextEditingController({String text = '', this.preserveText = false})
-    : _value = TextEditingValue(text: text, preserveText: preserveText);
+  TextEditingController({
+    String text = '',
+    this.preserveText = false,
+    this.editPolicy,
+    this.onEditRejected,
+  }) : _value = _initialValue(text, preserveText, editPolicy);
+
+  /// Optional bounds for every input path, including programmatic assignment.
+  /// Fixed for this controller's lifetime so undo/redo values remain admissible.
+  final TextEditPolicy? editPolicy;
+
+  /// Called on rejection; the editing value and undo/redo history stay intact.
+  /// The rejected text is not retained or passed to this callback.
+  final void Function(TextEditRejection reason)? onEditRejected;
+
+  static TextEditingValue _initialValue(
+    String text,
+    bool preserveText,
+    TextEditPolicy? policy,
+  ) {
+    if (policy?.check(text) != null) {
+      throw ArgumentError('Initial text does not satisfy the edit policy.');
+    }
+    final value = TextEditingValue(text: text, preserveText: preserveText);
+    if (policy?.check(value.text) != null) {
+      throw ArgumentError('Normalized text does not satisfy the edit policy.');
+    }
+    return value;
+  }
+
+  bool _accept(TextEditRejection? rejection) {
+    if (rejection == null) return true;
+    onEditRejected?.call(rejection);
+    return false;
+  }
+
+  TextEditRejection? _checkReplacement(
+    TextEditingValue base,
+    TextRange range,
+    String input, {
+    int precedingCodeUnits = 0,
+  }) {
+    final policy = editPolicy;
+    if (policy == null) return null;
+    final start = TextEditingModel.snapOffsetToGraphemeBoundary(
+      base.text,
+      range.normalizedStart,
+    );
+    final end = TextEditingModel.snapOffsetToGraphemeBoundary(
+      base.text,
+      range.normalizedEnd,
+    );
+    return policy.check(
+      input,
+      retainedCodeUnits: base.text.length - (end - start) + precedingCodeUnits,
+    );
+  }
+
+  /// Preflights a raw insertion without allocating or committing a new value.
+  /// Used by paste adapters to bound a transaction before normalization.
+  TextEditRejection? checkInsertion(
+    String input, {
+    int precedingCodeUnits = 0,
+  }) {
+    _checkNotDisposed();
+    final base = _compositionBase ?? _value;
+    return _checkReplacement(
+      base,
+      base.selection.range,
+      input,
+      precedingCodeUnits: precedingCodeUnits,
+    );
+  }
 
   /// Preserve exact text instead of canonicalizing controls and line endings.
   /// This is fixed for the controller's lifetime. Set [text] to load raw text;
@@ -172,6 +244,8 @@ class TextEditingController extends ChangeNotifier {
   /// impossible to edit anywhere but the end of the field.
   String get text => _value.text;
   set text(String text) {
+    _checkNotDisposed();
+    if (!_accept(editPolicy?.check(text))) return;
     _setValue(
       _value.copyWith(text: text, composing: TextRange.empty),
       resetHistory: true,
@@ -220,9 +294,16 @@ class TextEditingController extends ChangeNotifier {
   /// the run. Text widgets use this for typed input.
   void insert(String s, {bool singleLine = false, bool coalesce = false}) {
     _checkNotDisposed();
+    if (!_accept(checkInsertion(s))) return;
+    final next = TextEditingModel.insert(
+      _compositionBase ?? _value,
+      s,
+      singleLine: singleLine,
+    );
+    if (!_accept(editPolicy?.check(next.text))) return;
     _cancelComposingForEdit();
     _applyEdit(
-      TextEditingModel.insert(_value, s, singleLine: singleLine),
+      next,
       transaction: coalesce ? _EditTransaction.typing : _EditTransaction.edit,
     );
   }
@@ -230,16 +311,16 @@ class TextEditingController extends ChangeNotifier {
   /// Inserts bracketed paste content as one undoable transaction.
   void paste(String s, {bool singleLine = false, bool coalesce = false}) {
     _checkNotDisposed();
-    // A paste can arrive mid-composition (serve/browser IME + bracketed
-    // paste). Resolve the composition FIRST — otherwise _applyEdit nulls
-    // _compositionBase while the interim preedit text stays committed in the
-    // value (and the peer IME keeps composing, so its later commit lands a
-    // duplicate; undo restores a half-composed value). Cancel the abandoned
-    // composition (restore the pre-composition value), then insert against
-    // that clean value.
+    if (!_accept(checkInsertion(s))) return;
+    final next = TextEditingModel.insert(
+      _compositionBase ?? _value,
+      s,
+      singleLine: singleLine,
+    );
+    if (!_accept(editPolicy?.check(next.text))) return;
     _cancelComposingForEdit();
     _applyEdit(
-      TextEditingModel.insert(_value, s, singleLine: singleLine),
+      next,
       transaction: _EditTransaction.paste,
       coalesceWithPrevious: coalesce,
     );
@@ -322,8 +403,7 @@ class TextEditingController extends ChangeNotifier {
   /// Insert the kill ring at the caret (replacing any selection).
   void yank({bool singleLine = false}) {
     _checkNotDisposed();
-    _cancelComposingForEdit();
-    _applyEdit(TextEditingModel.yank(_value, singleLine: singleLine));
+    insert(TextEditingModel.killRing, singleLine: singleLine);
   }
 
   void replaceRange(
@@ -332,15 +412,17 @@ class TextEditingController extends ChangeNotifier {
     bool singleLine = false,
   }) {
     _checkNotDisposed();
-    _cancelComposingForEdit();
-    _applyEdit(
-      TextEditingModel.replaceRange(
-        _value,
-        range,
-        replacement,
-        singleLine: singleLine,
-      ),
+    final base = _compositionBase ?? _value;
+    if (!_accept(_checkReplacement(base, range, replacement))) return;
+    final next = TextEditingModel.replaceRange(
+      base,
+      range,
+      replacement,
+      singleLine: singleLine,
     );
+    if (!_accept(editPolicy?.check(next.text))) return;
+    _cancelComposingForEdit();
+    _applyEdit(next);
   }
 
   /// Marks [range] as the current composing range without changing text.
@@ -369,12 +451,17 @@ class TextEditingController extends ChangeNotifier {
   /// [commitComposing] records the full composition as one undo transaction.
   void updateComposingText(String text, {bool singleLine = false}) {
     _checkNotDisposed();
-    _compositionBase ??= TextEditingModel.clearComposing(_value);
+    final range = _value.composing.isCollapsed
+        ? _value.selection.range
+        : _value.composing;
+    if (!_accept(_checkReplacement(_value, range, text))) return;
     final next = TextEditingModel.updateComposing(
       _value,
       text,
       singleLine: singleLine,
     );
+    if (!_accept(editPolicy?.check(next.text))) return;
+    _compositionBase ??= TextEditingModel.clearComposing(_value);
     _lastTransaction = null;
     _setValue(next, clearTransaction: false);
   }
@@ -386,6 +473,12 @@ class TextEditingController extends ChangeNotifier {
   /// value captured before composition began.
   void commitComposing({String? text, bool singleLine = false}) {
     _checkNotDisposed();
+    if (text != null) {
+      final range = _value.composing.isCollapsed
+          ? _value.selection.range
+          : _value.composing;
+      if (!_accept(_checkReplacement(_value, range, text))) return;
+    }
     final base = _compositionBase;
     if (base == null) {
       // No live composition: this commit is late — the preedit it belongs to
@@ -418,6 +511,7 @@ class TextEditingController extends ChangeNotifier {
       text: text,
       singleLine: singleLine,
     );
+    if (!_accept(editPolicy?.check(next.text))) return;
     _compositionBase = null;
     if (next.text != base.text) {
       _pushUndoValue(base);
@@ -539,6 +633,7 @@ class TextEditingController extends ChangeNotifier {
     bool coalesceWithPrevious = false,
   }) {
     _checkNotDisposed();
+    if (!_accept(editPolicy?.check(next.text))) return;
     if (_value == next) return;
     // Safety net: public edit methods cancel first. Any remaining caller that
     // reaches here with a live base would otherwise orphan the preedit.
@@ -565,6 +660,7 @@ class TextEditingController extends ChangeNotifier {
     bool clearTransaction = true,
   }) {
     _checkNotDisposed();
+    if (!_accept(editPolicy?.check(next.text))) return;
     if (next.preserveText != preserveText) {
       next = TextEditingValue(
         text: next.text,
@@ -573,6 +669,7 @@ class TextEditingController extends ChangeNotifier {
         preserveText: preserveText,
       );
     }
+    if (!_accept(editPolicy?.check(next.text))) return;
     final valueChanged = _value != next;
     if (!valueChanged && !resetHistory) return;
     final historyChanged =
@@ -810,9 +907,14 @@ class _TextInputState extends State<TextInput>
   FormControlRegistration? _formRegistration;
   late final TextPasteDriver _paste = TextPasteDriver(
     policy: () => widget.pastePolicy,
+    atomic: () => _controller.editPolicy != null,
+    checkSegment: (text, preceding) =>
+        _controller.checkInsertion(text, precedingCodeUnits: preceding),
+    onRejected: (reason) => _controller.onEditRejected?.call(reason),
     documentLength: () => _controller.text.length,
-    applyEdit: (text, {required coalesce}) =>
-        _edit(() => _controller.paste(text, coalesce: coalesce)),
+    applyEdit: (text, {required coalesce}) => _edit(
+      () => _controller.paste(text, singleLine: true, coalesce: coalesce),
+    ),
     isAttached: () => mounted,
     onProgressChanged: () => setState(() {}),
     schedulePostFrame: _schedulePasteStep,
@@ -1042,6 +1144,7 @@ class _TextInputState extends State<TextInput>
   }
 
   void _onControllerChange() {
+    _paste.discardAtomic();
     setState(() {
       // Typing resets the blink to ON so the cursor is immediately
       // visible after a keystroke — matches native terminal cursor
@@ -1418,11 +1521,13 @@ class _TextInputState extends State<TextInput>
     // Canonicalized ONCE, before batching (see TextArea.onPaste).
     _paste.start(
       PasteEvent(text),
-      TextEditingModel.prepareInput(
-        text,
-        singleLine: true,
-        preserveText: _controller.preserveText,
-      ),
+      _controller.editPolicy != null
+          ? text
+          : TextEditingModel.prepareInput(
+              text,
+              singleLine: true,
+              preserveText: _controller.preserveText,
+            ),
     );
     return KeyEventResult.handled;
   }
@@ -1434,11 +1539,13 @@ class _TextInputState extends State<TextInput>
     _resetHistoryBrowsing();
     _paste.start(
       event,
-      TextEditingModel.prepareInput(
-        event.text,
-        singleLine: true,
-        preserveText: _controller.preserveText,
-      ),
+      _controller.editPolicy != null
+          ? event.text
+          : TextEditingModel.prepareInput(
+              event.text,
+              singleLine: true,
+              preserveText: _controller.preserveText,
+            ),
     );
     return KeyEventResult.handled;
   }
