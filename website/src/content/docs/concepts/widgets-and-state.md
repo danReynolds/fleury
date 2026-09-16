@@ -44,7 +44,7 @@ class _CounterState extends State<Counter> {
   Widget build(BuildContext context) => Column(
     children: [
       Text('Count: $_count'),
-      Button(label: 'Increment', onPressed: () => setState(() => _count++)),
+      Button(text: 'Increment', onPressed: () => setState(() => _count++)),
     ],
   );
 }

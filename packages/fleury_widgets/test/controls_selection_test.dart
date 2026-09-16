@@ -45,11 +45,7 @@ void main() {
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               const Text('hello world'),
-              Button(
-                label: 'Save',
-                onPressed: () => presses++,
-                autofocus: true,
-              ),
+              Button(text: 'Save', onPressed: () => presses++, autofocus: true),
             ],
           ),
         ),
@@ -69,7 +65,7 @@ void main() {
   );
 
   testWidgets('an enabled Button is not selectable text', (tester) {
-    tester.pumpWidget(Button(label: 'Save', onPressed: () {}));
+    tester.pumpWidget(Button(text: 'Save', onPressed: () {}));
     tester.render(size: const CellSize(20, 3));
     _dragAcross(tester, 9); // across "[ Save ]"
     tester.press(KeySequence.ctrl.c);
@@ -81,7 +77,7 @@ void main() {
   });
 
   testWidgets('a disabled Button is not selectable text', (tester) {
-    tester.pumpWidget(const Button(label: 'Save', onPressed: null));
+    tester.pumpWidget(const Button(text: 'Save', onPressed: null));
     tester.render(size: const CellSize(20, 3));
     _dragAcross(tester, 9);
     tester.press(KeySequence.ctrl.c);

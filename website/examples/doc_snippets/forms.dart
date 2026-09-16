@@ -83,7 +83,7 @@ class _ProjectFormState extends State<ProjectForm> {
               ListenableBuilder(
                 listenable: _form,
                 builder: (context, child) => Button(
-                  label: _form.isBusy ? 'Creating…' : 'Create',
+                  text: _form.isBusy ? 'Creating…' : 'Create',
                   onPressed: _form.isBusy ? null : _form.submit,
                 ),
               ),

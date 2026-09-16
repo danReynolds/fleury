@@ -95,11 +95,7 @@ void _expectRole(FleuryTester tester, Widget widget, SemanticRole role) {
 void main() {
   group('semantic role materializes at runtime', () {
     testWidgets('Button → button', (t) {
-      _expectRole(
-        t,
-        Button(label: 'OK', onPressed: () {}),
-        SemanticRole.button,
-      );
+      _expectRole(t, Button(text: 'OK', onPressed: () {}), SemanticRole.button);
     });
     testWidgets('ProgressBar → progress', (t) {
       _expectRole(t, const ProgressBar(value: 0.5), SemanticRole.progress);

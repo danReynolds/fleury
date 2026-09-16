@@ -57,7 +57,7 @@ layout bones are in place.
 | `CommandPalette` | A fuzzy command palette: filter input over a live-filtered list. |
 | `Dialog` | Modal chrome — a bordered, padded panel with an optional title. |
 | `Tooltip` | A hint anchored below its child while focus is inside it. |
-| `Toaster` | Hosts transient toast notifications, with optional actions. |
+| `Toaster` | Hosts transient or persistent toasts, with replacement, dismissal and optional actions. |
 | `ProgressBar` | A horizontal determinate progress bar. |
 | `Gauge` | A single-value status bar with an optional label. |
 
@@ -87,6 +87,51 @@ native image placements retain their full resolution.
 | --- | --- |
 | `Image` | Raster images in the terminal — auto-selects Kitty, iTerm2, or Sixel, with a dithered ANSI cell-art fallback. tmux, GNU Screen, and Zellij use cell art so redraw, resize, and pane lifecycle stay deterministic. Animated GIF/APNG/WebP supported. |
 | `Canvas` | A retained drawing surface for lines, shapes, and points. |
+
+## Replacing an operation's toast
+
+Give related results the same ID to replace the previous toast. A host can
+bound retained toasts without replaying old results from a queue:
+
+```dart
+Toaster(maxToasts: 1, child: app);
+
+final toast = Toaster.show(
+  context,
+  'Copy could not be confirmed.',
+  id: 'copy-result',
+  severity: ToastSeverity.error,
+  persistent: true,
+);
+
+// The related retry succeeded. Replace the error and start a fresh expiry.
+Toaster.show(
+  context,
+  'Copied',
+  id: 'copy-result',
+  severity: ToastSeverity.success,
+  duration: const Duration(seconds: 3),
+);
+
+// Safe: this old handle cannot dismiss the successful replacement.
+toast.dismiss();
+```
+
+`toast.isActive` reports whether that exact toast is still retained. It becomes
+false on expiry, replacement, eviction, dismissal or host disposal; it is a
+snapshot rather than a subscription.
+
+Persistence disables the timer; explicit dismissal, replacement, eviction and
+host disposal still remove a toast. Do not supply both `persistent: true` and
+an explicit duration. Calls without an ID create distinct toasts, and omitting
+`maxToasts` retains unrestricted stacking. Severity remains `info`, `success`,
+`warning` or `error`; there is no separate notice type.
+
+Try the runnable [toast lifecycle example](example/toast_lifecycle.dart) with
+`dart run example/toast_lifecycle.dart` from this package. Tab to a button and
+press Enter, or click it. Repeated success stays one toast; failure persists
+until dismissal or the related retry succeeds. The app owns that relationship;
+the framework owns presentation and expiry.
 
 ## Testing
 

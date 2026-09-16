@@ -180,7 +180,7 @@ class _PhotoViewerState extends State<PhotoViewer> {
         return Column(
           children: <Widget>[
             const Text('Could not load a photo.'),
-            Button(label: 'Retry', onPressed: _reload),
+            Button(text: 'Retry', onPressed: _reload),
           ],
         );
       }
@@ -201,7 +201,7 @@ class _PhotoViewerState extends State<PhotoViewer> {
               semanticLabel: 'Random landscape photo',
             ),
           ),
-          Button(label: 'Load another', onPressed: refreshing ? null : _reload),
+          Button(text: 'Load another', onPressed: refreshing ? null : _reload),
         ],
       );
     },
@@ -289,13 +289,13 @@ class _TransmissionViewState extends State<TransmissionView> {
           Row(
             children: <Widget>[
               Button(
-                label: 'Next packet',
+                text: 'Next packet',
                 onPressed: snapshot.connectionState == ConnectionState.done
                     ? null
                     : _transmission.receiveNext,
               ),
               const SizedBox(width: 1),
-              Button(label: 'Restart', onPressed: _restart),
+              Button(text: 'Restart', onPressed: _restart),
             ],
           ),
         ],

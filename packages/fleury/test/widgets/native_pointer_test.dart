@@ -21,7 +21,7 @@ void main() {
           row: row,
         ),
       );
-      tester.pumpWidget(tree(Button(label: 'Save', onPressed: () {})));
+      tester.pumpWidget(tree(Button(text: 'Save', onPressed: () {})));
       hover(2, 0);
       expect(changes, [MouseCursor.pointer]);
       hover(3, 0);
@@ -31,7 +31,7 @@ void main() {
         hasLength(1),
         reason: 'unchanged hover must not write OSC repeatedly',
       );
-      tester.pumpWidget(tree(const Button(label: 'Save', onPressed: null)));
+      tester.pumpWidget(tree(const Button(text: 'Save', onPressed: null)));
       expect(changes.last, MouseCursor.basic);
       tester.pumpWidget(tree(const SizedBox(width: 10, child: TextInput())));
       expect(changes.last, MouseCursor.text);
@@ -69,7 +69,7 @@ void main() {
                 top: 0,
                 width: 10,
                 height: 1,
-                child: Button(label: 'Behind', onPressed: () {}),
+                child: Button(text: 'Behind', onPressed: () {}),
               ),
               const Positioned(
                 left: 0,

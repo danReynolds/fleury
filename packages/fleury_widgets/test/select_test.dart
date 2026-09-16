@@ -86,7 +86,7 @@ class _EnabledHost extends StatelessWidget {
   Widget build(BuildContext context) => Row(
     children: [
       Button(
-        label: 'Previous',
+        text: 'Previous',
         autofocus: true,
         focusNode: priorFocus,
         onPressed: _noop,
@@ -529,7 +529,7 @@ void main() {
           children: <Widget>[
             const _Host(initial: 'red'),
             const SizedBox(height: 6),
-            Button(label: 'Behind', onPressed: () => behindPressed = true),
+            Button(text: 'Behind', onPressed: () => behindPressed = true),
           ],
         ),
       );

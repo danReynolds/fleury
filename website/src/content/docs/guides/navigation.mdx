@@ -275,7 +275,7 @@ class ProjectsScreen extends StatelessWidget {
   // This context belongs to the root Navigator.
   @override
   Widget build(BuildContext context) => Button(
-    label: 'Start setup',
+    text: 'Start setup',
     onPressed: () => context.push<void>(const SetupFlow()),
   );
 }
@@ -304,13 +304,13 @@ class SetupStep extends StatelessWidget {
   @override
   Widget build(BuildContext context) => step < 3
       ? Button(
-          label: 'Next step',
+          text: 'Next step',
           onPressed: () => context.push<void>(
             SetupStep(step: step + 1), // nearest: nested Navigator
           ),
         )
       : Button(
-          label: 'Finish setup',
+          text: 'Finish setup',
           onPressed: () => context.rootNavigator.pushReplacement<void>(
             const ProjectReadyScreen(), // replaces the whole setup flow
           ),

@@ -62,7 +62,7 @@ class CommandButton extends StatelessWidget {
 
     final enabled = registry.isEnabled(resolved, buildContext: context);
     return Button(
-      label: label ?? resolved.title,
+      text: label ?? resolved.title,
       variant: variant,
       focusNode: focusNode,
       autofocus: autofocus,

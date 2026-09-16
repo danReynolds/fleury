@@ -288,7 +288,7 @@ class _${className}State extends State<$className> {
             Text('Count: \$_count'),
             const SizedBox(height: 1),
             Button(
-              label: 'Increment',
+              text: 'Increment',
               autofocus: true,
               onPressed: _increment,
             ),

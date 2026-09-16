@@ -1473,22 +1473,22 @@ class _ControlsStoryState extends State<_ControlsStory> {
         if (selected == 'Button')
           Row(
             children: <Widget>[
-              Button(label: 'Normal', onPressed: onPressed),
+              Button(text: 'Normal', onPressed: onPressed),
               const Text(' '),
               Button(
-                label: 'Primary',
+                text: 'Primary',
                 variant: ButtonVariant.primary,
                 onPressed: onPressed,
               ),
               const Text(' '),
               Button(
-                label: 'Warn',
+                text: 'Warn',
                 variant: ButtonVariant.warning,
                 onPressed: onPressed,
               ),
               const Text(' '),
               Button(
-                label: 'Error',
+                text: 'Error',
                 variant: ButtonVariant.error,
                 onPressed: onPressed,
               ),
@@ -1942,13 +1942,13 @@ class _OverlayStory extends StatelessWidget {
             Row(
               children: <Widget>[
                 Button(
-                  label: 'Info',
+                  text: 'Info',
                   onPressed: () =>
                       Toaster.show(context, 'Heads up — nothing to do'),
                 ),
                 const SizedBox(width: 2),
                 Button(
-                  label: 'Success',
+                  text: 'Success',
                   onPressed: () => Toaster.show(
                     context,
                     'Saved story state',
@@ -1957,7 +1957,7 @@ class _OverlayStory extends StatelessWidget {
                 ),
                 const SizedBox(width: 2),
                 Button(
-                  label: 'Warning',
+                  text: 'Warning',
                   onPressed: () => Toaster.show(
                     context,
                     'Approaching rate limit',
@@ -1966,7 +1966,7 @@ class _OverlayStory extends StatelessWidget {
                 ),
                 const SizedBox(width: 2),
                 Button(
-                  label: 'Error',
+                  text: 'Error',
                   onPressed: () => Toaster.show(
                     context,
                     'Deploy failed',
@@ -1979,7 +1979,7 @@ class _OverlayStory extends StatelessWidget {
             // An actionable toast: a labelled affordance + a global hotkey that
             // runs it and dismisses the toast.
             Button(
-              label: 'Delete (with Undo action)',
+              text: 'Delete (with Undo action)',
               variant: ButtonVariant.primary,
               onPressed: () => Toaster.show(
                 context,
@@ -2001,13 +2001,13 @@ class _OverlayStory extends StatelessWidget {
         'Anchored' => const _AnchoredSpotlight(),
         'Tooltip' => Tooltip(
           message: 'Focus the button to show this anchored tooltip.',
-          child: Button(label: 'Tooltip target', onPressed: () {}),
+          child: Button(text: 'Tooltip target', onPressed: () {}),
         ),
         // A Dialog is a modal route, not inline chrome — so the story is a
         // trigger that presents it and a dialog that pops itself, letting you
         // watch the navigation in and back out (and the result round-trip).
         'Dialog' => Button(
-          label: 'Open dialog',
+          text: 'Open dialog',
           onPressed: () async {
             final result = await context.present<String>(
               Dialog(
@@ -2026,12 +2026,12 @@ class _OverlayStory extends StatelessWidget {
                     Row(
                       children: <Widget>[
                         Button(
-                          label: 'Cancel',
+                          text: 'Cancel',
                           onPressed: () => context.pop('cancelled'),
                         ),
                         const SizedBox(width: 2),
                         Button(
-                          label: 'Deploy',
+                          text: 'Deploy',
                           variant: ButtonVariant.primary,
                           onPressed: () => context.pop('deployed'),
                         ),
@@ -2053,7 +2053,7 @@ class _OverlayStory extends StatelessWidget {
           },
         ),
         _ => Button(
-          label: 'Open palette',
+          text: 'Open palette',
           onPressed: () => CommandPalette.open(context),
         ),
       },
@@ -2380,10 +2380,10 @@ class _FormsStoryState extends State<_FormsStory> {
       builder: (context, child) => Row(
         children: <Widget>[
           if (_step > 0)
-            Button(label: 'Back', onPressed: _form.isSubmitting ? null : _back),
+            Button(text: 'Back', onPressed: _form.isSubmitting ? null : _back),
           if (_step > 0) const SizedBox(width: 2),
           Button(
-            label: _form.isSubmitting ? 'Checking…' : nextLabel,
+            text: _form.isSubmitting ? 'Checking…' : nextLabel,
             onPressed: _form.isSubmitting ? null : _form.submit,
           ),
         ],
@@ -2566,7 +2566,7 @@ class _FormsStoryState extends State<_FormsStory> {
           Text('${_serviceName.text.trim()} is live in $_region.'),
           Text('${_replicas.toInt()} replicas · $_environment'),
           const SizedBox(height: 1),
-          Button(label: 'Create another', onPressed: _reset),
+          Button(text: 'Create another', onPressed: _reset),
         ],
       );
     }

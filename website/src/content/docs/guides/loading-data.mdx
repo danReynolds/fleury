@@ -221,7 +221,7 @@ class _PhotoViewerState extends State<PhotoViewer> {
       if (snapshot.hasError) {
         return Column(children: [
           const Text('Could not load a photo.'),
-          Button(label: 'Retry', onPressed: _reload),
+          Button(text: 'Retry', onPressed: _reload),
         ]);
       }
 
@@ -244,7 +244,7 @@ class _PhotoViewerState extends State<PhotoViewer> {
           ),
         ),
         Button(
-          label: 'Load another',
+          text: 'Load another',
           onPressed: refreshing ? null : _reload,
         ),
       ]);
@@ -359,11 +359,11 @@ class _TransmissionViewState extends State<TransmissionView> {
         for (final line in lines) Text(line),
         Row(children: [
           Button(
-            label: 'Next packet',
+            text: 'Next packet',
             onPressed: complete ? null : transmission.receiveNext,
           ),
           const SizedBox(width: 1),
-          Button(label: 'Restart', onPressed: restart),
+          Button(text: 'Restart', onPressed: restart),
         ]),
       ]);
     },

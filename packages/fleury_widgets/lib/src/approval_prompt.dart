@@ -158,14 +158,14 @@ class ApprovalPrompt extends StatelessWidget {
               Row(
                 children: [
                   Button(
-                    label: request.confirmLabel,
+                    text: request.confirmLabel,
                     variant: _confirmVariant(request.severity),
                     autofocus: approveFocused,
                     onPressed: _approve,
                   ),
                   const SizedBox(width: 1),
                   Button(
-                    label: request.cancelLabel,
+                    text: request.cancelLabel,
                     autofocus: !approveFocused,
                     onPressed: _deny,
                   ),

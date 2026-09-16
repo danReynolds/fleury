@@ -53,14 +53,14 @@ class _BuildLogState extends State<BuildLog> {
         children: [
           // #docregion interaction
           Button(
-            label: 'Append',
+            text: 'Append',
             onPressed: () =>
                 setState(() => lines.add('Step ${lines.length + 1} complete')),
           ),
-          Button(label: 'Latest', onPressed: log.jumpToBottom),
+          Button(text: 'Latest', onPressed: log.jumpToBottom),
           // #enddocregion interaction
           Button(
-            label: 'Grow last entry',
+            text: 'Grow last entry',
             onPressed: () => setState(
               () => lines[lines.length - 1] += '\n  Detail ${++detail}',
             ),

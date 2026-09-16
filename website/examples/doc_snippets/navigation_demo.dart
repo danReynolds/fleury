@@ -39,7 +39,7 @@ class _NavigationHomeState extends State<NavigationHome> {
         const Text('HOME · STACK DEPTH 1', style: CellStyle(bold: true)),
         const SizedBox(height: 1),
         Button(
-          label: 'Push details',
+          text: 'Push details',
           autofocus: true,
           onPressed: () => unawaited(_openDetails(context)),
         ),
@@ -76,15 +76,15 @@ class _DetailsScreenState extends State<DetailsScreen> {
         Text('dialog: $_dialogResult'),
         const SizedBox(height: 1),
         Button(
-          label: 'Present dialog',
+          text: 'Present dialog',
           autofocus: true,
           onPressed: () => unawaited(_presentDialog(context)),
         ),
         Button(
-          label: 'Pop with result',
+          text: 'Pop with result',
           onPressed: () => context.pop(DetailsResult.done),
         ),
-        Button(label: 'Pop without result', onPressed: context.pop),
+        Button(text: 'Pop without result', onPressed: context.pop),
       ],
     ),
   );
@@ -102,7 +102,7 @@ class ConfirmationDialog extends StatelessWidget {
       focused: true,
       child: Center(
         child: Button(
-          label: 'Confirm and pop',
+          text: 'Confirm and pop',
           autofocus: true,
           onPressed: () => context.pop(true),
         ),

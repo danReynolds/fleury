@@ -21,7 +21,7 @@ class _CounterState extends State<Counter> {
     children: [
       Text('Count: $count'),
       Button(
-        label: 'Add one',
+        text: 'Add one',
         autofocus: true,
         onPressed: () => setState(() => count++),
       ),
@@ -105,7 +105,7 @@ class _SaveStatusState extends State<SaveStatus> {
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Button(
-            label: 'Save',
+            text: 'Save',
             onPressed: saving
                 ? null
                 : () => setState(() => request = widget.save()),
@@ -158,7 +158,7 @@ class _AnimatedUploadState extends State<AnimatedUpload> {
         ),
       ),
       Button(
-        label: 'Animate',
+        text: 'Animate',
         onPressed: () => setState(() => target = target == 0 ? 1 : 0),
       ),
     ],
@@ -245,13 +245,13 @@ class _DraftEditorState extends State<DraftEditor> {
           Row(
             children: [
               Button(
-                label: 'Save',
+                text: 'Save',
                 variant: ButtonVariant.primary,
                 onPressed: saving || !dirty ? null : () => unawaited(save()),
               ),
               const SizedBox(width: 1),
               Button(
-                label: 'Discard',
+                text: 'Discard',
                 onPressed: saving || !dirty
                     ? null
                     : () => unawaited(discard(context)),
@@ -285,15 +285,12 @@ class _DiscardDialog extends StatelessWidget {
           Row(
             children: [
               Button(
-                label: 'Keep editing',
+                text: 'Keep editing',
                 autofocus: true,
                 onPressed: () => context.pop(false),
               ),
               const SizedBox(width: 1),
-              Button(
-                label: 'Discard draft',
-                onPressed: () => context.pop(true),
-              ),
+              Button(text: 'Discard draft', onPressed: () => context.pop(true)),
             ],
           ),
         ],
@@ -381,7 +378,7 @@ class _PublishControlState extends State<PublishControl> {
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         Button(
-          label: 'Publish',
+          text: 'Publish',
           onPressed: busy ? null : () => unawaited(publish()),
         ),
         const SizedBox(height: 1),
