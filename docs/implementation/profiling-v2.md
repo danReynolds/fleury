@@ -154,3 +154,26 @@ input differences. Legacy `fps` fields mean observed scenario update cadence
 
 CI runs the profiling correctness/smoke tests and existing structural gates.
 It does not gate machine-sensitive lab timing percentages.
+
+## Keyed-list parent rebuilds
+
+The general `list` scenario measures arrow input. To investigate key-index
+maintenance on a parent rebuild, use the targeted probe:
+
+```sh
+dart compile exe profiling/bin/keyed_list_rebuild_probe.dart -o /tmp/keyed-list-probe
+/tmp/keyed-list-probe 100000 auto
+/tmp/keyed-list-probe 100000 revision
+```
+
+Both modes update the same 20 visible rows in a 100,000-item list. `auto` uses
+the default `itemKeyBuilder` snapshot on every parent update; `revision` supplies
+an unchanged `itemKeyRevision` because only labels change, not the ordered keys.
+The probe verifies final visible content and key-call counts, then emits 150 raw
+rebuild-through-pump timings after 30 warmups. It excludes encoding, transport
+and display. Compile before timing and run at least five fresh process pairs,
+reversing their order each pair. Compare per-process summaries, not pooled frames.
+
+Revision reuse is opt-in. The application must change `itemKeyRevision` when
+keys or their order change. Omit it when the application cannot supply that
+contract; callback identity alone cannot detect mutations to captured data.

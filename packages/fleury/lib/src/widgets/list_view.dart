@@ -428,7 +428,8 @@ class ListView extends StatefulWidget {
   }) : itemCount = null,
        itemBuilder = null,
        separatorBuilder = null,
-       itemKeyBuilder = null;
+       itemKeyBuilder = null,
+       itemKeyRevision = null;
 
   /// Lazy constructor: build items on demand by index, mount only the
   /// visible ones. Each item builder invocation receives a `highlighted`
@@ -440,6 +441,7 @@ class ListView extends StatefulWidget {
     required int this.itemCount,
     required Widget Function(BuildContext, int, bool) this.itemBuilder,
     this.itemKeyBuilder,
+    this.itemKeyRevision,
     this.autofocus = false,
     this.selectable = true,
     this.edgeBehavior = EdgeBehavior.bubble,
@@ -449,6 +451,7 @@ class ListView extends StatefulWidget {
     this.scrollDirection = Axis.vertical,
     this.addRepaintBoundaries = true,
   }) : assert(itemCount >= 0, 'itemCount must be non-negative'),
+       assert(itemKeyRevision == null || itemKeyBuilder != null),
        separatorBuilder = null,
        children = null;
 
@@ -471,6 +474,7 @@ class ListView extends StatefulWidget {
     required Widget Function(BuildContext, int, bool) this.itemBuilder,
     required Widget? Function(BuildContext, int) this.separatorBuilder,
     this.itemKeyBuilder,
+    this.itemKeyRevision,
     this.autofocus = false,
     this.selectable = true,
     this.edgeBehavior = EdgeBehavior.bubble,
@@ -480,6 +484,7 @@ class ListView extends StatefulWidget {
     this.scrollDirection = Axis.vertical,
     this.addRepaintBoundaries = true,
   }) : assert(itemCount >= 0, 'itemCount must be non-negative'),
+       assert(itemKeyRevision == null || itemKeyBuilder != null),
        children = null;
 
   /// External controller. If null, the widget creates its own and
@@ -520,9 +525,26 @@ class ListView extends StatefulWidget {
   ///
   /// Fleury reads all item keys once on mount and whenever the parent supplies
   /// an updated ListView, building its own reverse lookup in O(itemCount) time
-  /// and space. The row widgets are still built and laid out only as needed.
+  /// and space. Supply [itemKeyRevision] to reuse this lookup across parent
+  /// rebuilds that do not change the ordered keys. The row widgets are still
+  /// built and laid out only as needed.
   /// Keys must have stable equality and hash codes; duplicates are an error.
   final ListItemKeyBuilder? itemKeyBuilder;
+
+  /// Optional revision of the ordered keys returned by [itemKeyBuilder].
+  ///
+  /// An unchanged non-null revision and item count reuse the key lookup in
+  /// O(1), even if the parent creates a new key-builder closure. Change the
+  /// revision whenever any key or its position changes, including reorders,
+  /// filtering, and replacing the data source. Use an immutable value with
+  /// stable equality, such as an incrementing integer. An item-count change
+  /// always refreshes the lookup. Requires [itemKeyBuilder].
+  ///
+  /// This caches only identities, not row content: visible item builders still
+  /// update on parent rebuilds. Null (the default) reads every key on each
+  /// parent update, safely supporting callbacks over mutable data without a
+  /// separate revision. Switching to or from null also refreshes the lookup.
+  final Object? itemKeyRevision;
 
   /// Wrap each item in a [RepaintBoundary] (default true, Flutter-parity) so a
   /// localized update — one row's setState, a streaming-token line — repaints
@@ -580,10 +602,17 @@ class ListView extends StatefulWidget {
 
 /// A single data revision's identities; widget creation stays lazy.
 class _ListItemIdentities {
-  _ListItemIdentities(this.keys, this.indexByKey);
+  _ListItemIdentities(this.keys, this.indexByKey, this.revision);
 
   final List<Object> keys;
   final Map<Object, int> indexByKey;
+  final Object? revision;
+
+  bool canReuseFor(ListView widget) =>
+      revision != null &&
+      widget.itemKeyBuilder != null &&
+      widget.itemKeyRevision == revision &&
+      widget.effectiveItemCount == keys.length;
 
   static _ListItemIdentities? capture(ListView widget) {
     final keyBuilder = widget.itemKeyBuilder;
@@ -602,7 +631,7 @@ class _ListItemIdentities {
       keys.add(key);
       indexByKey[key] = index;
     }
-    return _ListItemIdentities(keys, indexByKey);
+    return _ListItemIdentities(keys, indexByKey, widget.itemKeyRevision);
   }
 }
 
@@ -635,7 +664,11 @@ class _ListViewState extends State<ListView> {
   @override
   void didUpdateWidget(ListView oldWidget) {
     super.didUpdateWidget(oldWidget);
-    _identities = _ListItemIdentities.capture(widget);
+    // The revision belongs to the successfully captured snapshot. A previous
+    // widget update may have thrown while reading or validating its keys.
+    if (!(_identities?.canReuseFor(widget) ?? false)) {
+      _identities = _ListItemIdentities.capture(widget);
+    }
     _dataRevision++;
     final oldCount = oldWidget.effectiveItemCount;
     final oldCurrentKey = _currentItemKey;

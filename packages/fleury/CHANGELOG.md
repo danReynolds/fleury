@@ -2,6 +2,13 @@
 
 ## 0.1.0
 
+- Repaint caches remain invalid after a paint exception, including nested
+  caches. Focus and semantic geometry now honor the cache's layout-size clip,
+  including when caching is enabled or disabled at runtime.
+- `ListView.builder` and `.separated` accept an optional `itemKeyRevision` to
+  reuse their key lookup across unrelated parent rebuilds. Change it whenever
+  the ordered keys change. Omitting it preserves automatic key rescanning.
+
 - **Breaking:** `Focus.of` / `Focus.maybeOf` now return the nearest enclosing
   `FocusNode` instead of the `FocusManager`. The manager moved to
   `FocusManager.of` / `FocusManager.maybeOf`. An item builder can now render
