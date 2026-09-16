@@ -225,7 +225,12 @@ void main() {
         newIndex >= 0 ? newIndex : oldIndex.clamp(0, items.length - 1),
       );
       final text = tester.renderToString();
-      for (final match in RegExp(r'(\d+):(\d+)').allMatches(text)) {
+      final matches = RegExp(r'(\d+):(\d+)').allMatches(text).toList();
+      expect(matches, hasLength(4), reason: 'every visible row must paint');
+      final first = controller.visibleRange!.first;
+      for (var i = 0; i < matches.length; i++) {
+        final match = matches[i];
+        expect(match[1], '${items[first + i]}');
         expect(match[1], match[2], reason: 'row State must follow its key');
       }
       // Vary the current item and viewport for the next mutation.

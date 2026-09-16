@@ -51,6 +51,54 @@ follow-tail behavior, cursor/viewport preservation and pointer selection. The
 profiling lab checks every measured update's 20 visible labels and exact key
 read counts. Validation receipts and final measurements are recorded below.
 
+## Validation and measurements
+
+Measured runtime candidate: `b3fb70f7890f12d276a829dbc83f63286908f8fe`.
+Later review changes only strengthen a test assertion and record this summary.
+
+- 3,543 core tests passed with one skipped, using repaint-cache verification;
+  real-process/PTY integration tests were excluded locally.
+- 1,294 companion widget tests, 167 focused runtime tests and 29 profiling tests
+  passed. The strengthened five-test key-lookup suite also passed afterward.
+- Changed runtime, test and profiling sources analyze cleanly. All eight fast
+  structural gates passed. The regenerated browser asset changes only its
+  source fingerprint; the JavaScript payload is unchanged.
+- Final-head full repository CI is tracked on the PR separately from these
+  local receipts; the previous head's checks do not qualify the new head.
+
+The V2 lab ran five serial AOT process pairs per workload, reversing order each
+pair, with the same frozen harness and dependency locks on both sides. Baseline
+is main `f00a5b31`. The six list rebuild cases use 150 samples and 30 warmups;
+the four broader cases use 500 samples and 60 warmups. All 100 processes passed
+correctness checks and their retained raw artifact checksums were verified.
+No builds or tests from this task ran during the measured processes.
+
+| Workload | Main p50 | Candidate p50 | Paired change and 95% interval |
+| --- | ---: | ---: | --- |
+| 1,000 stable integer keys | 92 us | 64 us | -30.4% [-30.9, -29.4] |
+| 100,000 stable integer keys | 5,881.5 us | 625 us | -89.4% [-89.8, -89.3] |
+| 100,000 stable string keys | 9,399 us | 673 us | -93.0% [-93.5, -92.8] |
+| Swap first pair, 100,000 keys | 5,781 us | 5,897.5 us | +1.4% [-3.2, +2.9] |
+| Replace final key, 100,000 keys | 5,797.5 us | 5,906 us | +1.3% [+0.7, +2.0] |
+| Unkeyed parent rebuild | 53 us | 52 us | +1.9% [-1.9, +2.0] |
+| 40 panes | 46 us | 44 us | 0.0% [-4.3, +2.2] |
+| Dashboard leaf update | 111 us | 112 us | +0.9% [0.0, +1.8] |
+| Typing | 222 us | 224 us | 0.0% [-0.9, +3.2] |
+| List navigation | 1,029 us | 1,035 us | +0.8% [-0.9, +2.0] |
+
+Displayed p50s are medians of process summaries. Changes and bootstrap intervals
+are computed from paired processes, so they need not equal the ratio of the two
+displayed medians. The three stable-key cases improve at both p50 and p95; the
+other cases show no clear change at the lab's 5% practical threshold. This
+reproduces the earlier isolated prototype result with the checked-in V2 harness.
+
+These are single-machine framework measurements, not physical terminal latency.
+List rebuild cases measure setState through pump; frame cases exclude encoding
+and display; input cases measure enqueue through a dispatch checkpoint. The
+unchanged key scan is still O(N). No heap-size or GC-pressure reduction is claimed:
+map reuse is supported by the code path and bounded hash-work regression tests,
+not an allocation profile. Expensive application key callbacks may dominate.
+
 ## Reproduction
 
 From a bootstrapped checkout, after committing the candidate:
