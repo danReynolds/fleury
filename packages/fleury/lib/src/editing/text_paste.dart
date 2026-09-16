@@ -3,6 +3,7 @@ import 'dart:collection' show Queue;
 import 'package:characters/characters.dart';
 
 import '../input/events.dart';
+import 'text_edit_policy.dart';
 
 /// Policy for deciding when paste should be applied over multiple frames.
 final class TextPastePolicy {
@@ -187,12 +188,19 @@ final class TextPasteSession {
 final class TextPasteDriver {
   TextPasteDriver({
     required TextPastePolicy Function() policy,
+    bool Function()? atomic,
+    TextEditRejection? Function(String text, int precedingCodeUnits)?
+    checkSegment,
+    void Function(TextEditRejection)? onRejected,
     required int Function() documentLength,
     required void Function(String text, {required bool coalesce}) applyEdit,
     required bool Function() isAttached,
     required void Function() onProgressChanged,
     required void Function(void Function() callback) schedulePostFrame,
-  }) : _policy = policy,
+  }) : _atomic = atomic,
+       _checkSegment = checkSegment,
+       _onRejected = onRejected,
+       _policy = policy,
        _documentLength = documentLength,
        _applyEdit = applyEdit,
        _isAttached = isAttached,
@@ -204,6 +212,37 @@ final class TextPasteDriver {
   /// bulk once it passes these bounds.
   static const int _maxQueuedCodeUnits = 64 * 1024;
   static const int _maxQueuedSegments = 256;
+
+  // Bounded fields admit the complete raw paste before applying it. The
+  // controller checks size before characters, so buffering is bounded even
+  // when a terminal streams an arbitrarily large paste in small segments.
+  final bool Function()? _atomic;
+  final TextEditRejection? Function(String text, int precedingCodeUnits)?
+  _checkSegment;
+  final void Function(TextEditRejection)? _onRejected;
+  StringBuffer? _atomicText;
+  int? _atomicPasteId;
+
+  void _startAtomic(PasteEvent event, String text) {
+    if (event.isFirst) {
+      discard();
+      _atomicText = StringBuffer();
+      _atomicPasteId = event.pasteId;
+    }
+    final pending = _atomicText;
+    if (pending == null || event.pasteId != _atomicPasteId) return;
+    final rejection = _checkSegment?.call(text, pending.length);
+    if (rejection != null) {
+      discard();
+      _onRejected?.call(rejection);
+      return;
+    }
+    pending.write(text);
+    if (!event.isFinal) return;
+    final accepted = pending.toString();
+    discard();
+    if (_isAttached()) _applyEdit(accepted, coalesce: false);
+  }
 
   final TextPastePolicy Function() _policy;
   final int Function() _documentLength;
@@ -238,7 +277,15 @@ final class TextPasteDriver {
   /// Only for a state change that invalidates the destination itself — a
   /// swapped controller, a field turned read-only, disposal. Every ordinary
   /// interruption uses [finish].
+  /// An external value or selection change invalidates a pending atomic paste.
+  /// Ordinary incremental paste state is unaffected.
+  void discardAtomic() {
+    _atomicText = null;
+    _atomicPasteId = null;
+  }
+
   void discard() {
+    discardAtomic();
     _generation++;
     _session = null;
     _queuedSegments.clear();
@@ -279,8 +326,15 @@ final class TextPasteDriver {
     _complete();
   }
 
-  /// Accepts one paste event's already-normalized [text].
+  /// Accepts normalized text, or raw text when atomic admission is enabled.
+  /// Atomic pastes wait for the final marker; interruption discards the pending
+  /// transaction without changing the field. Continuations without a start
+  /// marker are ignored.
   void start(PasteEvent event, String text) {
+    if (_atomic?.call() ?? false) {
+      _startAtomic(event, text);
+      return;
+    }
     final continuesActivePaste =
         _active &&
         !event.isFirst &&

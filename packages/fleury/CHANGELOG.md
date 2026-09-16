@@ -1,5 +1,9 @@
 # Changelog
 
+- Add `TextEditPolicy` to `TextEditingController` for bounded fields: reject
+  invalid edits before commit, preserve selection and undo/redo, and admit
+  streamed pastes atomically without buffering beyond the configured limit.
+
 ## 0.1.0
 
 - Inline images respect later text and opaque popup backgrounds across cached,
