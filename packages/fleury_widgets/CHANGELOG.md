@@ -1,5 +1,9 @@
 ## 0.1.0
 
+- `ImageSource.decoded` accepts optional prepared `encodedPng` bytes for static
+  images, avoiding PNG encoding during the first placement paint. Callers must
+  supply matching pixels and PNG bytes and keep both immutable while mounted.
+
 - Forms refresh revealed validation after field and control updates, including
   programmatic choice changes and rules that read another registered field.
   Named and inline validators behave consistently; cleared errors stay hidden.

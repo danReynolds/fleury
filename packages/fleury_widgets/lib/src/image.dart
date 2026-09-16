@@ -100,8 +100,13 @@ abstract class ImageSource {
   /// transformations).
   factory ImageSource.decoded(
     /// Decoded pixels to expose without additional decoding.
-    img.Image image,
-  ) = _DecodedSource;
+    img.Image image, {
+
+    /// Optional PNG of these exact, static pixels, prepared off the UI thread.
+    /// Supplying it avoids PNG encoding in the first placement paint. Treat
+    /// both the image and bytes as immutable while the source is mounted.
+    Uint8List? encodedPng,
+  }) = _DecodedSource;
 
   /// Drop the cached decode for [path]. Call after writing to the file
   /// to force the next [decode] to re-read from disk.
@@ -153,8 +158,13 @@ class _FileSource implements ImageSource {
 }
 
 class _DecodedSource implements ImageSource {
-  _DecodedSource(this._image);
+  _DecodedSource(this._image, {this.encodedPng}) {
+    if (encodedPng != null && _image.numFrames > 1) {
+      throw ArgumentError('Prepared PNG bytes require a static image');
+    }
+  }
   final img.Image _image;
+  final Uint8List? encodedPng;
   @override
   img.Image decode() => _image;
 }
@@ -403,6 +413,9 @@ class _ImageState extends State<Image> with SingleTickerProviderStateMixin {
       state: semanticState,
       child: _RawImage(
         decoded: _source.frames[_frameIndex],
+        encodedPng: widget.source is _DecodedSource
+            ? (widget.source as _DecodedSource).encodedPng
+            : null,
         fit: widget.fit,
         glyph: widget.glyph,
         colorMode: colorMode,
@@ -416,6 +429,7 @@ class _ImageState extends State<Image> with SingleTickerProviderStateMixin {
 class _RawImage extends LeafRenderObjectWidget {
   const _RawImage({
     required this.decoded,
+    this.encodedPng,
     required this.fit,
     required this.glyph,
     required this.colorMode,
@@ -424,6 +438,7 @@ class _RawImage extends LeafRenderObjectWidget {
   });
 
   final img.Image decoded;
+  final Uint8List? encodedPng;
   final ImageFit fit;
   final ImageGlyph glyph;
   final ColorMode colorMode;
@@ -434,6 +449,7 @@ class _RawImage extends LeafRenderObjectWidget {
   RenderObject createRenderObject(BuildContext context) => RenderImage(
     glyphTier: drawingGlyphTierOf(context),
     decoded: decoded,
+    encodedPng: encodedPng,
     fit: fit,
     glyph: glyph,
     colorMode: colorMode,
@@ -445,6 +461,7 @@ class _RawImage extends LeafRenderObjectWidget {
   void updateRenderObject(BuildContext context, covariant RenderImage r) {
     r
       ..decoded = decoded
+      ..preparedPng = encodedPng
       ..fit = fit
       ..glyph = glyph
       ..colorMode = colorMode
@@ -462,6 +479,9 @@ class RenderImage extends RenderObject {
     /// Decoded pixels for the frame currently being rendered.
     required img.Image decoded,
 
+    /// Optional PNG of these exact static pixels, prepared before painting.
+    Uint8List? encodedPng,
+
     /// Scaling and cropping policy within the laid-out cell area.
     required ImageFit fit,
 
@@ -478,6 +498,8 @@ class RenderImage extends RenderObject {
     Color? backgroundColor,
   }) : _glyphTier = glyphTier,
        _decoded = decoded,
+       _suppliedPng = encodedPng,
+       _encodedPng = encodedPng,
        _fit = fit,
        _glyph = glyph,
        _colorMode = colorMode,
@@ -495,6 +517,7 @@ class RenderImage extends RenderObject {
   set decoded(img.Image v) {
     if (identical(_decoded, v)) return;
     _decoded = v;
+    _suppliedPng = null;
     _encodedPng = null;
     _encodedId = null;
     _rgba = null;
@@ -507,6 +530,15 @@ class RenderImage extends RenderObject {
   // when the decoded image changes. The placement paint path runs on every
   // frame the tree repaints; without this it would re-encode (zlib) and
   // re-hash the same pixels each frame.
+  Uint8List? _suppliedPng;
+  set preparedPng(Uint8List? bytes) {
+    if (identical(_suppliedPng, bytes)) return;
+    _suppliedPng = bytes;
+    _encodedPng = bytes;
+    _encodedId = null;
+    markNeedsPaintOnly();
+  }
+
   Uint8List? _encodedPng;
   String? _encodedId;
 

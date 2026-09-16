@@ -727,6 +727,40 @@ void main() {
       );
     }
 
+    testWidgets(
+      'prepared static PNG passes through first paint and source replacement',
+      (tester) {
+        for (final prepared in [true, false, true]) {
+          final decoded = _solid(8, 6, prepared ? 200 : 30, 20, 40);
+          // Non-default compression makes re-encoding observable.
+          final png = Uint8List.fromList(img.encodePng(decoded, level: 0));
+          tester.pumpWidget(
+            placementsHosted(
+              SizedBox(
+                width: 4,
+                height: 2,
+                child: Image(
+                  source: ImageSource.decoded(
+                    decoded,
+                    encodedPng: prepared ? png : null,
+                  ),
+                ),
+              ),
+            ),
+          );
+          final frame = tester.render(size: const CellSize(4, 2));
+          final bytes = frame.images.values.single.bytes;
+          if (prepared) expect(bytes, orderedEquals(png));
+          final painted = img.decodePng(bytes)!;
+          expect(painted.getPixel(0, 0).r, prepared ? 200 : 30);
+          expect(
+            tester.render().images.values.single.bytes,
+            orderedEquals(bytes),
+          );
+        }
+      },
+    );
+
     testWidgets('routes bytes off-grid and carries the widget fit', (tester) {
       tester.pumpWidget(
         placementsHosted(
