@@ -94,6 +94,17 @@ class ListController extends ChangeNotifier {
   TuiBinding? _binding;
   bool _metricsNotificationPending = false;
   int _attachment = 0;
+  int _viewRevision = 0;
+  bool _nextNotificationIsMetrics = false;
+
+  @override
+  void notifyListeners() {
+    // Consume the kind before invoking listeners: a nested command or explicit
+    // refresh must advance the view revision even during metric delivery.
+    if (!_nextNotificationIsMetrics) _viewRevision++;
+    _nextNotificationIsMetrics = false;
+    super.notifyListeners();
+  }
 
   /// Whether new output should be followed while the viewport is at its end.
   /// Scrolling away pauses following without disabling this policy. Setting it
@@ -348,7 +359,16 @@ class ListController extends ChangeNotifier {
     binding.addPostFrameCallback((_) {
       if (_disposed || attachment != _attachment) return;
       _metricsNotificationPending = false;
-      notifyListeners();
+      // These metrics describe the viewport already laid out and painted.
+      // External consumers still need them; the owning list need not rebuild.
+      _nextNotificationIsMetrics = true;
+      try {
+        // Keep the virtual call so controller subclasses observe metrics too.
+        notifyListeners();
+      } finally {
+        // A subclass may throw or return without calling super.
+        _nextNotificationIsMetrics = false;
+      }
     });
   }
 
@@ -633,6 +653,7 @@ class _ListItemIdentities {
 
 class _ListViewState extends State<ListView> {
   late ListController _controller;
+  int _lastViewRevision = 0;
   late FocusNode _focusNode;
   bool _ownsController = false;
   bool _ownsFocusNode = false;
@@ -729,6 +750,7 @@ class _ListViewState extends State<ListView> {
 
   void _initializeController(int count) {
     _controller._attach(this);
+    _lastViewRevision = _controller._viewRevision;
     _controller._itemCount = count;
     _controller._attached = true;
     _controller._selectable = widget.selectable;
@@ -745,6 +767,14 @@ class _ListViewState extends State<ListView> {
   }
 
   void _onControllerChange() {
+    // Only the built-in controller guarantees a metrics-only notification.
+    // A subclass can update row data or replace this notification with a nested
+    // command before calling super, so retain its ordinary invalidation path.
+    if (_controller.runtimeType == ListController &&
+        _lastViewRevision == _controller._viewRevision) {
+      return;
+    }
+    _lastViewRevision = _controller._viewRevision;
     _captureCurrentItemKey();
     setState(() {});
   }

@@ -1,5 +1,10 @@
 # Changelog
 
+- `ListView` using the built-in `ListController` no longer rebuilds again after
+  publishing its completed viewport metrics. Listeners still receive those
+  metrics, and commands and explicit refreshes issued during delivery still
+  update the list. Controller subclasses retain their existing rebuild behavior.
+
 - Add `TextEditPolicy` to `TextEditingController` for bounded fields: reject
   invalid edits before commit, preserve selection and undo/redo, and admit
   streamed pastes atomically without buffering beyond the configured limit.
