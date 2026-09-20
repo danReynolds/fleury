@@ -1,142 +1,166 @@
 ---
 title: Forms & validation
-description: Validate input, show useful errors, and save without losing the user's work.
+description: Collect input, guide users through corrections, and save their changes with useful feedback.
 ---
 
 import FleuryExample from '../../../components/FleuryExample.astro';
 import CodeDemoSplit from '../../../components/CodeDemoSplit.astro';
 import FormsGuideCode from '../../../components/FormsGuideCode.astro';
 
-Wrap a control in `FormField` to validate its value. Put related fields inside
-`Form` to validate and submit them together. Values stay in your application
-state; the form handles inline errors and focus.
+A form collects the information needed to do something: create a project,
+update settings, or save a configuration. Validation checks that information
+and helps the user correct it before continuing. If a save fails, the form
+should explain what happened and keep their work ready to try again.
 
-## Validate a form
+## Create a project
 
-Choose **Create** with both fields empty. Errors appear beside the fields and
-focus moves to **Name**. Enter a name and a lowercase slug, then press **Enter**
-in Slug or choose Create again.
+Start with a project name and a slug, a short identifier such as `my-project`.
+Both are required, and the slug accepts only lowercase letters, numbers, and
+hyphens. The project should be created only when both values pass those checks.
 
-<CodeDemoSplit files={['project_form.dart', 'project_form_test.dart']} codeLabel="Source and test" demoLabel="Submit, correct, submit" codeMaxHeight="30rem" layout="code-wide">
+Each input sits inside a `FormField` with its validation rule. A `Form` groups
+the fields and calls `onSubmit` once they are valid. The Create button and
+Enter in the Slug input both reach it through `form.submit()`:
+
+<CodeDemoSplit files={['project_form.dart', 'project_form_test.dart']} codeLabel="Source and test" demoLabel="Create a project" codeMaxHeight="30rem" layout="code-wide">
 <FormsGuideCode slot="code-0" file="project_form.dart" focus="child: Form(" />
 <FormsGuideCode slot="code-1" file="project_form_test.dart" test />
 <FleuryExample slot="demo" id="forms.project" cols={40} rows={18} interactive />
 </CodeDemoSplit>
 
-A validator returns an error message, or `null` when the value is valid.
-Validation starts when you submit or call `validate()`. Once feedback has been
-shown, editing or updating a value refreshes it automatically. It does not move
-focus as you correct errors.
+Choose **Create** with both fields empty. Each field explains what it needs,
+and focus moves to **Name** so you can begin correcting it. Enter a name and
+slug, then press **Enter** in Slug or choose Create again to finish.
 
-`FormField` discovers the ordinary control inside it and supplies its invalid
-styling and error semantics. A `SizedBox` or `Padding` around that control is
-fine. Give every input a visible label and a matching `semanticLabel`.
+A validator reads the current value and returns an error message, or `null`
+when it is valid. Fields start without errors; submitting reveals them. Once
+feedback is visible, editing a value refreshes it automatically without moving
+focus away from what you are typing. On an invalid submission, the form focuses
+the first error and, inside a `ScrollView`, scrolls it into view.
 
-`FormController.submit()` validates every mounted, enabled field before running
-`onSubmit`. Invalid submission focuses the first error and scrolls it into view
-when it is inside a `ScrollView`. Repeated submissions share the same pending
-attempt.
-
-Create controllers once in `State` and dispose them with that state, as the
-complete source shows. You can omit the form controller when all actions live
-inside the form: `Form.of(context)` gets its controller and rebuilds readers
-when its state changes.
+The values remain in your application state. Here, two `TextEditingController`s
+hold the text, while `FormController` coordinates validation and submission.
+Create the controllers once in `State` and dispose them with it. `FormField`
+connects to its child control to show the error and apply invalid styling;
+the visible label and the input's matching `semanticLabel` identify the field.
 
 ## Save and retry
 
-Choose a **Simulated server response**, then **Save**:
+Passing local validation does not guarantee that a save will succeed. A server
+might reject a name that is already in use, or the connection might fail. The
+next project form adds an asynchronous save, progress feedback, and a way to
+recover while keeping the entered name.
 
-- **Success** shows progress, then confirms which value was saved.
-- **Name taken** puts an error on Name. Edit the name to clear it, choose Success,
-  and retry.
-- **Offline** keeps the draft and offers a retry. Change the response to Success
-  and save the same draft.
+The dropdown simulates three server responses locally. Nothing is sent over
+the network:
 
-The service is local to this example; no request is sent.
-
-<CodeDemoSplit files={['save_project.dart', 'save_project_test.dart']} codeLabel="Source and test" demoLabel="Try a failure, then retry" codeMaxHeight="32rem" layout="code-wide">
+<CodeDemoSplit files={['save_project.dart', 'save_project_test.dart']} codeLabel="Source and test" demoLabel="Save a project" codeMaxHeight="32rem" layout="code-wide">
 <FormsGuideCode slot="code-0" file="save_project.dart" focus="Future<void> save() async" />
 <FormsGuideCode slot="code-1" file="save_project_test.dart" test />
 <FleuryExample slot="demo" id="forms.save" cols={40} rows={16} interactive />
 </CodeDemoSplit>
 
-Handle expected service failures inside `onSubmit` so the button, Enter, and
-semantic submission all get the same feedback. Keep field errors in application
-state and pass them to `FormField.error`. Clear the error when the user edits
-that value. A failure affecting the whole request belongs in the form's status
-message instead of on an unrelated field.
+Choose **Name taken**, then **Save**. The error belongs to Name because changing
+that value can resolve it. Edit the name, switch to **Success**, and save again.
+With **Offline**, the form instead shows a status message and leaves the draft
+ready for another attempt.
 
-Take a snapshot of the values before the asynchronous operation. After it
-finishes, check `mounted` before updating the UI. Put success-only actions, such
-as closing a dialog, in the successful branch of that callback.
+Server errors use `FormField.error`. Store the message in application state
+and clear it when the user edits the affected value, as this example does in
+`onChanged`. An error affecting the whole request, such as being offline,
+belongs in the form's status message.
 
-`submit()` returns `false` when validation rejects an attempt or the callback
-leaves a field with an error, including a server error passed to `FormField.error`.
-It applies pending UI updates before checking, so setting an error inside
-`onSubmit` is enough. Unhandled save exceptions propagate to an awaiting caller.
-The example displays its offline failure inside `save()` and handles that expected
-exception in the shared button/Enter handler; it never reports a failed save as
-successful.
+`onSubmit` can return a future. The example uses `isSubmitting` to keep the
+name read-only while saving, so the result still refers to the value being
+shown. It uses `isBusy`, which also includes validation, to disable Save. If
+you disable choice controls during a save, use `isSubmitting`: disabled fields
+are skipped during validation.
 
-Use `isBusy` to disable Submit and back actions for the whole attempt. Use
-`isSubmitting` to lock field editing after validation: `readOnly: true` keeps
-text fields focusable; `onChanged: null` disables choice controls. Keep fields
-enabled during validation, because disabled fields are skipped. For a navigation
-guard, use `PopScope(canPop: !form.isBusy)`.
+`submit()` returns `false` if validation fails or `onSubmit` leaves a field
+error. Setting `FormField.error` in the callback is enough; there is no second
+validation call to make. Exceptions from the save propagate to an awaiting
+caller. For Offline, the example shows the failure and catches that expected
+exception in the handler shared by Save and Enter, leaving the form open.
 
-## Validate related fields
+The save callback takes a snapshot of the submitted name and checks `mounted`
+before updating the UI after the wait. Any action that depends on success,
+such as closing a dialog, belongs after the service has accepted the save.
 
-A validator can read another application-owned value. Enter different made-up
-passwords, then choose **Check**. Errors appear and keyboard focus stays on
-Check. Choose **Confirm** instead to move focus to the first invalid field.
-After checking, changing either password refreshes the comparison.
+## Check related values
 
-<CodeDemoSplit files={['related_fields.dart', 'related_fields_test.dart']} codeLabel="Source and test" demoLabel="Check without moving focus" codeMaxHeight="30rem" layout="code-wide">
+Some rules depend on more than one input. A password confirmation is valid
+only when it matches the password, so its validator reads both values from
+application state. Once errors are visible, changing either value refreshes
+the comparison.
+
+You can also check a form without submitting it. Here, **Check** displays
+feedback while leaving focus on the button, so the user can decide what to
+edit next. **Confirm** submits the form and focuses the first invalid field:
+
+<CodeDemoSplit files={['related_fields.dart', 'related_fields_test.dart']} codeLabel="Source and test" demoLabel="Check a password confirmation" codeMaxHeight="30rem" layout="code-wide">
 <FormsGuideCode slot="code-0" file="related_fields.dart" focus="Future<void> check() async" />
 <FormsGuideCode slot="code-1" file="related_fields_test.dart" test />
 <FleuryExample slot="demo" id="forms.related" cols={40} rows={18} interactive />
 </CodeDemoSplit>
 
-`validate(autofocus: false)` displays errors without moving focus or scrolling.
-The default is `true`; it applies to that validation call, not the control's
-initial focus. If concurrent calls share a validation pass, any request for
-autofocus enables it. Submit always requests autofocus.
+Enter two different made-up passwords and choose **Check**, then **Confirm**.
+Both show the mismatch; only Confirm moves focus to the correction. Make the
+values match and the error clears.
 
-Validators are synchronous and should only read state and return an error.
-`validate()` returns a future so it can wait for pending widget updates before
-checking those values. For a server check, use the save-and-retry pattern above.
+Check calls `validate(autofocus: false)`. This still displays errors, but leaves
+focus and scrolling alone. The default, `validate()`, focuses the first invalid
+field. Unlike a control's initial autofocus, this option applies each time you
+ask the form to validate.
 
-`clearErrors()` hides validator feedback without changing values. Controlled
-`FormField.error` messages stay until your application clears them. To reset a
-form, reset your values and controlled errors, then clear validator feedback.
+Keep validators synchronous: read the relevant values and return an error.
+`validate()` itself returns a future so it can wait for pending widget updates
+before checking. Checks that need a server belong in the asynchronous save
+flow above.
 
 ## Build a custom field
 
-Use `FormField.builder` when several controls represent one logical value.
-This range starts invalid. Choose **Save range**, then make End greater than
-Start using the stepper's arrows or **+** button.
+Sometimes several controls represent one value. A range has a start and an
+end, but its validation rule describes the range as a whole: End must be greater
+than Start. `FormField.builder` lets that pair participate in the same validation
+and submission flow as an ordinary input.
 
-<CodeDemoSplit files={['custom_field.dart', 'custom_field_test.dart']} codeLabel="Source and test" demoLabel="Two controls, one range" codeMaxHeight="30rem" layout="code-wide">
+The example uses two steppers and one shared error. It chooses Start as the
+place to focus when the range needs correcting:
+
+<CodeDemoSplit files={['custom_field.dart', 'custom_field_test.dart']} codeLabel="Source and test" demoLabel="Edit a range" codeMaxHeight="30rem" layout="code-wide">
 <FormsGuideCode slot="code-0" file="custom_field.dart" focus="FormField.builder(" />
 <FormsGuideCode slot="code-1" file="custom_field_test.dart" test />
 <FleuryExample slot="demo" id="forms.custom" cols={40} rows={12} interactive />
 </CodeDemoSplit>
 
-Attach `field.focusNode` to the control that should receive focus when the value
-is invalid. Call `field.valueChanged()` after updating the value, and forward
-`field.error` to your custom error semantics or styling. The field supplies the
-visible error message below the composite by default.
+Choose **Save range** to reveal the error, then increase End above Start using
+the stepper's arrows or **+** button. The message clears as the range becomes
+valid, and Save range can now complete.
 
-The ordinary `FormField(child: ...)` constructor expects one value control.
-Use separate fields for separate values, or the builder for a composite; wrapping
-two unrelated controls in one ordinary field is an error.
+The builder receives a `field` that connects the controls to the form. Attach
+`field.focusNode` to the control that should receive focus, call
+`field.valueChanged()` after updating either value, and use `field.error` for
+custom styling or semantics. The field displays the error message below the
+pair by default. Separate, independent values should each have their own
+`FormField`.
 
-## Go further
+The Save range button lives in its own widget. It uses `Form.of(context)` to
+reach the surrounding form's controller, and rebuilds when that controller's
+state changes. You can use this for actions inside a form without passing the
+controller through every widget. When all actions live inside the form, you
+can omit its `controller` argument and let the form create one.
 
-The displayed source, live demos, and tests use the same widgets. Run the tests
-with `cd website/examples && dart test test/forms_guide_test.dart`.
+## Next steps
 
-- [Form reference](/fleury/widgets/form/) covers controller and field options.
-- [Theming](/fleury/guides/theming/) covers invalid-state styling.
-- [Navigation](/fleury/guides/navigation/) covers unsaved changes and multi-screen flows.
-- [Testing](/fleury/guides/testing/) shows how to edit controls and check outcomes.
+For a reset action, reset your application's values and server errors, then
+call `clearErrors()` to hide validator feedback. The form does not discard
+entered values itself.
+
+The [Form reference](/fleury/widgets/form/) covers the remaining controller and
+field options. Continue with [Navigation](/fleury/guides/navigation/) for
+protecting unsaved changes, or [Testing](/fleury/guides/testing/) to exercise
+validation and submission in your own forms.
+
+Each demo's source and test tabs show the files used by the live example. Run
+all four from the checkout with
+`cd website/examples && dart test test/forms_guide_test.dart`.
