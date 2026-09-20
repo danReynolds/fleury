@@ -86,6 +86,10 @@ The save callback takes a snapshot of the submitted name and checks `mounted`
 before updating the UI after the wait. Any action that depends on success,
 such as closing a dialog, belongs after the service has accepted the save.
 
+For a reset action, reset your application's values and server errors, then
+call `clearErrors()` to hide validator feedback. The form does not discard
+entered values itself.
+
 ## Check related values
 
 Some rules depend on more than one input. A password confirmation is valid
@@ -151,10 +155,6 @@ controller through every widget. When all actions live inside the form, you
 can omit its `controller` argument and let the form create one.
 
 ## Next steps
-
-For a reset action, reset your application's values and server errors, then
-call `clearErrors()` to hide validator feedback. The form does not discard
-entered values itself.
 
 The [Form reference](/fleury/widgets/form/) covers the remaining controller and
 field options. Continue with [Navigation](/fleury/guides/navigation/) for

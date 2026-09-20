@@ -98,15 +98,15 @@ Tests should exercise each demonstrated user outcome, not merely render the init
 
 Keep the basic comparison/ownership explanation short. Move exhaustive control lists, custom styling details, sensitive-input recipes, and API tables to linked reference pages where appropriate.
 
-## Evidence and limits
+## Baseline audit evidence and limits
 
 - Baseline: origin/main `19a8978c`, 2026-09-16.
 - Existing suite receipt: /tmp/fleury-forms-dx-existing-tests.log (63 passed).
 - Audit probes: /tmp/fleury-forms-dx-audit-probe-baseline.dart; receipt /tmp/fleury-forms-dx-probes.log (8 passed).
 - Current guide fixture: doc_snippets_test.dart forms render test passed; receipt /tmp/fleury-forms-dx-guide-test.log.
 - Probe development included correcting an unsupported StatefulBuilder helper and an initial hypothesis about Form.of subscription. The latter was disproved: Form.of is reactive. No missing reactive API is proposed.
-- Production code and the published guide are unchanged. Audit files are uncommitted in this isolated worktree.
-- No browser screenshot, real screen-reader session, native PTY dogfood, or performance measurement was performed for this assessment. Unit/semantic probes do not substitute for those checks.
+- At the time of this baseline audit, production code and the published guide were unchanged. The follow-up decision above records the subsequent implementation scope.
+- No browser screenshot, real screen-reader session, native PTY dogfood, or performance measurement was performed during the baseline assessment. Unit/semantic probes do not substitute for those checks.
 
 ## Primary sources consulted
 
