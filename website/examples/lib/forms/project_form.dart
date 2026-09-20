@@ -45,6 +45,7 @@ class _ProjectFormState extends State<ProjectForm> {
             child: TextInput(
               controller: name,
               semanticLabel: 'Name',
+              placeholder: 'e.g. My project',
               autofocus: true,
             ),
           ),
@@ -60,6 +61,7 @@ class _ProjectFormState extends State<ProjectForm> {
             child: TextInput(
               controller: slug,
               semanticLabel: 'Slug',
+              placeholder: 'e.g. my-project',
               onSubmit: (_) => form.submit(),
             ),
           ),
