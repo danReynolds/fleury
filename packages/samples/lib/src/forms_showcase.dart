@@ -104,8 +104,7 @@ class _ServiceDetailsScreenState extends State<_ServiceDetailsScreen> {
     if (!mounted) return;
     if (name.toLowerCase() == 'fleury') {
       setState(() => _nameError = 'That service name is already in use.');
-      await _form.validate();
-      return;
+      return; // submit() applies the server error and focuses this field.
     }
     unawaited(
       context.push<void>(

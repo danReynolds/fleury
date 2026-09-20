@@ -2345,8 +2345,7 @@ class _FormsStoryState extends State<_FormsStory> {
     await Future<void>.delayed(const Duration(milliseconds: 220));
     if (_serviceName.text.trim().toLowerCase() == 'fleury') {
       setState(() => _nameError = 'That service name is already in use.');
-      await _form.validate();
-      return;
+      return; // submit() applies the server error and focuses this field.
     }
     setState(() => _step = 1);
   }

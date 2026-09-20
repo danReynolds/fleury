@@ -27,38 +27,38 @@ void main() {
 
     await tester.target(role: SemanticRole.form).submit();
     await Future<void>.delayed(Duration.zero);
-    tester.pump();
+    await tester.settle();
     expect(rendered(), contains('Enter a service name.'));
 
     await tester.field('Service name').fill('fleury');
     await tester.target(role: SemanticRole.form).submit();
     await Future<void>.delayed(const Duration(milliseconds: 240));
-    tester.pump();
+    await tester.settle();
     expect(rendered(), contains('That service name is already in use.'));
 
     await tester.field('Service name').fill('webhook-worker');
     await tester.target(role: SemanticRole.form).submit();
     await Future<void>.delayed(const Duration(milliseconds: 240));
-    tester.pump();
+    await tester.settle();
     expect(rendered(), contains('DEPLOYMENT  ·  2 OF 3'));
     expect(rendered(), contains('Production'));
     expect(rendered(), contains('Toronto'));
 
     await tester.target(role: SemanticRole.form).submit();
     await Future<void>.delayed(Duration.zero);
-    tester.pump();
+    await tester.settle();
     expect(rendered(), contains('REVIEW  ·  3 OF 3'));
     expect(rendered(), contains('webhook-worker'));
 
     await tester.target(role: SemanticRole.form).submit();
     await Future<void>.delayed(Duration.zero);
-    tester.pump();
+    await tester.settle();
     expect(rendered(), contains('Confirm the production deployment.'));
 
     await tester.checkbox('I reviewed these settings').check();
     await tester.target(role: SemanticRole.form).submit();
     await Future<void>.delayed(const Duration(milliseconds: 470));
-    tester.pump();
+    await tester.settle();
     expect(rendered(), contains('SERVICE DEPLOYED'));
     expect(rendered(), contains('webhook-worker is live in Toronto.'));
   });

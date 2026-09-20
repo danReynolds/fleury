@@ -1,5 +1,12 @@
 ## 0.1.0
 
+- `FormController.submit()` returns false when the submit callback leaves a
+  mounted, enabled field with an error. Callback updates and temporarily locked
+  controls are applied before this final check, which focuses the invalid field.
+- `FormController.validate(autofocus: false)` displays errors without moving
+  focus or scrolling. The default remains true; concurrent validation calls
+  focus the first invalid field when any caller requests autofocus.
+
 - `ImageSource.decoded` accepts optional prepared `encodedPng` bytes for static
   images, avoiding PNG encoding during the first placement paint. Callers must
   supply matching pixels and PNG bytes and keep both immutable while mounted.

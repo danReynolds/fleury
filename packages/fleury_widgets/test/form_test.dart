@@ -94,9 +94,9 @@ Future<bool> _validate(FleuryTester tester, FormController controller) {
   return validation;
 }
 
-Future<bool> _submit(FleuryTester tester, FormController controller) {
+Future<bool> _submit(FleuryTester tester, FormController controller) async {
   final submission = controller.submit();
-  tester.pump();
+  await tester.settle();
   return submission;
 }
 
@@ -129,8 +129,14 @@ void main() {
         await Future<void>.delayed(Duration.zero);
         expect(controller.isSubmitting, isTrue);
         pending.complete();
+        await tester.settle();
         expect(await submission, isTrue);
-        expect(states, [(true, false), (true, true), (false, false)]);
+        expect(states, [
+          (true, false),
+          (true, true),
+          (true, false),
+          (false, false),
+        ]);
         tester.pumpWidget(const Text('gone'));
         controller.dispose();
       },
@@ -274,7 +280,7 @@ void main() {
           throws = false;
           final retry = run();
           expect(identical(first, retry), isFalse);
-          tester.pump();
+          await tester.settle();
           expect(await retry.timeout(const Duration(seconds: 1)), isTrue);
           expect(submits, submit ? 1 : 0);
         },
@@ -354,6 +360,7 @@ void main() {
       expect(submits, 1);
 
       pending.complete();
+      await tester.settle();
       expect(await first, isTrue);
       expect(controller.isSubmitting, isFalse);
 
