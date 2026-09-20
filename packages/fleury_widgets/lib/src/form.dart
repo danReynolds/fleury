@@ -34,17 +34,27 @@ final class FormController extends ChangeNotifier {
   /// use [isSubmitting] when temporarily disabling their editing controls.
   bool get isBusy => _submission != null;
 
-  /// Validates every mounted, enabled field and focuses the first invalid one.
+  /// Validates every mounted, enabled field and displays its errors.
   ///
   /// Validation runs after pending application-state changes have had a chance
   /// to rebuild the fields, so callers can update controlled errors and then
   /// immediately await this method without scheduling their own microtask.
-  Future<bool> validate() => _requireHost().validate();
+  ///
+  /// [autofocus] moves keyboard focus to the first invalid field and scrolls it
+  /// into view. Set it to false to display validation errors without moving
+  /// focus. Concurrent calls share a validation pass; if any caller requests
+  /// autofocus, that pass focuses the first invalid field. [submit] always
+  /// requests autofocus.
+  Future<bool> validate({bool autofocus = true}) =>
+      _requireHost().validate(autofocus: autofocus);
 
   /// Validates the form and, only when valid, awaits its submit callback.
   ///
-  /// Concurrent calls share one submission. The returned value is true when
-  /// the callback ran successfully and false when validation rejected it.
+  /// Concurrent calls share one submission. Returns false if validation fails
+  /// or the callback leaves a mounted, enabled field with an error, including
+  /// a controlled [FormField.error]. Callback updates are applied before this
+  /// final check. A successful callback may close/unmount the form. Unhandled
+  /// callback exceptions propagate to the caller instead of returning true.
   Future<bool> submit() {
     final active = _submission;
     if (active != null) return active;
@@ -67,14 +77,15 @@ final class FormController extends ChangeNotifier {
       if (!isCurrent()) return false;
       _setSubmitting(true);
       if (!isCurrent()) return false;
-      // onSubmit failures propagate. Containing them HERE made a thrown
-      // error indistinguishable from a validation rejection for an awaiting
-      // caller — `if (await controller.submit()) close(); else showErrors();`
-      // took the else branch on a network failure, showed nothing, and the
-      // exception reached no zone handler. Only the fire-and-forget call site
-      // (SemanticAction.submit) needs containment, and it does it itself.
+      // Awaiting callers receive callback failures. Fire-and-forget semantic
+      // submission contains them at its own boundary.
       await host.submit();
-      return true;
+      if (!isCurrent()) return true;
+      // Restore controls locked with isSubmitting before inspecting errors.
+      // Keep the attempt busy so reentrant requests still share its future.
+      _setSubmitting(false);
+      if (!isCurrent()) return true;
+      return await host.completeSubmission();
     } finally {
       if (_submissionGeneration == generation) {
         _submission = null;
@@ -156,8 +167,9 @@ final class FormController extends ChangeNotifier {
 }
 
 abstract interface class _FormHost {
-  Future<bool> validate();
+  Future<bool> validate({bool autofocus = true});
   FutureOr<void> submit();
+  Future<bool> completeSubmission();
   void clearErrors();
   void scheduleRevalidation();
 }
@@ -211,6 +223,8 @@ final class _FormWidgetState extends State<Form> implements _FormHost {
   late FormController _controller;
   bool _ownsController = false;
   Completer<bool>? _pendingValidation;
+  bool _pendingValidationAutofocus = false;
+  Completer<bool>? _pendingSubmissionCheck;
   bool _revalidationScheduled = false;
 
   @override
@@ -229,6 +243,7 @@ final class _FormWidgetState extends State<Form> implements _FormHost {
   void didUpdateWidget(Form oldWidget) {
     super.didUpdateWidget(oldWidget);
     if (widget.controller != oldWidget.controller) {
+      _finishSubmissionCheck();
       _controller._detach(this);
       if (_ownsController) _controller.dispose();
       _attach(widget.controller);
@@ -252,7 +267,8 @@ final class _FormWidgetState extends State<Form> implements _FormHost {
   }
 
   @override
-  Future<bool> validate() {
+  Future<bool> validate({bool autofocus = true}) {
+    _pendingValidationAutofocus |= autofocus;
     final active = _pendingValidation;
     if (active != null) return active.future;
 
@@ -261,28 +277,36 @@ final class _FormWidgetState extends State<Form> implements _FormHost {
     TuiBinding.of(context).addPostFrameCallback((_) {
       try {
         if (!validation.isCompleted) {
-          validation.complete(mounted && _validateNow());
+          validation.complete(
+            mounted && _validateNow(autofocus: _pendingValidationAutofocus),
+          );
         }
       } catch (error, stack) {
         if (!validation.isCompleted) validation.completeError(error, stack);
       } finally {
         if (identical(_pendingValidation, validation)) {
           _pendingValidation = null;
+          _pendingValidationAutofocus = false;
         }
       }
     });
     return validation.future;
   }
 
-  bool _validateNow() {
+  bool _validateNow({required bool autofocus}) {
     FormFieldState? firstInvalid;
     for (final field in _fieldsInTraversalOrder()) {
       if (!field.validate()) firstInvalid ??= field;
     }
-    firstInvalid?._debugCheckFocusDestination();
-    firstInvalid?.focusNode.requestFocus();
+    if (autofocus) _focusInvalid(firstInvalid);
+    return firstInvalid == null;
+  }
+
+  void _focusInvalid(FormFieldState? firstInvalid) {
     if (firstInvalid != null) {
       final field = firstInvalid;
+      field._debugCheckFocusDestination();
+      field.focusNode.requestFocus();
       // Error messages change layout. Reveal after that layout, and only if
       // the invalid control still owns focus (the user may have moved on).
       TuiBinding.of(context).addPostFrameCallback((_) {
@@ -298,7 +322,6 @@ final class _FormWidgetState extends State<Form> implements _FormHost {
         }
       });
     }
-    return firstInvalid == null;
   }
 
   @override
@@ -320,6 +343,35 @@ final class _FormWidgetState extends State<Form> implements _FormHost {
   FutureOr<void> submit() => widget.onSubmit();
 
   @override
+  Future<bool> completeSubmission() {
+    final check = Completer<bool>();
+    _pendingSubmissionCheck = check;
+    TuiBinding.of(context).addPostFrameCallback((_) {
+      if (check.isCompleted) return;
+      try {
+        FormFieldState? firstInvalid;
+        if (mounted) {
+          for (final field in _fieldsInTraversalOrder()) {
+            // Refresh already revealed feedback against the applied values.
+            // Respect clearErrors() when a successful save resets the draft.
+            field._refreshRevealedError();
+            if (field.error != null) firstInvalid ??= field;
+          }
+          _focusInvalid(firstInvalid);
+        }
+        check.complete(firstInvalid == null);
+      } catch (error, stack) {
+        check.completeError(error, stack);
+      } finally {
+        if (identical(_pendingSubmissionCheck, check)) {
+          _pendingSubmissionCheck = null;
+        }
+      }
+    });
+    return check.future;
+  }
+
+  @override
   void clearErrors() {
     for (final field in _fieldsInTraversalOrder()) {
       field._clearValidatorError();
@@ -328,6 +380,9 @@ final class _FormWidgetState extends State<Form> implements _FormHost {
 
   @override
   void dispose() {
+    // A callback may deliberately close a successfully submitted form while
+    // its final UI update is pending. The operation still completed.
+    _finishSubmissionCheck();
     final validation = _pendingValidation;
     _pendingValidation = null;
     if (validation != null && !validation.isCompleted) {
@@ -336,6 +391,12 @@ final class _FormWidgetState extends State<Form> implements _FormHost {
     _controller._detach(this);
     if (_ownsController) _controller.dispose();
     super.dispose();
+  }
+
+  void _finishSubmissionCheck() {
+    final check = _pendingSubmissionCheck;
+    _pendingSubmissionCheck = null;
+    if (check != null && !check.isCompleted) check.complete(true);
   }
 
   @override
@@ -487,11 +548,10 @@ final class FormFieldState extends State<FormField>
   }
 
   void _refreshRevealedError() {
-    if (!_validatorErrorVisible) return;
-    if (!enabled) {
-      _clearValidatorError();
-      return;
-    }
+    // A temporarily disabled control hides its errors through [error], but
+    // must remember that validation ran so feedback refreshes when editing is
+    // restored. Explicit clearErrors() still resets that feedback state.
+    if (!_validatorErrorVisible || !enabled) return;
     _runValidator(reveal: true);
   }
 

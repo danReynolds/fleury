@@ -94,8 +94,9 @@ void main() {
   testWidgets('forms guide app renders against the real API', (tester) {
     tester.pumpWidget(forms.formsDemoApp());
     final rendered = tester.renderToString(emptyMark: ' ');
-    expect(rendered, contains('Create project'));
-    expect(rendered, contains('Private project'));
+    expect(rendered, contains('Name'));
+    expect(rendered, contains('Slug'));
+    expect(rendered, contains('Fill in the project details'));
   });
 
   testWidgets('animation guide trigger demo replays feedback', (tester) async {
