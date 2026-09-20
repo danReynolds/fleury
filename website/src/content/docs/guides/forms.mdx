@@ -1,282 +1,142 @@
 ---
 title: Forms & validation
-description: Compose ordinary controls into forms with validation, accessible errors, and reliable submission.
+description: Validate input, show useful errors, and save without losing the user's work.
 ---
 
 import FleuryExample from '../../../components/FleuryExample.astro';
 import CodeDemoSplit from '../../../components/CodeDemoSplit.astro';
+import FormsGuideCode from '../../../components/FormsGuideCode.astro';
 
-A Fleury form is ordinary UI with a reliable submit boundary. Your application
-owns the values and layout; `Form` coordinates validation, focuses the first
-invalid control, and runs `onSubmit` only when every enabled field is valid.
+Wrap a control in `FormField` to validate its value. Put related fields inside
+`Form` to validate and submit them together. Values stay in your application
+state; the form handles inline errors and focus.
 
-| You need to… | Use |
-|---|---|
-| Validate one value | `FormField` around its control |
-| Validate and submit a group | `Form` |
-| Submit from a button or elsewhere | `FormController` |
-| Integrate a custom composite | `FormField.builder` |
+## Validate a form
 
-There are no field names, schemas, value maps, or required panel layouts.
+Choose **Create** with both fields empty. Errors appear beside the fields and
+focus moves to **Name**. Enter a name and a lowercase slug, then press **Enter**
+in Slug or choose Create again.
 
-## Build a form
-
-Own values exactly as you would without a form. Wrap controls that need
-validation or external-error handling in `FormField`, then put the resulting
-layout inside `Form`. Other controls remain ordinary app-owned widgets:
-
-<CodeDemoSplit file="forms.dart" layout="demo-wide">
-<Fragment slot="code">
-```dart
-final form = FormController();
-final name = TextEditingController();
-final slug = TextEditingController();
-var private = true;
-
-Form(
-  controller: form,
-  onSubmit: () => createProject(
-    name: name.text.trim(),
-    slug: slug.text.trim(),
-    private: private,
-  ),
-  child: Column(
-    children: [
-      FormField(
-        validator: () => name.text.trim().isEmpty
-            ? 'Enter a project name.'
-            : null,
-        child: TextInput(
-          controller: name,
-          semanticLabel: 'Name',
-        ),
-      ),
-      FormField(
-        validator: () => RegExp(r'^[a-z0-9-]+$').hasMatch(slug.text)
-            ? null
-            : 'Use lowercase letters, numbers, and hyphens.',
-        child: TextInput(
-          controller: slug,
-          semanticLabel: 'Slug',
-          onSubmit: (_) => form.submit(),
-        ),
-      ),
-      Checkbox(
-        value: private,
-        label: 'Private project',
-        onChanged: (value) => setState(() => private = value),
-      ),
-      Button(text: 'Create', onPressed: form.submit),
-    ],
-  ),
-)
-```
-</Fragment>
-<FleuryExample
-  slot="demo"
-  id="forms.project"
-  cols={68}
-  rows={15}
-  interactive
-/>
+<CodeDemoSplit files={['project_form.dart', 'project_form_test.dart']} codeLabel="Source and test" demoLabel="Submit, correct, submit" codeMaxHeight="30rem" layout="code-wide">
+<FormsGuideCode slot="code-0" file="project_form.dart" focus="child: Form(" />
+<FormsGuideCode slot="code-1" file="project_form_test.dart" test />
+<FleuryExample slot="demo" id="forms.project" cols={40} rows={18} interactive />
 </CodeDemoSplit>
 
-Try submitting immediately. Both text errors appear and focus moves to **Name**.
-Enter a name, try an invalid slug, then correct it and submit. Once validation
-feedback has been shown, changes to registered fields refresh that feedback
-after pending widget updates. This works for programmatic updates and rules
-that read another field too. Validators should only read state and return an
-error; they can run again when forms, fields, or controls rebuild.
+A validator returns an error message, or `null` when the value is valid.
+Validation starts when you submit or call `validate()`. Once feedback has been
+shown, editing or updating a value refreshes it automatically. It does not move
+focus as you correct errors.
 
-## How fields participate
+`FormField` discovers the ordinary control inside it and supplies its invalid
+styling and error semantics. A `SizedBox` or `Padding` around that control is
+fine. Give every input a visible label and a matching `semanticLabel`.
 
-`FormField(child: …)` finds one first-party value control below it. The control
-automatically receives invalid styling and semantics, reports edits, and becomes
-the field's focus target. Harmless layout wrappers are fine:
+`FormController.submit()` validates every mounted, enabled field before running
+`onSubmit`. Invalid submission focuses the first error and scrolls it into view
+when it is inside a `ScrollView`. Repeated submissions share the same pending
+attempt.
 
-```dart
-FormField(
-  validator: validateName,
-  child: SizedBox(
-    width: 32,
-    child: TextInput(controller: name),
-  ),
-)
-```
+Create controllers once in `State` and dispose them with that state, as the
+complete source shows. You can omit the form controller when all actions live
+inside the form: `Form.of(context)` gets its controller and rebuilds readers
+when its state changes.
 
-This works with Fleury's text inputs, selection controls, toggles, date and
-color pickers, steppers, and range sliders. A `FormField` represents one logical
-value, so wrapping multiple value controls is intentionally rejected in debug
-builds; use the custom-field escape hatch for a composite value.
+## Save and retry
 
-The visible error message is rendered below the child by default. Set
-`showErrorMessage: false` to place it yourself, or provide `errorBuilder` for a
-different presentation. The associated control still exposes the error through
-semantics.
+Choose a **Simulated server response**, then **Save**:
 
-## Submission
+- **Success** shows progress, then confirms which value was saved.
+- **Name taken** puts an error on Name. Edit the name to clear it, choose Success,
+  and retry.
+- **Offline** keeps the draft and offers a retry. Change the response to Success
+  and save the same draft.
 
-`submit()` validates every mounted, enabled field before calling `onSubmit`.
-It returns `false` when validation rejects the form and `true` after the submit
-callback completes. Concurrent calls share the same in-flight submission.
+The service is local to this example; no request is sent.
 
-`validate()` waits until pending application-state updates have rebuilt the
-fields. This makes it safe to set a controlled error and immediately
-`await form.validate()` without manually scheduling work.
+<CodeDemoSplit files={['save_project.dart', 'save_project_test.dart']} codeLabel="Source and test" demoLabel="Try a failure, then retry" codeMaxHeight="32rem" layout="code-wide">
+<FormsGuideCode slot="code-0" file="save_project.dart" focus="Future<void> save() async" />
+<FormsGuideCode slot="code-1" file="save_project_test.dart" test />
+<FleuryExample slot="demo" id="forms.save" cols={40} rows={16} interactive />
+</CodeDemoSplit>
 
-Use `isBusy` to disable submit and back actions throughout validation and submission:
+Handle expected service failures inside `onSubmit` so the button, Enter, and
+semantic submission all get the same feedback. Keep field errors in application
+state and pass them to `FormField.error`. Clear the error when the user edits
+that value. A failure affecting the whole request belongs in the form's status
+message instead of on an unrelated field.
 
-```dart
-ListenableBuilder(
-  listenable: form,
-  builder: (context, child) => Button(
-    text: form.isBusy ? 'Creating…' : 'Create',
-    onPressed: form.isBusy ? null : form.submit,
-  ),
-)
-```
+Take a snapshot of the values before the asynchronous operation. After it
+finishes, check `mounted` before updating the UI. Put success-only actions, such
+as closing a dialog, in the successful branch of that callback.
 
-`isBusy` becomes true as soon as `submit()` accepts the attempt. Use it for
-`PopScope(canPop: !form.isBusy)` as well. `isSubmitting` becomes true after
-validation succeeds, while the submit callback runs: use that narrower flag
-to make text fields read-only or disable choice controls. Keeping controls
-enabled during validation ensures their required-field checks still run.
+`submit()` returns `false` when validation rejects an attempt or the callback
+leaves a field with an error, including a server error passed to `FormField.error`.
+It applies pending UI updates before checking, so setting an error inside
+`onSubmit` is enough. Unhandled save exceptions propagate to an awaiting caller.
+The example displays its offline failure inside `save()` and handles that expected
+exception in the shared button/Enter handler; it never reports a failed save as
+successful.
 
-You can omit the controller when submission stays inside the subtree and call
-`Form.of(context).submit()`. Pass a controller when a shortcut, command, app
-bar, or parent region needs to validate or submit the form. Create it once,
-dispose it with its owning `State`, and attach it to only one mounted form at a
-time.
+Use `isBusy` to disable Submit and back actions for the whole attempt. Use
+`isSubmitting` to lock field editing after validation: `readOnly: true` keeps
+text fields focusable; `onChanged: null` disables choice controls. Keep fields
+enabled during validation, because disabled fields are skipped. For a navigation
+guard, use `PopScope(canPop: !form.isBusy)`.
 
-## Advanced patterns
+## Validate related fields
 
-### Server errors
+A validator can read another application-owned value. Enter different made-up
+passwords, then choose **Check**. Errors appear and keyboard focus stays on
+Check. Choose **Confirm** instead to move focus to the first invalid field.
+After checking, changing either password refreshes the comparison.
 
-Keep service-returned errors in application state and pass the current one to
-`FormField.error`. It is displayed, announced, and blocks submission like a
-local validator error. Clear it when the user edits the value:
+<CodeDemoSplit files={['related_fields.dart', 'related_fields_test.dart']} codeLabel="Source and test" demoLabel="Check without moving focus" codeMaxHeight="30rem" layout="code-wide">
+<FormsGuideCode slot="code-0" file="related_fields.dart" focus="Future<void> check() async" />
+<FormsGuideCode slot="code-1" file="related_fields_test.dart" test />
+<FleuryExample slot="demo" id="forms.related" cols={40} rows={18} interactive />
+</CodeDemoSplit>
 
-```dart
-FormField(
-  error: nameError,
-  validator: validateName,
-  child: TextInput(
-    controller: name,
-    onChanged: (_) => setState(() => nameError = null),
-  ),
-)
-```
+`validate(autofocus: false)` displays errors without moving focus or scrolling.
+The default is `true`; it applies to that validation call, not the control's
+initial focus. If concurrent calls share a validation pass, any request for
+autofocus enables it. Submit always requests autofocus.
 
-`form.clearErrors()` hides errors produced by validators without erasing any
-values. Controlled server errors remain until your application clears them.
+Validators are synchronous and should only read state and return an error.
+`validate()` returns a future so it can wait for pending widget updates before
+checking those values. For a server check, use the save-and-retry pattern above.
 
-### Custom error styling
+`clearErrors()` hides validator feedback without changing values. Controlled
+`FormField.error` messages stay until your application clears them. To reset a
+form, reset your values and controlled errors, then clear validator feedback.
 
-Controls use the `invalid` entry in `CellStyle.interactive(...)` supplied to
-`ThemeData.interactiveStyle`, falling back to `ThemeData.errorStyle`. Override the
-`invalid` state on an individual control when it needs different chrome. Pass
-`CellStyle.none` to keep that control visually neutral while retaining its
-error message and semantics:
+## Build a custom field
 
-```dart
-TextInput(
-  controller: query,
-  style: const CellStyle.interactive(invalid: CellStyle.none),
-)
-```
+Use `FormField.builder` when several controls represent one logical value.
+This range starts invalid. Choose **Save range**, then make End greater than
+Start using the stepper's arrows or **+** button.
 
-See [Theming](/fleury/guides/theming/) for app-wide and per-control state
-styling.
+<CodeDemoSplit files={['custom_field.dart', 'custom_field_test.dart']} codeLabel="Source and test" demoLabel="Two controls, one range" codeMaxHeight="30rem" layout="code-wide">
+<FormsGuideCode slot="code-0" file="custom_field.dart" focus="FormField.builder(" />
+<FormsGuideCode slot="code-1" file="custom_field_test.dart" test />
+<FleuryExample slot="demo" id="forms.custom" cols={40} rows={12} interactive />
+</CodeDemoSplit>
 
-### Custom controls
+Attach `field.focusNode` to the control that should receive focus when the value
+is invalid. Call `field.valueChanged()` after updating the value, and forward
+`field.error` to your custom error semantics or styling. The field supplies the
+visible error message below the composite by default.
 
-Use `FormField.builder` when one logical value is represented by a custom or
-multi-control widget. Supply the focus destination, call `valueChanged()` after
-the app-owned value changes, and use `field.error` for custom invalid chrome or
-semantics:
+The ordinary `FormField(child: ...)` constructor expects one value control.
+Use separate fields for separate values, or the builder for a composite; wrapping
+two unrelated controls in one ordinary field is an error.
 
-```dart
-FormField.builder(
-  validator: () => end.isBefore(start)
-      ? 'End must follow start.'
-      : null,
-  builder: (context, field) => DateRangeEditor(
-    start: start,
-    end: end,
-    focusNode: field.focusNode,
-    error: field.error,
-    onChanged: (range) {
-      setState(() {
-        start = range.start;
-        end = range.end;
-      });
-      field.valueChanged();
-    },
-  ),
-)
-```
+## Go further
 
-Attach `field.focusNode` to the custom control that should receive focus when
-the field is invalid. The field manages that node's lifetime. If the application
-already owns a node, pass it to `FormField.builder(focusNode: ...)` and attach
-the same node inside the builder. Debug builds report missing or unattached
-destinations when validation needs to focus the field.
+The displayed source, live demos, and tests use the same widgets. Run the tests
+with `cd website/examples && dart test test/forms_guide_test.dart`.
 
-### Multi-screen flows
-
-Forms do not impose a wizard abstraction. Keep the values in the parent state,
-render one `Form` for the current screen, and advance from that form's
-`onSubmit`. Only mounted fields validate, while the app-owned values naturally
-survive moving forward and back. Use a nested `Navigator` when the flow needs
-its own back stack; otherwise a simple step value is enough.
-
-## Enabling and disabling controls
-
-Text-family inputs (`TextInput`, `TextArea`, `NumberInput`, `PasswordInput`,
-`CompletionTextInput`, `Autocomplete`) use `enabled` / `readOnly` the same way
-Flutter's `TextField` does:
-
-- `enabled: false` — no focus, no edits, disabled semantics.
-- `readOnly: true` — can focus and navigate the caret, but rejects edits.
-
-Choice controls (`Checkbox`, `Radio`, `Toggle`, `Switch`, `Select`,
-`MultiSelect`, and similar) disable with `onChanged: null`, matching Flutter's
-nullable-callback convention.
-
-`NumberInput.onChanged: null` does **not** disable the field. Omit the callback
-when you do not need parsed updates; pass `enabled: false` or `readOnly: true`
-to lock input.
-
-During form submission, use `FormController.isSubmitting` to make text fields
-read-only or to pass `onChanged: null` on choice controls. Keep fields enabled
-during validation so required-field checks still run.
-
-## API reference
-
-| API | What it does |
-|---|---|
-| `Form` | Coordinates descendant validation and valid submission |
-| `FormField` | Validates one app-owned value and presents its error |
-| `FormField.builder` | Integrates a custom or composite value control |
-| `FormFieldState` | Exposes `error`, `focusNode`, `validate()`, and `valueChanged()` |
-| `FormController` | Validates, submits, clears validator errors, and reports submission state |
-
-## Next steps
-
-- [Focus management](/fleury/guides/focus/) explains traversal and first-invalid focus.
-- [Key handling](/fleury/guides/focus-and-keyboard/) covers screen-level submit shortcuts.
-- [Navigation](/fleury/guides/navigation/) shows multi-screen flows and unsaved-change guards.
-- See [TextInput](/fleury/widgets/textinput/), [Select](/fleury/widgets/select/),
-  and [Checkbox](/fleury/widgets/checkbox/) for individual control behavior.
-
-## Small applications and sensitive values
-
-`Button`, `TextInput`, `TextArea`, lists, layout and focus traversal are available
-from core. You can compose a small form without the companion widget package;
-`Form` remains useful when you need coordinated validation.
-
-The runnable [core editor example](https://github.com/danReynolds/fleury/blob/main/packages/fleury/example/core_editor.dart)
-shows search/list traversal, editing, actions and a compact confirmation.
-The [sensitive-input recipe](https://github.com/danReynolds/fleury/blob/main/packages/fleury/doc/sensitive_input.md)
-covers reveal toggling, clipboard policy, draft/undo lifetime, paste boundaries
-and native runtime options using the same ordinary controls.
+- [Form reference](/fleury/widgets/form/) covers controller and field options.
+- [Theming](/fleury/guides/theming/) covers invalid-state styling.
+- [Navigation](/fleury/guides/navigation/) covers unsaved changes and multi-screen flows.
+- [Testing](/fleury/guides/testing/) shows how to edit controls and check outcomes.

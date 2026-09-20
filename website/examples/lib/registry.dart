@@ -18,6 +18,10 @@ import 'input_guide.dart' as input;
 import 'lists_guide.dart' as lists;
 import 'datatable_rows.dart';
 import 'datatable_cells.dart';
+import 'forms/project_form.dart';
+import 'forms/save_project.dart';
+import 'forms/related_fields.dart';
+import 'forms/custom_field.dart';
 
 /// Builds the root widget for one live example.
 typedef ExampleBuilder = Widget Function();
@@ -876,7 +880,7 @@ TextArea(
     Button(text: 'Save', onPressed: form.submit),
   ]),
 )''',
-    builder: () => const _ProjectFormTour(),
+    builder: () => const ProjectForm(),
   ),
   ExampleInfo(
     id: 'formfield.basic',
@@ -895,7 +899,7 @@ TextArea(
     semanticLabel: 'Slug',
   ),
 )''',
-    builder: () => const _ProjectFormTour(),
+    builder: () => const ProjectForm(),
   ),
   ExampleInfo(
     id: 'formcontroller.basic',
@@ -912,7 +916,7 @@ TextArea(
 await form.submit();
 await form.validate();
 form.clearErrors();''',
-    builder: () => const _ProjectFormTour(),
+    builder: () => const ProjectForm(),
   ),
   ExampleInfo(
     id: 'button.basic',
@@ -1933,11 +1937,41 @@ form.clearErrors();''',
     category: 'Guide examples',
     blurb:
         'A project form that validates on submit, keeps errors next to their '
-        'fields, and returns typed values when complete.',
-    cols: 68,
-    rows: 15,
+        'fields, and confirms a successful submission.',
+    cols: 40,
+    rows: 18,
     interactive: true,
-    builder: () => const _ProjectFormTour(),
+    builder: () => const ProjectForm(),
+  ),
+  ExampleInfo(
+    id: 'forms.save',
+    widget: 'Form',
+    category: 'Guide examples',
+    blurb: 'Save asynchronously, recover from service errors, and retry.',
+    cols: 40,
+    rows: 16,
+    interactive: true,
+    builder: () => const SaveProject(),
+  ),
+  ExampleInfo(
+    id: 'forms.related',
+    widget: 'Form',
+    category: 'Guide examples',
+    blurb: 'Validate related values without moving keyboard focus.',
+    cols: 40,
+    rows: 18,
+    interactive: true,
+    builder: () => const RelatedFields(),
+  ),
+  ExampleInfo(
+    id: 'forms.custom',
+    widget: 'FormField',
+    category: 'Guide examples',
+    blurb: 'Integrate two controls as one validated range.',
+    cols: 40,
+    rows: 12,
+    interactive: true,
+    builder: () => const CustomField(),
   ),
   ExampleInfo(
     id: 'loading.snapshot',
@@ -5446,93 +5480,6 @@ class _CounterModel extends ChangeNotifier {
     count++;
     notifyListeners();
   }
-}
-
-/// A guide-level form with visible invalid and successful submit states.
-class _ProjectFormTour extends StatefulWidget {
-  const _ProjectFormTour();
-
-  @override
-  State<_ProjectFormTour> createState() => _ProjectFormTourState();
-}
-
-class _ProjectFormTourState extends State<_ProjectFormTour> {
-  final _form = FormController();
-  final _name = TextEditingController();
-  final _slug = TextEditingController();
-  bool _private = true;
-  String _status = 'Fill in the project details';
-
-  @override
-  void dispose() {
-    _form.dispose();
-    _name.dispose();
-    _slug.dispose();
-    super.dispose();
-  }
-
-  void _submit() => setState(() {
-    _status = 'Created ${_name.text.trim()} (${_slug.text.trim()})';
-  });
-
-  @override
-  Widget build(BuildContext context) => _framed(
-    Column(
-      crossAxisAlignment: CrossAxisAlignment.stretch,
-      children: <Widget>[
-        const Text('Create project'),
-        Form(
-          controller: _form,
-          onSubmit: _submit,
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: <Widget>[
-              const Text('Name'),
-              FormField(
-                validator: () =>
-                    _name.text.trim().isEmpty ? 'Enter a project name.' : null,
-                child: TextInput(
-                  controller: _name,
-                  autofocus: true,
-                  semanticLabel: 'Name',
-                  placeholder: 'Fleury app',
-                ),
-              ),
-              const Text('Slug'),
-              FormField(
-                validator: () =>
-                    RegExp(r'^[a-z0-9-]+$').hasMatch(_slug.text.trim())
-                    ? null
-                    : 'Use lowercase letters, numbers, and hyphens.',
-                child: TextInput(
-                  controller: _slug,
-                  semanticLabel: 'Slug',
-                  placeholder: 'fleury-app',
-                  onSubmit: (_) => _form.submit(),
-                ),
-              ),
-              FormField(
-                child: Checkbox(
-                  value: _private,
-                  label: 'Private project',
-                  onChanged: (value) => setState(() => _private = value),
-                ),
-              ),
-              ListenableBuilder(
-                listenable: _form,
-                builder: (context, child) => Button(
-                  text: _form.isBusy ? 'Creating…' : 'Create',
-                  onPressed: _form.isBusy ? null : _form.submit,
-                ),
-              ),
-            ],
-          ),
-        ),
-        const Spacer(),
-        Text('status: $_status'),
-      ],
-    ),
-  );
 }
 
 /// A local-breakpoint demo: its buttons change only the child envelope, so the

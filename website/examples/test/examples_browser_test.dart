@@ -335,10 +335,7 @@ void main() {
       form.querySelector('[role="textbox"][aria-label="Slug"]'),
       isNotNull,
     );
-    expect(
-      form.querySelector('[role="checkbox"][aria-label="Private project"]'),
-      isNotNull,
-    );
+    expect(form.querySelector('[role="button"]'), isNotNull);
   });
 
   test('formerly source-only web widgets mount as live examples', () async {
@@ -1205,7 +1202,7 @@ void main() {
   );
 
   test(
-    'forms.project exposes validation and a successful typed submit',
+    'forms.project exposes validation and a successful submission',
     () async {
       final fixture = await _mountExample(
         'forms.project',
@@ -1255,7 +1252,10 @@ void main() {
       await settle();
       expect(fixture.host.textContent, isNot(contains('status: Created')));
       expect(
-        fixture.host.querySelector('.fleury-screen')?.textContent,
+        fixture.host
+            .querySelector('.fleury-screen')
+            ?.textContent
+            ?.replaceAll(RegExp(r'\s+'), ' '),
         allOf(
           contains('Enter a project name.'),
           contains('Use lowercase letters, numbers, and hyphens.'),
@@ -1280,23 +1280,11 @@ void main() {
       (textboxes.item(1)! as web.HTMLElement).click();
       await settle();
       await typeText('fleury-app');
-      final checkbox = fixture.host.querySelector(
-        '.fleury-semantics [role="checkbox"]',
-      )!;
-      expect(checkbox.getAttribute('aria-checked'), 'true');
-      (checkbox as web.HTMLElement).click();
-      await settle();
       (buttonNamed('Create') as web.HTMLElement).click();
       await settle();
 
       expect(fixture.host.textContent, contains('status: Created Fleury'));
       expect(fixture.host.textContent, contains('(fleury-app)'));
-      expect(
-        fixture.host
-            .querySelector('.fleury-semantics [role="checkbox"]')
-            ?.getAttribute('aria-checked'),
-        'false',
-      );
     },
   );
 

@@ -1,0 +1,11 @@
+---
+import DemoSource from './DemoSource.astro';
+const sources = import.meta.glob<string>('../../examples/{lib,test}/forms/*.dart', {
+  query: '?raw', import: 'default', eager: true,
+});
+interface Props { file: string; test?: boolean; focus?: string }
+const { file, test = false, focus } = Astro.props;
+const code = sources[`../../examples/${test ? 'test' : 'lib'}/forms/${file}`];
+if (!code) throw new Error(`Forms guide file is missing: ${file}`);
+---
+<DemoSource code={code} focus={focus} />
