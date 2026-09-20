@@ -6,6 +6,51 @@ import 'package:fleury_widgets/fleury_widgets.dart';
 import 'package:test/test.dart';
 
 void main() {
+  for (final clear in [false, true]) {
+    testWidgets(
+      'restored choice ${clear ? 'respects an explicit reset' : 'rejects an invalid callback value'}',
+      (tester) async {
+        final form = FormController();
+        final accepted = ValueNotifier(true);
+        final pending = Completer<void>();
+        addTearDown(form.dispose);
+        addTearDown(accepted.dispose);
+        tester.pumpWidget(
+          ListenableBuilder(
+            listenable: accepted,
+            builder: (_, _) => ListenableBuilder(
+              listenable: form,
+              builder: (_, _) => Form(
+                controller: form,
+                onSubmit: () async {
+                  await pending.future;
+                  accepted.value = false;
+                  if (clear) form.clearErrors();
+                },
+                child: FormField(
+                  validator: () => accepted.value ? null : 'Accept the terms',
+                  child: Checkbox(
+                    value: accepted.value,
+                    label: 'Terms',
+                    onChanged: form.isSubmitting
+                        ? null
+                        : (value) => accepted.value = value,
+                  ),
+                ),
+              ),
+            ),
+          ),
+        );
+        final result = form.submit();
+        await tester.settle();
+        expect(tester.checkbox('Terms'), isDisabled);
+        pending.complete();
+        await tester.settle();
+        expect(await result, clear);
+        expect(tester.renderToString().contains('Accept the terms'), !clear);
+      },
+    );
+  }
   for (final choice in [false, true]) {
     testWidgets(
       'submit returns false for a server error after restoring ${choice ? 'choice' : 'text'} editing',

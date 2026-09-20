@@ -548,11 +548,10 @@ final class FormFieldState extends State<FormField>
   }
 
   void _refreshRevealedError() {
-    if (!_validatorErrorVisible) return;
-    if (!enabled) {
-      _clearValidatorError();
-      return;
-    }
+    // A temporarily disabled control hides its errors through [error], but
+    // must remember that validation ran so feedback refreshes when editing is
+    // restored. Explicit clearErrors() still resets that feedback state.
+    if (!_validatorErrorVisible || !enabled) return;
     _runValidator(reveal: true);
   }
 

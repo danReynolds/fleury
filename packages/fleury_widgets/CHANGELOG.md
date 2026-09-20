@@ -3,6 +3,8 @@
 - `FormController.submit()` returns false when the submit callback leaves a
   mounted, enabled field with an error. Callback updates and temporarily locked
   controls are applied before this final check, which focuses the invalid field.
+  Temporarily disabling a control preserves its validation feedback state so
+  reenabling it can recheck updated values; `clearErrors()` still resets it.
 - `FormController.validate(autofocus: false)` displays errors without moving
   focus or scrolling. The default remains true; concurrent validation calls
   focus the first invalid field when any caller requests autofocus.
