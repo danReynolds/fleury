@@ -417,6 +417,21 @@ abstract interface class BuildContext {
   /// True while the underlying element is in the tree.
   bool get mounted;
 
+  /// Observes [source] during this widget's build and returns the same object.
+  ///
+  /// Notifications rebuild this widget. Repeated reads share one subscription;
+  /// sources no longer read by a subsequent build are detached. The source is
+  /// borrowed and never disposed by the consumer. Event handlers use references
+  /// captured during build instead of calling this method.
+  T listen<T extends Listenable>(T source);
+
+  /// Reads the nearest [Scope] declared with type [T] during this widget's build.
+  ///
+  /// This widget rebuilds when that scope changes. The dependency is removed
+  /// when a later build no longer reads it. Use [Scope.of] for lifecycle reads
+  /// outside build; its dependencies remain until the element leaves the tree.
+  T scope<T extends Object>();
+
   /// Walks ancestors looking for an [Element] whose state is of type
   /// [T]. Does not establish a dependency.
   T? findAncestorStateOfType<T extends State>();
@@ -451,6 +466,32 @@ abstract interface class ElementDependency {
 
   /// Drops a previously-recorded dependent.
   void removeDependent(Element element);
+}
+
+final class _ContextSubscription {
+  _ContextSubscription(this._element, this._source, this.generation);
+
+  Element? _element;
+  Listenable? _source;
+  int generation;
+
+  void changed() => _element?.markNeedsBuild();
+  void attach() => _source!.addListener(changed);
+
+  void detach() {
+    final source = _source;
+    _source = null;
+    _element = null;
+    source?.removeListener(changed);
+  }
+}
+
+// Allocated only for widgets that use the new build-time readers. Structural
+// elements keep their existing allocation-free dependency storage fast path.
+final class _ContextDependencies {
+  int generation = 0;
+  Map<Listenable, _ContextSubscription>? sources;
+  Map<ScopeElement, int>? scopes;
 }
 
 int _nextElementActionTargetIdentity = 1;
@@ -524,12 +565,33 @@ abstract class Element implements BuildContext {
   @protected
   T runWithBuildTarget<T>(T Function() fn) {
     final previous = _current;
+    final outermost = _contextBuildDepth++ == 0;
+    if (outermost && _contextDependencies != null) {
+      _contextDependencies!.generation++;
+    }
     _current = this;
+    Object? buildError;
+    StackTrace? buildStack;
+    late T result;
     try {
-      return fn();
+      result = fn();
+    } catch (error, stack) {
+      buildError = error;
+      buildStack = stack;
     } finally {
       _current = previous;
+      _contextBuildDepth--;
     }
+    try {
+      if (outermost) _pruneContextDependencies();
+    } catch (error, stack) {
+      final errors = _TeardownErrors();
+      if (buildError != null) errors.add(buildError, buildStack!);
+      errors.add(error, stack);
+      errors.throwIfAny();
+    }
+    if (buildError != null) Error.throwWithStackTrace(buildError, buildStack!);
+    return result;
   }
 
   // Error-boundary hooks (errorBuilder / onBuildError) live on BuildOwner,
@@ -621,10 +683,26 @@ abstract class Element implements BuildContext {
     // fresh set, leaving this batch stable without allocating a list copy.
     final dependencies = _externalDependencies;
     _externalDependencies = null;
-    if (dependencies == null) return;
+    final contextDependencies = _contextDependencies;
+    _contextDependencies = null;
+    if (dependencies == null && contextDependencies == null) return;
     final errors = _TeardownErrors();
-    for (final dep in dependencies) {
-      errors.capture(() => dep.removeDependent(this));
+    if (dependencies != null) {
+      for (final dep in dependencies) {
+        errors.capture(() => dep.removeDependent(this));
+      }
+    }
+    final buildScopes = contextDependencies?.scopes;
+    if (buildScopes != null) {
+      for (final scope in buildScopes.keys) {
+        scope._dependents.remove(this);
+      }
+    }
+    final subscriptions = contextDependencies?.sources;
+    if (subscriptions != null) {
+      for (final subscription in subscriptions.values) {
+        errors.capture(subscription.detach);
+      }
     }
     errors.throwIfAny();
   }
@@ -688,7 +766,8 @@ abstract class Element implements BuildContext {
     assert(_lifecycle == _ElementLifecycle.active);
     _hadDependenciesWhenDeactivated =
         (_scopeDependencies?.isNotEmpty ?? false) ||
-        (_externalDependencies?.isNotEmpty ?? false);
+        (_externalDependencies?.isNotEmpty ?? false) ||
+        _contextDependencies != null;
     _detachDependencies();
     _owner?._dirtyElements.remove(this);
     _lifecycle = _ElementLifecycle.inactive;
@@ -779,10 +858,150 @@ abstract class Element implements BuildContext {
   // on unmount so the source stops marking this element dirty.
   Set<ElementDependency>? _externalDependencies;
 
+  _ContextDependencies? _contextDependencies;
+  int _contextBuildDepth = 0;
+
+  void _checkBuildReader(String reader) {
+    if (!mounted || !identical(_current, this)) {
+      throw StateError(
+        '$reader must be called during this context\'s own build. '
+        'Read the value in build and keep it for event handlers.',
+      );
+    }
+  }
+
+  @override
+  T listen<T extends Listenable>(T source) {
+    _checkBuildReader('context.listen()');
+    final dependencies = _contextDependencies ??= _ContextDependencies();
+    final sources = dependencies.sources ??= Map.identity();
+    final existing = sources[source];
+    if (existing != null) {
+      existing.generation = dependencies.generation;
+    } else {
+      final subscription = _ContextSubscription(
+        this,
+        source,
+        dependencies.generation,
+      );
+      sources[source] = subscription;
+      try {
+        subscription.attach();
+      } catch (error, stack) {
+        sources.remove(source);
+        final errors = _TeardownErrors()..add(error, stack);
+        errors.capture(subscription.detach);
+        errors.throwIfAny();
+      }
+    }
+    // Explicit reads take ownership of hybrid sources such as Animation, whose
+    // value getter otherwise creates an implicit ElementDependency as well.
+    if (source is ElementDependency) {
+      _retireImplicitDependency(source as ElementDependency);
+    }
+    return source;
+  }
+
+  void _retireImplicitDependency(ElementDependency source) {
+    final implicit = _externalDependencies;
+    if (implicit == null) return;
+    ElementDependency? previous;
+    for (final dependency in implicit) {
+      if (identical(dependency, source)) {
+        previous = dependency;
+        break;
+      }
+    }
+    if (previous != null) {
+      implicit.remove(previous);
+      previous.removeDependent(this);
+    }
+  }
+
+  @override
+  T scope<T extends Object>() {
+    _checkBuildReader('context.scope<$T>()');
+    final ancestor = _findScopeElement<T>();
+    if (ancestor == null) {
+      throw StateError(
+        'No Scope<$T> found above ${widget.runtimeType}. '
+        'Wrap this subtree in Scope<$T> and read from a descendant context.',
+      );
+    }
+    final dependencies = _contextDependencies ??= _ContextDependencies();
+    (dependencies.scopes ??= Map.identity())[ancestor] =
+        dependencies.generation;
+    ancestor._dependents.add(this);
+    final value = ancestor.value;
+    if (value is Listenable && value is ElementDependency) {
+      _retireImplicitDependency(value as ElementDependency);
+    }
+    return value as T;
+  }
+
+  void _pruneContextDependencies() {
+    final dependencies = _contextDependencies;
+    if (dependencies == null) return;
+    final scopes = dependencies.scopes;
+    if (scopes != null) {
+      List<ScopeElement>? stale;
+      for (final entry in scopes.entries) {
+        if (entry.value != dependencies.generation) {
+          (stale ??= []).add(entry.key);
+        }
+      }
+      if (stale != null) {
+        for (final scope in stale) {
+          scopes.remove(scope);
+          if (!(_scopeDependencies?.contains(scope) ?? false)) {
+            scope._dependents.remove(this);
+          }
+        }
+      }
+      if (scopes.isEmpty) dependencies.scopes = null;
+    }
+    final sources = dependencies.sources;
+    List<Listenable>? stale;
+    if (sources != null) {
+      for (final entry in sources.entries) {
+        if (entry.value.generation != dependencies.generation) {
+          (stale ??= []).add(entry.key);
+        }
+      }
+    }
+    _TeardownErrors? errors;
+    if (stale != null) {
+      errors = _TeardownErrors();
+      for (final source in stale) {
+        final subscription = sources!.remove(source)!;
+        errors.capture(subscription.detach);
+      }
+    }
+    if (sources?.isEmpty ?? false) dependencies.sources = null;
+    if (dependencies.scopes == null && dependencies.sources == null) {
+      _contextDependencies = null;
+    }
+    errors?.throwIfAny();
+  }
+
   /// Registers [dependency] as something this element's build read,
   /// so it rebuilds when the dependency changes and detaches on
   /// unmount. Idempotent. Called by [ElementDependency] sources.
   void dependOnExternal(ElementDependency dependency) {
+    final reads = _contextDependencies;
+    if (dependency is Listenable && reads != null) {
+      final source = dependency as Listenable;
+      if (reads.sources?[source]?.generation == reads.generation) return;
+      final scopes = reads.scopes;
+      if (scopes != null) {
+        for (final entry in scopes.entries) {
+          if (entry.value == reads.generation &&
+              identical(entry.key.value, source)) {
+            return;
+          }
+        }
+      }
+    }
     if ((_externalDependencies ??= <ElementDependency>{}).add(dependency)) {
       dependency.addDependent(this);
     }
@@ -2297,88 +2516,106 @@ abstract class ProxyWidget extends Widget {
 
 /// Shares a value with the widgets below it.
 ///
-/// `Scope` is Fleury's tree-local state primitive — what React calls a
-/// Context, Flutter an `InheritedWidget`, SwiftUI the environment. Wrap a
-/// subtree in a `Scope<T>` and any descendant reads the value with
-/// `Scope.of<T>(context)`; the widgets in between neither accept nor forward
-/// it. The type argument is the key: the nearest `Scope<T>` above the reader
-/// wins, so an inner scope shadows an outer one, and a test overrides a value
-/// by wrapping the widget under test in a scope of its own.
+/// Provide a value once with `Scope(model, child: ...)`, then read the nearest
+/// scope with `context.scope<Model>()` during build or a `ScopeBuilder<Model>`.
+/// Widgets between the provider and its readers need not pass the value along.
+/// The declared type is the lookup key; an inner scope of that type overrides
+/// an outer one.
+///
+/// Readers rebuild when an ordinary value changes according to `==`, when a
+/// [Listenable] is replaced by a different instance, or when it notifies.
+/// Mutable models extend [Notifier] and call [Notifier.notify] after a change.
+/// A scope listens on its readers' behalf, so they need no additional builder.
 ///
 /// ```dart
-/// // Share an object its owner keeps alive:
-/// Scope(value: chat, child: const ChatScreen())
+/// Scope(preferences, child: const SettingsPanel())
+/// Scope<Preferences>.create(Preferences.new, child: const SettingsPanel())
 ///
-/// // Let the scope own the object — created once on mount, disposed on
-/// // unmount:
-/// Scope<ChatModel>.create(
-///   create: (context) => ChatModel(),
-///   child: const ChatScreen(),
-/// )
-///
-/// // Anywhere below, in build or in an event handler:
-/// final chat = Scope.of<ChatModel>(context);
+/// // Inside a descendant's build method:
+/// final preferences = context.scope<Preferences>();
 /// ```
 ///
-/// Reading a scope subscribes the reader. It rebuilds when:
-///
-///   - the value is a [Listenable] — a `ChangeNotifier`, a `ValueNotifier`,
-///     an `Animation` — and it notifies. The scope listens on every reader's
-///     behalf, so a shared model needs no `ListenableBuilder` under it;
-///   - the scope is rebuilt with a value that is not `==` to the previous
-///     one (see [updateShouldNotify]).
-///
-/// Notification is coarse: every reader of a scope rebuilds when its value
-/// notifies. Keep one scope per rate of change — two models that change at
-/// very different rates belong in two scopes — and narrow a hot rebuild
-/// below a scope with a `ListenableBuilder`.
-///
-/// [Scope.of] works in `build`, `initState`, and event handlers. An element
-/// in `dispose` has already left the tree, so a value needed there is kept
-/// in a field.
+/// [Scope.create] creates and owns a value. [Scope.createWithContext] also
+/// supplies the scope's own context to a factory that needs ancestor scopes.
+/// [Scope.of] is available in `build`, `initState`, and event handlers and
+/// retains a dependency for the element's lifetime. In contrast,
+/// [BuildContext.scope] reconciles dependencies after each build. A value
+/// needed in `dispose` should be saved earlier, before the element leaves
+/// the tree.
 class Scope<T extends Object> extends ProxyWidget {
-  /// Shares [value] with the subtree.
-  ///
-  /// The scope never disposes [value]; whoever created it keeps owning it.
-  /// Rebuilding this widget with a value that is not equal to the previous
-  /// one rebuilds the readers, and so does every notification when [value]
-  /// is a [Listenable].
-  const Scope({super.key, required T value, required super.child})
-    : _value = value,
-      _create = null,
-      _dispose = null;
-
-  /// Shares an object the scope itself owns.
-  ///
-  /// [create] runs once — when the scope mounts, or when this position
-  /// switches from a shared value to an owned one — with the scope's own
-  /// [BuildContext], so it may read the scopes above it. Rebuilding the widget
-  /// does not run it again. When the scope unmounts the object is disposed:
-  /// through [dispose] when given, otherwise a [ChangeNotifier] is disposed
-  /// automatically and any other value is simply dropped.
-  const Scope.create({
+  /// Shares [value] without taking ownership or disposing it.
+  const Scope(
+    /// The value exposed to descendant readers under the declared type [T].
+    T value, {
     super.key,
-    required T Function(BuildContext context) create,
+
+    /// The subtree that can read this value.
+    required super.child,
+  }) : _value = value,
+       _create = null,
+       _createWithContext = null,
+       _dispose = null;
+
+  /// Creates a value once when this scope mounts and owns its lifetime.
+  ///
+  /// Rebuilding retains the value and its original [dispose] callback. A
+  /// [Notifier] is disposed automatically unless a custom callback is supplied.
+  /// Other resources can be cleaned up with [dispose]. Children unmount first.
+  /// Switching from a supplied value to an owned scope also runs [create].
+  const Scope.create(
+    /// Creates the value when this scope begins owning it.
+    T Function() create, {
+    super.key,
+
+    /// Optional cleanup, replacing automatic disposal for a [Notifier].
     void Function(T value)? dispose,
+
+    /// The subtree that can read this value.
     required super.child,
   }) : _value = null,
        _create = create,
+       _createWithContext = null,
+       _dispose = dispose;
+
+  /// Creates an owned value with access to ancestor scopes.
+  ///
+  /// [create] receives this scope's own context and may use [Scope.of] to read
+  /// ancestors. Its lifetime and disposal follow [Scope.create].
+  const Scope.createWithContext(
+    /// Creates the value with this scope's context for ancestor lookups.
+    T Function(BuildContext context) create, {
+    super.key,
+
+    /// Optional cleanup, replacing automatic disposal for a [Notifier].
+    void Function(T value)? dispose,
+
+    /// The subtree that can read this value.
+    required super.child,
+  }) : _value = null,
+       _create = null,
+       _createWithContext = create,
        _dispose = dispose;
 
   final T? _value;
-  final T Function(BuildContext context)? _create;
+  final T Function()? _create;
+  final T Function(BuildContext context)? _createWithContext;
   final void Function(T value)? _dispose;
 
-  /// Whether readers should rebuild because this widget replaced [oldWidget]
-  /// at the same tree position. The default compares the two shared values
-  /// with `==`; a subclass can compare a narrower field. A scope that owns
-  /// its object ([Scope.create]) keeps it across rebuilds and never notifies
-  /// here.
+  bool get _ownsValue => _create != null || _createWithContext != null;
+
+  T _createValue(BuildContext context) =>
+      _create != null ? _create() : _createWithContext!(context);
+
+  /// Whether replacement of this widget should rebuild its readers.
   ///
-  /// Notifications from a [Listenable] value are independent of this: they
-  /// always reach readers.
+  /// Ordinary values use `==`; listenable values use identity so readers see
+  /// a replacement source even if it compares equal. A subclass may compare a
+  /// narrower field. Owned scopes retain their object across rebuilds.
+  /// Notifications from a [Listenable] always reach readers independently.
   bool updateShouldNotify(covariant Scope<T> oldWidget) =>
-      _value != oldWidget._value;
+      _value is Listenable || oldWidget._value is Listenable
+      ? !identical(_value, oldWidget._value)
+      : _value != oldWidget._value;
 
   /// The nearest `Scope<T>` value above [context], subscribing [context] to
   /// it. Throws when no `Scope<T>` is above [context]; use [maybeOf] when the
@@ -2395,7 +2632,7 @@ class Scope<T extends Object> extends ProxyWidget {
     }
     throw StateError(
       'Scope.of<$T>: no Scope<$T> above this context. Wrap an ancestor in '
-      'Scope<$T>(value: ..., child: ...) or Scope<$T>.create(...).',
+      'Scope<$T>(..., child: ...) or Scope<$T>.create(...).',
     );
   }
 
@@ -2436,8 +2673,8 @@ class ScopeElement<T extends Object> extends ComponentElement {
   // Resolved before the first build; see _firstBuild.
   late T _value;
   bool _owned = false;
-  Listenable? _listening;
-  late final VoidCallback _onNotify = notifyDependents;
+  _ScopeSubscription? _listening;
+  void Function(T value)? _ownedDispose;
 
   @override
   Scope<T> get widget => super.widget as Scope<T>;
@@ -2458,14 +2695,11 @@ class ScopeElement<T extends Object> extends ComponentElement {
     // the manager for focus). Attaching afterwards would lose that event.
     // The parent link is already set, so an owning scope can read the
     // scopes above it.
-    final create = widget._create;
-    if (create == null) {
-      _value = widget._value!;
-    } else {
-      _value = create(this);
-      _owned = true;
-    }
-    _listen(_value);
+    final owned = widget._ownsValue;
+    _value = owned ? widget._createValue(this) : widget._value!;
+    _owned = owned;
+    _ownedDispose = _owned ? widget._dispose : null;
+    _listening = _subscribe(_value);
     super._firstBuild();
   }
 
@@ -2475,41 +2709,49 @@ class ScopeElement<T extends Object> extends ComponentElement {
     super.update(newWidget);
     final previous = _value;
     final wasOwned = _owned;
-    final create = newWidget._create;
-    final T next;
-    final bool nextOwned;
-    if (create != null) {
-      // An owning scope keeps its object across rebuilds; create runs once.
-      // Only a scope that previously shared a value creates here.
-      next = wasOwned ? previous : create(this);
-      nextOwned = true;
-    } else {
-      next = newWidget._value!;
-      nextOwned = false;
-    }
-    var swapped = false;
-    try {
-      if (!identical(next, previous)) {
-        // Keep the replacement live throughout the synchronous child rebuild
-        // below: a descendant may notify while it rebuilds. The element now
-        // exposes newWidget even if that rebuild throws, so the subscription
-        // follows the new value rather than rolling back.
-        _listen(next);
-        _value = next;
-        swapped = true;
+    final previousDispose = _ownedDispose;
+    final nextOwned = newWidget._ownsValue;
+    final next = nextOwned
+        ? (wasOwned ? previous : newWidget._createValue(this))
+        : newWidget._value!;
+    final swapped = !identical(next, previous);
+    _ScopeSubscription? nextSubscription;
+    if (swapped) {
+      try {
+        // Attach first: a rejected source leaves the current value live.
+        nextSubscription = _subscribe(next);
+      } catch (error, stack) {
+        final errors = _TeardownErrors()..add(error, stack);
+        if (nextOwned && !wasOwned) {
+          errors.capture(() => _release(next, newWidget._dispose));
+        }
+        errors.throwIfAny();
+        rethrow;
       }
-      // Ownership flips only once the value is in place. An object that
-      // stays (owned → shared with the same instance) passes to whoever
-      // supplies it now; one whose listener failed to attach stays owned and
-      // is released on unmount.
-      _owned = nextOwned;
+    }
+
+    final previousSubscription = _listening;
+    _value = next;
+    _owned = nextOwned;
+    _ownedDispose = nextOwned
+        ? (wasOwned ? previousDispose : newWidget._dispose)
+        : null;
+    if (swapped) _listening = nextSubscription;
+
+    final errors = _TeardownErrors();
+    // The replacement is committed even if old-source removal fails. Its
+    // detached callback is inert, and descendants can read the new value.
+    if (swapped) errors.capture(() => previousSubscription?.detach());
+    errors.capture(() {
       if (newWidget.updateShouldNotify(oldWidget)) notifyDependents();
       rebuild(force: true);
-    } finally {
-      // An object this scope created and no longer shares is released once
-      // the subtree has re-read the replacement.
-      if (swapped && wasOwned && !nextOwned) _release(oldWidget, previous);
+    });
+    // An owned object handed over unchanged becomes externally owned. A
+    // replaced owned value is released only after descendants see its successor.
+    if (swapped && wasOwned && !nextOwned) {
+      errors.capture(() => _release(previous, previousDispose));
     }
+    errors.throwIfAny();
   }
 
   @override
@@ -2520,7 +2762,7 @@ class ScopeElement<T extends Object> extends ComponentElement {
     errors.capture(super.unmount);
     if (_owned) {
       _owned = false;
-      errors.capture(() => _release(widget, _value));
+      errors.capture(() => _release(_value, _ownedDispose));
     }
     errors.throwIfAny();
   }
@@ -2537,27 +2779,29 @@ class ScopeElement<T extends Object> extends ComponentElement {
     }
   }
 
-  void _listen(T next) {
-    final previous = _listening;
-    if (next is Listenable) {
-      next.addListener(_onNotify);
-      _listening = next;
-    } else {
-      _listening = null;
+  _ScopeSubscription? _subscribe(T next) {
+    if (next is! Listenable) return null;
+    final subscription = _ScopeSubscription(next, notifyDependents);
+    try {
+      subscription.attach();
+    } catch (error, stack) {
+      final errors = _TeardownErrors()..add(error, stack);
+      errors.capture(subscription.detach);
+      errors.throwIfAny();
     }
-    previous?.removeListener(_onNotify);
+    return subscription;
   }
 
   void _unlisten() {
-    _listening?.removeListener(_onNotify);
+    final subscription = _listening;
     _listening = null;
+    subscription?.detach();
   }
 
-  void _release(Scope<T> scope, T value) {
-    final dispose = scope._dispose;
+  void _release(T value, void Function(T value)? dispose) {
     if (dispose != null) {
       dispose(value);
-    } else if (value is ChangeNotifier) {
+    } else if (value is Notifier) {
       value.dispose();
     }
   }
@@ -2572,5 +2816,24 @@ class ScopeElement<T extends Object> extends ComponentElement {
     } else if (dependent is RenderObjectElement) {
       dependent._dependenciesChanged = true;
     }
+  }
+}
+
+// A rejected or detached custom Listenable may retain its callback. Clear both
+// references before asking it to remove the listener so that callback is inert.
+final class _ScopeSubscription {
+  _ScopeSubscription(this._source, this._onChange);
+
+  Listenable? _source;
+  VoidCallback? _onChange;
+
+  void changed() => _onChange?.call();
+  void attach() => _source!.addListener(changed);
+
+  void detach() {
+    final source = _source;
+    _source = null;
+    _onChange = null;
+    source?.removeListener(changed);
   }
 }

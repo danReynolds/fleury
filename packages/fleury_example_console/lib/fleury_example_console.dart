@@ -239,7 +239,7 @@ final class _DemoScreenSpec {
   final List<AppCommand> commands;
 }
 
-final class _DemoNavigationController extends ChangeNotifier {
+final class _DemoNavigationController extends Notifier {
   _DemoNavigationController(this.activeScreenId);
 
   String activeScreenId;
@@ -247,7 +247,7 @@ final class _DemoNavigationController extends ChangeNotifier {
   bool activate(String screenId) {
     if (activeScreenId == screenId) return true;
     activeScreenId = screenId;
-    notifyListeners();
+    notify();
     return true;
   }
 }
@@ -1283,8 +1283,8 @@ class _ConsoleShell extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return ListenableBuilder(
-      listenable: navigation,
+    return NotifierBuilder(
+      notifier: navigation,
       builder: (context, _) {
         final active = activeScreen;
         return Padding(
@@ -2042,13 +2042,11 @@ class _ConnectionScreenState extends State<_ConnectionScreen> {
               onChanged: (value) => setState(() => _confirmed = value),
             ),
           ),
-          ListenableBuilder(
-            listenable: widget.controller,
-            builder: (context, child) => Button(
-              text: widget.controller.isSubmitting ? 'Connecting…' : 'Connect',
-              onPressed: widget.controller.isSubmitting
-                  ? null
-                  : widget.controller.submit,
+          NotifierBuilder(
+            notifier: widget.controller,
+            builder: (context, controller) => Button(
+              text: controller.isSubmitting ? 'Connecting…' : 'Connect',
+              onPressed: controller.isSubmitting ? null : controller.submit,
             ),
           ),
         ],
@@ -2241,8 +2239,8 @@ class _RunsScreen extends StatelessWidget {
         ),
         const SizedBox(height: 1),
         Expanded(
-          child: ListenableBuilder(
-            listenable: filter,
+          child: NotifierBuilder(
+            notifier: filter,
             builder: (context, _) {
               final query = filter.text.trim();
               final sourceCell = (int row, String columnId) =>

@@ -53,8 +53,8 @@ class _Row extends StatelessWidget {
           child: Semantics(
             role: SemanticRole.listItem,
             label: 'row $index',
-            child: ListenableBuilder(
-              listenable: model,
+            child: NotifierBuilder(
+              notifier: model,
               builder: (context, child) => Text('row $index tick=${model.v}'),
             ),
           ),

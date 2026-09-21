@@ -36,7 +36,7 @@ class LogLine {
 /// A bounded, observable record of captured stray output. The oldest lines
 /// are dropped once [capacity] is exceeded. Notifies listeners on each
 /// append so a log view can repaint.
-class LogBuffer extends ChangeNotifier {
+class LogBuffer extends Notifier {
   LogBuffer({this.capacity = 1000}) : assert(capacity > 0);
 
   final int capacity;
@@ -63,7 +63,7 @@ class LogBuffer extends ChangeNotifier {
     if (_lines.length > capacity) {
       _lines.removeRange(0, _lines.length - capacity);
     }
-    notifyListeners();
+    notify();
   }
 
   void _checkNotDisposed() {

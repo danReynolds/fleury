@@ -16,10 +16,10 @@ void main() {
         addTearDown(form.dispose);
         addTearDown(accepted.dispose);
         tester.pumpWidget(
-          ListenableBuilder(
-            listenable: accepted,
-            builder: (_, _) => ListenableBuilder(
-              listenable: form,
+          NotifierBuilder(
+            notifier: accepted,
+            builder: (_, _) => NotifierBuilder(
+              notifier: form,
               builder: (_, _) => Form(
                 controller: form,
                 onSubmit: () async {
@@ -63,10 +63,10 @@ void main() {
         Future<bool>? reentrant;
         var called = false;
         tester.pumpWidget(
-          ListenableBuilder(
-            listenable: error,
-            builder: (context, _) => ListenableBuilder(
-              listenable: form,
+          NotifierBuilder(
+            notifier: error,
+            builder: (context, _) => NotifierBuilder(
+              notifier: form,
               builder: (context, _) => Form(
                 controller: form,
                 onSubmit: () async {
@@ -180,8 +180,8 @@ void main() {
         addTearDown(second.dispose);
         addTearDown(done.dispose);
         tester.pumpWidget(
-          ListenableBuilder(
-            listenable: done,
+          NotifierBuilder(
+            notifier: done,
             builder: (context, _) => done.value && !replace
                 ? const Text('Closed')
                 : Form(

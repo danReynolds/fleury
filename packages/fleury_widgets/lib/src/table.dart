@@ -32,7 +32,7 @@ final class FlexColumnWidth extends TableColumnWidth {
 /// Browsing cursor for an interactive [Table]. Optional — the table
 /// creates its own when none is supplied. `rowCount` is set by the widget
 /// on each build, so the cursor stays clamped to the available rows.
-class TableController extends ChangeNotifier {
+class TableController extends Notifier {
   TableController({int? initialIndex = 0})
     : _currentIndex = initialIndex,
       _restoreCurrentWhenNonEmpty = initialIndex != null;
@@ -66,7 +66,7 @@ class TableController extends ChangeNotifier {
     final clamped = _clamp(value);
     if (_currentIndex == clamped) return;
     _currentIndex = clamped;
-    notifyListeners();
+    notify();
   }
 
   int? _clamp(int? value) {
@@ -84,7 +84,7 @@ class TableController extends ChangeNotifier {
         : _clamp(_currentIndex ?? (_restoreCurrentWhenNonEmpty ? 0 : null));
     if (next == _currentIndex) return;
     _currentIndex = next;
-    notifyListeners();
+    notify();
   }
 
   void _checkNotDisposed() {

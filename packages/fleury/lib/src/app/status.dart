@@ -100,7 +100,7 @@ final class StatusItem {
 }
 
 /// Mutable status model installed by [FleuryApp].
-class StatusController extends ChangeNotifier {
+class StatusController extends Notifier {
   StatusController({List<StatusItem> items = const <StatusItem>[]})
     : _items = List<StatusItem>.of(items);
 
@@ -116,7 +116,7 @@ class StatusController extends ChangeNotifier {
     _checkNotDisposed();
     if (listEquals(_items, items)) return;
     _items = List<StatusItem>.of(items);
-    notifyListeners();
+    notify();
   }
 
   void _checkNotDisposed() {

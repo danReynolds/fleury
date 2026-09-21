@@ -48,11 +48,11 @@ const _defaultWarmup = 300;
 const _failFraction = 0.10;
 
 /// A steady-state metric model bumped once per frame.
-class _Model extends ChangeNotifier {
+class _Model extends Notifier {
   int v = 0;
   void bump() {
     v++;
-    notifyListeners();
+    notify();
   }
 }
 
@@ -76,8 +76,8 @@ Widget _scenario(_Model m) {
     children: [
       const Text('Fleury alloc-gate dashboard'),
       const Text('────────────────────────────'),
-      ListenableBuilder(
-        listenable: m,
+      NotifierBuilder(
+        notifier: m,
         builder: (context, _) => Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [

@@ -44,7 +44,7 @@ enum EdgeBehavior {
 /// Moving the cursor reveals its item. Scrolling leaves the cursor alone,
 /// and a rebuild preserves the viewport. Listeners receive changed viewport
 /// metrics after the frame, when [visibleRange] describes the rendered content.
-class ListController extends ChangeNotifier {
+class ListController extends Notifier {
   /// Starts with [initialIndex] as the current row and reveals it on mount.
   /// The index is clamped to the available items. This does not select the row
   /// or take keyboard focus; use [ListView.autofocus] to request focus.
@@ -97,6 +97,10 @@ class ListController extends ChangeNotifier {
   int _viewRevision = 0;
   bool _nextNotificationIsMetrics = false;
 
+  /// Refreshes consumers after externally managed list content changes.
+  @override
+  void notify() => super.notify();
+
   @override
   void notifyListeners() {
     // Consume the kind before invoking listeners: a nested command or explicit
@@ -121,7 +125,7 @@ class ListController extends ChangeNotifier {
       _pendingBottom = true;
       _unseenCount = 0;
     }
-    notifyListeners();
+    notify();
   }
 
   /// Whether the viewport is currently following output. False while reading
@@ -185,7 +189,7 @@ class ListController extends ChangeNotifier {
     _pendingRevealIndex = next;
     // The completed viewport, not the current index, decides whether to resume.
     _isFollowing = false;
-    notifyListeners();
+    notify();
   }
 
   /// Places an item at the viewport start, clamped to the final full viewport. Does not
@@ -203,7 +207,7 @@ class ListController extends ChangeNotifier {
     // refill.
     if (_viewportExtent == 0 && _itemCount > 0 && _visibleFraction == 0) {
       _isFollowing = false;
-      notifyListeners();
+      notify();
       return;
     }
     _clearRequests();
@@ -211,7 +215,7 @@ class ListController extends ChangeNotifier {
         ? index
         : index.clamp(0, _itemCount - 1);
     _isFollowing = false;
-    notifyListeners();
+    notify();
   }
 
   /// Scrolls by cells along the list's axis, including within an oversized item.
@@ -222,7 +226,7 @@ class ListController extends ChangeNotifier {
     _pendingBottom = false;
     _pendingScrollCells += delta;
     _isFollowing = false;
-    notifyListeners();
+    notify();
   }
 
   /// Moves a scrollbar to an approximate fraction of the collection. Zero and
@@ -233,7 +237,7 @@ class ListController extends ChangeNotifier {
     _clearRequests();
     _pendingFraction = fraction.clamp(0.0, 1.0);
     _isFollowing = false;
-    notifyListeners();
+    notify();
   }
 
   /// Shows the end of the final item. Resumes following only if [followTail] is
@@ -244,7 +248,7 @@ class ListController extends ChangeNotifier {
     _pendingBottom = true;
     _isFollowing = _followTail;
     _unseenCount = 0;
-    notifyListeners();
+    notify();
   }
 
   /// Vertical spelling of [jumpToEnd].
@@ -263,7 +267,7 @@ class ListController extends ChangeNotifier {
     _clearRequests();
     _pendingRevealIndex = _currentIndex;
     _isFollowing = false;
-    notifyListeners();
+    notify();
   }
 
   void _handleCountChange(
@@ -300,7 +304,7 @@ class ListController extends ChangeNotifier {
         _unseenCount += arrived;
       }
     }
-    if (before != (_itemCount, _currentIndex, _unseenCount)) notifyListeners();
+    if (before != (_itemCount, _currentIndex, _unseenCount)) notify();
   }
 
   int? _clampCurrentIndex(int? value) {
@@ -364,7 +368,7 @@ class ListController extends ChangeNotifier {
       _nextNotificationIsMetrics = true;
       try {
         // Keep the virtual call so controller subclasses observe metrics too.
-        notifyListeners();
+        notify();
       } finally {
         // A subclass may throw or return without calling super.
         _nextNotificationIsMetrics = false;

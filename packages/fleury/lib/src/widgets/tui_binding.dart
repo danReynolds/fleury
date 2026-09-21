@@ -150,7 +150,7 @@ class TuiBindingScope extends Scope<TuiBinding> {
     super.key,
     required TuiBinding binding,
     required super.child,
-  }) : super(value: binding);
+  }) : super(binding);
 }
 
 /// `State` mixin that creates and owns one raw [Ticker], scoped to

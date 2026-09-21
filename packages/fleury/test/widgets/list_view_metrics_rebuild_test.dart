@@ -193,7 +193,7 @@ void main() {
       expect(controller.visibleRange, (first: 40, last: 43));
       label = 'after';
       controller.deliver = true;
-      controller.notifyListeners();
+      controller.notify();
       tester.pump();
       expect(tester.renderToString(), contains('after 40'));
     },
@@ -249,7 +249,7 @@ void main() {
         ),
       );
       label = 'after';
-      controller.notifyListeners();
+      controller.notify();
       tester.pump();
       expect(tester.renderToString(), contains('after 0'));
     },
@@ -266,7 +266,7 @@ void main() {
         void refresh() {
           if (controller.visibleRange?.first == 40 && label == 'before') {
             label = 'after';
-            controller.notifyListeners();
+            controller.notify();
           }
         }
 

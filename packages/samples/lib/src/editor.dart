@@ -35,9 +35,9 @@ const String _sampleText =
     'In nano, the shortcut bar shows every command.';
 
 /// The editable document: lines, a cursor, the active personality/mode, and a
-/// pending count register (vim `3dd`). A [ChangeNotifier] so the surface and
+/// pending count register (vim `3dd`). A [Notifier] so the surface and
 /// the status chrome rebuild on every edit.
-class EditorModel with ChangeNotifier {
+class EditorModel with Notifier {
   EditorModel(String initial) : _lines = initial.split('\n');
 
   List<String> _lines;
@@ -85,7 +85,7 @@ class EditorModel with ChangeNotifier {
 
   void _changed() {
     _clamp();
-    notifyListeners();
+    notify();
   }
 
   // ---- personality / mode -------------------------------------------------
@@ -121,7 +121,7 @@ class EditorModel with ChangeNotifier {
   void pushCountDigit(int digit) {
     _count = _count * 10 + digit;
     status = 'count: $_count';
-    notifyListeners();
+    notify();
   }
 
   int _takeCount() {
@@ -343,12 +343,12 @@ class EditorModel with ChangeNotifier {
 
   void reportPosition() {
     status = 'line ${_row + 1}, col ${_col + 1}';
-    notifyListeners();
+    notify();
   }
 
   void flash(String message) {
     status = message;
-    notifyListeners();
+    notify();
   }
 }
 
@@ -381,14 +381,11 @@ class _EditorBodyState extends State<_EditorBody> implements TextInputClaimant {
   void initState() {
     super.initState();
     _focusNode = FocusNode(debugLabel: 'editor')..textInputClaimant = this;
-    _model.addListener(_onModelChanged);
   }
-
-  void _onModelChanged() => setState(() {});
 
   @override
   void dispose() {
-    _model.removeListener(_onModelChanged);
+    _model.dispose();
     _focusNode.textInputClaimant = null;
     _focusNode.dispose();
     super.dispose();
@@ -416,6 +413,7 @@ class _EditorBodyState extends State<_EditorBody> implements TextInputClaimant {
 
   @override
   Widget build(BuildContext context) {
+    context.listen(_model);
     // Fleury's SelectionArea makes the rendered text drag-selectable and
     // copies on release (the terminal "select to copy" idiom) as well as on
     // Ctrl+C; over `fleury serve` it writes to the browser clipboard. Its keys

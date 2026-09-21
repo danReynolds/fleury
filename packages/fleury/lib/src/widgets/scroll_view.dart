@@ -96,7 +96,7 @@ CellRect? _boundsInScrollAncestor(RenderObject target, RenderObject ancestor) {
 /// yet) only the lower bound is enforced, so an initial offset survives
 /// until layout can clamp it — mirroring how [ListController] preserves a
 /// current item before `itemCount` is known.
-class ScrollController extends ChangeNotifier {
+class ScrollController extends Notifier {
   ScrollController({int initialOffset = 0})
     : _offset = initialOffset < 0 ? 0 : initialOffset;
 
@@ -130,7 +130,7 @@ class ScrollController extends ChangeNotifier {
     if (_owner != null && _metricsKnown && v > _maxOffset) v = _maxOffset;
     if (_offset == v) return;
     _offset = v;
-    notifyListeners();
+    notify();
   }
 
   /// The largest valid [offset] (`contentExtent - viewportExtent`, or 0
@@ -207,7 +207,7 @@ class ScrollController extends ChangeNotifier {
     binding.addPostFrameCallback((_) {
       if (_disposed || attachment != _attachment) return;
       _metricsNotificationPending = false;
-      notifyListeners();
+      notify();
     });
   }
 

@@ -369,7 +369,7 @@ _FocusScopeMarkerElement? _nearestScopeMarker(Element? from) {
   return null;
 }
 
-class FocusManager extends ChangeNotifier {
+class FocusManager extends Notifier {
   FocusManager();
 
   FocusNode? _focusedNode;
@@ -501,7 +501,7 @@ class FocusManager extends ChangeNotifier {
   /// registered, unregistered, or flipped its `trapFocus` flag. Deferred to a
   /// microtask so the notification
   /// never lands mid-build — a marker's `mount` / `update` runs inside a
-  /// build phase, and `notifyListeners` there would re-enter `setState`
+  /// build phase, and `notify` there would re-enter `setState`
   /// on a dependent.
   void _notifyManagerScopeChanged() {
     if (_disposed) return;
@@ -510,7 +510,7 @@ class FocusManager extends ChangeNotifier {
       // before the microtask runs (for example, when a short-lived test or
       // runtime tears down immediately after its first build).
       if (_disposed) return;
-      notifyListeners();
+      notify();
     });
   }
 
@@ -730,7 +730,7 @@ class FocusManager extends ChangeNotifier {
     if (wasFocused) {
       _focusedNode = fallback;
       if (fallback != null) _rememberFocusInScopes(fallback);
-      notifyListeners();
+      notify();
     }
   }
 
@@ -774,7 +774,7 @@ class FocusManager extends ChangeNotifier {
     } else {
       _focusedAncestry = null;
     }
-    notifyListeners();
+    notify();
     return true;
   }
 
@@ -1167,7 +1167,7 @@ final class _FocusManagerIdentity {
 /// code can always reach a `FocusManager` via [FocusManager.of].
 ///
 /// Installs a `Scope<FocusManager>`: readers rebuild on every focus change
-/// because the manager is a [ChangeNotifier]. An identity-only scope sits
+/// because the manager is a [Notifier]. An identity-only scope sits
 /// above it for framework boundaries that must not.
 class FocusManagerScope extends StatelessWidget {
   const FocusManagerScope({
@@ -1182,8 +1182,8 @@ class FocusManagerScope extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Scope<_FocusManagerIdentity>(
-      value: _FocusManagerIdentity(manager),
-      child: Scope<FocusManager>(value: manager, child: child),
+      _FocusManagerIdentity(manager),
+      child: Scope<FocusManager>(manager, child: child),
     );
   }
 }
@@ -1653,7 +1653,7 @@ class FocusScope extends StatelessWidget {
   /// Returns the nearest enclosing [FocusScopeRef] by walking the
   /// element tree. Used internally by [Focus] when it mounts.
   static FocusScopeRef? _enclosingOf(Element from) =>
-      _nearestScopeMarker(from.elementParent)?.scope;
+      _nearestScopeMarker(from.elementParent)?.scopeRef;
 }
 
 class _FocusScopeMarker extends Widget {
@@ -1674,7 +1674,7 @@ class _FocusScopeMarkerElement extends ComponentElement {
   /// branch happens to be deeper in the element tree.
   static int _nextActivationSeq = 0;
 
-  FocusScopeRef get scope => (widget as _FocusScopeMarker).scope;
+  FocusScopeRef get scopeRef => (widget as _FocusScopeMarker).scope;
   FocusManager? _registeredManager;
 
   /// The node most recently focused within this scope — the scope's focus

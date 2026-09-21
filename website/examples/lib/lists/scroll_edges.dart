@@ -45,8 +45,8 @@ class _ScrollEdgesState extends State<ScrollEdges> {
               setState(() => edgeBehavior = value),
         ),
         const SizedBox(height: 1),
-        ListenableBuilder(
-          listenable: scroll,
+        NotifierBuilder(
+          notifier: scroll,
           builder: (context, _) {
             final first = scroll.offset + 1;
             final last =

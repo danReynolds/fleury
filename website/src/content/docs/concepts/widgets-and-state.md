@@ -11,8 +11,9 @@ home.)
 
 ## Two kinds of widget
 
-A **`StatelessWidget`** depends only on its inputs. Override one method, `build`,
-which returns what the widget displays:
+A **`StatelessWidget`** describes UI from its inputs and any state it reads
+through its build context. It has no companion mutable `State` object. Override
+one method, `build`, which returns what the widget displays:
 
 ```dart
 class Greeting extends StatelessWidget {
@@ -65,8 +66,8 @@ the old. The terminal presenter writes only cells that actually changed; when
 the runtime has no frame work, it skips build, layout, paint, and presentation.
 
 For fields owned by your `State`, use `setState` to schedule the rebuild.
-Controllers and other listenables notify their listeners themselves; use a
-`ListenableBuilder` when your surrounding UI reads their state.
+Shared models publish changes through `Notifier.notify()`; subscribe with
+`NotifierBuilder` or `context.listen(model)` when your UI reads their state.
 
 ## Who owns a control's value?
 
@@ -163,8 +164,7 @@ with `if (!mounted) return;` before calling `setState`).
 ## BuildContext
 
 The `BuildContext` handed to `build` is a handle to *where* this widget sits in
-the tree. You rarely call methods on it directly — most of the time you pass it
-to a `.of(context)` lookup:
+the tree. Use it to read values provided by ancestors:
 
 ```dart
 final theme = Theme.of(context);          // nearest ThemeData
@@ -176,6 +176,13 @@ they **subscribe** this widget to it — change the theme and every widget that
 read `Theme.of(context)` rebuilds. That's the mechanism behind theming and
 responsive layout; it's a `Scope` under the hood (see below). There
 are shorthands too: `context.theme` and `context.colors`.
+
+For application state, `context.scope<Model>()` finds the nearest `Scope<Model>`
+and subscribes this widget. If you already have a model,
+`context.listen(model)` subscribes directly and returns that same object. Call
+these readers during this widget's `build`; use the captured model in event
+callbacks. Their subscriptions follow the dependencies used by each build and
+are removed automatically when no longer used or when the widget unmounts.
 
 Note one difference from a render tree: a `BuildContext` has no `.size`. A widget
 doesn't know its own dimensions during `build` (it hasn't been laid out yet).
@@ -198,22 +205,20 @@ shuffled:
   `State` from elsewhere via `key.currentState`. Powerful but heavier — prefer
   lifting state up before reaching for one.
 
-## Sharing data down the tree: Scope
+## Sharing data down the tree
 
-You've already used this. Every `.of(context)` call reads from a **`Scope`** — a
-widget that sits high in the tree, shares one value with everything beneath it,
-and rebuilds any descendant that read it when the value is replaced by one that
-is not equal or, for a `Listenable` such as a `ChangeNotifier`, when it
-notifies. The built-ins you've met (`Theme`, `MediaQuery`,
-`DefaultTextStyle`) are scopes, each fronted by a `.of(context)` helper.
+Use `Scope(value, child: ...)` to share an existing object with descendants, or
+`Scope.create(Model.new, child: ...)` to create and own a model for a subtree.
+Descendants choose `context.scope<Model>()` or a `ScopeBuilder<Model>` consumer.
+The type argument is the key, and the nearest scope of that type wins.
+Plain values notify when replaced by an unequal value; notifiers also publish
+changes themselves. The [State management guide](/fleury/guides/state-management/)
+shows complete examples of both readers. See the
+[Scope reference](/fleury/widgets/scope/) for creation and disposal rules.
 
-You'd reach for your own when a model — a current user, a router, a feature
-flag — needs to reach many widgets, and you'd rather not thread it through ten
-constructors to get there. Wrap the subtree in `Scope(value: model, child: ...)`
-(or `Scope<Model>.create(...)` to let the scope own the model) and read it
-anywhere below with `Scope.of<Model>(context)`. The type argument is the key,
-and the nearest scope of that type wins. The
-[State management](/fleury/guides/state-management/) guide covers the rest.
+The built-ins you've met (`Theme`, `MediaQuery`, and `DefaultTextStyle`) use
+scopes behind their `.of(context)` helpers. Give your own scope a distinct
+value type when it needs an independent identity in the tree.
 
 ---
 

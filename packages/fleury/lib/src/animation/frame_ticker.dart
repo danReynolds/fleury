@@ -25,7 +25,7 @@ import 'ticker_scheduler.dart';
 /// Sharing the scheduler with [Ticker]s in the continuous lane
 /// means N concurrent [FrameTicker]s still produce only one
 /// underlying [Timer.periodic] in the runtime.
-class FrameTicker extends ChangeNotifier {
+class FrameTicker extends Notifier {
   FrameTicker({required this.interval, required TickerScheduler scheduler})
     : _scheduler = scheduler,
       assert(
@@ -159,7 +159,7 @@ class FrameTicker extends ChangeNotifier {
     if (_active) {
       _startTime = _scheduler.clock.now;
     }
-    notifyListeners();
+    notify();
   }
 
   void _handleSchedulerTick(Duration clockNow) {
@@ -170,6 +170,6 @@ class FrameTicker extends ChangeNotifier {
     _lastEmitElapsed = _elapsed;
     _frame += 1;
     if (_muted) return;
-    notifyListeners();
+    notify();
   }
 }

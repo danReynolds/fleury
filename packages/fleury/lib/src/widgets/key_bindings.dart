@@ -106,7 +106,7 @@ final class KeyCompletion {
 /// One per `runApp`, owned by the `InputDispatcher` and shared with the widget
 /// tree by [PendingSequenceScope]. Framework-internal: apps read the value via
 /// [KeyBindings.pendingOf], never touch this directly.
-final class PendingSequenceNotifier with ChangeNotifier {
+final class PendingSequenceNotifier with Notifier {
   PendingKeySequenceMatch? _value;
 
   /// The current pending match, or null when no sequence is in flight.
@@ -117,7 +117,7 @@ final class PendingSequenceNotifier with ChangeNotifier {
   set value(PendingKeySequenceMatch? next) {
     if (identical(_value, next)) return;
     _value = next;
-    notifyListeners();
+    notify();
   }
 
   /// Framework-only: the dispatcher installs its pending-cancel here so a
@@ -140,7 +140,7 @@ final class PendingSequenceScope extends Scope<PendingSequenceNotifier> {
     super.key,
     required PendingSequenceNotifier notifier,
     required super.child,
-  }) : super(value: notifier);
+  }) : super(notifier);
 }
 
 /// Passed to every [KeyBinding.onTrigger] handler. Exposes what matched

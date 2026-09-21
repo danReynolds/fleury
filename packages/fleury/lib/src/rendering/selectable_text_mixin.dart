@@ -19,7 +19,7 @@
 //   - [selectionLines]    — flat text per visually-laid-out line
 //   - [selectionWidthResolver] / [selectionPolicy] — for grapheme widths
 //
-// Concrete classes still need `with ChangeNotifier, SelectionRegistrant`
+// Concrete classes still need `with Notifier, SelectionRegistrant`
 // to get the registration machinery; the mixin only handles the
 // algorithm.
 
@@ -60,12 +60,12 @@ class TextEdgeRelation {
 }
 
 /// The shared selection algorithm. Mix this in to a [RenderObject]
-/// that also mixes in `ChangeNotifier` (for listener machinery) and
+/// that also mixes in `Notifier` (for listener machinery) and
 /// `SelectionRegistrant` (for ambient-area attach/detach).
 ///
 /// ```dart
 /// class RenderText extends RenderObject
-///     with ChangeNotifier, SelectionRegistrant, SelectableTextMixin
+///     with Notifier, SelectionRegistrant, SelectableTextMixin
 ///     implements Selectable { ... }
 /// ```
 mixin SelectableTextMixin on RenderObject implements Selectable {
@@ -97,9 +97,12 @@ mixin SelectableTextMixin on RenderObject implements Selectable {
   CellWidthPolicy get selectionPolicy;
 
   /// Subclass hook: notify the framework that listener-attached
-  /// observers should run. Hosts mixing in `ChangeNotifier` already
-  /// provide a matching `notifyListeners()`.
+  /// observers should run. Hosts mixing in `Notifier` provide this legacy
+  /// hook, retained for existing custom renderers.
   void notifyListeners();
+
+  /// Publishes selection changes while preserving legacy renderer hooks.
+  void notify() => notifyListeners();
 
   // ----- Mixin state -------------------------------------------------
 
@@ -715,7 +718,7 @@ mixin SelectableTextMixin on RenderObject implements Selectable {
           );
     if (_selectionGeometry == next) return;
     _selectionGeometry = next;
-    notifyListeners();
+    notify();
     // Paint-only: a selection-range change moves which cells are
     // highlighted, never the text's size or wrap. `performLayout` produces
     // the line structure that selection maps onto (layout -> selection), not

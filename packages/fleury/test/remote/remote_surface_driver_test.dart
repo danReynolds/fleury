@@ -1312,8 +1312,8 @@ void main() {
         var ran = 0;
         scheduleMicrotask(() => transport.emit(_init));
         final done = runApp(
-          ListenableBuilder(
-            listenable: tick,
+          NotifierBuilder(
+            notifier: tick,
             builder: (context, child) => Semantics(
               role: SemanticRole.button,
               label: 'Current',
@@ -1380,8 +1380,8 @@ void main() {
         var ran = 0;
         scheduleMicrotask(() => transport.emit(_init));
         final done = runApp(
-          ListenableBuilder(
-            listenable: alternateShape,
+          NotifierBuilder(
+            notifier: alternateShape,
             builder: (context, child) {
               final alternate = alternateShape.value;
               return Semantics(
@@ -1452,8 +1452,8 @@ void main() {
         final visible = _BoolNotifier()..value = true;
         scheduleMicrotask(() => transport.emit(_init));
         final done = runApp(
-          ListenableBuilder(
-            listenable: visible,
+          NotifierBuilder(
+            notifier: visible,
             builder: (context, child) => _SyntheticActionSlots(
               showTarget: visible.value,
               child: const Text('synthetic'),
@@ -1556,8 +1556,8 @@ void main() {
                 },
                 child: const Text('swap'),
               ),
-              ListenableBuilder(
-                listenable: showReplacement,
+              NotifierBuilder(
+                notifier: showReplacement,
                 builder: (context, child) {
                   return showReplacement.value
                       ? _ReplacementDeleteControl(
@@ -1827,7 +1827,7 @@ final class _LinkProbe extends StatelessWidget {
   }
 }
 
-final class _BoolNotifier extends ChangeNotifier {
+final class _BoolNotifier extends Notifier {
   bool _value = false;
 
   bool get value => _value;
@@ -1835,7 +1835,7 @@ final class _BoolNotifier extends ChangeNotifier {
   set value(bool next) {
     if (_value == next) return;
     _value = next;
-    notifyListeners();
+    notify();
   }
 }
 

@@ -52,7 +52,7 @@ abstract class FleuryAppExtension {
 }
 
 /// Root controller installed by [FleuryApp].
-class FleuryAppController extends ChangeNotifier {
+class FleuryAppController extends Notifier {
   FleuryAppController({
     required String title,
     required this.commands,
@@ -75,7 +75,7 @@ class FleuryAppController extends ChangeNotifier {
     _checkNotDisposed();
     if (_title == value) return;
     _title = value;
-    notifyListeners();
+    notify();
   }
 
   /// App-level extension objects registered by the host application.
@@ -134,7 +134,7 @@ class FleuryAppController extends ChangeNotifier {
     _checkNotDisposed();
     if (listEquals(_extensions, extensions)) return;
     _extensions = List<Object>.unmodifiable(extensions);
-    notifyListeners();
+    notify();
   }
 
   @override
@@ -148,7 +148,7 @@ class FleuryAppController extends ChangeNotifier {
 
   void _notifyChanged() {
     if (_disposed) return;
-    notifyListeners();
+    notify();
   }
 
   void _checkNotDisposed() {
@@ -165,7 +165,7 @@ class FleuryAppScope extends Scope<FleuryAppController> {
     super.key,
     required FleuryAppController controller,
     required super.child,
-  }) : super(value: controller);
+  }) : super(controller);
 
   static FleuryAppController of(BuildContext context) {
     final controller = maybeOf(context);
@@ -412,7 +412,7 @@ class _FleuryAppState extends State<FleuryApp> {
     final app = CommandRegistryScope(
       registry: _commands,
       child: Scope<StatusController>(
-        value: _app.status,
+        _app.status,
         child: FleuryAppScope(
           controller: _app,
           child: _ContextBuilder(

@@ -752,7 +752,7 @@ class NavigatorState extends State<Navigator> {
       }),
       onAction: _handleNavigatorAction,
       child: Scope<NavigatorState>(
-        value: this,
+        this,
         child: _RouteStack(
           firstPainted: _firstPainted(),
           children: <Widget>[
@@ -921,7 +921,7 @@ class _RouteHost extends StatelessWidget {
         child: ExcludeFocus(
           excluding: !active,
           child: Scope<_Route>(
-            value: route,
+            route,
             // Per-route traversal: every route — the home page, a pushed page,
             // or a presented modal — gets arrow + Tab focus traversal for free.
             // It sits inside the route's FocusScope, so a presented route's

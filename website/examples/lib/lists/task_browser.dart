@@ -1,6 +1,5 @@
 // dart format width=60
 import 'package:fleury/fleury_core.dart';
-import 'package:fleury_widgets/fleury_widgets_web.dart';
 
 class TaskBrowser extends StatefulWidget {
   const TaskBrowser({super.key});
@@ -46,8 +45,8 @@ class _TaskBrowserState extends State<TaskBrowser> {
     mainAxisSize: MainAxisSize.min,
     crossAxisAlignment: CrossAxisAlignment.start,
     children: [
-      ListenableBuilder(
-        listenable: list,
+      NotifierBuilder(
+        notifier: list,
         builder: (context, _) {
           final range = list.visibleRange;
           return Text(

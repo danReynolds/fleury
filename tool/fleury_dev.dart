@@ -275,6 +275,7 @@ void _printCatalog() {
   stdout.writeln('');
   stdout.writeln('Samples:');
   stdout.writeln('  samples <app> -> packages/samples/bin/samples.dart');
+  stdout.writeln('  samples state -> local, tree, and global state showcase');
 }
 
 final _coreDemos = <String, String>{
@@ -459,6 +460,7 @@ class _Runner {
         'test/input_guide_test.dart',
         'test/lists_guide_test.dart',
         'test/forms_guide_test.dart',
+        'test/state_management_guide_test.dart',
         'test/datatable_examples_test.dart',
         'test/loading_error_future_test.dart',
       ], workingDirectory: webExamples);

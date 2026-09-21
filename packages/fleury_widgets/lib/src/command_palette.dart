@@ -240,8 +240,8 @@ class CommandPalette extends StatelessWidget {
       sourceRegistry: sourceRegistry,
       sourceContext: sourceContext,
     );
-    return ListenableBuilder(
-      listenable: registry,
+    return NotifierBuilder(
+      notifier: registry,
       builder: (context, _) {
         final activeSourceContext = _resolvedCommandSourceContext(
           context,

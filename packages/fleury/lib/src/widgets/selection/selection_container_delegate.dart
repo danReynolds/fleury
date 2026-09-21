@@ -38,7 +38,7 @@ import 'selection_event.dart';
 /// **Stale geometry.** A Selectable that hasn't painted yet (or has
 /// been hidden) returns null `cellBounds`. Those are silently skipped
 /// — they don't appear in reading order until they next paint.
-class SelectionContainerDelegate extends ChangeNotifier
+class SelectionContainerDelegate extends Notifier
     implements SelectionRegistrar {
   final List<Selectable> _selectables = <Selectable>[];
   bool _disposed = false;
@@ -153,7 +153,7 @@ class SelectionContainerDelegate extends ChangeNotifier
     }
 
     _recomputeSelectionFromEdges();
-    notifyListeners();
+    notify();
   }
 
   /// Sorted view of registered selectables, top-to-bottom then
@@ -183,7 +183,7 @@ class SelectionContainerDelegate extends ChangeNotifier
   /// don't bounce the event back through `dispatchSelectionEvent`.
   void _onSelectableChanged() {
     if (_disposed) return;
-    notifyListeners();
+    notify();
   }
 
   /// Re-applies the in-flight edge updates to a newly-added

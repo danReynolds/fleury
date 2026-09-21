@@ -186,7 +186,7 @@ void main() {
         ),
       );
       tester.pumpWidget(const Text('gone'));
-      // A disposed ChangeNotifier throws on addListener — assert ours
+      // A disposed Notifier throws on addListener — assert ours
       // wasn't disposed because the widget didn't own it.
       expect(() => c.addListener(() {}), returnsNormally);
     });

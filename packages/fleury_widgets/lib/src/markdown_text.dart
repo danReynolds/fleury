@@ -278,13 +278,13 @@ final class MarkdownBlock {
 }
 
 /// Controller for [MarkdownView] browsing.
-class MarkdownViewController extends ChangeNotifier {
+class MarkdownViewController extends Notifier {
   MarkdownViewController({
     /// Zero-based block selected when the controller is created.
     /// Initial browsing row. Null starts without a current row.
     int? initialIndex = 0,
   }) : _list = ListController(initialIndex: initialIndex) {
-    _list.addListener(notifyListeners);
+    _list.addListener(notify);
   }
 
   final ListController _list;
@@ -315,7 +315,7 @@ class MarkdownViewController extends ChangeNotifier {
   void dispose() {
     if (_disposed) return;
     _disposed = true;
-    _list.removeListener(notifyListeners);
+    _list.removeListener(notify);
     _list.dispose();
     super.dispose();
   }

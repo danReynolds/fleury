@@ -114,14 +114,14 @@ class _ServiceDetailsScreenState extends State<_ServiceDetailsScreen> {
   }
 
   @override
-  Widget build(BuildContext context) => ListenableBuilder(
-    listenable: _form,
-    builder: (context, child) => _ShowcaseScreen(
+  Widget build(BuildContext context) => NotifierBuilder(
+    notifier: _form,
+    builder: (context, form) => _ShowcaseScreen(
       step: 1,
       title: 'Service details',
       description: 'Start with the identity and visibility of the service.',
       child: Form(
-        controller: _form,
+        controller: form,
         semanticLabel: 'Create service details',
         onSubmit: _continue,
         child: Column(
@@ -137,7 +137,7 @@ class _ServiceDetailsScreenState extends State<_ServiceDetailsScreen> {
                 width: 42,
                 child: TextInput(
                   controller: widget.draft.name,
-                  readOnly: _form.isSubmitting,
+                  readOnly: form.isSubmitting,
                   autofocus: true,
                   semanticLabel: 'Service name',
                   placeholder: 'webhook-worker',
@@ -146,7 +146,7 @@ class _ServiceDetailsScreenState extends State<_ServiceDetailsScreen> {
                       setState(() => _nameError = null);
                     }
                   },
-                  onSubmit: (_) => _form.submit(),
+                  onSubmit: (_) => form.submit(),
                 ),
               ),
             ),
@@ -160,7 +160,7 @@ class _ServiceDetailsScreenState extends State<_ServiceDetailsScreen> {
                 width: 52,
                 child: TextArea(
                   controller: widget.draft.description,
-                  readOnly: _form.isSubmitting,
+                  readOnly: form.isSubmitting,
                   semanticLabel: 'Description',
                   minLines: 2,
                   maxLines: 2,
@@ -171,14 +171,14 @@ class _ServiceDetailsScreenState extends State<_ServiceDetailsScreen> {
               child: Checkbox(
                 value: widget.draft.private,
                 label: 'Private service',
-                onChanged: _form.isSubmitting
+                onChanged: form.isSubmitting
                     ? null
                     : (value) => setState(() => widget.draft.private = value),
               ),
             ),
             const Text('Tip: try the reserved name “fleury”.'),
             const SizedBox(height: 1),
-            _SubmitButton(controller: _form, label: 'Continue'),
+            _SubmitButton(controller: form, label: 'Continue'),
           ],
         ),
       ),
@@ -335,14 +335,14 @@ class _ReviewScreenState extends State<_ReviewScreen> {
   @override
   Widget build(BuildContext context) {
     final draft = widget.draft;
-    return ListenableBuilder(
-      listenable: _form,
-      builder: (context, child) => _ShowcaseScreen(
+    return NotifierBuilder(
+      notifier: _form,
+      builder: (context, form) => _ShowcaseScreen(
         step: 3,
         title: 'Review',
         description: 'Confirm the complete deployment before it starts.',
         child: Form(
-          controller: _form,
+          controller: form,
           semanticLabel: 'Review service',
           onSubmit: _deploy,
           child: Column(
@@ -363,14 +363,14 @@ class _ReviewScreenState extends State<_ReviewScreen> {
                   value: draft.confirmed,
                   autofocus: true,
                   label: 'I reviewed these settings',
-                  onChanged: _form.isSubmitting
+                  onChanged: form.isSubmitting
                       ? null
                       : (value) => setState(() => draft.confirmed = value),
                 ),
               ),
               const SizedBox(height: 1),
               _FormActions(
-                controller: _form,
+                controller: form,
                 nextLabel: 'Deploy service',
                 onBack: context.pop,
               ),
@@ -470,9 +470,9 @@ class _SubmitButton extends StatelessWidget {
   final String label;
 
   @override
-  Widget build(BuildContext context) => ListenableBuilder(
-    listenable: controller,
-    builder: (context, child) => Button(
+  Widget build(BuildContext context) => NotifierBuilder(
+    notifier: controller,
+    builder: (context, controller) => Button(
       text: controller.isBusy ? 'Checking…' : label,
       onPressed: controller.isBusy ? null : controller.submit,
     ),
@@ -491,9 +491,9 @@ class _FormActions extends StatelessWidget {
   final void Function() onBack;
 
   @override
-  Widget build(BuildContext context) => ListenableBuilder(
-    listenable: controller,
-    builder: (context, child) => PopScope(
+  Widget build(BuildContext context) => NotifierBuilder(
+    notifier: controller,
+    builder: (context, controller) => PopScope(
       canPop: !controller.isBusy,
       child: Row(
         children: <Widget>[

@@ -6,6 +6,7 @@ import 'package:fleury/fleury.dart';
 import 'package:fleury_widgets/fleury_widgets.dart';
 
 import 'sample_image.dart';
+import 'state_stories.dart';
 import 'story.dart';
 import 'theme_gallery.dart';
 
@@ -752,6 +753,7 @@ final List<Story> storybookStories = _perWidgetStories(<Story>[
     initialHeight: 19,
     builder: (context) => _WorkflowStory(view: context.option('view')),
   ),
+  ...stateStories,
 ]);
 
 List<Story> _perWidgetStories(List<Story> groupedStories) {
@@ -2374,16 +2376,16 @@ class _FormsStoryState extends State<_FormsStory> {
   }
 
   Widget _actions({required String nextLabel}) {
-    return ListenableBuilder(
-      listenable: _form,
-      builder: (context, child) => Row(
+    return NotifierBuilder(
+      notifier: _form,
+      builder: (context, form) => Row(
         children: <Widget>[
           if (_step > 0)
-            Button(text: 'Back', onPressed: _form.isSubmitting ? null : _back),
+            Button(text: 'Back', onPressed: form.isSubmitting ? null : _back),
           if (_step > 0) const SizedBox(width: 2),
           Button(
-            text: _form.isSubmitting ? 'Checking…' : nextLabel,
-            onPressed: _form.isSubmitting ? null : _form.submit,
+            text: form.isSubmitting ? 'Checking…' : nextLabel,
+            onPressed: form.isSubmitting ? null : form.submit,
           ),
         ],
       ),

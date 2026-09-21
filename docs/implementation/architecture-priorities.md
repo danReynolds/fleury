@@ -168,7 +168,10 @@ of the API track until after the storybook work, not arch blockers.
    widget-local state, `Scope<T>` for tree-local state (replacing
    `InheritedWidget` + `InheritedNotifier`), notifiers for anything with an
    independent owner. Coarse notification; field-level reactivity was measured
-   and rejected (RFC 0023 §7–§8 on the spike branch).
+   and rejected (RFC 0023 §7–§8 on the spike branch). The current API uses
+   `Notifier.notify()` for model updates, with builder widgets and
+   `context.scope<T>()` / `context.listen(model)` for consumption. `Scope.create`
+   owns a subtree model; externally supplied instances retain their owner.
 
 ## ⏸ Gated (need a product / posture decision first)
 

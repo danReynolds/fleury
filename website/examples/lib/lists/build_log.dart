@@ -1,5 +1,4 @@
 import 'package:fleury/fleury_core.dart';
-import 'package:fleury_widgets/fleury_widgets_web.dart';
 
 class BuildLog extends StatefulWidget {
   const BuildLog({super.key});
@@ -26,8 +25,8 @@ class _BuildLogState extends State<BuildLog> {
     mainAxisSize: MainAxisSize.min,
     crossAxisAlignment: CrossAxisAlignment.start,
     children: [
-      ListenableBuilder(
-        listenable: log,
+      NotifierBuilder(
+        notifier: log,
         builder: (context, _) => Text(
           log.isFollowing
               ? 'Following latest output'

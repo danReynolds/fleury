@@ -33,7 +33,7 @@ final class DebugMonitor {
 /// and rebuilds when monitors come and go (so `registerMonitor` in
 /// `initState` of some widget mid-app correctly surfaces the new
 /// monitor in the live panel without a manual refresh).
-final class FleuryDebug extends ChangeNotifier {
+final class FleuryDebug extends Notifier {
   FleuryDebug._();
 
   /// Singleton instance — there's exactly one debug registry per
@@ -55,20 +55,20 @@ final class FleuryDebug extends ChangeNotifier {
     } else {
       instance._monitors.add(entry);
     }
-    instance.notifyListeners();
+    instance.notify();
   }
 
   /// Remove a previously-registered monitor. No-op if not registered.
   static void unregisterMonitor(String name) {
     final removed = instance._monitors.length;
     instance._monitors.removeWhere((m) => m.name == name);
-    if (instance._monitors.length != removed) instance.notifyListeners();
+    if (instance._monitors.length != removed) instance.notify();
   }
 
   /// Drop every registered monitor. Mainly for tests.
   static void clearMonitors() {
     if (instance._monitors.isEmpty) return;
     instance._monitors.clear();
-    instance.notifyListeners();
+    instance.notify();
   }
 }

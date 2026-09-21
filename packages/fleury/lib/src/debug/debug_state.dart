@@ -1,6 +1,6 @@
 // Debug panel state — mode (off / docked / fullscreen) + the
 // in-panel toggles (paint-flashing, no-reflow, …). A small
-// `ChangeNotifier` so the shell rebuilds on mode flips.
+// `Notifier` so the shell rebuilds on mode flips.
 
 import '../foundation/change_notifier.dart';
 import '../runtime/runtime_error_overlay.dart' show RuntimeErrorRecord;
@@ -76,7 +76,7 @@ class DebugConfig {
 
 /// Mutable runtime state — flips between modes, switches tabs,
 /// toggles in-panel options. The shell + panel listen and rebuild.
-class DebugController extends ChangeNotifier {
+class DebugController extends Notifier {
   DebugController(this._config) : _mode = _config.startMode;
 
   final DebugConfig _config;
@@ -115,7 +115,7 @@ class DebugController extends ChangeNotifier {
   void setSemanticTreeProvider(SemanticTree? Function()? provider) {
     _checkNotDisposed();
     _semanticTreeProvider = provider;
-    notifyListeners();
+    notify();
   }
 
   /// Set by the native runtime when this session can hot restart (a dev
@@ -125,7 +125,7 @@ class DebugController extends ChangeNotifier {
   void setHotRestartHandler(void Function()? handler) {
     _checkNotDisposed();
     _hotRestartHandler = handler;
-    notifyListeners();
+    notify();
   }
 
   void Function()? _hotRestartHandler;
@@ -158,7 +158,7 @@ class DebugController extends ChangeNotifier {
   void setTerminalDiagnosisProvider(TerminalDiagnosis? Function()? provider) {
     _checkNotDisposed();
     _terminalDiagnosisProvider = provider;
-    notifyListeners();
+    notify();
   }
 
   TerminalDiagnosis? terminalDiagnosisSnapshot() =>
@@ -174,7 +174,7 @@ class DebugController extends ChangeNotifier {
       _lastOpen = _mode;
       _mode = DebugMode.off;
     }
-    notifyListeners();
+    notify();
   }
 
   /// Shift+Ctrl+G / F11 — docked ↔ fullscreen. No-op when off.
@@ -183,7 +183,7 @@ class DebugController extends ChangeNotifier {
     if (_mode == DebugMode.off) return;
     _mode = _mode == DebugMode.docked ? DebugMode.fullscreen : DebugMode.docked;
     _lastOpen = _mode;
-    notifyListeners();
+    notify();
   }
 
   /// Esc when fullscreen → back to docked.
@@ -192,14 +192,14 @@ class DebugController extends ChangeNotifier {
     if (_mode != DebugMode.fullscreen) return;
     _mode = DebugMode.docked;
     _lastOpen = _mode;
-    notifyListeners();
+    notify();
   }
 
   void selectTab(DebugTab tab) {
     _checkNotDisposed();
     if (_tab == tab) return;
     _tab = tab;
-    notifyListeners();
+    notify();
   }
 
   /// Cycle to the next/previous tab (Tab / Shift+Tab while the shell is
@@ -208,13 +208,13 @@ class DebugController extends ChangeNotifier {
     _checkNotDisposed();
     final values = DebugTab.values;
     _tab = values[(values.indexOf(_tab) + delta) % values.length];
-    notifyListeners();
+    notify();
   }
 
   void togglePaintFlash() {
     _checkNotDisposed();
     _paintFlash = !_paintFlash;
-    notifyListeners();
+    notify();
   }
 
   void moveSemanticCursor(int delta) {
@@ -223,14 +223,14 @@ class DebugController extends ChangeNotifier {
     final clamped = next < 0 ? 0 : next;
     if (clamped == _semanticCursorIndex) return;
     _semanticCursorIndex = clamped;
-    notifyListeners();
+    notify();
   }
 
   void resetSemanticCursor() {
     _checkNotDisposed();
     if (_semanticCursorIndex == 0) return;
     _semanticCursorIndex = 0;
-    notifyListeners();
+    notify();
   }
 
   /// Opens the Logs-tab search field (`/`), capturing typed characters into
@@ -239,7 +239,7 @@ class DebugController extends ChangeNotifier {
     _checkNotDisposed();
     if (_logSearching) return;
     _logSearching = true;
-    notifyListeners();
+    notify();
   }
 
   /// Appends typed [text] to the search query while [logSearching].
@@ -247,7 +247,7 @@ class DebugController extends ChangeNotifier {
     _checkNotDisposed();
     if (!_logSearching || text.isEmpty) return;
     _logQuery += text;
-    notifyListeners();
+    notify();
   }
 
   /// Deletes the last character of the search query (Backspace).
@@ -255,7 +255,7 @@ class DebugController extends ChangeNotifier {
     _checkNotDisposed();
     if (!_logSearching || _logQuery.isEmpty) return;
     _logQuery = _logQuery.substring(0, _logQuery.length - 1);
-    notifyListeners();
+    notify();
   }
 
   /// Leaves search-input mode but keeps [logQuery] as the active filter
@@ -264,7 +264,7 @@ class DebugController extends ChangeNotifier {
     _checkNotDisposed();
     if (!_logSearching) return;
     _logSearching = false;
-    notifyListeners();
+    notify();
   }
 
   /// Clears the search query and closes the field (Esc) — the full log shows
@@ -274,7 +274,7 @@ class DebugController extends ChangeNotifier {
     if (!_logSearching && _logQuery.isEmpty) return;
     _logSearching = false;
     _logQuery = '';
-    notifyListeners();
+    notify();
   }
 
   /// Cycles the Logs-tab source filter all → stdout → stderr → all (`s`).
@@ -283,7 +283,7 @@ class DebugController extends ChangeNotifier {
     final values = LogSourceFilter.values;
     _logSourceFilter =
         values[(values.indexOf(_logSourceFilter) + 1) % values.length];
-    notifyListeners();
+    notify();
   }
 
   void _checkNotDisposed() {

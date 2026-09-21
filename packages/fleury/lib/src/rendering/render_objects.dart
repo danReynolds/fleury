@@ -57,7 +57,7 @@ enum TextAlign {
 /// sanitize. Wide graphemes occupy leading + continuation cells via
 /// `CellBuffer`.
 class RenderText extends RenderObject
-    with ChangeNotifier, SelectionRegistrant, SelectableTextMixin
+    with Notifier, SelectionRegistrant, SelectableTextMixin
     implements Selectable {
   RenderText({
     required String text,

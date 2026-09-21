@@ -247,8 +247,8 @@ void main() {
       addTearDown(model.dispose);
 
       tester.pumpWidget(
-        ListenableBuilder(
-          listenable: model,
+        NotifierBuilder(
+          notifier: model,
           builder: (context, _) {
             return Column(
               crossAxisAlignment: CrossAxisAlignment.start,
@@ -431,13 +431,13 @@ void main() {
   });
 }
 
-final class _StyleToggleModel extends ChangeNotifier {
+final class _StyleToggleModel extends Notifier {
   var _accent = false;
 
   bool get accent => _accent;
 
   void toggle() {
     _accent = !_accent;
-    notifyListeners();
+    notify();
   }
 }

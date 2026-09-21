@@ -22,7 +22,7 @@ import '../input/events.dart';
 import '../widgets/basic.dart';
 import '../widgets/framework.dart';
 import '../widgets/layout_builder.dart';
-import '../widgets/listenable_builder.dart';
+import '../widgets/notifier_builder.dart';
 import 'debug_panel.dart';
 import 'debug_state.dart';
 
@@ -51,8 +51,8 @@ class _DebugShellState extends State<DebugShell> {
   @override
   Widget build(BuildContext context) {
     if (!widget.controller.config.enabled) return widget.child;
-    return ListenableBuilder(
-      listenable: widget.controller,
+    return NotifierBuilder(
+      notifier: widget.controller,
       builder: (context, _) => _layout(context),
     );
   }

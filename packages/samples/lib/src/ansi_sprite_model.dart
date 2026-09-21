@@ -32,7 +32,7 @@ final class AnsiSpriteFrame {
 ///
 /// Palette index zero is transparent. Opaque palette entries are one-based:
 /// a cell value of `1` refers to `paletteRgb[0]`.
-class AnsiSpriteModel with ChangeNotifier {
+class AnsiSpriteModel with Notifier {
   AnsiSpriteModel._({
     required this.width,
     required this.height,
@@ -242,7 +242,7 @@ class AnsiSpriteModel with ChangeNotifier {
     if (_selectedFrameIndex == index) return;
     _selectedFrameIndex = index;
     _playing = false;
-    notifyListeners();
+    notify();
   }
 
   void selectColor(int index) {
@@ -252,18 +252,18 @@ class AnsiSpriteModel with ChangeNotifier {
     }
     _selectedColorIndex = index;
     _tool = AnsiSpriteTool.pencil;
-    notifyListeners();
+    notify();
   }
 
   void selectTool(AnsiSpriteTool value) {
     if (_tool == value) return;
     _tool = value;
-    notifyListeners();
+    notify();
   }
 
   void toggleOnionSkin() {
     _onionSkin = !_onionSkin;
-    notifyListeners();
+    notify();
   }
 
   void moveCursor(int dx, int dy) {
@@ -279,7 +279,7 @@ class AnsiSpriteModel with ChangeNotifier {
       _strokeChanged = true;
       _playing = false;
     }
-    notifyListeners();
+    notify();
   }
 
   void setCursor(int x, int y) {
@@ -288,7 +288,7 @@ class AnsiSpriteModel with ChangeNotifier {
     if (nextX == _cursorX && nextY == _cursorY) return;
     _cursorX = nextX;
     _cursorY = nextY;
-    notifyListeners();
+    notify();
   }
 
   /// Applies the selected tool as one undoable keyboard edit.
@@ -314,7 +314,7 @@ class AnsiSpriteModel with ChangeNotifier {
       _strokeChanged = true;
       _playing = false;
     }
-    notifyListeners();
+    notify();
   }
 
   /// Lifts the pen and closes the undo unit.
@@ -322,7 +322,7 @@ class AnsiSpriteModel with ChangeNotifier {
     if (!_brushDown) return;
     _brushDown = false;
     endStroke();
-    notifyListeners();
+    notify();
   }
 
   /// Starts one mouse gesture. Every changed cell until [endStroke] is one
@@ -340,7 +340,7 @@ class AnsiSpriteModel with ChangeNotifier {
     if (_applyTool(x, y)) {
       _strokeChanged = true;
       _playing = false;
-      notifyListeners();
+      notify();
     }
   }
 
@@ -415,7 +415,7 @@ class AnsiSpriteModel with ChangeNotifier {
 
   void togglePlayback() {
     _playing = !_playing;
-    notifyListeners();
+    notify();
   }
 
   /// Resolves the displayed frame from elapsed playback time. No wall clock is
@@ -441,7 +441,7 @@ class AnsiSpriteModel with ChangeNotifier {
     if (_undo.isEmpty) return;
     _redo.add(_capture());
     _restore(_undo.removeLast());
-    notifyListeners();
+    notify();
   }
 
   void redo() {
@@ -449,7 +449,7 @@ class AnsiSpriteModel with ChangeNotifier {
     if (_redo.isEmpty) return;
     _undo.add(_capture());
     _restore(_redo.removeLast());
-    notifyListeners();
+    notify();
   }
 
   /// Stable, canonical JSON. Map insertion order is intentional and tested:
@@ -531,7 +531,7 @@ class AnsiSpriteModel with ChangeNotifier {
     _playing = false;
     _undo.add(before);
     _redo.clear();
-    notifyListeners();
+    notify();
   }
 
   _SpriteSnapshot _capture() {

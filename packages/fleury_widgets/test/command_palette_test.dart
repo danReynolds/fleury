@@ -727,8 +727,8 @@ void main() {
         FleuryApp(
           title: 'App',
           child: Navigator(
-            home: ListenableBuilder(
-              listenable: phase,
+            home: NotifierBuilder(
+              notifier: phase,
               builder: (context, _) {
                 final current = phase.value;
                 final openCommand = AppCommand(

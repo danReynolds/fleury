@@ -48,10 +48,10 @@ final class TaskGraphNode {
 }
 
 /// Controller for [TaskGraph] browsing and viewport state.
-class TaskGraphController extends ChangeNotifier {
+class TaskGraphController extends Notifier {
   TaskGraphController({int? initialIndex = 0})
     : _list = ListController(initialIndex: initialIndex) {
-    _list.addListener(notifyListeners);
+    _list.addListener(notify);
   }
 
   final ListController _list;
@@ -82,7 +82,7 @@ class TaskGraphController extends ChangeNotifier {
   void dispose() {
     if (_disposed) return;
     _disposed = true;
-    _list.removeListener(notifyListeners);
+    _list.removeListener(notify);
     _list.dispose();
     super.dispose();
   }

@@ -10,7 +10,7 @@ import 'package:fleury/fleury_internal.dart';
 /// it. Create it once in `State`, pass it to [Form], and dispose it alongside
 /// that state when external access is useful. Omit it for forms that submit
 /// through [Form.of] from inside their subtree.
-final class FormController extends ChangeNotifier {
+final class FormController extends Notifier {
   _FormHost? _host;
   bool _submitting = false;
   bool _disposed = false;
@@ -71,7 +71,7 @@ final class FormController extends ChangeNotifier {
     bool isCurrent() =>
         _submissionGeneration == generation && identical(_host, host);
     try {
-      notifyListeners();
+      notify();
       if (!isCurrent()) return false;
       if (!await host.validate()) return false;
       if (!isCurrent()) return false;
@@ -93,7 +93,7 @@ final class FormController extends ChangeNotifier {
           if (_submitting) {
             _setSubmitting(false);
           } else {
-            notifyListeners();
+            notify();
           }
         }
       }
@@ -144,14 +144,14 @@ final class FormController extends ChangeNotifier {
     if (_submitting) {
       _setSubmitting(false);
     } else if (wasBusy) {
-      notifyListeners();
+      notify();
     }
   }
 
   void _setSubmitting(bool value) {
     if (_submitting == value) return;
     _submitting = value;
-    notifyListeners();
+    notify();
   }
 
   @override
@@ -400,11 +400,10 @@ final class _FormWidgetState extends State<Form> implements _FormHost {
   }
 
   @override
-  Widget build(BuildContext context) => ListenableBuilder(
-    listenable: _controller,
-    child: widget.child,
-    builder: (context, child) => Scope<FormController>(
-      value: _controller,
+  Widget build(BuildContext context) => NotifierBuilder(
+    notifier: _controller,
+    builder: (context, controller) => Scope<FormController>(
+      _controller,
       child: Semantics(
         role: SemanticRole.form,
         label: widget.semanticLabel,
@@ -426,7 +425,7 @@ final class _FormWidgetState extends State<Form> implements _FormHost {
             unawaited(_controller.submit().catchError((Object _) => false));
           }
         },
-        child: child!,
+        child: widget.child,
       ),
     ),
   );

@@ -33,14 +33,14 @@ class _DisposeProbeState extends State<_DisposeProbe> {
   Widget build(BuildContext context) => const Text('probe');
 }
 
-// A ChangeNotifier the storm widget listens to, so a test can trigger a
+// A Notifier the storm widget listens to, so a test can trigger a
 // rebuild through the public reactive path (not a protected setState call).
-class _Trigger with ChangeNotifier {
+class _Trigger with Notifier {
   int _value = 0;
   int get value => _value;
   void bump() {
     _value++;
-    notifyListeners();
+    notify();
   }
 }
 

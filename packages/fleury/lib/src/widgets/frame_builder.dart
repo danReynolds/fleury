@@ -6,7 +6,7 @@
 // rather than along a continuous tween.
 //
 // Internally owns a FrameTicker whose lifecycle follows this
-// widget's State. Subscribes via the FrameTicker's ChangeNotifier
+// widget's State. Subscribes via the FrameTicker's Notifier
 // surface so multiple FrameBuilders with the same interval cost
 // nothing extra on the scheduler.
 

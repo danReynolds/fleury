@@ -120,13 +120,13 @@ final class MessageListCopyResult {
 }
 
 /// Controller for [MessageList] browsing and tail-follow behavior.
-class MessageListController extends ChangeNotifier {
+class MessageListController extends Notifier {
   MessageListController({int? initialIndex = 0, bool followTail = true})
     : _list = ListController(
         initialIndex: initialIndex,
         followTail: followTail,
       ) {
-    _list.addListener(notifyListeners);
+    _list.addListener(notify);
   }
 
   final ListController _list;
@@ -177,7 +177,7 @@ class MessageListController extends ChangeNotifier {
   void dispose() {
     if (_disposed) return;
     _disposed = true;
-    _list.removeListener(notifyListeners);
+    _list.removeListener(notify);
     _list.dispose();
     super.dispose();
   }

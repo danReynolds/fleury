@@ -724,14 +724,14 @@ final class TreeTableCopyResult<T> {
 }
 
 /// Controller for [TreeTable] expansion, browsing, and visible range.
-class TreeTableController extends ChangeNotifier {
+class TreeTableController extends Notifier {
   TreeTableController({
     /// Initial browsing row. Null starts without a current row.
     int? initialIndex = 0,
     Iterable<Object> expandedKeys = const <Object>[],
   }) : _list = ListController(initialIndex: initialIndex),
        _expandedKeys = Set<Object>.of(expandedKeys) {
-    _list.addListener(notifyListeners);
+    _list.addListener(notify);
   }
 
   final ListController _list;
@@ -763,14 +763,14 @@ class TreeTableController extends ChangeNotifier {
     _checkNotDisposed();
     if (!_expandedKeys.add(key)) return;
     _expansionRevision++;
-    notifyListeners();
+    notify();
   }
 
   void collapse(Object key) {
     _checkNotDisposed();
     if (!_expandedKeys.remove(key)) return;
     _expansionRevision++;
-    notifyListeners();
+    notify();
   }
 
   void toggle(Object key) {
@@ -779,7 +779,7 @@ class TreeTableController extends ChangeNotifier {
       _expandedKeys.add(key);
     }
     _expansionRevision++;
-    notifyListeners();
+    notify();
   }
 
   void collapseAll() {
@@ -787,7 +787,7 @@ class TreeTableController extends ChangeNotifier {
     if (_expandedKeys.isEmpty) return;
     _expandedKeys.clear();
     _expansionRevision++;
-    notifyListeners();
+    notify();
   }
 
   void _checkNotDisposed() {
@@ -800,7 +800,7 @@ class TreeTableController extends ChangeNotifier {
   void dispose() {
     if (_disposed) return;
     _disposed = true;
-    _list.removeListener(notifyListeners);
+    _list.removeListener(notify);
     _list.dispose();
     super.dispose();
   }

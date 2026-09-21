@@ -54,10 +54,7 @@ void main() {
     final source = _Source('one');
     final log = <String>[];
     final root = owner.mountRoot(
-      Scope<_Source>(
-        value: source,
-        child: _Reader(log: log),
-      ),
+      Scope<_Source>(source, child: _Reader(log: log)),
     );
     source.notify();
     owner.flushBuild();
@@ -74,7 +71,7 @@ void main() {
     final second = _Source('second');
     final root = owner.mountRoot(
       Scope<_Source>(
-        value: first,
+        first,
         child: _Reader(log: [], second: second),
       ),
     );
@@ -101,14 +98,8 @@ void main() {
       final reader = _Reader(key: key, log: log);
       Widget scene(bool moved) => Row(
         children: [
-          Scope<_Source>(
-            value: first,
-            child: moved ? const EmptyBox() : reader,
-          ),
-          Scope<_Source>(
-            value: second,
-            child: moved ? reader : const EmptyBox(),
-          ),
+          Scope<_Source>(first, child: moved ? const EmptyBox() : reader),
+          Scope<_Source>(second, child: moved ? reader : const EmptyBox()),
         ],
       );
       final root = owner.mountRoot(scene(false));

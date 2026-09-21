@@ -62,10 +62,10 @@ typedef FileMentionMatcher =
     bool Function(FileMentionEntry entry, String query);
 
 /// Controller for [FileMentionPicker] browsing and viewport state.
-class FileMentionPickerController extends ChangeNotifier {
+class FileMentionPickerController extends Notifier {
   FileMentionPickerController({int? initialIndex = 0})
     : _list = ListController(initialIndex: initialIndex) {
-    _list.addListener(notifyListeners);
+    _list.addListener(notify);
   }
 
   final ListController _list;
@@ -96,7 +96,7 @@ class FileMentionPickerController extends ChangeNotifier {
   void dispose() {
     if (_disposed) return;
     _disposed = true;
-    _list.removeListener(notifyListeners);
+    _list.removeListener(notify);
     _list.dispose();
     super.dispose();
   }

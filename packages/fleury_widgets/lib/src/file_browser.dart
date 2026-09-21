@@ -74,10 +74,10 @@ final class FileBrowserCopyResult {
 }
 
 /// Controller for [FileBrowser] browsing and visible-range observation.
-class FileBrowserController extends ChangeNotifier {
+class FileBrowserController extends Notifier {
   FileBrowserController({int? initialIndex = 0})
     : _list = ListController(initialIndex: initialIndex) {
-    _list.addListener(notifyListeners);
+    _list.addListener(notify);
   }
 
   final ListController _list;
@@ -100,7 +100,7 @@ class FileBrowserController extends ChangeNotifier {
     host._openDirectory(path, interaction: false);
   }
 
-  void _directoryChanged() => notifyListeners();
+  void _directoryChanged() => notify();
 
   void _attach(_FileBrowserState host) {
     _checkNotDisposed();
@@ -141,7 +141,7 @@ class FileBrowserController extends ChangeNotifier {
   void dispose() {
     if (_disposed) return;
     _disposed = true;
-    _list.removeListener(notifyListeners);
+    _list.removeListener(notify);
     _list.dispose();
     super.dispose();
   }

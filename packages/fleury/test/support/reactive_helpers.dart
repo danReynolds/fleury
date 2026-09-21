@@ -1,16 +1,16 @@
 // Shared reactive test helpers — one home for the _Flag/_Listen plumbing that
 // several widget tests were each re-implementing (and that duplicated the
-// exported ListenableBuilder). Prefer ListenableBuilder in new tests; these
+// exported NotifierBuilder). Prefer NotifierBuilder in new tests; these
 // exist for the cases that need an explicit State (didUpdateWidget, dispose).
 
 import 'package:fleury/fleury.dart';
 
 /// A boolean you can flip to drive a rebuild in a listener.
-class Flag extends ChangeNotifier {
+class Flag extends Notifier {
   bool value = false;
   void set(bool v) {
     value = v;
-    notifyListeners();
+    notify();
   }
 
   void enable() => set(true);

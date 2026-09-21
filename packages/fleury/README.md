@@ -128,6 +128,11 @@ Existing `Button(label: ...)` calls migrate to `Button(text: ...)`.
   handling.
 - **Navigation**: `Navigator` with routes + an `Overlay` for modals,
   menus, tooltips, and toasts.
+- **State**: `setState` for local fields, `Scope(value, child: ...)` for values
+  shared through the tree, and `Notifier.notify()` for models used across
+  widgets and services. Consume shared state with `ScopeBuilder` /
+  `NotifierBuilder` or `context.scope<T>()` / `context.listen(model)` in build.
+  See the [state-management guide](https://danreynolds.github.io/fleury/guides/state-management/).
 - **Animation**: `AnimationBuilder` + `Animation` (spring-based,
   value-driven) and `FrameBuilder` / `FrameTicker` (frame-indexed),
   sharing one per-runtime scheduler. See below.

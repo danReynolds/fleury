@@ -4,8 +4,8 @@ description: A practical map from Flutter's widget model to Fleury's cell-grid U
 ---
 
 Fleury is deliberately familiar if you know Flutter: apps are widget trees,
-state lives in `State`, `build` returns widgets, and `setState` schedules a
-rebuild. The difference is the surface. Flutter lays out pixels and usually
+local widget state lives in `State`, `build` returns widgets, and `setState`
+schedules a rebuild. The difference is the surface. Flutter lays out pixels and usually
 leans on Material/Cupertino; Fleury lays out terminal-style **cells** and can
 paint the same tree to a real terminal, a browser embed, or a served browser
 session.
@@ -124,7 +124,7 @@ These transfer with little or no adjustment:
 | Navigation | `Navigator.push`, `pop`, `pushReplacement`, `popUntil`, `PopScope`, plus `context.push` / `context.pop` helpers |
 | Focus and pointer input | `FocusNode`, `Focus`, `FocusScope`, `GestureDetector`, `MouseRegion` |
 | Lists | `ListView`, `ListView.builder`, `ScrollView` |
-| Inherited data | `Theme.of`, `MediaQuery.of`, `DefaultTextStyle`, `ListenableBuilder`, `ChangeNotifier`, `Listenable` |
+| Inherited data | `Theme.of`, `MediaQuery.of`, `DefaultTextStyle` |
 | Text | `Text`, `RichText`, `TextSpan` |
 | Testing | `testWidgets`, `tester.pumpWidget` via `package:fleury_test`, plus terminal-native helpers like `tester.renderToString` |
 
@@ -137,11 +137,22 @@ The table is intentionally boring: most of the muscle memory is valid.
 | `TextStyle` | `CellStyle` | A cell has foreground/background color and terminal attributes such as bold, dim, underline, and inverse (reverse-video). It does not have fonts. |
 | `BoxConstraints` | `CellConstraints` | Constraints are integer cells; `null` represents unbounded. |
 | `Offset` / `Size` | `CellOffset` / `CellSize` | Coordinates and dimensions are whole cells. |
-| `AnimatedBuilder` | `ListenableBuilder` | Rebuild from any `Listenable`: an `Animation`, a `ChangeNotifier`, or another notifier. |
+| `ChangeNotifier` / `notifyListeners()` | `Notifier` / `notify()` | An ordinary Dart model announces changes to its consumers. |
+| `AnimatedBuilder` / `ListenableBuilder` | `NotifierBuilder` | Rebuild from a typed notifier or any `Listenable`, including an animation. |
+| `ValueListenableBuilder` | `NotifierBuilder` or `context.listen` | Read a `ValueNotifier` through the same APIs as other notifiers. |
 | `TweenAnimationBuilder` | `AnimationBuilder` | Animate a value toward a new target when it changes. |
 | `SingleChildScrollView` | `ScrollView` | A scrollable viewport around one child. |
 | `Shortcuts` / `Actions` / `Intent` | `KeyBindings` / `KeySequence` | A key sequence maps directly to a callback; no `Intent` layer. |
-| `InheritedWidget` / `InheritedNotifier` | `Scope<T>` | One tree-local primitive: the type argument is the key, `Scope.of<T>(context)` reads it, and a `ChangeNotifier` value notifies readers through the scope. `Scope<T>.create` lets the scope own the object. |
+| `InheritedWidget` / `InheritedNotifier` | `Scope<T>` | One tree-local primitive: the type argument is the key, `context.scope<T>()` or `ScopeBuilder<T>` reads it, and a `Notifier` value notifies readers through the scope. `Scope<T>.create` lets the scope own the object. |
+
+For state, keep `setState` for a widget's own fields. Use `Scope` to share values
+with descendants, read through `ScopeBuilder<T>` or `context.scope<T>()`.
+Models used by widgets and services extend `Notifier`; widgets observe them
+with `NotifierBuilder` or `context.listen(model)`. `ValueNotifier<T>` handles
+notification automatically when its value changes. The
+[State management guide](/fleury/guides/state-management/) demonstrates all
+three levels. The older `ChangeNotifier`, `notifyListeners`, `ListenableBuilder`,
+and `ValueListenableBuilder` APIs remain available for compatibility.
 
 `EdgeInsets` keeps the familiar constructors (`all`, `symmetric`, `only`), but
 the values are cells:
@@ -260,7 +271,6 @@ in Flutter.
 | `InkWell` / ripples | `GestureDetector`, `MouseRegion`, focus styles, and key hints. |
 | `Scaffold`, `AppBar`, Material layout chrome | Compose Fleury widgets directly; terminal apps usually want denser app-specific chrome. |
 | `CustomScrollView` / slivers / `GridView` | `ListView`, `ListView.builder`, `ScrollView`, `Wrap`, or purpose-built table/tree widgets. |
-| `ValueListenableBuilder` / `ValueNotifier` | Same names and typed value-listening model. |
 | Plain `Builder` | A small `StatelessWidget`. |
 | `FittedBox` / `FractionallySizedBox` / `OverflowBox` | `LayoutBuilder`, `ConstrainedBox`, explicit cell sizing, and wrapping/clipping behavior. |
 | `Hero` / route-shared element transitions | `AnimatedVisibility`, route transitions, or simpler terminal-native motion. |

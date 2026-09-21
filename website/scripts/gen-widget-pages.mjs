@@ -567,6 +567,12 @@ const CORE = [
     code: "LayoutBuilder(\n  builder: (context, constraints) =>\n      (constraints.maxCols ?? 0) > 60 ? Wide() : Narrow(),\n)" },
   { slug: 'listenablebuilder', guide: 'state-management', widget: 'ListenableBuilder',
     code: "ListenableBuilder(\n  listenable: model,\n  builder: (context, child) => Text(model.statusLabel),\n)" },
+  { slug: 'scope', guide: 'state-management', widget: 'Scope',
+    code: "Scope(\n  project,\n  child: const ProjectLabel(),\n)" },
+  { slug: 'scopebuilder', guide: 'state-management', widget: 'ScopeBuilder',
+    code: "ScopeBuilder<Project>(\n  builder: (context, project) => Text('Project: ${project.name}'),\n)" },
+  { slug: 'notifierbuilder', guide: 'state-management', widget: 'NotifierBuilder',
+    code: "NotifierBuilder(\n  notifier: cart,\n  builder: (context, cart) => Text('Items: ${cart.itemCount}'),\n)" },
   { slug: 'valuelistenablebuilder', guide: 'state-management', widget: 'ValueListenableBuilder',
     code: "ValueListenableBuilder<bool>(\n  valueListenable: connected,\n  builder: (context, value, child) => Text(value ? 'Online' : 'Offline'),\n)" },
   { slug: 'sizedbox', widget: 'SizedBox',
@@ -691,6 +697,7 @@ const SAMPLE_FILES = {
   editor: 'editor.dart',
   finance: 'finance.dart',
   forms: 'forms_showcase.dart',
+  state: 'state_management_showcase.dart',
   themes: 'theming_showcase.dart',
   asteroids: 'neon_asteroids.dart',
   sprite: 'ansi_sprite_studio.dart',
@@ -769,6 +776,12 @@ const SHOWCASE_GOALS = {
     'colors, brightness, and borders.\n\n' +
     'The preview keeps ordinary text, form controls, status colors, progress, ' +
     'selected data, and actions visible together so each change is easy to see.',
+  state:
+    'Three small examples show where state lives in Fleury: a local counter, ' +
+    'a project shared through a subtree, and a cart shared with application code.\n\n' +
+    'Change the project or add an item and watch builder widgets and context ' +
+    'readers update together. The [state-management guide](/fleury/guides/state-management/) ' +
+    'walks through each API; the sample source puts them in one app.',
   asteroids:
     'A complete arcade game rendered into terminal cells: fixed-step physics, ' +
     'toroidal wrapping, swept collisions, asteroid splitting, particles, ' +
@@ -819,6 +832,9 @@ const SHOWCASE_TRY = {
   themes:
     '*Try it: arrow through the Theme picker, then choose Custom, select a ' +
     'palette role, and change its color—the full widget gallery updates immediately.*',
+  state:
+    '*Try it: **Increment** changes local state. **Switch project** updates both ' +
+    'scope readers. **Add item** updates both readers of the shared cart.*',
   asteroids:
     '*Try it: press Space to launch, then steer with A/D/W and fire with ' +
     'Space—or click and drag directly in the playfield.*',
@@ -832,6 +848,8 @@ const catalog = new Map();
 for (const e of widgets)
   catalog.set(e.widget, { slug: e.id.split('.')[0], category: e.category });
 for (const d of DOC_ONLY) catalog.set(d.widget, { slug: d.slug, category: d.category });
+for (const d of CORE.filter((entry) => entry.guide === 'state-management'))
+  catalog.set(d.widget, { slug: d.slug, category: 'State management' });
 const widgetsUsedIn = (file) => {
   const src = readFileSync(join(SAMPLES_DIR, file), 'utf8');
   const used = [];

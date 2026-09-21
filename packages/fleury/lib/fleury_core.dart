@@ -12,7 +12,7 @@ library;
 
 // Foundation
 export 'src/foundation/change_notifier.dart'
-    show ChangeNotifier, Listenable, ValueListenable, ValueNotifier;
+    show ChangeNotifier, Listenable, Notifier, ValueListenable, ValueNotifier;
 export 'src/foundation/fleury_error.dart' show FleuryError;
 export 'src/foundation/geometry.dart' show CellSize, CellOffset, CellRect;
 export 'src/foundation/key.dart' show Key, LocalKey, ValueKey, UniqueKey;
@@ -497,3 +497,6 @@ export 'src/widgets/framework.dart'
         StatelessWidget,
         VoidCallback,
         Widget;
+
+export 'src/widgets/notifier_builder.dart' show NotifierBuilder;
+export 'src/widgets/scope.dart' show ScopeBuilder;

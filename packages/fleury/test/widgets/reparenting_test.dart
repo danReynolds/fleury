@@ -146,11 +146,11 @@ class _DepHostState extends State<_DepHost> {
     return Column(
       children: [
         Scope<_Tag>(
-          value: const _Tag('A'),
+          const _Tag('A'),
           child: Center(child: first ? probe : const Text('-')),
         ),
         Scope<_Tag>(
-          value: const _Tag('B'),
+          const _Tag('B'),
           child: Center(child: first ? const Text('-') : probe),
         ),
       ],
@@ -253,11 +253,11 @@ class _CachedLbHostState extends State<_CachedLbHost> {
     return Column(
       children: [
         Scope<_Tag>(
-          value: const _Tag('A'),
+          const _Tag('A'),
           child: Center(child: first ? wrapper : const Text('-')),
         ),
         Scope<_Tag>(
-          value: const _Tag('B'),
+          const _Tag('B'),
           child: Center(child: first ? const Text('-') : wrapper),
         ),
       ],

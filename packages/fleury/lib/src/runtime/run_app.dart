@@ -1053,7 +1053,7 @@ Future<AppExit> _runAppImpl(
         final negotiatedSink = surfaceSink;
         if (negotiatedSink != null) {
           // Report a link fault WITHOUT ever throwing back into the serialize
-          // link. errorReporter.report → notifyListeners() can throw (a
+          // link. errorReporter.report → notify() can throw (a
           // throwing listener); if that escaped the link it would reject the
           // tail future and skip every later queued action — the exact wedge
           // the per-link catch exists to prevent. Degrade to a no-op instead:

@@ -291,7 +291,9 @@ class _SelectState<T> extends State<Select<T>> {
 
   @override
   Widget build(BuildContext context) {
-    FocusManager.maybeOf(context); // Rebuild trigger semantics when focus moves.
+    FocusManager.maybeOf(
+      context,
+    ); // Rebuild trigger semantics when focus moves.
     final theme = Theme.of(context);
     final enabled = widget.onChanged != null;
     final focused = _triggerFocus.hasFocus;
@@ -883,7 +885,7 @@ class _SelectListState<T> extends State<_SelectList<T>> {
   /// Forward highlight moves to the live-preview callback. Hung off the
   /// controller rather than each key handler so every path that moves the
   /// highlight — arrows, Home/End, typeahead, hover, click — reports alike.
-  /// [ListController] is a ChangeNotifier that also fires for scroll changes,
+  /// [ListController] is a Notifier that also fires for scroll changes,
   /// hence the guard on the index actually landing somewhere new and enabled.
   void _reportHighlight() {
     final i = _list.currentIndex;
@@ -925,7 +927,9 @@ class _SelectListState<T> extends State<_SelectList<T>> {
   }
 
   void _releaseFocusTrap() {
-    FocusManager.of(context).releaseFocusTrapIn(widget.trapContentKey.currentContext);
+    FocusManager.of(
+      context,
+    ).releaseFocusTrapIn(widget.trapContentKey.currentContext);
   }
 
   void _dismiss() {
@@ -997,7 +1001,9 @@ class _SelectListState<T> extends State<_SelectList<T>> {
 
   @override
   Widget build(BuildContext context) {
-    FocusManager.maybeOf(context); // Rebuild list/item semantics when focus moves.
+    FocusManager.maybeOf(
+      context,
+    ); // Rebuild list/item semantics when focus moves.
     // Cells, not code units: a CJK or emoji label is wider than its length.
     final widths = MediaQuery.textPolicyOf(context).widths;
     var labelWidth = 0;

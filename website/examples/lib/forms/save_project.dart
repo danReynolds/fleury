@@ -88,8 +88,8 @@ class _SaveProjectState extends State<SaveProject> {
   @override
   Widget build(BuildContext context) => Padding(
     padding: const EdgeInsets.all(1),
-    child: ListenableBuilder(
-      listenable: form,
+    child: NotifierBuilder(
+      notifier: form,
       builder: (context, _) => Column(
         mainAxisSize: MainAxisSize.min,
         crossAxisAlignment: CrossAxisAlignment.start,

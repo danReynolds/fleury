@@ -9,11 +9,11 @@ import 'package:fleury/fleury_wire.dart';
 
 import 'sample_frame_host.dart';
 
-class BurstModel extends ChangeNotifier {
+class BurstModel extends Notifier {
   int value = 0;
   void publish(int next) {
     value = next;
-    notifyListeners();
+    notify();
   }
 }
 
@@ -23,7 +23,7 @@ class _Status extends StatelessWidget {
   final void Function(int, int) record;
   @override
   Widget build(BuildContext context) {
-    final value = Scope.of<BurstModel>(context).value;
+    final value = context.scope<BurstModel>().value;
     record(index, value);
     return SizedBox(width: 27, child: Text('Service $index: $value'));
   }
@@ -33,7 +33,7 @@ class BurstWorkload {
   BurstWorkload({required this.count, required this.structured}) {
     host = SampleFrameHost(
       Scope<BurstModel>(
-        value: model,
+        model,
         child: Column(children: [
           const Text('Service status'),
           for (var row = 0; row < (count + 3) ~/ 4; row++)

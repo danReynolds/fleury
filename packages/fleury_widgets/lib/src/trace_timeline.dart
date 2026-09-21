@@ -83,10 +83,10 @@ final class TraceTimelineEntry {
 }
 
 /// Controller for [TraceTimeline] browsing and viewport state.
-class TraceTimelineController extends ChangeNotifier {
+class TraceTimelineController extends Notifier {
   TraceTimelineController({int? initialIndex = 0})
     : _list = ListController(initialIndex: initialIndex) {
-    _list.addListener(notifyListeners);
+    _list.addListener(notify);
   }
 
   final ListController _list;
@@ -117,7 +117,7 @@ class TraceTimelineController extends ChangeNotifier {
   void dispose() {
     if (_disposed) return;
     _disposed = true;
-    _list.removeListener(notifyListeners);
+    _list.removeListener(notify);
     _list.dispose();
     super.dispose();
   }

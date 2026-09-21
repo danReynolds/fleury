@@ -24,7 +24,7 @@ Matcher _stateError(String message) => throwsA(
 /// every possible local selection state — that's the algorithm we
 /// need real Selectables (RenderText et al.) to implement, so we
 /// exercise it here against the dispatcher.
-class _StubSelectable extends ChangeNotifier implements Selectable {
+class _StubSelectable extends Notifier implements Selectable {
   _StubSelectable({required this.bounds, required this.text});
 
   final CellRect bounds;
@@ -146,7 +146,7 @@ class _StubSelectable extends ChangeNotifier implements Selectable {
           );
     if (_geometry == next) return;
     _geometry = next;
-    notifyListeners();
+    notify();
   }
 }
 

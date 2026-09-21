@@ -55,7 +55,7 @@ abstract interface class Selectable implements Listenable {
   CellRect? get visibleBounds;
 
   /// Live geometry — what portion of this leaf is currently
-  /// selected. Implementations should `notifyListeners()` whenever
+  /// selected. Implementations should `notify()` whenever
   /// this value changes.
   SelectionGeometry get geometry;
 
@@ -130,7 +130,7 @@ class SelectionScope extends Scope<SelectionRegistrar> {
     super.key,
     required SelectionRegistrar? registrar,
     required super.child,
-  }) : super(value: registrar ?? const _NoSelection());
+  }) : super(registrar ?? const _NoSelection());
 
   /// Looks up the ambient registrar without subscribing to changes.
   /// Returns null when no [SelectionScope] is in scope OR when the

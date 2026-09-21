@@ -155,6 +155,16 @@ void main() {
         jsonDecode(result.stdout.toString()) as Map<String, Object?>;
     expect(decoded['complete'], isTrue);
     expect(decoded['missingWidgetCount'], 0);
+    expect(
+      decoded['exportedWidgets'],
+      containsAll(<String>[
+        'Scope',
+        'ScopeBuilder',
+        'Notifier',
+        'NotifierBuilder',
+        'ValueNotifier',
+      ]),
+    );
   }, timeout: cliTimeout);
 
   test('invalid story exits before opening the TUI', () async {

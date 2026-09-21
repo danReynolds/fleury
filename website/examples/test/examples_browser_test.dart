@@ -5,7 +5,6 @@ import 'package:fleury_doc_examples/registry.dart';
 import 'package:fleury_doc_examples/frame_flush_scheduler.dart';
 import 'package:fleury/fleury_host.dart';
 import 'package:fleury_web/fleury_web.dart';
-import 'package:fleury_widgets/fleury_widgets_web.dart';
 import 'package:test/test.dart';
 import 'package:web/web.dart' as web;
 
@@ -587,6 +586,48 @@ void main() {
     },
   );
 
+  test(
+    'showcase.state updates local, scoped, and global painted state',
+    () async {
+      final fixture = await _mountExample(
+        'showcase.state',
+        useManifestSize: true,
+      );
+      String painted() =>
+          fixture.host.querySelector('.fleury-screen')!.textContent ?? '';
+      Future<void> tap(String label) async {
+        _tapPaintedText(fixture.host, label);
+        await Future<void>.delayed(Duration.zero);
+        for (var i = 0; i < 6 && fixture.flush.pending; i++) {
+          fixture.flush.fire();
+          await Future<void>.delayed(Duration.zero);
+        }
+        await fixture.app.awaitSemanticIdle();
+      }
+
+      expect(painted(), contains('Count: 0'));
+      expect(painted(), contains('Project: Atlas'));
+      expect(painted(), contains('Active project: Atlas'));
+      expect(painted(), contains('Items: 0'));
+      expect(painted(), contains('Cart summary: 0 items'));
+
+      await tap('Increment');
+      expect(painted(), contains('Count: 1'));
+      expect(painted(), contains('Items: 0'));
+
+      await tap('Switch project');
+      expect(painted(), contains('Project: Beacon'));
+      expect(painted(), contains('Active project: Beacon'));
+      expect(painted(), contains('Count: 1'));
+
+      await tap('Add item');
+      expect(painted(), contains('Items: 1'));
+      expect(painted(), contains('Cart summary: 1 items'));
+      expect(painted(), contains('Project: Beacon'));
+      expect(painted(), contains('Click any button'));
+    },
+  );
+
   // Guard for the whole catalog: every example must paint *visible* content at
   // the exact frame size the docs page gives it. sparkline.basic and
   // progressbar.basic shipped blank because their host (rows: 2) was too short
@@ -682,6 +723,13 @@ void main() {
         'Commands',
       ],
       'showcase.commands': <String>['COMMAND EDITOR', 'New file', 'README.md'],
+      'showcase.state': <String>[
+        'STATE MANAGEMENT',
+        'Increment',
+        'Switch project',
+        'Add item',
+        'Click any button',
+      ],
       // The tutorial-page embed: the full language list fits its frame.
       'tutorial.filter': <String>['10 of 10', 'Dart', 'Haskell'],
     };

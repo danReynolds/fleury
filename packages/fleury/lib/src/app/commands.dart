@@ -161,7 +161,7 @@ final class _CommandInvocationContext implements CommandContext {
 /// Registries can form a parent chain. Local commands win over parent commands
 /// with the same ID, matching the app-kernel rule that nearer scopes have
 /// higher priority.
-class CommandRegistry extends ChangeNotifier {
+class CommandRegistry extends Notifier {
   CommandRegistry({
     CommandRegistry? parent,
     List<AppCommand> commands = const <AppCommand>[],
@@ -181,7 +181,7 @@ class CommandRegistry extends ChangeNotifier {
     _parent?.removeListener(_notifyParentChanged);
     _parent = value;
     _parent?.addListener(_notifyParentChanged);
-    notifyListeners();
+    notify();
   }
 
   List<AppCommand> get localCommands =>
@@ -190,7 +190,7 @@ class CommandRegistry extends ChangeNotifier {
   set localCommands(List<AppCommand> value) {
     _checkNotDisposed();
     _commands = _copyAndValidateCommands(value);
-    notifyListeners();
+    notify();
   }
 
   CommandInvocationResult? get lastResult => _lastResult;
@@ -295,13 +295,13 @@ class CommandRegistry extends ChangeNotifier {
   CommandInvocationResult _record(CommandInvocationResult result) {
     if (_disposed) return result;
     _lastResult = result;
-    notifyListeners();
+    notify();
     return result;
   }
 
   void _notifyParentChanged() {
     if (_disposed) return;
-    notifyListeners();
+    notify();
   }
 
   void _checkNotDisposed() {
@@ -340,7 +340,7 @@ class CommandRegistryScope extends Scope<CommandRegistry> {
     super.key,
     required CommandRegistry registry,
     required super.child,
-  }) : super(value: registry);
+  }) : super(registry);
 
   static CommandRegistry of(BuildContext context) {
     final registry = maybeOf(context);
