@@ -43,8 +43,8 @@ class _Row extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final row = cheap
-        ? ListenableBuilder(
-            listenable: model,
+        ? NotifierBuilder(
+            notifier: model,
             builder: (context, _) => Text('row $index tick=${model.v}'),
           )
         : liveRow(index: index, model: model, cols: _cols);

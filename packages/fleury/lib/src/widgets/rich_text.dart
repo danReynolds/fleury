@@ -205,7 +205,7 @@ class _GlyphFactory {
 /// Styles are visual only — the clipboard copy is the plain text of
 /// the spans.
 class RenderRichText extends RenderObject
-    with ChangeNotifier, SelectionRegistrant, SelectableTextMixin
+    with Notifier, SelectionRegistrant, SelectableTextMixin
     implements Selectable {
   RenderRichText({
     required TextSpan span,

@@ -1,6 +1,5 @@
 // dart format width=60
 import 'package:fleury/fleury_core.dart';
-import 'package:fleury_widgets/fleury_widgets_web.dart';
 
 class HorizontalContent extends StatefulWidget {
   const HorizontalContent({super.key});
@@ -40,8 +39,8 @@ class _HorizontalContentState
         ),
       ),
       const SizedBox(height: 1),
-      ListenableBuilder(
-        listenable: scroll,
+      NotifierBuilder(
+        notifier: scroll,
         builder: (_, _) => Text(
           'Columns ${scroll.offset + 1}–'
           '${scroll.offset + scroll.viewportExtent}'

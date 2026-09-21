@@ -375,11 +375,27 @@ List<File> writeStorybookSnapshots(
   return files;
 }
 
+// State management lives in fleury_core rather than fleury_widgets. Keep these
+// entry points explicit: scanning all core exports would also require stories
+// for low-level engine types, and the widget heuristic deliberately excludes
+// Builder suffixes because most widget-package exports with that suffix are
+// callback typedefs.
+const _requiredCoreStateApis = <String>{
+  'Scope',
+  'ScopeBuilder',
+  'Notifier',
+  'NotifierBuilder',
+  'ValueNotifier',
+};
+
 StorybookCoverageReport buildStorybookCoverageReport({
   required List<Story> stories,
   required File exportedLibrary,
 }) {
-  final exported = exportedWidgetSymbols(exportedLibrary);
+  final exported = <String>{
+    ...exportedWidgetSymbols(exportedLibrary),
+    ..._requiredCoreStateApis,
+  }.toList()..sort();
   final storiesByWidget = <String, List<String>>{};
   for (final story in stories) {
     for (final widget in story.widgets) {

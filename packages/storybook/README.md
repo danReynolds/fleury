@@ -30,7 +30,9 @@ Commands:
 - `list` prints story ids, categories, controls, and variants.
 - `verify` renders each selected story target and captures semantic summaries.
 - `snapshot` writes text snapshots for selected story targets.
-- `coverage` compares story coverage against exported widget-like symbols.
+- `coverage` compares story coverage against exported widget-like symbols and
+  the selected core state APIs: `Scope`, `ScopeBuilder`, `Notifier`,
+  `NotifierBuilder`, and `ValueNotifier`.
 
 Common options:
 
@@ -63,3 +65,20 @@ focusable widgets inside each demo. The details panel shows typed controls for
 the selected story plus the most recent actions emitted by interactive widgets.
 The inspector section summarizes focus, command shortcuts, story metadata,
 variants, and widget coverage.
+
+## State management
+
+The State category has interactive stories for shared project values, a cart
+model, and a single observable count. Switch projects to update two scoped
+readers, or add items to publish model changes. The Reader control switches
+between a builder and `context.scope` / `context.listen`; named variants make
+both forms part of `verify` runs.
+
+```sh
+dart tool/fleury_dev.dart storybook run --story state.tree.scope
+dart tool/fleury_dev.dart storybook run --story state.model.notifier-builder --variant context-reader
+dart tool/fleury_dev.dart storybook run --story state.value.value-notifier
+```
+
+Strict coverage explicitly requires these core state stories even though their
+APIs are exported by `fleury_core`, outside the widget package's export list.

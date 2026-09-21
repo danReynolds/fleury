@@ -159,7 +159,7 @@ void _runCoverage(_StorybookCliOptions options) {
   } else {
     stdout.writeln(
       'Covered ${report.coveredWidgets.length}/${report.exportedWidgets.length} '
-      'exported widget-like symbols.',
+      'exported widget-like symbols and core state APIs.',
     );
     if (report.missingWidgets.isNotEmpty) {
       stdout.writeln('Missing: ${report.missingWidgets.join(', ')}');
@@ -227,7 +227,7 @@ void _printUsage() {
     '  snapshot            Capture text snapshots for story targets.',
   );
   stdout.writeln(
-    '  coverage            Compare stories against exported widgets.',
+    '  coverage            Check widget exports and core state API stories.',
   );
   stdout.writeln('');
   stdout.writeln('Options:');
@@ -254,7 +254,7 @@ void _printUsage() {
     '  --widgets-export <path> Widget package export file for coverage.',
   );
   stdout.writeln(
-    '  --strict                Fail coverage when exports are missing.',
+    '  --strict                Fail coverage when required stories are missing.',
   );
   stdout.writeln('');
   stdout.writeln('Examples:');

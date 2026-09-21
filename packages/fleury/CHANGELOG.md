@@ -1,5 +1,18 @@
 # Changelog
 
+- Add `Notifier.notify()`, typed `NotifierBuilder`, `ScopeBuilder`, and
+  build-time `context.listen(model)` / `context.scope<T>()` readers. Readers
+  automatically detach dependencies no longer used by their widget.
+  `ValueNotifier` uses the same consumers. The legacy notifier names and
+  builders remain compatible.
+- **Breaking:** scopes now take their value or factory positionally:
+  `Scope(model, child: ...)` and `Scope.create(Model.new, child: ...)`.
+  Context-dependent factories use
+  `Scope.createWithContext((context) => ..., child: ...)`.
+  Existing `Scope.of` / `Scope.maybeOf` lifecycle reads remain available.
+- Update first-party controllers, examples, Storybook, showcases, and guides
+  to the local, tree, and global state APIs.
+
 - `ListView` using the built-in `ListController` no longer rebuilds again after
   publishing its completed viewport metrics. Listeners still receive those
   metrics, and commands and explicit refreshes issued during delivery still

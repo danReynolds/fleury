@@ -88,11 +88,11 @@ const _dragTo = CellOffset(10, 3);
 
 /// A steady-state model bumped once per frame, so the grid rebuilds and
 /// repaints every frame (the selected Texts included).
-class _Model extends ChangeNotifier {
+class _Model extends Notifier {
   int v = 0;
   void bump() {
     v++;
-    notifyListeners();
+    notify();
   }
 }
 
@@ -108,8 +108,8 @@ Widget _scenario(_Model m) {
       .padRight(_lineWidth)
       .substring(0, _lineWidth);
   return SelectionArea(
-    child: ListenableBuilder(
-      listenable: m,
+    child: NotifierBuilder(
+      notifier: m,
       builder: (context, _) => Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [

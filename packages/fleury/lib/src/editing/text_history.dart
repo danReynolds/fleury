@@ -7,7 +7,7 @@ import 'text_editing.dart';
 /// tracks editing transactions inside one value; submission history stores
 /// previously accepted field values for REPLs, command inputs, and agent
 /// composers.
-final class TextHistoryController extends ChangeNotifier {
+final class TextHistoryController extends Notifier {
   TextHistoryController({
     Iterable<String> entries = const <String>[],
     this.maxEntries = 200,
@@ -55,7 +55,7 @@ final class TextHistoryController extends ChangeNotifier {
       changed = true;
     }
     changed = _clearBrowsingState() || changed;
-    if (changed) notifyListeners();
+    if (changed) notify();
   }
 
   /// Removes all entries and any captured draft state.
@@ -64,7 +64,7 @@ final class TextHistoryController extends ChangeNotifier {
     final hadEntries = _entries.isNotEmpty;
     final browsingChanged = _clearBrowsingState();
     _entries.clear();
-    if (hadEntries || browsingChanged) notifyListeners();
+    if (hadEntries || browsingChanged) notify();
   }
 
   /// Replaces all history entries.
@@ -75,7 +75,7 @@ final class TextHistoryController extends ChangeNotifier {
       ..addAll(entries);
     _trimToMaxEntries();
     _clearBrowsingState();
-    notifyListeners();
+    notify();
   }
 
   /// Moves toward older entries and returns the value to display.
@@ -89,13 +89,13 @@ final class TextHistoryController extends ChangeNotifier {
     if (_currentIndex == null) {
       _draft = current;
       _currentIndex = _entries.length - 1;
-      notifyListeners();
+      notify();
       return _valueFor(_entries[_currentIndex!]);
     }
 
     if (_currentIndex! > 0) {
       _currentIndex = _currentIndex! - 1;
-      notifyListeners();
+      notify();
     }
     return _valueFor(_entries[_currentIndex!]);
   }
@@ -108,20 +108,20 @@ final class TextHistoryController extends ChangeNotifier {
 
     if (index < _entries.length - 1) {
       _currentIndex = index + 1;
-      notifyListeners();
+      notify();
       return _valueFor(_entries[_currentIndex!]);
     }
 
     final draft = _valueFor(_draft?.text ?? '');
     _clearBrowsingState();
-    notifyListeners();
+    notify();
     return draft;
   }
 
   /// Leaves history browsing without changing stored entries.
   void resetBrowsing() {
     _checkNotDisposed();
-    if (_clearBrowsingState()) notifyListeners();
+    if (_clearBrowsingState()) notify();
   }
 
   TextEditingValue _valueFor(String text) =>

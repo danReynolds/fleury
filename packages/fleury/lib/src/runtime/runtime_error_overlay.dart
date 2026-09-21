@@ -8,7 +8,7 @@ import '../rendering/render_objects.dart' show TextOverflow;
 import '../widgets/align.dart';
 import '../widgets/basic.dart';
 import '../widgets/framework.dart';
-import '../widgets/listenable_builder.dart';
+import '../widgets/notifier_builder.dart';
 import '../widgets/pointer.dart';
 
 /// One captured uncaught runtime error.
@@ -28,7 +28,7 @@ class RuntimeErrorRecord {
 /// its zone guard and its event-dispatch try/catch. [isStorming] lets the
 /// runtime fall back to a hard stop when errors recur every frame (an
 /// unrecoverable loop) instead of spinning forever.
-class RuntimeErrorReporter with ChangeNotifier {
+class RuntimeErrorReporter with Notifier {
   RuntimeErrorReporter({
     this.onLog,
     this.autoDismiss = const Duration(seconds: 8),
@@ -88,7 +88,7 @@ class RuntimeErrorReporter with ChangeNotifier {
     if (autoDismiss > Duration.zero) {
       _dismissTimer = Timer(autoDismiss, dismiss);
     }
-    notifyListeners();
+    notify();
   }
 
   void dismiss() {
@@ -97,7 +97,7 @@ class RuntimeErrorReporter with ChangeNotifier {
     if (_current == null) return;
     _current = null;
     _shownCount = 0;
-    notifyListeners();
+    notify();
   }
 
   @override
@@ -119,8 +119,8 @@ class RuntimeErrorOverlay extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return ListenableBuilder(
-      listenable: reporter,
+    return NotifierBuilder(
+      notifier: reporter,
       builder: (context, _) {
         final record = reporter.current;
         if (record == null) return const SizedBox();

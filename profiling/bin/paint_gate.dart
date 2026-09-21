@@ -135,8 +135,8 @@ Widget _staticDashboard() => Column(
 
 /// A dashboard whose EVERY row carries the model's tick — one bump dirties
 /// the whole subtree (the app-dirty frame S3's convention protects).
-Widget _churningDashboard(RowModel model) => ListenableBuilder(
-      listenable: model,
+Widget _churningDashboard(RowModel model) => NotifierBuilder(
+      notifier: model,
       builder: (context, _) => Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
@@ -150,8 +150,8 @@ Widget _churningDashboard(RowModel model) => ListenableBuilder(
 /// with a fixed footprint (3 rows × 24 cols) so its damage bounds are exact.
 Widget _floaterBox(RowModel model) => Align(
       alignment: Alignment.bottomRight,
-      child: ListenableBuilder(
-        listenable: model,
+      child: NotifierBuilder(
+        notifier: model,
         builder: (context, _) => Column(
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.start,

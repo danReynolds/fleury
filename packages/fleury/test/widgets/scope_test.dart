@@ -6,7 +6,7 @@
 import 'package:fleury/fleury.dart';
 import 'package:test/test.dart';
 
-class _Model extends ChangeNotifier {
+class _Model extends Notifier {
   _Model([this.value = 0]);
 
   int value;
@@ -14,10 +14,10 @@ class _Model extends ChangeNotifier {
 
   void increment() {
     value++;
-    notifyListeners();
+    notify();
   }
 
-  void ping() => notifyListeners();
+  void ping() => notify();
 
   @override
   void dispose() {
@@ -116,13 +116,13 @@ class _ConfigHostState extends State<_ConfigHost> {
   @override
   Widget build(BuildContext context) => widget.narrow
       ? _ParityScope(value: config, child: widget.child)
-      : Scope<_Config>(value: config, child: widget.child);
+      : Scope<_Config>(config, child: widget.child);
 }
 
 /// A subclass narrowing [updateShouldNotify]: readers care about parity only.
 class _ParityScope extends Scope<_Config> {
   const _ParityScope({required this.value, required super.child})
-    : super(value: value);
+    : super(value);
 
   final _Config value;
 
@@ -145,7 +145,7 @@ class _ModelHostState extends State<_ModelHost> {
 
   @override
   Widget build(BuildContext context) =>
-      Scope<_Model>(value: model, child: widget.child);
+      Scope<_Model>(model, child: widget.child);
 }
 
 class _ThrowOnValue extends StatelessWidget {
@@ -231,15 +231,12 @@ class _VariantHostState extends State<_VariantHost> {
 
   @override
   Widget build(BuildContext context) => owning
-      ? Scope<_Model>.create(
-          create: (_) {
-            final model = _Model(100);
-            widget.created.add(model);
-            return model;
-          },
-          child: widget.child,
-        )
-      : Scope<_Model>(value: widget.shared, child: widget.child);
+      ? Scope<_Model>.create(() {
+          final model = _Model(100);
+          widget.created.add(model);
+          return model;
+        }, child: widget.child)
+      : Scope<_Model>(widget.shared, child: widget.child);
 }
 
 class _Plain {
@@ -264,12 +261,9 @@ class _HandoffHostState extends State<_HandoffHost> {
   Widget build(BuildContext context) {
     final shared = this.shared;
     if (shared != null) {
-      return Scope<_Model>(value: shared, child: widget.child);
+      return Scope<_Model>(shared, child: widget.child);
     }
-    return Scope<_Model>.create(
-      create: (_) => created = _Model(7),
-      child: widget.child,
-    );
+    return Scope<_Model>.create(() => created = _Model(7), child: widget.child);
   }
 }
 
@@ -289,7 +283,7 @@ void main() {
       _Model? missing;
       owner.mountRoot(
         Scope<_Config>(
-          value: const _Config(7),
+          const _Config(7),
           child: _Build((context) {
             found = Scope.of<_Config>(context);
             missing = Scope.maybeOf<_Model>(context);
@@ -323,7 +317,7 @@ void main() {
       Object? error;
       owner.mountRoot(
         Scope<_Config>(
-          value: const _Config(1),
+          const _Config(1),
           child: _Build((context) {
             try {
               Scope.maybeOf(context);
@@ -342,9 +336,9 @@ void main() {
       final seen = <String>[];
       owner.mountRoot(
         Scope<_Config>(
-          value: const _Config(1),
+          const _Config(1),
           child: Scope<_Base>(
-            value: const _Base('outer'),
+            const _Base('outer'),
             child: Column(
               children: [
                 _Build((context) {
@@ -352,7 +346,7 @@ void main() {
                   return const EmptyBox();
                 }),
                 Scope<_Base>(
-                  value: const _Base('inner'),
+                  const _Base('inner'),
                   child: _Build((context) {
                     seen.add('b:${Scope.of<_Base>(context).name}');
                     seen.add('c:${Scope.of<_Config>(context).n}');
@@ -373,9 +367,9 @@ void main() {
       _Derived? derived;
       owner.mountRoot(
         Scope<_Base>(
-          value: const _Base('base'),
+          const _Base('base'),
           child: Scope<_Derived>(
-            value: const _Derived('derived'),
+            const _Derived('derived'),
             child: _Build((context) {
               base = Scope.of<_Base>(context);
               derived = Scope.of<_Derived>(context);
@@ -461,12 +455,7 @@ void main() {
       final owner = BuildOwner();
       final model = _Model();
       final log = <int>[];
-      owner.mountRoot(
-        Scope<_Model>(
-          value: model,
-          child: _Reader(log: log),
-        ),
-      );
+      owner.mountRoot(Scope<_Model>(model, child: _Reader(log: log)));
 
       model.increment();
       owner.flushBuild();
@@ -483,7 +472,7 @@ void main() {
       final log = <int>[];
       owner.mountRoot(
         Scope<_Model>(
-          value: model,
+          model,
           child: Column(
             children: [
               _Reader(log: log),
@@ -548,13 +537,13 @@ void main() {
       final first = _Model();
       final second = _Model();
       final root = owner.mountRoot(
-        Scope<_Model>(value: first, child: const _ThrowOnValue(1)),
+        Scope<_Model>(first, child: const _ThrowOnValue(1)),
       );
 
       expect(
         () => owner.updateRoot(
           root,
-          Scope<_Model>(value: second, child: const _ThrowOnValue(2)),
+          Scope<_Model>(second, child: const _ThrowOnValue(2)),
         ),
         throwsA(isA<StateError>()),
       );
@@ -567,10 +556,7 @@ void main() {
       final owner = BuildOwner();
       final model = _Model();
       final root = owner.mountRoot(
-        Scope<_Model>(
-          value: model,
-          child: _Reader(log: <int>[]),
-        ),
+        Scope<_Model>(model, child: _Reader(log: <int>[])),
       );
 
       expect(model.hasListeners, isTrue);
@@ -585,10 +571,7 @@ void main() {
       final model = _Model();
       final log = <int>[];
       owner.mountRoot(
-        Scope<_Model>(
-          value: model,
-          child: _Reader(log: log, subscribe: false),
-        ),
+        Scope<_Model>(model, child: _Reader(log: log, subscribe: false)),
       );
 
       model.increment();
@@ -601,12 +584,7 @@ void main() {
       final owner = BuildOwner();
       final model = _Model(5);
       final log = <String>[];
-      owner.mountRoot(
-        Scope<_Model>(
-          value: model,
-          child: _InitStateReader(log: log),
-        ),
-      );
+      owner.mountRoot(Scope<_Model>(model, child: _InitStateReader(log: log)));
       expect(log, ['init:5', 'build']);
 
       model.increment();
@@ -619,10 +597,7 @@ void main() {
       final model = _Model();
       final log = <String>[];
       final root = owner.mountRoot(
-        Scope<_Model>(
-          value: model,
-          child: _DisposeReader(log: log),
-        ),
+        Scope<_Model>(model, child: _DisposeReader(log: log)),
       );
       root.unmount();
       expect(log, hasLength(1));
@@ -638,14 +613,11 @@ void main() {
       final log = <int>[];
       final root = owner.mountRoot(
         Scope<_Config>(
-          value: const _Config(40),
-          child: Scope<_Model>.create(
-            create: (context) {
-              creates++;
-              return _Model(Scope.of<_Config>(context).n + 2);
-            },
-            child: _Reader(log: log),
-          ),
+          const _Config(40),
+          child: Scope<_Model>.createWithContext((context) {
+            creates++;
+            return _Model(Scope.of<_Config>(context).n + 2);
+          }, child: _Reader(log: log)),
         ),
       );
       expect(log, [42]);
@@ -655,14 +627,11 @@ void main() {
       owner.updateRoot(
         root,
         Scope<_Config>(
-          value: const _Config(40),
-          child: Scope<_Model>.create(
-            create: (context) {
-              creates++;
-              return _Model(-1);
-            },
-            child: _Reader(log: log),
-          ),
+          const _Config(40),
+          child: Scope<_Model>.createWithContext((context) {
+            creates++;
+            return _Model(-1);
+          }, child: _Reader(log: log)),
         ),
       );
       expect(creates, 1);
@@ -675,7 +644,7 @@ void main() {
       final log = <int>[];
       owner.mountRoot(
         Scope<_Model>.create(
-          create: (_) => created = _Model(),
+          () => created = _Model(),
           child: _Reader(log: log),
         ),
       );
@@ -684,12 +653,12 @@ void main() {
       expect(log, [0, 1]);
     });
 
-    test('a ChangeNotifier is disposed on unmount by default', () {
+    test('a Notifier is disposed on unmount by default', () {
       final owner = BuildOwner();
       _Model? created;
       final root = owner.mountRoot(
         Scope<_Model>.create(
-          create: (_) => created = _Model(),
+          () => created = _Model(),
           child: _Reader(log: <int>[]),
         ),
       );
@@ -704,7 +673,7 @@ void main() {
       final plain = _Plain();
       final root = owner.mountRoot(
         Scope<_Plain>.create(
-          create: (_) => plain,
+          () => plain,
           dispose: (value) => value.disposeCalls++,
           child: _Build((context) {
             Scope.of<_Plain>(context);
@@ -721,7 +690,7 @@ void main() {
       final order = <String>[];
       final root = owner.mountRoot(
         Scope<_Plain>.create(
-          create: (_) => _Plain(),
+          () => _Plain(),
           dispose: (_) => order.add('dispose'),
           child: _OrderProbe(order: order),
         ),

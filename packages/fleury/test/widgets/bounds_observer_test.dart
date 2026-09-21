@@ -29,8 +29,8 @@ void main() {
     final chip = BoundsNotifier();
     final label = ValueNotifier<String>('ab');
     tester.pumpWidget(
-      ListenableBuilder(
-        listenable: label,
+      NotifierBuilder(
+        notifier: label,
         builder: (context, _) => Row(
           children: <Widget>[
             Text(label.value),
@@ -210,8 +210,8 @@ void main() {
       final chip = BoundsNotifier();
       final show = ValueNotifier<bool>(true);
       tester.pumpWidget(
-        ListenableBuilder(
-          listenable: show,
+        NotifierBuilder(
+          notifier: show,
           builder: (context, _) => Stack(
             children: <Widget>[
               BoundsObserver(notifier: chip, child: const Text('@')),
@@ -238,8 +238,8 @@ void main() {
       final chip = BoundsNotifier();
       final show = ValueNotifier<bool>(true);
       tester.pumpWidget(
-        ListenableBuilder(
-          listenable: show,
+        NotifierBuilder(
+          notifier: show,
           builder: (context, _) => Stack(
             children: <Widget>[
               if (show.value)
@@ -313,8 +313,8 @@ void main() {
       final useSecond = ValueNotifier<bool>(false);
 
       tester.pumpWidget(
-        ListenableBuilder(
-          listenable: useSecond,
+        NotifierBuilder(
+          notifier: useSecond,
           builder: (context, _) => Stack(
             children: <Widget>[
               Column(

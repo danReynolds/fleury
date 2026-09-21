@@ -112,10 +112,10 @@ void main() {
       final requests = <int>[];
       final activations = <int>[];
       tester.pumpWidget(
-        ValueListenableBuilder<int>(
-          valueListenable: selected,
-          builder: (context, value, child) => _table(
-            currentRowIndex: value,
+        NotifierBuilder<ValueNotifier<int>>(
+          notifier: selected,
+          builder: (context, notifier) => _table(
+            currentRowIndex: notifier.value,
             onFocusedItemChanged: (row) {
               requests.add(row);
               selected.value = row;
@@ -150,10 +150,10 @@ void main() {
       final requests = <int>[];
       final activations = <int>[];
       tester.pumpWidget(
-        ValueListenableBuilder<int>(
-          valueListenable: selected,
-          builder: (context, value, child) => _table(
-            currentRowIndex: value,
+        NotifierBuilder<ValueNotifier<int>>(
+          notifier: selected,
+          builder: (context, notifier) => _table(
+            currentRowIndex: notifier.value,
             onFocusedItemChanged: (row) {
               requests.add(row);
               selected.value = row;
@@ -180,11 +180,11 @@ void main() {
     final selected = ValueNotifier(0);
     final requests = <int>[];
     tester.pumpWidget(
-      ValueListenableBuilder<int>(
-        valueListenable: selected,
-        builder: (context, value, child) => LayoutBuilder(
+      NotifierBuilder<ValueNotifier<int>>(
+        notifier: selected,
+        builder: (context, notifier) => LayoutBuilder(
           builder: (context, constraints) => _table(
-            currentRowIndex: value,
+            currentRowIndex: notifier.value,
             mode: DataTableSelectionMode.cell,
             onFocusedItemChanged: (row) {
               requests.add(row);
@@ -282,10 +282,10 @@ void main() {
     final rows = ValueNotifier(8);
     final requests = <int>[];
     tester.pumpWidget(
-      ValueListenableBuilder<int>(
-        valueListenable: rows,
-        builder: (context, value, child) => _table(
-          rows: value,
+      NotifierBuilder<ValueNotifier<int>>(
+        notifier: rows,
+        builder: (context, notifier) => _table(
+          rows: notifier.value,
           currentRowIndex: 0,
           onFocusedItemChanged: (row) {
             requests.add(row);

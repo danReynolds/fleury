@@ -1,5 +1,5 @@
 // Implicit reactivity: reading animation.value during a build
-// auto-subscribes that widget (no AnimationBuilder, no ListenableBuilder).
+// auto-subscribes that widget (no AnimationBuilder, no NotifierBuilder).
 
 import 'package:fleury/fleury.dart';
 import '../support/harness.dart';

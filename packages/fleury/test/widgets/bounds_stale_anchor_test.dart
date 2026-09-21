@@ -29,8 +29,8 @@ void main() {
     final chip = BoundsNotifier();
     final index = ValueNotifier<int>(0);
     tester.pumpWidget(
-      ListenableBuilder(
-        listenable: index,
+      NotifierBuilder(
+        notifier: index,
         builder: (context, _) => Stack(
           children: [
             IndexedStack(
@@ -75,8 +75,8 @@ void main() {
               RepaintBoundary(
                 child: BoundsObserver(notifier: chip, child: const Text('ab')),
               ),
-              ListenableBuilder(
-                listenable: counter,
+              NotifierBuilder(
+                notifier: counter,
                 builder: (context, _) => Text('tick ${counter.value}'),
               ),
             ],

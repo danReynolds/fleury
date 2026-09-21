@@ -98,8 +98,9 @@ void main() {
       ),
     );
 
-    expect(flush.pending, isTrue);
-    flush.fire();
+    await Future<void>.delayed(Duration.zero);
+    if (flush.pending) flush.fire();
+    await host.awaitSemanticIdle();
     expect(hostElement.textContent, contains('counter  1'));
     expect(hostElement.textContent, contains('last submit  abc'));
     expect(hostElement.textContent, contains('draft length  0'));

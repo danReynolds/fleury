@@ -1731,7 +1731,7 @@ class _TextEditingScenarioApp extends StatelessWidget {
   }
 }
 
-final class _CounterModel extends ChangeNotifier {
+final class _CounterModel extends Notifier {
   _CounterModel({int initialValue = 0}) : _value = initialValue;
 
   int _value;
@@ -1746,17 +1746,17 @@ final class _CounterModel extends ChangeNotifier {
 
   void increment() {
     _value += 1;
-    notifyListeners();
+    notify();
   }
 
   void toggleAccent() {
     _accent = !_accent;
-    notifyListeners();
+    notify();
   }
 
   void toggleTextVariant() {
     _textVariant = !_textVariant;
-    notifyListeners();
+    notify();
   }
 }
 
@@ -1767,8 +1767,8 @@ final class _CounterScenarioBody extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return ListenableBuilder(
-      listenable: counter,
+    return NotifierBuilder(
+      notifier: counter,
       builder: (context, _) {
         final count = counter.value;
         return Semantics(
@@ -1875,8 +1875,8 @@ class _LayoutCounterPane extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return ListenableBuilder(
-      listenable: counter,
+    return NotifierBuilder(
+      notifier: counter,
       builder: (context, _) {
         final count = counter.value;
         final accent = counter.accent;

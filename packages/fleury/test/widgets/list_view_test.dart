@@ -1938,8 +1938,8 @@ void main() {
         ListView(
           children: [
             for (var i = 0; i < 6; i++)
-              ListenableBuilder(
-                listenable: rows[i],
+              NotifierBuilder(
+                notifier: rows[i],
                 builder: (context, _) => Text('row $i = ${rows[i].value}'),
               ),
           ],
@@ -2019,12 +2019,12 @@ void main() {
   });
 }
 
-/// A purpose-built ChangeNotifier for driving a per-row rebuild.
-class _Bump extends ChangeNotifier {
+/// A purpose-built Notifier for driving a per-row rebuild.
+class _Bump extends Notifier {
   int value = 0;
   void bump() {
     value++;
-    notifyListeners();
+    notify();
   }
 }
 

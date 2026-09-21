@@ -28,6 +28,9 @@ import 'framework.dart';
 
 /// Builds a widget by subscribing to a [Listenable] and invoking
 /// [builder] each time it notifies.
+///
+/// Supported compatibility API. New application state can use `NotifierBuilder`
+/// or `context.listen(model)` for a typed source and automatic subscriptions.
 class ListenableBuilder extends StatefulWidget {
   const ListenableBuilder({
     super.key,
@@ -92,6 +95,8 @@ class _ListenableBuilderState extends State<ListenableBuilder> {
 ///
 /// This is the typed single-value counterpart to [ListenableBuilder]. The
 /// optional [child] is passed through unchanged on every rebuild.
+/// Supported for compatibility; new code can use `context.listen(source).value`
+/// or the same source with `NotifierBuilder`.
 class ValueListenableBuilder<T> extends StatelessWidget {
   const ValueListenableBuilder({
     super.key,

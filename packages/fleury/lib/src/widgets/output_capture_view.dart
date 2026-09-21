@@ -11,7 +11,7 @@ import 'align.dart';
 import 'basic.dart';
 import 'framework.dart';
 import 'layout_builder.dart';
-import 'listenable_builder.dart';
+import 'notifier_builder.dart';
 import 'media_query.dart';
 import 'theme.dart';
 
@@ -23,7 +23,7 @@ class LogBufferScope extends Scope<LogBuffer> {
     super.key,
     required LogBuffer buffer,
     required super.child,
-  }) : super(value: buffer);
+  }) : super(buffer);
 
   static LogBuffer? maybeOf(BuildContext context) =>
       Scope.maybeOf<LogBuffer>(context);
@@ -63,8 +63,8 @@ class OutputCaptureView extends StatelessWidget {
   Widget build(BuildContext context) {
     final explicit = buffer;
     if (explicit != null) {
-      return ListenableBuilder(
-        listenable: explicit,
+      return NotifierBuilder(
+        notifier: explicit,
         builder: (context, _) => _list(context, explicit),
       );
     }

@@ -140,13 +140,13 @@ final class LogRegionCopyResult {
 }
 
 /// Controller for [LogRegion] browsing and tail-follow behavior.
-class LogRegionController extends ChangeNotifier {
+class LogRegionController extends Notifier {
   LogRegionController({int? initialIndex = 0, bool followTail = true})
     : _list = ListController(
         initialIndex: initialIndex,
         followTail: followTail,
       ) {
-    _list.addListener(notifyListeners);
+    _list.addListener(notify);
   }
 
   final ListController _list;
@@ -197,7 +197,7 @@ class LogRegionController extends ChangeNotifier {
   void dispose() {
     if (_disposed) return;
     _disposed = true;
-    _list.removeListener(notifyListeners);
+    _list.removeListener(notify);
     _list.dispose();
     super.dispose();
   }

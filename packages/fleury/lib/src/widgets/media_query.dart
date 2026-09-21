@@ -59,7 +59,7 @@ class MediaQuery extends Scope<MediaQueryData> {
     super.key,
     required MediaQueryData data,
     required super.child,
-  }) : super(value: data);
+  }) : super(data);
 
   /// The full data in scope. Throws if there is no [MediaQuery] ancestor.
   static MediaQueryData of(BuildContext context) {

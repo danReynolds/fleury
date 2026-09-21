@@ -24,7 +24,7 @@ import 'framework.dart';
 /// ticker-owning widget below it.
 class TickerMode extends Scope<_TickerModeData> {
   const TickerMode({super.key, required this.enabled, required super.child})
-    : super(value: enabled ? _TickerModeData.on : _TickerModeData.off);
+    : super(enabled ? _TickerModeData.on : _TickerModeData.off);
 
   /// When true, descendant tickers fire their callbacks normally.
   /// When false, descendant tickers continue to advance their

@@ -10,7 +10,7 @@
 //
 // Design notes
 //
-//   - Each OverlayEntry is its own ChangeNotifier so removing it
+//   - Each OverlayEntry is its own Notifier so removing it
 //     can notify the OverlayState to rebuild without us managing a
 //     manual subscription model.
 //   - Entries stack in insertion order; the last-inserted entry is
@@ -44,7 +44,7 @@ import 'framework.dart';
 ///   Overlay.of(context).insert(entry);
 ///   // ... later ...
 ///   entry.remove();
-class OverlayEntry extends ChangeNotifier {
+class OverlayEntry extends Notifier {
   OverlayEntry({
     required this.builder,
     bool opaque = false,
@@ -95,7 +95,7 @@ class OverlayEntry extends ChangeNotifier {
 
   void _markNeedsRebuild() {
     // Notify the OverlayState so it rebuilds just this entry.
-    notifyListeners();
+    notify();
   }
 
   void _attach(OverlayState state) {

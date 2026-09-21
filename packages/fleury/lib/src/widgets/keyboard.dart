@@ -160,12 +160,12 @@ final class Keyboard {
 
 /// Publishes the session keyboard to the tree, notifying on capability and
 /// session changes only — never on key transitions (see [Keyboard]).
-final class KeyboardStateNotifier with ChangeNotifier {
+final class KeyboardStateNotifier with Notifier {
   KeyboardStateNotifier(this.dispatcher) {
     // Layout learning republishes through the same channel capabilities do:
     // both answer "what is this keyboard", both are build-legal reads, and a
     // hint bar that asked the layout must hear when the answer improves.
-    dispatcher.keyboardSession.onDescriptionChanged = notifyListeners;
+    dispatcher.keyboardSession.onDescriptionChanged = notify;
   }
 
   /// The dispatcher that owns the session and the capture gate.
@@ -180,7 +180,7 @@ final class KeyboardStateNotifier with ChangeNotifier {
 
   /// Framework-only: the runtime calls this after applying confirmed
   /// capabilities or replacing the session.
-  void notifyCapabilitiesChanged() => notifyListeners();
+  void notifyCapabilitiesChanged() => notify();
 }
 
 /// Shares the session keyboard with the widget tree — a
@@ -191,7 +191,7 @@ final class KeyboardScope extends Scope<KeyboardStateNotifier> {
     super.key,
     required KeyboardStateNotifier notifier,
     required super.child,
-  }) : super(value: notifier);
+  }) : super(notifier);
 
   /// Framework-internal: the dispatcher owning this surface's input lanes,
   /// or null outside a running app. Non-subscribing — a widget reaching for

@@ -1,6 +1,5 @@
 // dart format width=60
 import 'package:fleury/fleury_core.dart';
-import 'package:fleury_widgets/fleury_widgets_web.dart';
 
 class ReorderTasks extends StatefulWidget {
   const ReorderTasks({super.key});
@@ -55,8 +54,8 @@ class _ReorderTasksState extends State<ReorderTasks> {
           ),
         ),
         // #enddocregion interaction
-        ListenableBuilder(
-          listenable: list,
+        NotifierBuilder(
+          notifier: list,
           builder: (context, _) {
             final index = list.currentIndex;
             return Text(

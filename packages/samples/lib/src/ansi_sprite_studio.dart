@@ -63,8 +63,8 @@ class _AnsiSpriteStudioBodyState extends State<_AnsiSpriteStudioBody> {
       // finishes negotiating, this rebuilds and the control scheme upgrades
       // itself (RFC 0020 §7.6).
       bindings: _bindings(Keyboard.of(context).capabilities),
-      child: ListenableBuilder(
-        listenable: _model,
+      child: NotifierBuilder(
+        notifier: _model,
         builder: (context, _) => _studioSurface(context),
       ),
     );

@@ -78,10 +78,10 @@ typedef ConversationMatcher =
     bool Function(ConversationEntry entry, String query);
 
 /// Controller for [ConversationNavigator] browsing and viewport state.
-class ConversationNavigatorController extends ChangeNotifier {
+class ConversationNavigatorController extends Notifier {
   ConversationNavigatorController({int? initialIndex = 0})
     : _list = ListController(initialIndex: initialIndex) {
-    _list.addListener(notifyListeners);
+    _list.addListener(notify);
   }
 
   final ListController _list;
@@ -112,7 +112,7 @@ class ConversationNavigatorController extends ChangeNotifier {
   void dispose() {
     if (_disposed) return;
     _disposed = true;
-    _list.removeListener(notifyListeners);
+    _list.removeListener(notify);
     _list.dispose();
     super.dispose();
   }

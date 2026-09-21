@@ -122,10 +122,10 @@ final class _DomDemoAppState extends State<_DomDemoApp> {
               placeholder: 'submit text',
               onSubmit: _submit,
             ),
-            ListenableBuilder(
-              listenable: _controller,
-              builder: (context, child) {
-                final text = _controller.text;
+            NotifierBuilder(
+              notifier: _controller,
+              builder: (context, controller) {
+                final text = controller.text;
                 return Text(
                   'draft length  ${text.length}',
                   style: const CellStyle(dim: true),

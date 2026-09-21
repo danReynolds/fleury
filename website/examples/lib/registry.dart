@@ -13,6 +13,7 @@ import 'package:fleury_widgets/fleury_widgets_web.dart';
 import 'package:http/http.dart' as http;
 import 'package:image/image.dart' as img;
 
+import 'state_management_guide.dart' as state;
 import 'testing_guide.dart' as testing;
 import 'input_guide.dart' as input;
 import 'lists_guide.dart' as lists;
@@ -30,7 +31,7 @@ typedef ExampleBuilder = Widget Function();
 enum DocsExampleStyle { dark, light }
 
 /// Lets the host page retheme a live example after it has mounted.
-final class DocsExampleThemeController extends ChangeNotifier {
+final class DocsExampleThemeController extends Notifier {
   DocsExampleThemeController(this._style);
 
   DocsExampleStyle _style;
@@ -40,30 +41,30 @@ final class DocsExampleThemeController extends ChangeNotifier {
   set style(DocsExampleStyle value) {
     if (value == _style) return;
     _style = value;
-    notifyListeners();
+    notify();
   }
 }
 
 Widget themedExampleRoot(
   ExampleBuilder builder,
   DocsExampleThemeController controller,
-) => ListenableBuilder(
-  listenable: controller,
-  child: builder(),
-  builder: (context, child) {
-    final theme = _themeFor(controller.style);
-    return Scope<_DocsExampleTheme>(
-      value: _DocsExampleTheme(theme),
-      child: Theme(
-        data: theme,
-        // Docs embeds are intentionally not full applications, but interactive
-        // examples still need a traversal policy now that browser hosts mount
-        // their supplied root exactly.
-        child: FocusTraversalGroup(child: child!),
-      ),
-    );
-  },
-);
+) {
+  final child = builder();
+  return NotifierBuilder(
+    notifier: controller,
+    builder: (context, controller) {
+      final theme = _themeFor(controller.style);
+      return Scope<_DocsExampleTheme>(
+        _DocsExampleTheme(theme),
+        child: Theme(
+          data: theme,
+          // Docs embeds need a traversal policy even without a full app shell.
+          child: FocusTraversalGroup(child: child),
+        ),
+      );
+    },
+  );
+}
 
 /// One embeddable example, keyed by the `data-fleury-example` id used on the
 /// docs page. This list is the single source of truth: it drives the live
@@ -1906,6 +1907,18 @@ form.clearErrors();''',
     builder: () => const FormsShowcaseApp(),
   ),
   ExampleInfo(
+    id: 'showcase.state',
+    widget: 'State management',
+    category: 'Showcases',
+    blurb:
+        'Local fields, a shared project scope, and an application-owned cart, '
+        'with builder widgets and context readers updating together.',
+    cols: 80,
+    rows: 28,
+    interactive: true,
+    builder: () => const StateManagementShowcaseApp(),
+  ),
+  ExampleInfo(
     id: 'showcase.themes',
     widget: 'Theme studio',
     category: 'Showcases',
@@ -2135,66 +2148,57 @@ form.clearErrors();''',
     cols: 34,
     rows: 9,
     interactive: true,
-    builder: () => const _LocalCounterTour(),
+    builder: () => _framed(const state.LocalCounter()),
   ),
   ExampleInfo(
-    id: 'state.shared-counter',
-    widget: 'State',
+    id: 'state.project-scope',
+    widget: 'ScopeBuilder',
     category: 'Guide examples',
-    blurb:
-        'A parent-owned counter passes its value and update callback to two '
-        'ordinary child widgets.',
-    cols: 34,
-    rows: 9,
-    interactive: true,
-    builder: () => const _SharedCounterTour(),
-  ),
-  ExampleInfo(
-    id: 'state.value-notifier',
-    widget: 'ValueListenableBuilder',
-    category: 'Guide examples',
-    blurb:
-        'A connection service exposes one typed observable value without '
-        'needing a larger model.',
+    blurb: 'A descendant reads the shared project with ScopeBuilder.',
     cols: 38,
     rows: 9,
     interactive: true,
-    builder: () => const _ValueNotifierTour(),
+    builder: () => _framed(const state.ProjectScopeScreen()),
   ),
   ExampleInfo(
-    id: 'state.deployment',
-    widget: 'ListenableBuilder',
-    category: 'Guide examples',
-    blurb:
-        'A small app-owned model groups deployment progress and pause actions.',
-    cols: 42,
-    rows: 11,
-    interactive: true,
-    builder: () => const _DeploymentTour(),
-  ),
-  ExampleInfo(
-    id: 'state.scope',
+    id: 'state.project-context',
     widget: 'Scope',
     category: 'Guide examples',
-    blurb:
-        'A Scope shares a parent-owned model with a nested reader through '
-        'BuildContext; the reader rebuilds when the model notifies.',
+    blurb: 'A descendant reads the shared project through context.scope.',
     cols: 38,
     rows: 9,
     interactive: true,
-    builder: () => const _ScopeCounterTour(),
+    builder: () => _framed(const state.ProjectScreen()),
   ),
   ExampleInfo(
-    id: 'state.scope-create',
-    widget: 'Scope',
+    id: 'state.cart-notifier',
+    widget: 'NotifierBuilder',
     category: 'Guide examples',
-    blurb:
-        'Scope.create lets the scope own the model: created on mount, '
-        'disposed on unmount, read the same way.',
+    blurb: 'A cart notifies its builder when an item is added.',
     cols: 38,
     rows: 9,
     interactive: true,
-    builder: () => const _ScopeCreateTour(),
+    builder: () => _framed(const state.CartDemo()),
+  ),
+  ExampleInfo(
+    id: 'state.cart-context',
+    widget: 'BuildContext',
+    category: 'Guide examples',
+    blurb: 'The same cart API updates a widget through context.listen.',
+    cols: 38,
+    rows: 9,
+    interactive: true,
+    builder: () => _framed(const state.CartDemo(contextReader: true)),
+  ),
+  ExampleInfo(
+    id: 'state.cart-value',
+    widget: 'ValueNotifier',
+    category: 'Guide examples',
+    blurb: 'A ValueNotifier updates the item count through context.listen.',
+    cols: 38,
+    rows: 9,
+    interactive: true,
+    builder: () => _framed(const state.CartValueDemo()),
   ),
   ExampleInfo(
     id: 'input.editing',
@@ -3490,15 +3494,15 @@ String _knobString(Object? v, String fallback) =>
 bool _knobBool(Object? v, bool fallback) => v is bool ? v : fallback;
 
 /// A mutable params holder the docs knob UI pushes updates into. Notifies so a
-/// [ListenableBuilder] can rebuild the widget in place (no remount/recompile).
-class KnobParams with ChangeNotifier {
+/// [NotifierBuilder] can rebuild the widget in place (no remount/recompile).
+class KnobParams with Notifier {
   KnobParams(this._value);
 
   Map<String, Object?> _value;
   Map<String, Object?> get value => _value;
   set value(Map<String, Object?> next) {
     _value = next;
-    notifyListeners();
+    notify();
   }
 }
 
@@ -3508,9 +3512,9 @@ Widget knobRoot(String id, KnobParams params) {
   final builder = knobExamples[id];
   if (builder == null) return const Center(child: Text('Unknown knob example'));
   return FocusTraversalGroup(
-    child: ListenableBuilder(
-      listenable: params,
-      builder: (context, _) => builder(params.value),
+    child: NotifierBuilder(
+      notifier: params,
+      builder: (context, params) => builder(params.value),
     ),
   );
 }
@@ -3667,14 +3671,6 @@ class _ThemePickerExampleState extends State<_ThemePickerExample> {
   final ListController _list = ListController(initialIndex: 0);
 
   @override
-  void initState() {
-    super.initState();
-    // The preview follows the highlight, so arrowing the list re-themes
-    // immediately — no separate "apply" step in a docs embed.
-    _list.addListener(() => setState(() {}));
-  }
-
-  @override
   void dispose() {
     _list.dispose();
     super.dispose();
@@ -3682,7 +3678,10 @@ class _ThemePickerExampleState extends State<_ThemePickerExample> {
 
   @override
   Widget build(BuildContext context) {
-    final index = (_list.currentIndex ?? 0).clamp(0, fleuryThemes.length - 1);
+    final index = (context.listen(_list).currentIndex ?? 0).clamp(
+      0,
+      fleuryThemes.length - 1,
+    );
     return Row(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: <Widget>[
@@ -5229,256 +5228,6 @@ class _TickerSimulationTourState extends State<_TickerSimulationTour>
         ],
       ),
     );
-  }
-}
-
-/// A guide-level example for local widget state.
-class _LocalCounterTour extends StatefulWidget {
-  const _LocalCounterTour();
-
-  @override
-  State<_LocalCounterTour> createState() => _LocalCounterTourState();
-}
-
-class _LocalCounterTourState extends State<_LocalCounterTour> {
-  int _count = 0;
-
-  @override
-  Widget build(BuildContext context) => _framed(
-    Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: <Widget>[
-        const Text('COUNTER', style: CellStyle(bold: true)),
-        const SizedBox(height: 1),
-        Text('Count: $_count'),
-        Button(text: 'Increment', onPressed: () => setState(() => _count++)),
-      ],
-    ),
-  );
-}
-
-/// A guide-level example for lifting widget state to a common parent.
-class _SharedCounterTour extends StatefulWidget {
-  const _SharedCounterTour();
-
-  @override
-  State<_SharedCounterTour> createState() => _SharedCounterTourState();
-}
-
-class _SharedCounterTourState extends State<_SharedCounterTour> {
-  int _count = 0;
-
-  @override
-  Widget build(BuildContext context) => _framed(
-    Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: <Widget>[
-        const Text('SHARED COUNTER', style: CellStyle(bold: true)),
-        const SizedBox(height: 1),
-        _CounterValue(value: _count),
-        _CounterButton(onPressed: () => setState(() => _count++)),
-      ],
-    ),
-  );
-}
-
-class _CounterValue extends StatelessWidget {
-  const _CounterValue({required this.value});
-
-  final int value;
-
-  @override
-  Widget build(BuildContext context) => Text('Count: $value');
-}
-
-class _CounterButton extends StatelessWidget {
-  const _CounterButton({required this.onPressed});
-
-  final VoidCallback onPressed;
-
-  @override
-  Widget build(BuildContext context) =>
-      Button(text: 'Increment', onPressed: onPressed);
-}
-
-/// A guide-level example: a parent owns the model and shares it in a Scope.
-class _ScopeCounterTour extends StatefulWidget {
-  const _ScopeCounterTour();
-
-  @override
-  State<_ScopeCounterTour> createState() => _ScopeCounterTourState();
-}
-
-class _ScopeCounterTourState extends State<_ScopeCounterTour> {
-  final _counter = _CounterModel();
-
-  @override
-  void dispose() {
-    _counter.dispose();
-    super.dispose();
-  }
-
-  @override
-  Widget build(BuildContext context) => Scope(
-    value: _counter,
-    child: _framed(const _ScopeCounterPanel(title: 'SHARED COUNTER')),
-  );
-}
-
-/// A guide-level example: the scope owns the model it shares.
-class _ScopeCreateTour extends StatelessWidget {
-  const _ScopeCreateTour();
-
-  @override
-  Widget build(BuildContext context) => Scope<_CounterModel>.create(
-    create: (context) => _CounterModel(),
-    child: _framed(const _ScopeCounterPanel(title: 'OWNED COUNTER')),
-  );
-}
-
-class _ScopeCounterPanel extends StatelessWidget {
-  const _ScopeCounterPanel({required this.title});
-
-  final String title;
-
-  @override
-  Widget build(BuildContext context) {
-    final counter = Scope.of<_CounterModel>(context);
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: <Widget>[
-        Text(title, style: const CellStyle(bold: true)),
-        const SizedBox(height: 1),
-        Text('Count: ${counter.count}'),
-        Button(text: 'Increment', onPressed: counter.increment),
-      ],
-    );
-  }
-}
-
-/// A service that exposes one observable value without becoming a larger model.
-class _ConnectionService {
-  final online = ValueNotifier<bool>(false);
-
-  void toggle() => online.value = !online.value;
-
-  void dispose() => online.dispose();
-}
-
-/// A guide-level example for a service-owned observable value.
-class _ValueNotifierTour extends StatefulWidget {
-  const _ValueNotifierTour();
-
-  @override
-  State<_ValueNotifierTour> createState() => _ValueNotifierTourState();
-}
-
-class _ValueNotifierTourState extends State<_ValueNotifierTour> {
-  final _connection = _ConnectionService();
-
-  @override
-  void dispose() {
-    _connection.dispose();
-    super.dispose();
-  }
-
-  @override
-  Widget build(BuildContext context) => _framed(
-    ValueListenableBuilder<bool>(
-      valueListenable: _connection.online,
-      builder: (context, isOnline, child) => Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: <Widget>[
-          const Text('CONNECTION', style: CellStyle(bold: true)),
-          const SizedBox(height: 1),
-          Text(isOnline ? 'Online' : 'Offline'),
-          Button(
-            text: isOnline ? 'Disconnect' : 'Connect',
-            onPressed: _connection.toggle,
-          ),
-        ],
-      ),
-    ),
-  );
-}
-
-/// A small app-owned model with related values and actions.
-class _Deployment extends ChangeNotifier {
-  int _completed = 1;
-  bool _paused = false;
-
-  int get completed => _completed;
-  bool get paused => _paused;
-
-  void completeNext() {
-    if (_paused || _completed == 3) return;
-    _completed++;
-    notifyListeners();
-  }
-
-  void togglePaused() {
-    _paused = !_paused;
-    notifyListeners();
-  }
-}
-
-class _DeploymentTour extends StatefulWidget {
-  const _DeploymentTour();
-
-  @override
-  State<_DeploymentTour> createState() => _DeploymentTourState();
-}
-
-class _DeploymentTourState extends State<_DeploymentTour> {
-  final _deployment = _Deployment();
-
-  @override
-  void dispose() {
-    _deployment.dispose();
-    super.dispose();
-  }
-
-  @override
-  Widget build(BuildContext context) =>
-      _framed(_DeploymentView(deployment: _deployment));
-}
-
-class _DeploymentView extends StatelessWidget {
-  const _DeploymentView({required this.deployment});
-
-  final _Deployment deployment;
-
-  @override
-  Widget build(BuildContext context) => ListenableBuilder(
-    listenable: deployment,
-    builder: (context, child) => Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: <Widget>[
-        const Text('DEPLOYMENT', style: CellStyle(bold: true)),
-        const SizedBox(height: 1),
-        Text('${deployment.completed} of 3 complete'),
-        Text(deployment.paused ? 'Paused' : 'Running'),
-        const SizedBox(height: 1),
-        Row(
-          children: <Widget>[
-            Button(text: 'Complete next', onPressed: deployment.completeNext),
-            Button(
-              text: deployment.paused ? 'Resume' : 'Pause',
-              onPressed: deployment.togglePaused,
-            ),
-          ],
-        ),
-      ],
-    ),
-  );
-}
-
-class _CounterModel extends ChangeNotifier {
-  int count = 0;
-
-  void increment() {
-    count++;
-    notifyListeners();
   }
 }
 

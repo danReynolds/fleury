@@ -28,8 +28,8 @@ void main() {
       if (event is FrameDebugEvent) frames.add(event.frame);
     });
     final future = runApp(
-      ListenableBuilder(
-        listenable: index,
+      NotifierBuilder(
+        notifier: index,
         builder: (context, _) => Stack(
           children: [
             IndexedStack(

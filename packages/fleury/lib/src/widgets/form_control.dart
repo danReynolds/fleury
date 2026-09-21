@@ -44,7 +44,7 @@ class FormControlScope extends Scope<FormControlRegistration> {
     required FormControlRegistration registration,
     required this.error,
     required super.child,
-  }) : super(value: registration);
+  }) : super(registration);
 
   /// The field's current validation error. Carried here so a change
   /// rebuilds the control below even though the registration is the same.

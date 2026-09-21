@@ -259,72 +259,58 @@ void main() {
     expect(tester.scheduler.activeTickerCount, 0);
   });
 
-  testWidgets('state management guide local counter updates', (tester) async {
-    tester.pumpWidget(state_management.localStateDemoApp());
-    expect(tester.renderToString(emptyMark: ' '), contains('Count: 0'));
-
-    await tester.button('Increment').press();
-    expect(tester.renderToString(emptyMark: ' '), contains('Count: 1'));
-  });
-
-  testWidgets('state management guide shared counter updates its reader', (
-    tester,
-  ) async {
-    tester.pumpWidget(state_management.sharedStateDemoApp());
-    expect(tester.renderToString(emptyMark: ' '), contains('Count: 0'));
-
-    await tester.button('Increment').press();
-    expect(tester.renderToString(emptyMark: ' '), contains('Count: 1'));
-  });
-
-  testWidgets('state management guide value notifier updates its reader', (
-    tester,
-  ) async {
-    tester.pumpWidget(state_management.valueNotifierDemoApp());
-    expect(tester.renderToString(emptyMark: ' '), contains('Offline'));
-
-    await tester.button('Connect').press();
-    expect(tester.renderToString(emptyMark: ' '), contains('Online'));
-  });
-
-  testWidgets('state management guide model updates its reader', (
-    tester,
-  ) async {
-    tester.pumpWidget(state_management.stateManagementDemoApp());
-    expect(
-      tester.renderToString(emptyMark: ' '),
-      allOf(contains('1 of 3 complete'), contains('Running')),
-    );
-
-    await tester.button('Complete next').press();
-    expect(tester.renderToString(emptyMark: ' '), contains('2 of 3 complete'));
-
-    await tester.button('Pause').press();
-    expect(
-      tester.renderToString(emptyMark: ' '),
-      allOf(contains('2 of 3 complete'), contains('Paused')),
-    );
-  });
-
-  testWidgets('state management guide shared scope updates its reader', (
-    tester,
-  ) async {
-    tester.pumpWidget(state_management.scopeDemoApp());
-    expect(tester.renderToString(emptyMark: ' '), contains('Count: 0'));
-
-    await tester.button('Increment').press();
-    expect(tester.renderToString(emptyMark: ' '), contains('Count: 1'));
-  });
-
-  testWidgets('state management guide owned scope updates its reader', (
-    tester,
-  ) async {
-    tester.pumpWidget(state_management.scopeCreateDemoApp());
-    expect(tester.renderToString(emptyMark: ' '), contains('Count: 0'));
-
-    await tester.button('Increment').press();
-    expect(tester.renderToString(emptyMark: ' '), contains('Count: 1'));
-  });
+  for (final (name, build, initial, action, updated)
+      in <(String, Widget Function(), String, String, String)>[
+        (
+          'local counter',
+          state_management.localStateDemoApp,
+          'Count: 0',
+          'Increment',
+          'Count: 1',
+        ),
+        (
+          'project scope builder',
+          state_management.projectScopeDemoApp,
+          'Project: Atlas',
+          'Switch project',
+          'Project: Beacon',
+        ),
+        (
+          'project context reader',
+          state_management.projectContextDemoApp,
+          'Project: Atlas',
+          'Switch project',
+          'Project: Beacon',
+        ),
+        (
+          'cart notifier builder',
+          state_management.cartNotifierDemoApp,
+          'Items: 0',
+          'Add item',
+          'Items: 1',
+        ),
+        (
+          'cart context reader',
+          state_management.cartContextDemoApp,
+          'Items: 0',
+          'Add item',
+          'Items: 1',
+        ),
+        (
+          'cart value notifier',
+          state_management.cartValueDemoApp,
+          'Items: 0',
+          'Add item',
+          'Items: 1',
+        ),
+      ]) {
+    testWidgets('state management guide $name updates', (tester) async {
+      tester.pumpWidget(build());
+      expect(tester.renderToString(emptyMark: ' '), contains(initial));
+      await tester.button(action).press();
+      expect(tester.renderToString(emptyMark: ' '), contains(updated));
+    });
+  }
 
   testWidgets('loading data guide snapshot explorer starts in waiting', (
     tester,

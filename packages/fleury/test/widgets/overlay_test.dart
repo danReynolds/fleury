@@ -993,6 +993,6 @@ void main() {
   });
 }
 
-class _TestNotifier extends ChangeNotifier {
-  void fire() => notifyListeners();
+class _TestNotifier extends Notifier {
+  void fire() => notify();
 }

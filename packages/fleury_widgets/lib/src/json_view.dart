@@ -97,7 +97,7 @@ final class JsonViewCopyResult {
 }
 
 /// Controller for [JsonView] expansion and browsing.
-class JsonViewController extends ChangeNotifier {
+class JsonViewController extends Notifier {
   JsonViewController({
     /// JSON Pointer paths that start explicitly expanded.
     Iterable<String> expandedPointers = const <String>[],
@@ -111,7 +111,7 @@ class JsonViewController extends ChangeNotifier {
   }) : _expandedPointers = Set<String>.of(expandedPointers),
        _collapsedPointers = Set<String>.of(collapsedPointers),
        _list = ListController(initialIndex: initialIndex) {
-    _list.addListener(notifyListeners);
+    _list.addListener(notify);
   }
 
   final Set<String> _expandedPointers;
@@ -151,14 +151,14 @@ class JsonViewController extends ChangeNotifier {
     _checkNotDisposed();
     final changed =
         _collapsedPointers.remove(pointer) | _expandedPointers.add(pointer);
-    if (changed) notifyListeners();
+    if (changed) notify();
   }
 
   void collapse(String pointer) {
     _checkNotDisposed();
     final changed =
         _expandedPointers.remove(pointer) | _collapsedPointers.add(pointer);
-    if (changed) notifyListeners();
+    if (changed) notify();
   }
 
   void toggle(String pointer, {required bool expanded}) {
@@ -185,7 +185,7 @@ class JsonViewController extends ChangeNotifier {
   void dispose() {
     if (_disposed) return;
     _disposed = true;
-    _list.removeListener(notifyListeners);
+    _list.removeListener(notify);
     _list.dispose();
     super.dispose();
   }

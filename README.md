@@ -31,6 +31,9 @@ AI agents can inspect and operate by meaning instead of terminal coordinates.
 - **A familiar retained UI model.** Widgets, state, context, keys, constraints,
   focus, navigation, animation, and inherited dependencies compose the way
   application developers expect.
+- **State at three levels.** `setState` for local fields, `Scope` for data shared
+  through the tree, and `Notifier` for models used by widgets and services.
+  Read shared state through builder widgets or directly from `BuildContext`.
 - **Terminal-native rendering.** Fleury paints grapheme-aware cells and sends
   diffed ANSI output instead of treating the terminal like a pixel canvas.
 - **Terminal and browser targets.** Share application UI while choosing a

@@ -1,7 +1,7 @@
 // TextInput: a single-line editable text widget for terminal apps.
 //
 // Composed of three pieces:
-//   - TextEditingController — a ChangeNotifier holding the current
+//   - TextEditingController — a Notifier holding the current
 //     TextEditingValue and compatibility text/cursor accessors.
 //   - TextInput — the widget. Creates a Focus node tagged as a
 //     TextInputClaimant / TextCompositionClaimant, so the InputDispatcher
@@ -137,7 +137,7 @@ enum _EditTransaction { edit, typing, paste }
 /// controls and line endings through construction, edits, paste, and history.
 /// Rendering replaces unsafe graphemes without changing the model or offsets.
 /// Masking, semantic redaction, and clipboard protection remain separate policies.
-class TextEditingController extends ChangeNotifier {
+class TextEditingController extends Notifier {
   TextEditingController({
     String text = '',
     this.preserveText = false,
@@ -686,7 +686,7 @@ class TextEditingController extends ChangeNotifier {
     if (resetHistory || clearTransaction) {
       _lastTransaction = null;
     }
-    if (valueChanged || historyChanged) notifyListeners();
+    if (valueChanged || historyChanged) notify();
   }
 
   void _checkNotDisposed() {

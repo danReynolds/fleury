@@ -85,11 +85,11 @@ void writeBaselineJson(String path, Map<String, Object?> data) {
 
 /// A per-row reactive model: [bump] notifies this row's listeners only —
 /// the localized-update primitive of the probe and the gate.
-class RowModel extends ChangeNotifier {
+class RowModel extends Notifier {
   int v = 0;
   void bump() {
     v++;
-    notifyListeners();
+    notify();
   }
 }
 
@@ -112,8 +112,8 @@ Widget styledRow({required int index, required int tick, required int cols}) {
 /// live-row update shape whose localized repaint the boundaries prune.
 Widget liveRow(
     {required int index, required RowModel model, required int cols}) {
-  return ListenableBuilder(
-    listenable: model,
+  return NotifierBuilder(
+    notifier: model,
     builder: (context, _) => styledRow(index: index, tick: model.v, cols: cols),
   );
 }

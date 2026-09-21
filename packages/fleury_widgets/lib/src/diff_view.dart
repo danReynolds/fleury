@@ -122,13 +122,13 @@ final class DiffLine {
 }
 
 /// Controller for [DiffView] browsing.
-class DiffViewController extends ChangeNotifier {
+class DiffViewController extends Notifier {
   DiffViewController({
     /// Zero-based row selected when the controller is created.
     /// Initial browsing row. Null starts without a current row.
     int? initialIndex = 0,
   }) : _list = ListController(initialIndex: initialIndex) {
-    _list.addListener(notifyListeners);
+    _list.addListener(notify);
   }
 
   final ListController _list;
@@ -159,7 +159,7 @@ class DiffViewController extends ChangeNotifier {
   void dispose() {
     if (_disposed) return;
     _disposed = true;
-    _list.removeListener(notifyListeners);
+    _list.removeListener(notify);
     _list.dispose();
     super.dispose();
   }

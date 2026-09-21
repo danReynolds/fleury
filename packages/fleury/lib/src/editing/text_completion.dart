@@ -111,7 +111,7 @@ final class TextCompletionState {
 ///
 /// This owns query/range/options/selection state only. Suggestion providers and
 /// popup rendering can be layered above it without changing the text model.
-final class TextCompletionController extends ChangeNotifier {
+final class TextCompletionController extends Notifier {
   TextCompletionState _state = TextCompletionState.inactive;
   bool _disposed = false;
 
@@ -210,7 +210,7 @@ final class TextCompletionController extends ChangeNotifier {
   void _setState(TextCompletionState state) {
     _checkNotDisposed();
     _state = state;
-    notifyListeners();
+    notify();
   }
 
   void _checkNotDisposed() {

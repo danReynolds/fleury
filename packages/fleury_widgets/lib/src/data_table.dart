@@ -420,7 +420,7 @@ typedef DataTableCellBuilder = String Function(int rowIndex, String columnId);
 typedef DataTableRowKeyBuilder = Object Function(int rowIndex);
 
 /// Navigation and range-selection state for [DataTable].
-class DataTableController extends ChangeNotifier {
+class DataTableController extends Notifier {
   DataTableController({int initialRowIndex = 0, int initialColumnIndex = 0})
     : _currentRowIndex = initialRowIndex,
       _currentColumnIndex = initialColumnIndex,
@@ -468,7 +468,7 @@ class DataTableController extends ChangeNotifier {
     _currentColumnIndex = _clampColumn(columnIndex);
     // An explicit navigation request also reveals an unchanged current row
     // after the user has scrolled it out of view.
-    notifyListeners();
+    notify();
   }
 
   /// Total row / column counts, so callers can tell when the cursor sits on
@@ -498,7 +498,7 @@ class DataTableController extends ChangeNotifier {
       _anchorColumn = column;
     }
     // Also notify for an explicit reveal of the same selected cell.
-    notifyListeners();
+    notify();
   }
 
   /// Selects a cell relative to the cursor, optionally extending the range.
@@ -550,7 +550,7 @@ class DataTableController extends ChangeNotifier {
     _anchorColumn = anchorColumn;
     _rangeRow = rangeRow;
     _rangeColumn = rangeColumn;
-    notifyListeners();
+    notify();
   }
 
   int _clamp(int value) {

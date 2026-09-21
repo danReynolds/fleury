@@ -76,13 +76,13 @@ final class PatchReviewFile {
 }
 
 /// Controller for [PatchReview] file browsing and viewport state.
-class PatchReviewController extends ChangeNotifier {
+class PatchReviewController extends Notifier {
   PatchReviewController({
     /// Zero-based file row selected when the controller is created.
     /// Initial browsing row. Null starts without a current row.
     int? initialIndex = 0,
   }) : _list = ListController(initialIndex: initialIndex) {
-    _list.addListener(notifyListeners);
+    _list.addListener(notify);
   }
 
   final ListController _list;
@@ -113,7 +113,7 @@ class PatchReviewController extends ChangeNotifier {
   void dispose() {
     if (_disposed) return;
     _disposed = true;
-    _list.removeListener(notifyListeners);
+    _list.removeListener(notify);
     _list.dispose();
     super.dispose();
   }

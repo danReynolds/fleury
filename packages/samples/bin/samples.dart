@@ -8,7 +8,7 @@ import 'package:fleury_samples/samples.dart';
 ///   dart run packages/samples/bin/samples.dart <app>
 ///   fleury dev samples <app>            (via tool/fleury_dev.dart)
 ///
-/// Apps: dashboard | files | editor | agent | finance | forms | themes |
+/// Apps: dashboard | files | editor | agent | finance | forms | state | themes |
 /// asteroids | sprite | commands | debug.
 const Map<String, (String, Widget Function())>
 _apps = <String, (String, Widget Function())>{
@@ -21,6 +21,10 @@ _apps = <String, (String, Widget Function())>{
     FinanceApp.new,
   ),
   'forms': ('multi-screen validated service deployment', FormsShowcaseApp.new),
+  'state': (
+    'local, tree, and global state with widget and context readers',
+    StateManagementShowcaseApp.new,
+  ),
   'themes': (
     'community theme gallery and live theme studio',
     ThemingShowcaseApp.new,
@@ -56,16 +60,26 @@ Future<void> main(List<String> args) async {
     exit(2);
   }
 
-  await runApp(
-    FleuryApp(title: 'Fleury $name sample', home: withQuitKey(entry.$2())),
-    // No keyboard flags: `asteroids` needs real key releases and `dashboard`
-    // does not, and neither has to say so. The framework asks the terminal for
-    // everything it can safely give and negotiates down transactionally.
-    mode: const TerminalMode(mouse: true),
-    // Which sample to run comes from argv, and a dev hot-restart re-runs this
-    // entrypoint — so hand argv over or the respawn lands on the usage banner.
-    args: args,
-  );
+  // The application owns this model. Widgets borrow it, and services can use
+  // the same instance without a BuildContext.
+  final cart = name == 'state' ? StateManagementCart() : null;
+  final app = cart == null
+      ? entry.$2()
+      : StateManagementShowcaseApp(cart: cart);
+  try {
+    await runApp(
+      FleuryApp(title: 'Fleury $name sample', home: withQuitKey(app)),
+      // No keyboard flags: `asteroids` needs real key releases and `dashboard`
+      // does not, and neither has to say so. The framework asks the terminal for
+      // everything it can safely give and negotiates down transactionally.
+      mode: const TerminalMode(mouse: true),
+      // Which sample to run comes from argv, and a dev hot-restart re-runs this
+      // entrypoint — so hand argv over or the respawn lands on the usage banner.
+      args: args,
+    );
+  } finally {
+    cart?.dispose();
+  }
 }
 
 /// Wraps a sample's root so the advertised `q` key quits.

@@ -90,8 +90,8 @@ class TerminalOutputRegion extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final buffer = this.buffer ?? LogBufferScope.of(context);
-    return ListenableBuilder(
-      listenable: buffer,
+    return NotifierBuilder(
+      notifier: buffer,
       builder: (context, _) {
         return LogRegion(
           entries: buildTerminalOutputLogEntries(

@@ -1,3 +1,6 @@
+import 'dart:io';
+
+import 'package:fleury_storybook/src/storybook_runner.dart';
 import 'package:fleury_storybook/storybook.dart';
 import 'package:test/test.dart';
 
@@ -129,4 +132,46 @@ void main() {
       containsPair('view', 1),
     );
   });
+
+  const stateApis = <String, String>{
+    'Scope': 'state.tree.scope',
+    'ScopeBuilder': 'state.tree.scope-builder',
+    'Notifier': 'state.model.notifier',
+    'NotifierBuilder': 'state.model.notifier-builder',
+    'ValueNotifier': 'state.value.value-notifier',
+  };
+
+  test('core state APIs have dedicated stories and both consumer forms', () {
+    for (final entry in stateApis.entries) {
+      final story = storybookStories.singleWhere(
+        (story) => story.id == entry.value,
+      );
+      expect(story.widgets, [entry.key]);
+      expect(story.category, 'State');
+      expect(story.usage, isNotEmpty);
+      final readers = <Object?>{
+        story.initialControlValues()['reader'],
+        for (final variant in story.variants)
+          story.initialControlValues(variant: variant)['reader'],
+      };
+      expect(readers, {0, 1}, reason: '${entry.key} needs both consumer forms');
+    }
+  });
+
+  for (final api in stateApis.keys) {
+    test('strict coverage detects a missing core $api story', () {
+      final report = buildStorybookCoverageReport(
+        stories: storybookStories
+            .where((story) => !story.widgets.contains(api))
+            .toList(),
+        exportedLibrary: File('../fleury_widgets/lib/fleury_widgets.dart'),
+      );
+
+      expect(report.complete, isFalse);
+      expect(report.missingWidgets, [api]);
+      expect(report.exportedWidgets, containsAll(stateApis.keys));
+      expect(report.exportedWidgets, isNot(contains('BuildOwner')));
+      expect(report.exportedWidgets, isNot(contains('InheritedWidget')));
+    });
+  }
 }

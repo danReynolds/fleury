@@ -65,7 +65,7 @@ final class TerminalSessionScope extends Scope<TerminalSession> {
     super.key,
     required this.session,
     required super.child,
-  }) : super(value: session);
+  }) : super(session);
 
   final TerminalSession session;
 

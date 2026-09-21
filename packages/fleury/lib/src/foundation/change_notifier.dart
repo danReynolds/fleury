@@ -6,7 +6,7 @@ import '../widgets/framework.dart' show VoidCallback;
 
 /// An object that can notify listeners when something about it changes.
 ///
-/// Used by `ListenableBuilder`, `Scope`, and any mutable
+/// Used by `NotifierBuilder`, `context.listen`, `Scope`, and any mutable
 /// model that wants to broadcast changes without imposing a Stream
 /// subscription model on consumers.
 abstract interface class Listenable {
@@ -27,7 +27,11 @@ abstract interface class ValueListenable<T> implements Listenable {
   T get value;
 }
 
-/// Concrete [Listenable] with a `notifyListeners` hook for subclasses.
+/// A mutable model that publishes changes through [notify].
+///
+/// Extend or mix in [Notifier], update ordinary fields, then call [notify].
+/// Widgets observe changes through `NotifierBuilder` or `context.listen(model)`.
+/// Services can use [listen], which returns an independent cancellation function.
 ///
 /// Its listener and re-entrancy behavior follows Flutter's `ChangeNotifier`,
 /// while lifecycle misuse fails in every build mode: adding or notifying after
@@ -35,19 +39,19 @@ abstract interface class ValueListenable<T> implements Listenable {
 /// a safe no-op so dependents can tear down in either order.
 ///
 /// Notification honors the `Listenable` contract: a listener removed (or the
-/// notifier disposed) *during* a `notifyListeners` pass is not invoked
+/// notifier disposed) *during* a `notify` pass is not invoked
 /// afterwards. Removal during notification nulls the listener's slot rather
 /// than shrinking the backing list, so the in-progress index walk stays valid
 /// and skips it; the list is compacted once the outermost pass completes. This
 /// is allocation-free in the common case — no per-notify copy — which matters
-/// because `notifyListeners` is a per-frame hot path.
-mixin class ChangeNotifier implements Listenable {
+/// because `notify` is a per-frame hot path.
+mixin class Notifier implements Listenable {
   // Grows on demand; slots past [_count] are unused, and slots nulled by a
   // mid-notification removal are compacted out once notification unwinds.
   List<VoidCallback?> _listeners = List<VoidCallback?>.filled(0, null);
   int _count = 0;
 
-  // Re-entrancy depth of [notifyListeners] and how many live slots were nulled
+  // Re-entrancy depth of [notify] and how many live slots were nulled
   // by a removal during the current notification, deferred to a single compact.
   int _notificationDepth = 0;
   int _reentrantlyRemoved = 0;
@@ -94,6 +98,17 @@ mixin class ChangeNotifier implements Listenable {
     }
   }
 
+  /// Registers [listener] and returns an idempotent cancellation function.
+  ///
+  /// Each registration is independent, even for the same callback. Canceling
+  /// releases references to this notifier and the callback, and remains safe
+  /// after disposal.
+  VoidCallback listen(VoidCallback listener) {
+    final subscription = _NotifierSubscription(this, listener);
+    addListener(subscription.dispatch);
+    return subscription.cancel;
+  }
+
   void _removeAt(int index) {
     _count -= 1;
     for (var i = index; i < _count; i++) {
@@ -102,6 +117,14 @@ mixin class ChangeNotifier implements Listenable {
     _listeners[_count] = null;
   }
 
+  /// Publishes changes through the legacy notification hook, preserving existing
+  /// subclass overrides. Listener failures do not prevent other subscriptions
+  /// from observing the committed state.
+  @protected
+  void notify() => notifyListeners();
+
+  /// Compatibility notification hook. New models can call [notify].
+  ///
   /// Invokes every listener registered when the pass began. A listener added
   /// during notification runs on the next pass, not this one; one removed
   /// during notification (or lost to [dispose]) is skipped.
@@ -159,13 +182,32 @@ mixin class ChangeNotifier implements Listenable {
   }
 }
 
-/// A [ChangeNotifier] that publishes one mutable [value].
+/// Previous name for [Notifier], retained for existing subclasses and mixins.
+typedef ChangeNotifier = Notifier;
+
+class _NotifierSubscription {
+  _NotifierSubscription(this._notifier, this._listener);
+
+  Notifier? _notifier;
+  VoidCallback? _listener;
+
+  void dispatch() => _listener?.call();
+
+  void cancel() {
+    final notifier = _notifier;
+    _notifier = null;
+    _listener = null;
+    notifier?.removeListener(dispatch);
+  }
+}
+
+/// A [Notifier] that publishes one mutable [value].
 ///
 /// Listeners are notified only when the replacement is not equal to the
 /// current value according to `==`. Prefer immutable values: mutating the
 /// contents of a collection in place does not replace it and therefore does
 /// not notify listeners.
-class ValueNotifier<T> extends ChangeNotifier implements ValueListenable<T> {
+class ValueNotifier<T> extends Notifier implements ValueListenable<T> {
   ValueNotifier(this._value);
 
   T _value;
@@ -177,7 +219,7 @@ class ValueNotifier<T> extends ChangeNotifier implements ValueListenable<T> {
     _checkNotDisposed('value assignment');
     if (_value == value) return;
     _value = value;
-    notifyListeners();
+    notify();
   }
 
   @override

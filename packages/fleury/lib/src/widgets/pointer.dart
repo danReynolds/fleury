@@ -601,7 +601,7 @@ class PointerRouterScope extends Scope<PointerRouter> {
     super.key,
     required this.router,
     required super.child,
-  }) : super(value: router);
+  }) : super(router);
 
   /// The router this scope shares (also the scope's value).
   final PointerRouter router;

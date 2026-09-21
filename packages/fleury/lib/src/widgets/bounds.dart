@@ -8,7 +8,7 @@
 //                             `visibleBounds` — and notifies on change
 //   consumers                 react: `BoundsAnchor` anchors its child to the
 //                             observed widget's live geometry the SAME frame
-//                             (render-tier); any `ListenableBuilder` rebuilds
+//                             (render-tier); any `NotifierBuilder` rebuilds
 //                             the NEXT frame (build-tier, readouts and
 //                             derived UI)
 //
@@ -31,14 +31,14 @@ import 'framework.dart';
 /// Written by exactly one [BoundsObserver] (debug-asserted); read and
 /// listened to by anything. [BoundsAnchor] reads the observed widget's
 /// [liveGeometry] at the render tier and repositions the same frame; a
-/// `ListenableBuilder` reacts to [bounds] at the build tier on the following
+/// `NotifierBuilder` reacts to [bounds] at the build tier on the following
 /// frame.
 ///
 /// Publishing a *different* value notifies listeners, so a consumer whose
 /// own subtree is clean still reacts when the observed widget moves.
 /// Equal values are dropped, so a static widget re-publishing identical
 /// geometry every frame costs one comparison and never requests another.
-class BoundsNotifier with ChangeNotifier {
+class BoundsNotifier with Notifier {
   RenderGeometry? _geometry;
   Object? _writer;
 
@@ -71,7 +71,7 @@ class BoundsNotifier with ChangeNotifier {
   bool publish(RenderGeometry? geometry) {
     if (geometry == _geometry) return false;
     _geometry = geometry;
-    notifyListeners();
+    notify();
     return true;
   }
 

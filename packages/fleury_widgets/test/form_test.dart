@@ -150,8 +150,8 @@ void main() {
         var validations = 0;
         final states = <bool>[];
         tester.pumpWidget(
-          ListenableBuilder(
-            listenable: controller,
+          NotifierBuilder(
+            notifier: controller,
             builder: (context, _) => Form(
               controller: controller,
               onSubmit: () => submits++,

@@ -298,8 +298,8 @@ Future<_Scenario> _anchorRetraction() async {
   final index = ValueNotifier<int>(0);
 
   await _session(
-    ListenableBuilder(
-      listenable: index,
+    NotifierBuilder(
+      notifier: index,
       builder: (context, _) => Stack(
         children: [
           IndexedStack(

@@ -660,11 +660,11 @@ class _PaintOnlyAnimState extends State<_PaintOnlyAnim>
   Widget build(BuildContext context) => _PaintPulse(holder: _holder);
 }
 
-class _ProgressHolder extends ChangeNotifier {
+class _ProgressHolder extends Notifier {
   double value = 0;
   void set(double v) {
     value = v;
-    notifyListeners();
+    notify();
   }
 }
 

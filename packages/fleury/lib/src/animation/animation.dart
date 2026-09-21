@@ -128,7 +128,7 @@ CellOffset _offsetFromVec(List<double> v) =>
 const Duration _maxStep = Duration(milliseconds: 66);
 
 /// A value that animates toward whatever you retarget it to.
-class Animation<T> extends ChangeNotifier implements ElementDependency {
+class Animation<T> extends Notifier implements ElementDependency {
   /// Creates a animation holding [value]. [type] is required only for
   /// non-built-in [T]; built-ins ([double], [int], [RgbColor],
   /// [CellOffset]) resolve automatically.
@@ -188,7 +188,7 @@ class Animation<T> extends ChangeNotifier implements ElementDependency {
   int _requestGeneration = 0;
 
   /// Elements that read [value] during their build, auto-subscribed
-  /// for rebuild on change. Distinct from [ChangeNotifier] listeners
+  /// for rebuild on change. Distinct from [Notifier] listeners
   /// (which AnimationBuilder uses).
   final Set<Element> _dependents = <Element>{};
 
@@ -247,7 +247,7 @@ class Animation<T> extends ChangeNotifier implements ElementDependency {
   /// Notifies explicit listeners (AnimationBuilder) AND marks every
   /// implicitly-subscribed element dirty.
   void _notify() {
-    notifyListeners();
+    notify();
     if (_dependents.isEmpty) return;
     for (final element in _dependents.toList(growable: false)) {
       element.markNeedsBuild();

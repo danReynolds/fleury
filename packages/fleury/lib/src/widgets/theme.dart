@@ -295,7 +295,7 @@ class Theme extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) => Scope<ThemeData>(
-    value: data,
+    data,
     child: DefaultTextStyle(style: data.textStyle, child: child),
   );
 }
@@ -323,10 +323,8 @@ class DefaultTextStyle extends StatelessWidget {
   }) => _MergeDefaultTextStyle(key: key, style: style, child: child);
 
   @override
-  Widget build(BuildContext context) => Scope<_DefaultTextStyleData>(
-    value: _DefaultTextStyleData(style),
-    child: child,
-  );
+  Widget build(BuildContext context) =>
+      Scope<_DefaultTextStyleData>(_DefaultTextStyleData(style), child: child);
 }
 
 /// The scope value behind [DefaultTextStyle]: its own type, so a `CellStyle`

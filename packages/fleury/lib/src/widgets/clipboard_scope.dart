@@ -21,7 +21,7 @@ class ClipboardScope extends Scope<Clipboard> {
     super.key,
     required Clipboard clipboard,
     required super.child,
-  }) : super(value: clipboard);
+  }) : super(clipboard);
 
   /// The nearest scope's clipboard. A non-dependent read: call sites are
   /// event handlers (copy chords, drag-end), not build methods, and the

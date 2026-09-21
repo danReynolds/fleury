@@ -13,7 +13,7 @@ class TabItem {
 
 /// Selected-tab state for a [Tabs]. Optional — [Tabs] creates its own when
 /// none is given. `length` is set by the widget on each build.
-class TabController extends ChangeNotifier {
+class TabController extends Notifier {
   TabController({
     /// Initial zero-based selection; negative values are clamped to zero.
     int initialIndex = 0,
@@ -51,13 +51,13 @@ class TabController extends ChangeNotifier {
       final next = value < 0 ? 0 : value;
       if (_index == next) return;
       _index = next;
-      notifyListeners();
+      notify();
       return;
     }
     final clamped = value.clamp(0, _length - 1);
     if (clamped == _index) return;
     _index = clamped;
-    notifyListeners();
+    notify();
   }
 
   /// Advances to the next tab, wrapping at the end.
