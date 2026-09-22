@@ -74,7 +74,7 @@ const examplesBundle = '/fleury/fleury-examples.js';
         data-fleury-test={test}
         data-fleury-theme={surfaceTheme}
         style={style}
-        role="img"
+        role={interactive ? 'group' : 'img'}
         aria-label={title ?? `Live Fleury example: ${id}`}
       >
       </div>

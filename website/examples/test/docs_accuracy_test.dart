@@ -234,11 +234,11 @@ void main() {
       );
     });
 
-    test('agent guide uses typed semantic ids in inline examples', () {
+    test('agent guide keeps custom semantic ids typed', () {
       final guide = File(
         p.join(
           repo.path,
-          'website/src/content/docs/guides/driving-with-agents.md',
+          'website/src/content/docs/guides/driving-with-agents.mdx',
         ),
       ).readAsStringSync();
       final compiledSnippet = File(
@@ -248,15 +248,33 @@ void main() {
         ),
       ).readAsStringSync();
 
-      expect(
-        guide,
-        contains("Semantics(id: const SemanticNodeId('submit'), …)"),
-      );
+      expect(guide, contains("id: const SemanticNodeId('retry-upload')"));
       expect(
         RegExp(r'''Semantics\s*\(\s*id:\s*(?:const\s+)?['"]''').hasMatch(guide),
         isFalse,
       );
+      expect(guide, contains('<AgentGuideCode slot="code"'));
       expect(compiledSnippet, contains("id: SemanticNodeId('save')"));
+    });
+
+    test('interactive live examples expose their descendant controls', () {
+      final component = File(
+        p.join(repo.path, 'website/src/components/FleuryExample.astro'),
+      ).readAsStringSync();
+      final guide = File(
+        p.join(
+          repo.path,
+          'website/src/content/docs/guides/driving-with-agents.mdx',
+        ),
+      ).readAsStringSync();
+
+      expect(component, contains("role={interactive ? 'group' : 'img'}"));
+      expect(
+        guide,
+        contains(
+          'id="agents.release-checklist" cols={46} rows={15} interactive',
+        ),
+      );
     });
 
     test('fleury_mcp README matches its publishable package boundary', () {
@@ -268,6 +286,8 @@ void main() {
       expect(readme, contains('pubspec_overrides.yaml'));
       expect(readme, isNot(contains('publish_to: none')));
       expect(readme, isNot(contains('path dependency on')));
+      expect(readme, isNot(contains('"id": "increment"')));
+      expect(readme, contains('"targetRef": "target:…"'));
     });
 
     test('getting started follows the generated project contract', () {

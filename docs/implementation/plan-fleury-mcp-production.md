@@ -43,6 +43,13 @@ same target signature remains intentionally indistinguishable; apps use a
 `Key` or stable `Semantics.id` to distinguish that case. This preserves WS-0's
 scoped fail-closed goal without its whole-tree false positives.
 
+**2026-09-21 protocol follow-up:** MCP `2026-07-28` removed connection-scoped
+initialization and legacy resource subscriptions from the modern core. Fleury
+now supports `server/discover`, per-request result metadata, and explicit
+positional `targetRef` claims while retaining the completed 2025-era work as a
+compatibility path. Modern streaming via `subscriptions/listen` and official
+conformance-suite qualification remain release follow-ups.
+
 ## Conventions
 
 - **Validate commands** (from repo root):

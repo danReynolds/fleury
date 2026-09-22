@@ -1,0 +1,8 @@
+---
+import DemoSource from './DemoSource.astro';
+import code from '../../../packages/samples/lib/src/agent_guide.dart?raw';
+
+interface Props { focus?: string }
+const { focus } = Astro.props;
+---
+<DemoSource code={code} focus={focus} />

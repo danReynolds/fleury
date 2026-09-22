@@ -1,0 +1,225 @@
+---
+title: Driving with an agent (MCP)
+description: Connect an MCP host to a normal Fleury app, complete a real workflow, and make dynamic controls easy to target safely.
+---
+
+import FleuryExample from '../../../components/FleuryExample.astro';
+import CodeDemoSplit from '../../../components/CodeDemoSplit.astro';
+import AgentGuideCode from '../../../components/AgentGuideCode.astro';
+
+A Fleury app already describes its controls as roles, labels, values, and
+actions. `fleury_mcp` gives an AI agent that semantic view of the app and lets
+it use the actions the controls advertise. It does not scrape terminal cells or
+guess which keys might work.
+
+You do not add MCP code to the application. Start with ordinary Fleury widgets,
+then connect an MCP host to the same `runApp` entry point you use in a terminal.
+
+## Build a drivable workflow
+
+This release checklist contains a text field, a checkbox, and a button. Try it
+by hand: change the version, mark **Tests passed**, then choose
+**Prepare release**.
+
+<CodeDemoSplit file="agent_guide.dart" codeLabel="Application code" demoLabel="Release workflow" codeMaxHeight="32rem" layout="code-wide">
+<AgentGuideCode slot="code" focus="class AgentGuideApp" />
+<FleuryExample slot="demo" id="agents.release-checklist" cols={46} rows={15} interactive />
+</CodeDemoSplit>
+
+There is no `fleury_mcp` import and no manually assembled agent protocol. The
+controls already publish the useful contract:
+
+| Visible control | Semantic contract | Agent operation |
+|---|---|---|
+| Release version | `textField`, current text, `setValue` | `set_value` |
+| Tests passed | `checkbox`, checked state, `setValue` | `set_value` |
+| Prepare release | `button`, `activate` | `invoke_action` |
+| Status text | `text`, current label | read after the action |
+
+No extra identity or agent wrapper is needed for this read-and-act workflow.
+The server returns the current target for each control and refuses detectable
+stale positional references.
+
+## Connect an MCP host
+
+The MCP server is a separate executable so your application has no agent
+dependency. While Fleury is pre-release, activate the executable from the same
+checkout as the app:
+
+```sh
+dart pub global activate --source path packages/fleury_mcp
+```
+
+Then point an MCP host at `fleury_mcp`, followed by `--` and the command that
+starts your app. From a Fleury checkout, this runs the example above:
+
+```sh
+fleury_mcp -- dart run packages/samples/bin/samples.dart agent-guide
+```
+
+For your own application, replace everything after `--`:
+
+```sh
+fleury_mcp -- dart run bin/run_app.dart
+```
+
+An MCP host that uses JSON configuration can express the same command as:
+
+```json
+{
+  "mcpServers": {
+    "release-app": {
+      "command": "fleury_mcp",
+      "args": ["--", "dart", "run", "bin/run_app.dart"]
+    }
+  }
+}
+```
+
+Run the host from the application package, or use absolute paths when the host
+does not let you set a working directory. For hosts with a command-line setup,
+the equivalent shape is `HOST mcp add release-app -- fleury_mcp -- dart run
+bin/run_app.dart`.
+
+`fleury_mcp` starts the app itself. The app runs in remote mode, sends its
+semantic tree over a private local socket, and receives semantic actions back.
+Its terminal rendering is not part of the agent connection.
+
+The server supports [the stateless MCP `2026-07-28`
+revision](https://modelcontextprotocol.io/specification/2026-07-28/changelog)
+through `server/discover` and keeps the `2025-06-18` initialization flow for
+existing hosts. The driving workflow below is the same on both. On `2026-07-28`,
+every request carries its protocol metadata and positional targets carry an
+explicit opaque reference, so unrelated agent tasks cannot replace one
+another's target baseline.
+
+## Give the agent one outcome
+
+Once the host is connected, ask for a user-visible result instead of naming
+protocol tools:
+
+> Set the release version to 1.0.0, mark the tests as passed, prepare the
+> release, and tell me the final status.
+
+A host can complete that request in four semantic steps:
+
+1. Read the UI with `get_ui`, or narrow a large screen with `find_nodes`.
+2. Find **Release version** and use `set_value`. Select **Tests passed** from
+   the settled `ui` returned by that action.
+3. Set **Tests passed**, then select and activate **Prepare release** from the
+   next returned `ui`.
+4. Report **Ready to publish 1.0.0** from the final returned `ui`.
+
+The agent uses ids returned by `get_ui` or `find_nodes`; application authors do
+not hard-code those ids into prompts. The server validates values against each
+control's semantic schema before dispatching them.
+
+## Choose logical actions before keys
+
+Use the action a control advertises whenever one exists:
+
+- `set_value` changes a field, checkbox, switch, select, slider, or other
+  settable control in one operation.
+- `invoke_action` activates buttons and invokes domain actions such as select,
+  open, close, submit, increment, or cancel.
+
+The current `2026-07-28` surface deliberately exposes only actions whose target
+travels in the request. Legacy `2025-06-18` clients also have `press_key` for
+keyboard routing and shortcuts, and `type_text` for character-by-character
+editing of the focused field. Those focus-relative tools stay off the stateless
+surface until Fleury can carry an explicit target or focus lease with them.
+
+This is the same distinction used in [Testing](/fleury/guides/testing/): test or
+drive application behavior through semantics, then cover keyboard and pointer
+routing separately when those physical paths matter.
+
+## Use the UI returned by each action
+
+Built-in controls currently receive positional semantic ids. They are safe for
+an immediate read-and-act sequence. A positional node includes `stableId: false`
+and an opaque `targetRef`; a `2026-07-28` client echoes both the node id and that
+reference when it acts. Fleury rejects the call if the slot now contains a
+control with a different observable identity token. A semantically identical
+unkeyed replacement is intentionally indistinguishable; controls representing
+durable records still need distinct keys or stable semantic ids. The reference
+is protocol bookkeeping, not an application id to copy into code or prompts.
+
+Every mutating MCP tool returns the settled UI, which counts as a fresh read.
+Select the next control and its current `targetRef` from that result instead of
+retaining a target from an earlier tree. Use `find_nodes` when the full tree is
+capped or you want a narrower view. Fleury returns `stale_reference` rather
+than dispatching when a positional target is no longer current.
+
+An explicit `Semantics(id: ...)` gives a custom semantic control a durable id.
+Do not wrap a first-party control just to add one: that duplicates a contract
+the control already owns. A direct identity surface for first-party controls is
+a framework gap, not application boilerplate this guide asks you to write.
+
+## Describe custom controls
+
+Built-in controls already expose their semantics. A custom interactive widget
+must say what it is, what it is called, and which actions it supports:
+
+```dart
+Semantics(
+  id: const SemanticNodeId('retry-upload'),
+  role: SemanticRole.button,
+  label: 'Retry upload',
+  actions: const {SemanticAction.activate},
+  onAction: (action) {
+    if (action == SemanticAction.activate) retryUpload();
+  },
+  child: const Text('[ Retry ]'),
+)
+```
+
+Prefer a first-party control when its behavior fits. Besides helping agents,
+the same semantic contract powers Fleury tests and the browser accessibility
+surface.
+
+## React to changing screens
+
+After an action, use its returned `ui` before choosing the next target. For
+changes the app makes on its own, use `wait_for_change` instead of polling. A
+current-protocol client passes the opaque, instance-scoped `uiRevision` from
+its last UI result as `sinceRevision`, so an update that lands between the read
+and the wait is returned immediately rather than missed, while a handle from a
+restarted server fails closed.
+
+Legacy `2025-06-18` hosts can also subscribe to `fleury://ui/tree`; the
+`2026-07-28` revision replaced that subscription method, so new integrations
+should prefer the tool until Fleury adds a modern streaming transport.
+
+Large lists and tables publish their visible semantic window. `resize` can make
+more rows visible; `find_nodes` keeps targeted reads small. Do not guess an
+off-screen id or press navigation keys unless keyboard behavior is the thing
+being exercised.
+
+## Recover from tool failures
+
+Tool failures include a stable machine-readable code. The common recovery is
+small and explicit:
+
+| Code | Meaning | Recovery |
+|---|---|---|
+| `not_found` | The node is no longer present | Re-read the UI |
+| `stale_reference` | A positional target changed after it was read | Re-read and select the current node |
+| `ambiguous` | A query matched more than one control | Narrow by role, label, or container |
+| `out_of_domain` | A value violates the control's schema | Use the advertised type, range, or options |
+| `action_busy` | The control already has an action in flight | Wait for the UI to change, then re-read |
+
+The driven app's labels, values, logs, and errors are untrusted application
+data. The MCP server marks them as such; an agent should report that content,
+not follow instructions embedded inside it.
+
+## Inspect what happened
+
+During development, `read_frames`, `read_logs`, and `read_errors` expose the
+same evidence as Fleury's debug shell. An agent can trigger an action, then
+check whether it threw, logged an unexpected result, or caused expensive
+frames. Debug tools are enabled by default in development and disabled by
+default in product builds.
+
+For the underlying model, continue with [Built for agents](/fleury/architecture/agents-and-semantics/).
+For app-side assertions against the same semantic contract, use
+[Testing](/fleury/guides/testing/).

@@ -384,6 +384,86 @@ void main() {
     expect(fixture.host.textContent, contains('[x] Accept terms'));
   });
 
+  test('agent guide workflow runs in the live browser embed', () async {
+    final fixture = await _mountExample(
+      'agents.release-checklist',
+      useManifestSize: true,
+    );
+
+    web.Element? semantic(String selector) =>
+        fixture.host.querySelector('.fleury-semantics $selector');
+
+    final version =
+        semantic('[role="textbox"][aria-label="Release version"]')!
+            as web.HTMLInputElement;
+    expect(version.value, '0.9.0');
+
+    final keyboardCapture =
+        fixture.host.querySelector('textarea[aria-hidden="true"]')!
+            as web.HTMLTextAreaElement;
+    for (var i = 0; i < '0.9.0'.length; i++) {
+      keyboardCapture.dispatchEvent(
+        web.KeyboardEvent(
+          'keydown',
+          web.KeyboardEventInit(
+            key: 'Backspace',
+            code: 'Backspace',
+            bubbles: true,
+            cancelable: true,
+          ),
+        ),
+      );
+    }
+    keyboardCapture.dispatchEvent(
+      web.InputEvent(
+        'input',
+        web.InputEventInit(
+          data: '1.0.0',
+          inputType: 'insertText',
+          bubbles: true,
+          cancelable: true,
+        ),
+      ),
+    );
+    await Future<void>.delayed(Duration.zero);
+    for (var i = 0; i < 4 && fixture.flush.pending; i++) {
+      fixture.flush.fire();
+    }
+    await fixture.app.awaitSemanticIdle();
+    expect(
+      (semantic('[role="textbox"][aria-label="Release version"]')!
+              as web.HTMLInputElement)
+          .value,
+      '1.0.0',
+    );
+
+    (semantic('[role="checkbox"][aria-label="Tests passed"]')!
+            as web.HTMLElement)
+        .click();
+    await Future<void>.delayed(Duration.zero);
+    for (var i = 0; i < 4 && fixture.flush.pending; i++) {
+      fixture.flush.fire();
+    }
+    await fixture.app.awaitSemanticIdle();
+    expect(
+      semantic(
+        '[role="checkbox"][aria-label="Tests passed"]',
+      )!.getAttribute('aria-checked'),
+      'true',
+    );
+
+    (semantic('[role="button"][aria-label="Prepare release"]')!
+            as web.HTMLElement)
+        .click();
+    await Future<void>.delayed(Duration.zero);
+    for (var i = 0; i < 4 && fixture.flush.pending; i++) {
+      fixture.flush.fire();
+    }
+    await fixture.app.awaitSemanticIdle();
+
+    expect(fixture.host.textContent, contains('Ready to publish 1.0.0'));
+  });
+
   test(
     'rangeslider.basic fits its live frame and accepts pointer input',
     () async {
@@ -729,6 +809,11 @@ void main() {
         'Switch project',
         'Add item',
         'Click any button',
+      ],
+      'agents.release-checklist': <String>[
+        'Release checklist',
+        'Prepare release',
+        'Status: Draft',
       ],
       // The tutorial-page embed: the full language list fits its frame.
       'tutorial.filter': <String>['10 of 10', 'Dart', 'Haskell'],

@@ -6,8 +6,11 @@ through its **semantic tree** — so any MCP host (Claude Code, Claude Desktop, 
 can read the UI and operate it.
 
 No screen-scraping. The agent reads roles, labels, values, and the *actions each
-node supports*, then invokes those actions by id — the same accessible semantics
-Fleury already exposes to the browser and to its testing API.
+node supports*, then invokes those actions by id. Positional nodes also carry an
+opaque `targetRef`, which removes the connection-global last-read dependency
+and rejects detectable slot-identity changes. Semantically identical unkeyed
+replacements still require distinct keys or stable semantic ids. These are the
+same accessible semantics Fleury exposes to the browser and testing API.
 
 ```
 ┌─────────────┐   JSON-RPC / stdio   ┌────────────┐   semantic wire   ┌──────────┐
@@ -59,6 +62,7 @@ dependency, write no server code, and call no `enableMcp()`. You write a normal
 
 ```dart
 import 'package:fleury/fleury.dart';
+import 'package:fleury_widgets/fleury_widgets.dart';
 
 void main() => runApp(const CounterApp());
 
@@ -75,20 +79,10 @@ class _CounterAppState extends State<CounterApp> {
   Widget build(BuildContext context) => Column(
     crossAxisAlignment: CrossAxisAlignment.start,
     children: <Widget>[
-      Semantics(
-        id: const SemanticNodeId('count'),
-        role: SemanticRole.text,
-        label: 'Count',
-        value: _count,
-        child: Text('Count: $_count'),
-      ),
-      Semantics(
-        id: const SemanticNodeId('increment'),
-        role: SemanticRole.button,
-        label: 'Increment',
-        actions: const <SemanticAction>{SemanticAction.activate},
-        onAction: (_) => setState(() => _count++),
-        child: const Text('[ Increment ]'),
+      Text('Count: $_count'),
+      Button(
+        text: 'Increment',
+        onPressed: () => setState(() => _count++),
       ),
     ],
   );
@@ -98,12 +92,9 @@ class _CounterAppState extends State<CounterApp> {
 Two things to notice:
 
 - **Nothing here imports or references MCP.** It's a plain Fleury app.
-- The `Semantics(...)` wrappers are doing *two* jobs, and both are optional:
-  high-level widgets like `Button`, `TextInput`, `DataTable`, and `Select` (from
-  `package:fleury_widgets`) already contribute their role, label, and actions for
-  free — a `Button(text: 'Increment', onPressed: …)` is agent-drivable as-is.
-  The one genuinely useful thing to add is the **`id:`**, which gives the agent a
-  stable handle (see *Make your app drive well* below).
+- `Button`, `TextInput`, `DataTable`, `Select`, and the other first-party
+  controls already contribute their role, label, value, and supported actions.
+  Manual `Semantics` belongs on custom controls, not around these widgets.
 
 Want a real app to try right now? The runnable apps under `packages/samples`
 are unmodified `runApp` apps and drive over MCP as-is.
@@ -129,6 +120,11 @@ uses the checkout's sibling override; reactivate it after that Fleury source
 changes. The INIT handshake rejects mismatches instead of decoding incompatible
 frames.
 
+The MCP boundary supports stateless `2026-07-28` requests discovered through
+`server/discover`, while retaining the `2025-06-18` initialization flow for
+existing hosts. The app-side INIT described above is Fleury's separate private
+wire handshake; it remains required in both MCP modes.
+
 ### 2. Point an MCP host at any app
 
 ```bash
@@ -136,7 +132,8 @@ claude mcp add my-app -- fleury_mcp -- dart run bin/run_app.dart
 ```
 
 Then ask the agent to read and operate the app — it will `get_ui` to see the
-tree, then `invoke_action` / `set_value` / `type_text` to drive it. The app needs
+tree, then `invoke_action` / `set_value` to drive it. Legacy `2025-06-18`
+clients can additionally use focus-relative text and key input. The app needs
 no changes.
 
 ### 3. (Recommended) AOT-compile for instant startup
@@ -152,8 +149,10 @@ claude mcp add my-app -- fleury_mcp -- ./my_app
 
 ### Drive it by hand (for debugging)
 
-`fleury_mcp` speaks newline-delimited JSON-RPC on stdio, so you can poke it
-without a host:
+`fleury_mcp` speaks newline-delimited JSON-RPC on stdio. Current MCP requests
+carry protocol metadata in every `params` object, so an MCP host or inspector is
+the most representative probe. For a short raw-pipe smoke test, the legacy
+initialization path remains available:
 
 ```bash
 printf '%s\n' \
@@ -170,42 +169,45 @@ frame lands well within the startup window.
 ## What the agent sees
 
 `get_ui` returns the tree as JSON — roles, labels, values, and supported actions.
-For the counter above:
+For the counter above, a narrowed `find_nodes` result looks like this (opaque
+ids and references shortened):
 
 ```json
 {
-  "schemaVersion": 1,
-  "nodeCount": 3,
-  "roleCounts": { "app": 1, "text": 1, "button": 1 },
-  "focusedNodeId": "increment",
-  "root": {
-    "id": "auto:…/app", "role": "app",
-    "children": [
-      { "id": "count",     "role": "text",   "label": "Count", "value": 0 },
-      { "id": "increment", "role": "button", "label": "Increment",
-        "actions": ["activate"] }
-    ]
-  }
+  "matchCount": 1,
+  "uiRevision": "revision:…",
+  "nodes": [{
+    "id": "element-…",
+    "role": "button",
+    "label": "Increment",
+    "actions": ["activate"],
+    "stableId": false,
+    "targetRef": "target:…"
+  }]
 }
 ```
 
-The agent then drives by id — e.g. `invoke_action {"id": "increment",
-"action": "activate"}` — and re-reads to see the change. Results come back both
-as text JSON (the model-facing channel) and as MCP `structuredContent`.
+The agent echoes that exact returned target — for example, `invoke_action
+{"id":"element-…","action":"activate","targetRef":"target:…"}`. If a node
+reports `"stableId": false`, its opaque `targetRef` is required by the
+`2026-07-28` protocol path. Mutating tools return the settled UI, so the next
+target should be selected from that result instead of forcing another full
+read. Results come back both as text JSON (the model-facing channel) and as MCP
+`structuredContent`.
 
 ### Tools & resource
 
 | | |
 |---|---|
-| **resource** `fleury://ui/tree` | The current semantic tree — the same artifact `get_ui` returns. **Subscribable**: `resources/subscribe` and the server pushes `notifications/resources/updated` (with just the changed node ids) whenever the UI settles. App-authored ids carry the same `untrustedContent` marker as tree reads. |
-| `get_ui` | Read the whole tree (roles, labels, values, state, actions). Call first, and after each action. |
+| **resource** `fleury://ui/tree` | The current semantic tree — the same artifact `get_ui` returns. Legacy `2025-06-18` clients can subscribe for coalesced deltas; current integrations use `wait_for_change` until the modern streaming transport is implemented. App-authored ids carry the same `untrustedContent` marker as tree reads. |
+| `get_ui` | Read the whole tree (roles, labels, values, state, actions). Call first; mutating tools return the next settled tree. |
 | `find_nodes` | Query by role / label substring / supported action / focus / selection — the lean path on a large screen. |
 | `invoke_action` | Invoke a `SemanticAction` on a node by id (activate, focus, select, submit, increment, open/close, …). |
 | `set_value` | Set a value in one call — text fields, checkboxes/toggles, sliders/steppers, selects, date pickers, or a table's row index. Settable nodes advertise a typed `valueSchema`, and the value is validated against it before dispatch. |
-| `type_text` | Type into the focused input. |
-| `press_key` | A named key (enter, tab, arrows, f1–f12) or a chord (ctrl/alt/shift). Prefer `invoke_action` when a semantic action exists. |
+| `type_text` | **Legacy `2025-06-18` only.** Type into the focused input. It is withheld from stateless discovery until a request can carry an explicit target or focus lease. |
+| `press_key` | **Legacy `2025-06-18` only.** A named key (enter, tab, arrows, f1–f12) or a chord (ctrl/alt/shift). Prefer `invoke_action` when a semantic action exists. |
 | `resize` | Resize the viewport to reflow the layout and surface more rows of a windowed widget. |
-| `wait_for_change` | Block until the UI updates on its own (a ticking dashboard, a streaming response) instead of polling. |
+| `wait_for_change` | Block until the UI updates on its own (a ticking dashboard, a streaming response) instead of polling. Current clients pass the prior result's opaque, instance-scoped `uiRevision` as `sinceRevision`, so a change that already landed returns immediately and a handle from a restarted server fails closed. |
 | `read_frames` | **Agent devtools:** recent render-frame stats (number, trigger, build/layout/paint/diff µs) — diagnose slowness or excess repaints. |
 | `read_logs` | **Agent devtools:** the app's captured stdout/stderr, including native/library output Fleury captures at the file descriptor. Source-tagged, newest last. |
 | `read_errors` | **Agent devtools:** recent uncaught runtime errors with full stack traces and timestamps — check whether an action threw. |
@@ -230,21 +232,28 @@ fleury_mcp [--cols=<n>] [--rows=<n>] -- <command ...>
 
 ## Live updates, cancellation & logging
 
-Beyond request/response, the server is a full MCP citizen:
+The request/response path is current MCP; a few event features remain as legacy
+compatibility:
 
-- **Push on change.** Subscribe to `fleury://ui/tree` and the server emits
+- **Legacy push on change.** A `2025-06-18` client can subscribe to
+  `fleury://ui/tree` and the server emits
   `notifications/resources/updated` when the UI settles — coalesced to one per
   settled burst, carrying only the changed/removed node ids. An agent learns
   *what* changed without re-reading the tree (~0.3% of a full re-read on a busy
-  screen). `wait_for_change` stays for hosts that prefer to pull.
+  screen). The `2026-07-28` protocol replaced this method with
+  `subscriptions/listen`; Fleury does not advertise modern subscriptions yet,
+  so current clients use `wait_for_change`.
 - **Cancellation.** A long `wait_for_change` can be abandoned with the standard
   `notifications/cancelled`; it returns at once instead of waiting out its
   timeout.
-- **App logs.** The driven app's own stdout/stderr is forwarded as
+- **Legacy app logs.** For `2025-06-18`, the driven app's own stdout/stderr is forwarded as
   `notifications/message` (logger `app`; stdout → `info`, stderr → `warning`),
   gated by `logging/setLevel` — so an agent can see what the app logged while
   driving it, without it polluting the JSON-RPC channel. `params.data` is an
-  envelope with the verbatim `message` plus an `untrustedContent` warning.
+  envelope with the verbatim `message` plus an `untrustedContent` warning. MCP
+  Logging is deprecated in `2026-07-28`; current clients use `read_logs` and
+  `read_errors`, while deployments can route server diagnostics through stderr
+  or OpenTelemetry.
 - **Machine-readable errors.** A failed tool call carries a stable
   `structuredContent.code` (`not_found`, `stale_reference`, `ambiguous`,
   `rate_limited`, `not_ready`, …) so an agent branches on the category instead of
@@ -259,13 +268,14 @@ Beyond request/response, the server is a full MCP citizen:
 
 The app works with zero effort; these make the agent's job easier:
 
-- **Pin stable ids on the nodes that matter** with `Semantics(id: SemanticNodeId(…))` or a
-  `Key`. Without one, a node gets a derived id that stays stable across rebuilds
-  *when it has a keyed ancestor*, but a fully-unkeyed node falls back to a
-  positional id that can shift as the tree changes. A `Semantics(id: SemanticNodeId('submit'))`
-  is a durable handle. (The server rejects observable positional recycling.
-  Semantically identical logical replacements that share framework identity
-  need distinct keys or stable semantics ids.)
+- **Give custom semantic controls stable ids when durable targeting matters.**
+  `Semantics(id: SemanticNodeId('submit'))` is a durable handle. Ordinary
+  first-party controls get a per-read `targetRef` that rejects observable slot
+  changes; wrapping one merely to add an id duplicates the contract it already
+  owns. A widget
+  `Key` can stabilize a derived semantic path only when that key reaches the
+  semantic contributor, so do not assume every public control key becomes its
+  MCP id.
 - **Give nodes meaningful labels.** Labels are how the agent recognizes a node.
 - **Hide decorative or off-screen chrome** with `ExcludeSemantics` so it doesn't
   clutter what the agent reads.
@@ -276,8 +286,11 @@ The app works with zero effort; these make the agent's job easier:
   node-capped (800) and trimmed (no pixel bounds, no value that just repeats a
   label), so a large screen can't blow the agent's context; `find_nodes` is the
   lean drill-in path. A committed test gates per-node payload size.
-- **Push deltas, not re-reads.** A subscription update carries only the changed
-  ids — ~0.3% of a full re-read on a busy dashboard (~322× lighter).
+- **Avoid redundant re-reads.** Mutations return their settled tree and
+  `wait_for_change` blocks for app-initiated changes. Its revision cursor closes
+  the read-to-wait race. Legacy subscription
+  updates carry only changed ids (~0.3% of a full re-read on the measured busy
+  dashboard).
 - **Fast internals, gated against regression.** Id→node lookup is O(1) per
   revision (~477× vs a full tree walk), and the settle behind `wait_for_change`
   is capped so a continuously-animating app returns promptly (~3.7× faster than
@@ -297,8 +310,9 @@ Developed in the Fleury monorepo and packaged for publication with an exact
 dependency on the matching Fleury release (`fleury: 0.1.0`). That pairing covers
 Fleury's supported host/process SPI and its explicitly unstable, lockstep wire.
 Local development uses `pubspec_overrides.yaml` to resolve the sibling package.
-Matching builds are verified against the MCP Inspector, a host-process
-end-to-end harness, and live drives of the sample apps; wire-version skew is
-rejected during INIT. See
+Matching builds are covered by protocol-level tests, a host-process end-to-end
+harness, and live drives of the sample apps; app-wire version skew is rejected
+during INIT. Official `2026-07-28` conformance-suite qualification remains a
+release gate rather than a claim made by these local tests. See
 [`docs/agents-and-semantics.md`](https://github.com/danReynolds/fleury/blob/main/docs/agents-and-semantics.md) for the
 broader semantics story.
