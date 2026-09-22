@@ -20,6 +20,14 @@ String generateServeToken([Random? random]) {
   return digits.toString();
 }
 
+/// The token a `fleury serve` bound to [host] requires: [token] when given,
+/// otherwise a generated one for a network bind, and none on loopback.
+String? resolveServeToken({
+  required String host,
+  String? token,
+  Random? random,
+}) => token ?? (isLoopbackServeHost(host) ? null : generateServeToken(random));
+
 /// Whether [presented] equals [expected], compared in time that does not
 /// depend on where the two first differ.
 bool serveTokenMatches(String expected, String? presented) {

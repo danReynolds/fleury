@@ -141,6 +141,10 @@ class PosixTerminalDriver
   // SIGHUP — but it is one event. Delivering it twice would read as the user
   // overruling a slow shutdown and force-exit past the app's cleanup.
   bool _hangupDelivered = false;
+
+  // Whether stdin is a terminal in raw mode. Only then does its input ending
+  // mean a hangup: in cooked mode Ctrl+D at the start of a line is an EOF.
+  bool _rawTerminalInput = false;
   Timer? _flushTimer;
   Timer? _pasteIdleTimer;
   Timer? _graceTimer;
@@ -482,6 +486,7 @@ class PosixTerminalDriver
     // (stdin not a terminal, e.g. scripted keystrokes) still streams in
     // via the listener below.
     if (mode.rawInput && _stdinIsTerminal) {
+      _rawTerminalInput = true;
       _nativeRawMode = _terminalModeController.enableRawMode();
       if (!_nativeRawMode && !suspendOnCtrlZ) {
         // The Dart fallback leaves ISIG enabled, so Ctrl+Z would stop the
@@ -516,7 +521,7 @@ class PosixTerminalDriver
       onError: (Object error, StackTrace stack) {
         // A terminal read fails once the terminal is gone (EIO after a
         // hangup): that is the hangup itself, not an application error.
-        if (_stdinIsTerminal) {
+        if (_rawTerminalInput) {
           _deliverHangup();
           return;
         }
@@ -528,17 +533,17 @@ class PosixTerminalDriver
         _pasteIdleTimer?.cancel();
         _pasteIdleTimer = null;
         _parser.finish(_sink); // finalizes any in-progress paste at EOF
-        if (_stdinIsTerminal) {
-          // A terminal never ends its input on its own — in raw mode Ctrl+D
-          // is just a byte — so EOF means it hung up (window closed, SSH
+        if (_rawTerminalInput) {
+          // A raw-mode terminal never ends its input on its own — Ctrl+D is
+          // just a byte — so EOF means it hung up (window closed, SSH
           // dropped). Report the hangup SIGHUP also reports; the app exits
           // through its normal path with its cleanup intact.
           _deliverHangup();
           return;
         }
-        // Piped input ended: the scripted session is over. Closing the driver
-        // event stream lets runApp's onDone path exit and restore instead of
-        // waiting forever on an input source that vanished.
+        // Piped (or cooked-mode) input ended: the session is over. Closing
+        // the driver event stream lets runApp's onDone path exit and restore
+        // instead of waiting forever on an input source that vanished.
         if (!_events.isClosed) unawaited(_events.close());
       },
       cancelOnError: false,

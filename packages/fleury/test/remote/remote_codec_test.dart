@@ -202,6 +202,34 @@ void main() {
       expect(mirror.atColRow(0, 0).style.linkUri, 'https://x');
     });
 
+    test('unknown plan flag and style bits are rejected', () {
+      final plan = RemotePlan(
+        size: const CellSize(2, 1),
+        fullRepaint: true,
+        styleTable: const [CellStyle(bold: true)],
+        patches: const [
+          RemoteRowPatch(
+            row: 0,
+            startCol: 0,
+            runs: [RemotePatchRun(styleIndex: 0, text: 'hi')],
+          ),
+        ],
+      );
+      final bytes = encodeRemotePlan(plan);
+      expect(() => decodeRemotePlan(bytes), returnsNormally);
+      // Layout: [flags][cols][rows][styleCount][setMask]...
+      final flagged = Uint8List.fromList(bytes)..[0] |= 8;
+      expect(
+        () => decodeRemotePlan(flagged),
+        throwsA(isA<RemoteCodecException>()),
+      );
+      final styled = Uint8List.fromList(bytes)..[4] |= 0x80;
+      expect(
+        () => decodeRemotePlan(styled),
+        throwsA(isA<RemoteCodecException>()),
+      );
+    });
+
     test('a malformed/oversized link length is rejected, never crashes', () {
       // bit 6 set but the URI varint length overruns the payload: the reader's
       // _need guard turns it into a RemoteCodecException, the same clean

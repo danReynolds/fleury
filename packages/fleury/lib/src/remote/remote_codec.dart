@@ -399,6 +399,9 @@ void _writeStyle(_Writer w, CellStyle s) {
 CellStyle _readStyle(_Reader r) {
   final setMask = r.u8();
   final valMask = r.u8();
+  if (setMask & 0x80 != 0) {
+    throw const RemoteCodecException('unknown style attribute bit 7');
+  }
   bool? bit(int i) =>
       (setMask & (1 << i)) == 0 ? null : (valMask & (1 << i)) != 0;
   // Mirror the writer exactly: the optional link URI sits right after the two
@@ -481,6 +484,11 @@ Uint8List encodeRemotePlan(RemotePlan plan) {
 RemotePlan decodeRemotePlan(Uint8List bytes) {
   final r = _Reader(bytes);
   final flags = r.u8();
+  if (flags & ~7 != 0) {
+    throw RemoteCodecException(
+      'unknown plan flags 0x${flags.toRadixString(16)}',
+    );
+  }
   final hasImageWindows = (flags & 4) != 0;
   final cols = r.varint();
   final rows = r.varint();

@@ -829,6 +829,35 @@ void main() {
     },
   );
 
+  test('cooked-mode terminal EOF ends the session, not a hangup', () async {
+    // Without raw input, Ctrl+D at the start of a line is an EOF the user
+    // typed; the terminal is still there.
+    final trace = <String>[];
+    final input = _FakeStdin(terminal: true);
+    final driver = PosixTerminalDriver(
+      stdinOverride: input,
+      stdoutOverride: _RecordingStdout(terminal: true, trace: trace),
+      terminalModeController: _FakeModeController(trace),
+      selfStopOverride: () => true,
+      signalWatcherOverride: (signal, onSignal) =>
+          _TraceSignalSubscription(signal, trace),
+    );
+    final events = <TuiEvent>[];
+    final done = Completer<void>();
+    final sub = driver.events.listen(events.add, onDone: done.complete);
+    try {
+      await driver.enter(
+        const TerminalMode(rawInput: false, alternateScreen: false),
+      );
+      await input.close();
+      await done.future.timeout(const Duration(seconds: 1));
+      expect(events.whereType<SignalEvent>(), isEmpty);
+    } finally {
+      await driver.restore();
+      await sub.cancel();
+    }
+  });
+
   test(
     'restore() keeps SIGINT/SIGTERM shielded until the terminal is back',
     () async {

@@ -628,7 +628,7 @@ Future<int> _runServe(List<String> args) async {
     );
     if (token == null) {
       // A network bind never runs open: the wire carries full app control.
-      token = generateServeToken();
+      token = resolveServeToken(host: host);
       stderr.writeln(
         '[serve] no --token given; generated one for this run (it is part '
         'of the browser URL below).',

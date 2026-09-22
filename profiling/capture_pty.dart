@@ -490,6 +490,26 @@ void main(List<String> args) {
 
     while (true) {
       final elapsedMs = sw.elapsedMicroseconds / 1000.0;
+      // After a hangup the master is closed: nothing may touch it again, so
+      // only wait for the child's exit.
+      if (hungUp) {
+        if (_waitpid(pid, status, _wnohang) == pid) {
+          childStatus = status.value;
+          childExited = true;
+          break;
+        }
+        if (elapsedMs > timeout * 1000) {
+          timedOut = true;
+          _kill(pid, _sigkill);
+          if (_waitpid(pid, status, 0) == pid) {
+            childStatus = status.value;
+            childExited = true;
+          }
+          break;
+        }
+        sleep(const Duration(milliseconds: 2));
+        continue;
+      }
       while (
           pendingReplies.isNotEmpty && pendingReplies.first.$1 <= elapsedMs) {
         _writeAll(masterFd, pendingReplies.removeAt(0).$2.codeUnits, arena);
@@ -548,23 +568,6 @@ void main(List<String> args) {
           'signal': 'sighup',
         });
         hungUp = true;
-      }
-      if (hungUp) {
-        if (_waitpid(pid, status, _wnohang) == pid) {
-          childStatus = status.value;
-          childExited = true;
-          break;
-        }
-        if (elapsedMs > timeout * 1000) {
-          timedOut = true;
-          _kill(pid, _sigkill);
-          if (_waitpid(pid, status, 0) == pid) {
-            childStatus = status.value;
-            childExited = true;
-          }
-          break;
-        }
-        sleep(const Duration(milliseconds: 2));
         continue;
       }
       if (!suspendSent &&

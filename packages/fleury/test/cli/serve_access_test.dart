@@ -21,6 +21,14 @@ void main() {
     expect(generateServeToken(Random(1)), generateServeToken(Random(1)));
   });
 
+  test('a network bind always resolves a token; loopback needs none', () {
+    expect(resolveServeToken(host: '127.0.0.1'), isNull);
+    expect(resolveServeToken(host: '127.0.0.1', token: 'x'), 'x');
+    expect(resolveServeToken(host: '0.0.0.0', token: 'x'), 'x');
+    expect(resolveServeToken(host: '0.0.0.0'), matches(r'^[0-9a-f]{32}$'));
+    expect(resolveServeToken(host: '::'), isNotNull);
+  });
+
   test('only the exact token is admitted', () {
     const token = '0123456789abcdef0123456789abcdef';
     expect(serveTokenMatches(token, token), isTrue);

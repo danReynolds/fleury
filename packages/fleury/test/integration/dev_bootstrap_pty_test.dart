@@ -411,6 +411,37 @@ Future<void> main() async {
         }
       },
     );
+
+    test(
+      'a direct SIGHUP to the supervisor still ends the session',
+      timeout: const Timeout(Duration(minutes: 3)),
+      () async {
+        // Unwatched, SIGHUP killed the supervisor outright and the app never
+        // heard of it. Now the supervisor forwards it like SIGTERM.
+        final app = await _generateApp(tempDir);
+        final session = await _startSession(app: app, timeoutSeconds: 90);
+        try {
+          await session.waitUntilChildReady();
+          final appPid = await session.appPid();
+          final supervisorPid = await _parentPidOf(appPid);
+          expect(supervisorPid, isNotNull);
+
+          Process.killPid(supervisorPid!, ProcessSignal.sighup);
+
+          final metadata = await session.finish();
+          expect(metadata['timedOut'], isFalse, reason: session.diagnostics());
+          expect(
+            metadata['exitCode'],
+            79,
+            reason:
+                'the app must receive the forwarded SIGHUP and run its own '
+                'teardown:\n${session.diagnostics()}',
+          );
+        } finally {
+          session.dispose();
+        }
+      },
+    );
   });
 
   group('watch roots', () {
