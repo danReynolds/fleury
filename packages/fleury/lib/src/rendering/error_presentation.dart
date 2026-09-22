@@ -20,6 +20,7 @@ import '../foundation/geometry.dart';
 import 'border.dart';
 import 'cell.dart';
 import 'cell_buffer.dart';
+import 'text_sanitizer.dart';
 import 'width_resolver.dart';
 
 const _errorStyle = CellStyle(foreground: AnsiColor(1));
@@ -109,11 +110,11 @@ void paintCellErrorPresentation(
   final innerRows = size.rows - 2;
   if (innerWidth <= 0 || innerRows <= 0) return;
 
-  final words = '⚠ $error'
-      .replaceAll('\n', ' ')
-      .split(' ')
-      .where((w) => w.isNotEmpty)
-      .toList();
+  // Error text is untrusted — an exception often echoes the input it
+  // rejected — so it is sanitized like any other displayed string.
+  final words = sanitizeSingleLine(
+    '⚠ $error',
+  ).split(' ').where((w) => w.isNotEmpty).toList();
 
   // Greedy word-wrap into at most innerRows lines. A word wider than the
   // interior is hard-split along grapheme boundaries.

@@ -11,6 +11,25 @@ import 'package:test/test.dart';
 const _vertical = '│';
 
 void main() {
+  test('an escape sequence in the message is collapsed, not painted', () {
+    // Error text is untrusted: a FormatException echoes the input it
+    // rejected. The whole sequence collapses to one replacement character,
+    // exactly as a Text widget would show it.
+    final buffer = CellBuffer(const CellSize(40, 5));
+    paintCellErrorPresentation(
+      buffer,
+      CellOffset.zero,
+      const CellSize(40, 5),
+      const FormatException('bad \x1b]52;c;SGVsbG8=\x07 input'),
+    );
+
+    final painted = buffer.textInRange(CellRect.fromLTWH(0, 0, 40, 5));
+    expect(painted, contains('bad'));
+    expect(painted, contains('input'));
+    expect(painted, isNot(contains(']52;')));
+    expect(painted, contains('\uFFFD'));
+  });
+
   test('a CJK error message stays inside the panel border', () {
     // 12×5 panel. Interior width is 10 cells; a run of double-width CJK
     // must wrap at 5 graphemes, not 10 — a code-unit measure would paint
