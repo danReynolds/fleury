@@ -22,22 +22,32 @@ fleury_mcp -- dart run bin/run_app.dart
 
 It spawns your app, tracks its live semantic tree, and exposes it as MCP: the
 graph as a **resource** (`fleury://ui/tree`), and the actions on it as **tools** —
-`get_ui` / `find_nodes` to read, `invoke_action` / `set_value` / `type_text` /
-`press_key` to drive, and `resize` / `wait_for_change` to surface more rows or
-watch for asynchronous change.
+`get_ui` / `find_nodes` to read, `invoke_action` / `set_value` to drive, and
+`resize` / `wait_for_change` to surface more rows or watch for asynchronous
+change. Legacy `2025-06-18` clients also retain the focus-relative `type_text`
+and `press_key` tools; they stay off the stateless surface until the request can
+carry an explicit target or focus lease.
 
 Point an MCP host at it and the agent reads roles, labels, values, and the
 actions each node supports, then drives the UI through them — no ANSI scraping,
-no guessed keystrokes. The app needs no agent-specific code.
+no guessed keystrokes. Positional nodes carry an opaque `targetRef`, so a
+stateless action request does not depend on another task's last read and rejects
+observable slot-identity changes. Semantically identical unkeyed replacements
+still need distinct keys or stable semantic ids. The app needs no
+agent-specific code.
 
-The resource is **live**: subscribe to it and the server pushes a compact
-`notifications/resources/updated` — just the changed node ids — each time the UI
-settles, so an agent following a streaming response or a ticking dashboard learns
-*what* changed without re-reading the whole tree.
+For asynchronous app changes, `wait_for_change` returns the next settled tree
+without polling. Current clients pass the opaque, instance-scoped `uiRevision`
+from the prior result as `sinceRevision`, closing the gap between reading and
+starting the wait while rejecting handles from a restarted server. Legacy
+`2025-06-18` hosts can additionally subscribe for a
+compact `notifications/resources/updated` delta. Current MCP replaced that
+method with `subscriptions/listen`; Fleury does not advertise modern streaming
+subscriptions yet.
 
 See [Driving with an agent (MCP)](/guides/driving-with-agents/) for the hands-on
-setup: installing the driver, connecting a host, the full tool reference, and
-making your app drive well.
+setup: installing the driver, connecting a host, completing a semantic
+workflow, and making custom controls drive well.
 
 ## What powers it — the semantic tree
 

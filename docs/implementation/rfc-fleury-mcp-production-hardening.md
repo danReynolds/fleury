@@ -20,6 +20,14 @@ structure-generation handle** is a dependency here);
 > also require a matching echoed INIT before accepting semantic frames.
 > See [the implementation plan](plan-fleury-mcp-production.md) and
 > [wire protocol](wire-protocol.md) for the current contract.
+>
+> **MCP update (2026-09-21).** The current protocol (`2026-07-28`) removed
+> connection-scoped initialization and replaced cross-call state with explicit
+> handles. Fleury now supports `server/discover`, modern result envelopes, and
+> per-node `targetRef` claims while retaining the older initialization path.
+> WS-1's `resources/subscribe` and protocol Logging design below describes the
+> legacy `2025-06-18` surface; modern Fleury clients use `wait_for_change` and
+> the explicit `read_*` tools until a `subscriptions/listen` transport lands.
 
 ## Scope
 

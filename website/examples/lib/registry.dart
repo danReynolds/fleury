@@ -1919,6 +1919,18 @@ form.clearErrors();''',
     builder: () => const StateManagementShowcaseApp(),
   ),
   ExampleInfo(
+    id: 'agents.release-checklist',
+    widget: 'Agent-driving release checklist',
+    category: 'Guide examples',
+    blurb:
+        'Ordinary text, checkbox, and button semantics drive one complete '
+        'release workflow by hand, in tests, or through MCP.',
+    cols: 46,
+    rows: 15,
+    interactive: true,
+    builder: () => const AgentGuideApp(),
+  ),
+  ExampleInfo(
     id: 'showcase.themes',
     widget: 'Theme studio',
     category: 'Showcases',

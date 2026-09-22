@@ -22,6 +22,7 @@ export 'src/app_bridge.dart'
 export 'src/mcp_server.dart'
     show
         McpServer,
+        mcpLegacyProtocolVersion,
         mcpProtocolVersion,
         mcpServerName,
         mcpServerVersion,

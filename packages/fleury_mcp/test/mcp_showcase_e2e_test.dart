@@ -26,14 +26,16 @@ void main() {
       : null;
 
   /// Spawns a named sample and returns a driver that calls MCP tools against it.
-  Future<_Driver> drive(String app) async {
+  Future<_Driver> drive(String app, {bool modern = false}) async {
     final bridge = await FleuryAppBridge.spawn(
       command: <String>['dart', 'run', samplesBin!, app],
       log: (_) {},
     );
     addTearDown(bridge.close);
     await bridge.ready;
-    return _Driver(bridge);
+    final driver = _Driver(bridge);
+    if (!modern) await driver.initializeLegacy();
+    return driver;
   }
 
   group(
@@ -182,6 +184,115 @@ void main() {
         },
       );
 
+      test(
+        'agent guide: ordinary controls complete a release workflow',
+        () async {
+          final guide = await drive('agent-guide', modern: true);
+
+          Future<Map<String, Object?>> one({
+            required String role,
+            required String label,
+          }) async {
+            final result = await guide.modernTool(
+              'find_nodes',
+              <String, Object?>{'role': role, 'label': label},
+            );
+            final nodes = (result['nodes'] as List)
+                .cast<Map<String, Object?>>();
+            expect(
+              nodes,
+              hasLength(1),
+              reason: '$role "$label" should be unique',
+            );
+            return nodes.single;
+          }
+
+          Map<String, Object?> oneIn(
+            Object? value, {
+            required String role,
+            required String label,
+          }) {
+            final matches = <Map<String, Object?>>[];
+
+            void visit(Object? current) {
+              if (current is List) {
+                for (final child in current) {
+                  visit(child);
+                }
+                return;
+              }
+              if (current is! Map) return;
+              final node = current.cast<String, Object?>();
+              if (node['role'] == role && '${node['label']}'.contains(label)) {
+                matches.add(node);
+              }
+              for (final child in node.values) {
+                visit(child);
+              }
+            }
+
+            visit(value);
+            expect(
+              matches,
+              hasLength(1),
+              reason: '$role "$label" should be unique in the returned UI',
+            );
+            return matches.single;
+          }
+
+          final version = await one(
+            role: 'textField',
+            label: 'Release version',
+          );
+          final versionChanged = await guide.modernTool(
+            'set_value',
+            <String, Object?>{
+              'id': version['id'],
+              'targetRef': version['targetRef'],
+              'value': '1.0.0',
+            },
+          );
+
+          // Built-in controls currently expose positional semantic ids. Each
+          // mutating tool returns the settled UI, so select the next target
+          // from that fresh tree rather than retaining the initial target.
+          final tests = oneIn(
+            versionChanged['ui'],
+            role: 'checkbox',
+            label: 'Tests passed',
+          );
+          final testsChanged = await guide.modernTool(
+            'set_value',
+            <String, Object?>{
+              'id': tests['id'],
+              'targetRef': tests['targetRef'],
+              'value': true,
+            },
+          );
+
+          final prepare = oneIn(
+            testsChanged['ui'],
+            role: 'button',
+            label: 'Prepare release',
+          );
+          final prepared = await guide
+              .modernTool('invoke_action', <String, Object?>{
+                'id': prepare['id'],
+                'targetRef': prepare['targetRef'],
+                'action': 'activate',
+              });
+
+          expect(
+            oneIn(
+              prepared['ui'],
+              role: 'text',
+              label: 'Ready to publish 1.0.0',
+            )['label'],
+            contains('Ready to publish 1.0.0'),
+          );
+        },
+      );
+
       test('debug playground: an agent triggers each scenario and reads the '
           'evidence in the devtools', () async {
         // THE showcase claim, end-to-end: "your AI can use your debugger."
@@ -318,6 +429,26 @@ final class _Driver {
   late final McpServer _server;
   int _id = 100;
 
+  Future<void> initializeLegacy() async {
+    _out.clear();
+    await _server.handleLine(
+      jsonEncode(<String, Object?>{
+        'jsonrpc': '2.0',
+        'id': _id++,
+        'method': 'initialize',
+        'params': <String, Object?>{
+          'protocolVersion': mcpLegacyProtocolVersion,
+          'capabilities': const <String, Object?>{},
+        },
+      }),
+    );
+    final message = jsonDecode(_out.single) as Map<String, Object?>;
+    expect(
+      (message['result'] as Map)['protocolVersion'],
+      mcpLegacyProtocolVersion,
+    );
+  }
+
   Future<Map<String, Object?>> tool(
     String name, [
     Map<String, Object?> args = const <String, Object?>{},
@@ -333,6 +464,44 @@ final class _Driver {
     );
     final message = jsonDecode(_out.single) as Map<String, Object?>;
     final result = message['result'] as Map<String, Object?>;
+    expect(
+      result['isError'],
+      isFalse,
+      reason: '$name failed: ${result['content']}',
+    );
+    final content = (result['content'] as List).single as Map<String, Object?>;
+    return jsonDecode(content['text'] as String) as Map<String, Object?>;
+  }
+
+  /// Calls a tool through the stateless MCP 2026-07-28 request envelope.
+  Future<Map<String, Object?>> modernTool(
+    String name, [
+    Map<String, Object?> args = const <String, Object?>{},
+  ]) async {
+    _out.clear();
+    await _server.handleLine(
+      jsonEncode(<String, Object?>{
+        'jsonrpc': '2.0',
+        'id': _id++,
+        'method': 'tools/call',
+        'params': <String, Object?>{
+          'name': name,
+          'arguments': args,
+          '_meta': <String, Object?>{
+            'io.modelcontextprotocol/protocolVersion': mcpProtocolVersion,
+            'io.modelcontextprotocol/clientInfo': <String, Object?>{
+              'name': 'fleury-showcase-test',
+              'version': '1.0.0',
+            },
+            'io.modelcontextprotocol/clientCapabilities':
+                const <String, Object?>{},
+          },
+        },
+      }),
+    );
+    final message = jsonDecode(_out.single) as Map<String, Object?>;
+    final result = message['result'] as Map<String, Object?>;
+    expect(result['resultType'], 'complete');
     expect(
       result['isError'],
       isFalse,

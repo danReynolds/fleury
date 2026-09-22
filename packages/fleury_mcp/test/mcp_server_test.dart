@@ -21,13 +21,20 @@ void main() {
   late List<String> out;
   late McpServer server;
 
-  setUp(() {
+  setUp(() async {
     transport = _FakeTransport();
     bridge = FleuryAppBridge(transport)..start();
     transport.addIncoming(_appInit(remoteProtocolVersion));
     encoder = SemanticsWireEncoder();
     out = <String>[];
     server = McpServer(bridge: bridge, send: out.add);
+    await server.handleLine(
+      _rpc(0, 'initialize', <String, Object?>{
+        'protocolVersion': mcpLegacyProtocolVersion,
+        'capabilities': <String, Object?>{},
+      }),
+    );
+    out.clear();
   });
 
   tearDown(() async {
@@ -291,7 +298,156 @@ void main() {
           'protocolVersion': '1999-01-01',
         }),
       );
-      expect(lastResult()['protocolVersion'], mcpProtocolVersion);
+      expect(lastResult()['protocolVersion'], mcpLegacyProtocolVersion);
+    },
+  );
+
+  test(
+    'server/discover advertises modern stateless MCP and legacy fallback',
+    () async {
+      await server.handleLine(_modernRpc(200, 'server/discover'));
+
+      final result = lastResult();
+      expect(result['resultType'], 'complete');
+      expect(result['supportedVersions'], contains(mcpProtocolVersion));
+      expect(result['supportedVersions'], contains(mcpLegacyProtocolVersion));
+      expect(result['ttlMs'], 3600000);
+      expect(result['cacheScope'], 'public');
+      expect(
+        ((result['_meta'] as Map)['io.modelcontextprotocol/serverInfo']
+            as Map)['name'],
+        mcpServerName,
+      );
+      final capabilities = result['capabilities'] as Map;
+      expect(capabilities, contains('tools'));
+      expect(capabilities, contains('resources'));
+    },
+  );
+
+  test(
+    'a modern request is self-describing and gets a modern result envelope',
+    () async {
+      await server.handleLine(_modernRpc(201, 'tools/list'));
+
+      final result = lastResult();
+      expect(result['resultType'], 'complete');
+      expect(result['ttlMs'], 3600000);
+      expect(result['cacheScope'], 'public');
+      expect(
+        ((result['_meta'] as Map)['io.modelcontextprotocol/serverInfo']
+            as Map)['version'],
+        mcpServerVersion,
+      );
+    },
+  );
+
+  test(
+    'an unsupported per-request protocol version reports supported versions',
+    () async {
+      await server.handleLine(
+        _modernRpc(202, 'tools/list', null, '2099-01-01'),
+      );
+
+      final message = jsonDecode(out.removeLast()) as Map<String, Object?>;
+      final error = message['error'] as Map<String, Object?>;
+      expect(error['code'], -32022);
+      expect((error['data'] as Map)['supported'], contains(mcpProtocolVersion));
+      expect((error['data'] as Map)['requested'], '2099-01-01');
+    },
+  );
+
+  test(
+    'a legacy version is rejected inside a modern request envelope',
+    () async {
+      await server.handleLine(
+        _modernRpc(2021, 'tools/list', null, mcpLegacyProtocolVersion),
+      );
+
+      final message = jsonDecode(out.removeLast()) as Map<String, Object?>;
+      final error = message['error'] as Map<String, Object?>;
+      expect(error['code'], -32022);
+      expect(
+        (error['data'] as Map)['supported'],
+        orderedEquals(<String>[mcpProtocolVersion]),
+      );
+      expect((error['data'] as Map)['requested'], mcpLegacyProtocolVersion);
+    },
+  );
+
+  test(
+    'modern requests require protocol version and capabilities metadata',
+    () async {
+      await server.handleLine(
+        jsonEncode(<String, Object?>{
+          'jsonrpc': '2.0',
+          'id': 203,
+          'method': 'tools/list',
+          'params': <String, Object?>{
+            '_meta': <String, Object?>{
+              'io.modelcontextprotocol/protocolVersion': mcpProtocolVersion,
+            },
+          },
+        }),
+      );
+
+      final message = jsonDecode(out.removeLast()) as Map<String, Object?>;
+      final error = message['error'] as Map<String, Object?>;
+      expect(error['code'], -32602);
+      expect(error['message'], contains('clientCapabilities'));
+    },
+  );
+
+  test(
+    'legacy requests are unavailable until initialize selects that era',
+    () async {
+      final strictOut = <String>[];
+      final strict = McpServer(bridge: bridge, send: strictOut.add);
+
+      await strict.handleLine(_rpc(204, 'tools/list'));
+
+      final message = jsonDecode(strictOut.single) as Map<String, Object?>;
+      final error = message['error'] as Map<String, Object?>;
+      expect(error['code'], -32600);
+      expect(error['message'], contains('require initialize'));
+    },
+  );
+
+  test('modern tool discovery withholds focus-relative input tools', () async {
+    await server.handleLine(_modernRpc(205, 'tools/list'));
+    final tools = (lastResult()['tools'] as List).cast<Map<String, Object?>>();
+    final names = [for (final tool in tools) tool['name'] as String];
+    expect(names, isNot(contains('type_text')));
+    expect(names, isNot(contains('press_key')));
+    expect(names, containsAll(<String>['set_value', 'invoke_action']));
+    final wait = tools.singleWhere((tool) => tool['name'] == 'wait_for_change');
+    expect(
+      (wait['inputSchema'] as Map<String, Object?>)['required'],
+      contains('sinceRevision'),
+    );
+
+    await server.handleLine(
+      _modernRpc(206, 'tools/call', <String, Object?>{
+        'name': 'type_text',
+        'arguments': <String, Object?>{'text': 'unsafe'},
+      }),
+    );
+    final message = jsonDecode(out.removeLast()) as Map<String, Object?>;
+    expect((message['error'] as Map)['code'], -32602);
+  });
+
+  test(
+    'modern tool input validation returns an actionable tool error',
+    () async {
+      await server.handleLine(
+        _modernRpc(207, 'tools/call', <String, Object?>{
+          'name': 'get_ui',
+          'arguments': <String, Object?>{'surprise': true},
+        }),
+      );
+
+      final result = lastResult();
+      expect(toolError(result), contains('does not accept argument'));
+      expect((result['structuredContent'] as Map)['code'], 'invalid_arguments');
     },
   );
 
@@ -543,6 +699,13 @@ void main() {
       mutationBurst: 2,
       mutationRefillPerSecond: 1,
     );
+    await limited.handleLine(
+      _rpc(0, 'initialize', <String, Object?>{
+        'protocolVersion': mcpLegacyProtocolVersion,
+        'capabilities': <String, Object?>{},
+      }),
+    );
+    out.clear();
     pushCount(0);
     await bridge.ready;
 
@@ -850,6 +1013,7 @@ void main() {
         contains('"stableId":false'),
         reason: 'the positional button is annotated somewhere in the tree',
       );
+      expect(jsonEncode(ui), contains(':target:element-7:Run"'));
 
       // find_nodes: the flat match carries the marker; the envelope explains.
       out.clear();
@@ -864,6 +1028,8 @@ void main() {
       final node = (found['nodes'] as List).single as Map<String, Object?>;
       expect(node['id'], 'element-7');
       expect(node['stableId'], isFalse);
+      expect('${node['targetRef']}', endsWith(':target:element-7:Run'));
+      expect(node['targetRef'], isNot('target:element-7:Run'));
     });
 
     test('a fully stable-id tree carries no marker and no note', () async {
@@ -883,6 +1049,138 @@ void main() {
         reason: 'stable ids stay unannotated to keep the tree lean',
       );
     });
+  });
+
+  test(
+    'modern positional actions require and honor an explicit targetRef',
+    () async {
+      pushRoot(buttonAndCount('element-22', 'Save', 0));
+      await bridge.ready;
+
+      await server.handleLine(
+        _modernRpc(210, 'tools/call', <String, Object?>{
+          'name': 'find_nodes',
+          'arguments': <String, Object?>{'role': 'button'},
+        }),
+      );
+      final found = toolJson(lastResult());
+      final button = (found['nodes'] as List).single as Map<String, Object?>;
+      final targetRef = button['targetRef'] as String;
+
+      // A modern request cannot fall back to process-global "last read" state.
+      await server.handleLine(
+        _modernRpc(211, 'tools/call', <String, Object?>{
+          'name': 'invoke_action',
+          'arguments': <String, Object?>{
+            'id': 'element-22',
+            'action': 'activate',
+          },
+        }),
+      );
+      final missingRef = lastResult();
+      expect(
+        toolError(missingRef),
+        contains('requires the opaque "targetRef"'),
+      );
+      expect(
+        (missingRef['structuredContent'] as Map)['code'],
+        'stale_reference',
+      );
+
+      // An unrelated read replaces the legacy baseline, but the explicit ref
+      // remains sufficient because the request carries its own target claim.
+      await server.handleLine(
+        _modernRpc(212, 'tools/call', <String, Object?>{
+          'name': 'find_nodes',
+          'arguments': <String, Object?>{'label': 'Count'},
+        }),
+      );
+      lastResult();
+
+      final pending = server.handleLine(
+        _modernRpc(213, 'tools/call', <String, Object?>{
+          'name': 'invoke_action',
+          'arguments': <String, Object?>{
+            'id': 'element-22',
+            'action': 'activate',
+            'targetRef': targetRef,
+          },
+        }),
+      );
+      pushRoot(buttonAndCount('element-22', 'Save', 1));
+      await pending;
+
+      final result = lastResult();
+      expect(result['resultType'], 'complete');
+      expect(toolJson(result)['invoked'], isNotNull);
+      final action = transport.sent
+          .whereType<SemanticActionFrame>()
+          .singleWhere((frame) => frame.id.value == 'element-22');
+      expect(action.targetToken, 'target:element-22:Save');
+    },
+  );
+
+  test('modern positional actions reject a stale explicit targetRef', () async {
+    pushRoot(buttonAndCount('element-23', 'Delete', 0));
+    await bridge.ready;
+    await server.handleLine(
+      _modernRpc(214, 'tools/call', <String, Object?>{
+        'name': 'find_nodes',
+        'arguments': <String, Object?>{'role': 'button'},
+      }),
+    );
+    final found = toolJson(lastResult());
+    final oldRef =
+        ((found['nodes'] as List).single as Map<String, Object?>)['targetRef']
+            as String;
+
+    await pushAndAwait(buttonAndCount('element-23', 'Replacement', 0));
+    await server.handleLine(
+      _modernRpc(215, 'tools/call', <String, Object?>{
+        'name': 'invoke_action',
+        'arguments': <String, Object?>{
+          'id': 'element-23',
+          'action': 'activate',
+          'targetRef': oldRef,
+        },
+      }),
+    );
+
+    final result = lastResult();
+    expect((result['structuredContent'] as Map)['code'], 'stale_reference');
+    expect(transport.sent.whereType<SemanticActionFrame>(), isEmpty);
+  });
+
+  test('a targetRef from an earlier server process is rejected', () async {
+    pushRoot(buttonAndCount('element-24', 'Run', 0));
+    await bridge.ready;
+    await server.handleLine(
+      _modernRpc(216, 'tools/call', <String, Object?>{
+        'name': 'find_nodes',
+        'arguments': <String, Object?>{'role': 'button'},
+      }),
+    );
+    final found = toolJson(lastResult());
+    final oldRef =
+        ((found['nodes'] as List).single as Map<String, Object?>)['targetRef']
+            as String;
+
+    final restarted = McpServer(bridge: bridge, send: out.add);
+    out.clear();
+    await restarted.handleLine(
+      _modernRpc(217, 'tools/call', <String, Object?>{
+        'name': 'invoke_action',
+        'arguments': <String, Object?>{
+          'id': 'element-24',
+          'action': 'activate',
+          'targetRef': oldRef,
+        },
+      }),
+    );
+
+    final result = lastResult();
+    expect((result['structuredContent'] as Map)['code'], 'stale_reference');
+    expect(transport.sent.whereType<SemanticActionFrame>(), isEmpty);
   });
 
   test(
@@ -1254,6 +1552,8 @@ void main() {
   test(
     'app logs before initialize are held, then flushed on the handshake (WS-6)',
     () async {
+      server = McpServer(bridge: bridge, send: out.add);
+      out.clear();
       bool hasMessage() => out.any(
         (l) => (jsonDecode(l) as Map)['method'] == 'notifications/message',
       );
@@ -1290,6 +1590,8 @@ void main() {
   test(
     'pre-initialize app logs are byte-bounded with an exact drop notice',
     () async {
+      server = McpServer(bridge: bridge, send: out.add);
+      out.clear();
       const retained = '[app err] exact retained startup failure';
       server.forwardAppLog('x' * (1024 * 1024));
       server.forwardAppLog(retained, level: 'warning');
@@ -1359,15 +1661,17 @@ void main() {
     expect(result['isError'], isFalse);
   });
 
-  test('a request with explicit id:null still gets answered', () async {
+  test('a request with id:null is rejected as invalid', () async {
     await server.handleLine('{"jsonrpc":"2.0","id":null,"method":"ping"}');
-    final ok = jsonDecode(out.removeLast()) as Map<String, Object?>;
-    expect(ok['id'], isNull);
-    expect(ok['result'], isA<Map<String, Object?>>());
-
-    // …including the malformed case (a request, not a notification).
-    await server.handleLine('{"jsonrpc":"2.0","id":null}');
     final err = jsonDecode(out.removeLast()) as Map<String, Object?>;
+    expect(err['id'], isNull);
+    expect((err['error'] as Map<String, Object?>)['code'], -32600);
+  });
+
+  test('a request must declare JSON-RPC 2.0', () async {
+    await server.handleLine('{"id":1606,"method":"ping"}');
+    final err = jsonDecode(out.removeLast()) as Map<String, Object?>;
+    expect(err['id'], isNull);
     expect((err['error'] as Map<String, Object?>)['code'], -32600);
   });
 
@@ -1387,9 +1691,19 @@ void main() {
       ]),
     );
     for (final tool in tools) {
+      expect(tool['title'], isA<String>());
       expect(tool['description'], isA<String>());
-      expect((tool['inputSchema'] as Map<String, Object?>)['type'], 'object');
+      final input = tool['inputSchema'] as Map<String, Object?>;
+      expect(input['type'], 'object');
+      expect(input['additionalProperties'], isFalse);
+      expect((tool['outputSchema'] as Map<String, Object?>)['type'], 'object');
+      expect(tool['annotations'], isA<Map<String, Object?>>());
     }
+    final invoke = tools.singleWhere((tool) => tool['name'] == 'invoke_action');
+    final invokeProperties =
+        ((invoke['inputSchema'] as Map<String, Object?>)['properties']
+            as Map<String, Object?>);
+    expect(invokeProperties, contains('targetRef'));
   });
 
   test('get_ui and the resource expose the same tree envelope', () async {
@@ -2086,6 +2400,20 @@ void main() {
     expect(error['message'], contains('Unknown resource'));
   });
 
+  test(
+    'modern resources/read uses JSON-RPC invalid params for an unknown URI',
+    () async {
+      await server.handleLine(
+        _modernRpc(81, 'resources/read', <String, Object?>{
+          'uri': 'fleury://nope',
+        }),
+      );
+      final message = jsonDecode(out.removeLast()) as Map<String, Object?>;
+      final error = message['error'] as Map<String, Object?>;
+      expect(error['code'], -32602);
+    },
+  );
+
   test('find_nodes rejects an unknown role with a corrective hint', () async {
     pushCount(0);
     await bridge.ready;
@@ -2535,6 +2863,76 @@ void main() {
     expect(jsonEncode(result['ui']), contains('"value":7'));
   });
 
+  test('modern wait_for_change observes a change that landed first', () async {
+    pushCount(0);
+    await bridge.ready;
+    await server.handleLine(
+      _modernRpc(420, 'tools/call', <String, Object?>{
+        'name': 'get_ui',
+        'arguments': <String, Object?>{},
+      }),
+    );
+    final read = toolJson(lastResult());
+    final sinceRevision = read['uiRevision'] as String;
+
+    await pushAndAwait(_counterRoot(9));
+    await server.handleLine(
+      _modernRpc(421, 'tools/call', <String, Object?>{
+        'name': 'wait_for_change',
+        'arguments': <String, Object?>{
+          'sinceRevision': sinceRevision,
+          'timeout_ms': 2000,
+        },
+      }),
+    );
+
+    final result = toolJson(lastResult());
+    expect(result['changed'], isTrue);
+    expect(result['uiRevision'], isNot(sinceRevision));
+    expect(jsonEncode(result['ui']), contains('"value":9'));
+  });
+
+  test('modern wait_for_change requires a prior uiRevision', () async {
+    await server.handleLine(
+      _modernRpc(422, 'tools/call', <String, Object?>{
+        'name': 'wait_for_change',
+        'arguments': <String, Object?>{'timeout_ms': 100},
+      }),
+    );
+
+    final result = lastResult();
+    expect(toolError(result), contains('sinceRevision'));
+    expect((result['structuredContent'] as Map)['code'], 'invalid_arguments');
+  });
+
+  test('modern wait rejects a uiRevision from an earlier server', () async {
+    pushCount(0);
+    await bridge.ready;
+    await server.handleLine(
+      _modernRpc(423, 'tools/call', <String, Object?>{
+        'name': 'get_ui',
+        'arguments': <String, Object?>{},
+      }),
+    );
+    final oldRevision = toolJson(lastResult())['uiRevision'] as String;
+
+    final restarted = McpServer(bridge: bridge, send: out.add);
+    out.clear();
+    await restarted.handleLine(
+      _modernRpc(424, 'tools/call', <String, Object?>{
+        'name': 'wait_for_change',
+        'arguments': <String, Object?>{
+          'sinceRevision': oldRevision,
+          'timeout_ms': 100,
+        },
+      }),
+    );
+
+    final result = lastResult();
+    expect(toolError(result), contains('earlier server or app instance'));
+    expect((result['structuredContent'] as Map)['code'], 'stale_reference');
+  });
+
   test('wait_for_change reports no change on timeout', () async {
     pushCount(0);
     await bridge.ready;
@@ -2637,6 +3035,12 @@ void main() {
         input: input.stream,
         output: sink,
       );
+      input.add(
+        utf8.encode(
+          '${_rpc(0, 'initialize', <String, Object?>{'protocolVersion': mcpLegacyProtocolVersion, 'capabilities': <String, Object?>{}})}\n',
+        ),
+      );
+      await waitUntil(() => sink.lines.any((line) => line.contains('"id":0')));
 
       // invoke_action with no reacting frame → its settle blocks ~2s …
       input.add(
@@ -2790,7 +3194,9 @@ void main() {
         input: input.stream,
         output: sink,
       );
-      final bytes = utf8.encode('${' ' * 20000}${_rpc(91, 'ping')}\n');
+      final bytes = utf8.encode(
+        '${_rpc(0, 'initialize', <String, Object?>{'protocolVersion': mcpLegacyProtocolVersion, 'capabilities': <String, Object?>{}})}\n${' ' * 20000}${_rpc(91, 'ping')}\n',
+      );
 
       for (final byte in bytes) {
         input.add(Uint8List.fromList(<int>[byte]));
@@ -2822,8 +3228,14 @@ void main() {
         input: input.stream,
         output: sink,
       );
+      input.add(
+        utf8.encode(
+          '${_rpc(0, 'initialize', <String, Object?>{'protocolVersion': mcpLegacyProtocolVersion, 'capabilities': <String, Object?>{}})}\n',
+        ),
+      );
+      await waitUntil(() => sink.lines.any((line) => line.contains('"id":0')));
 
-      for (var id = 0; id < 64; id++) {
+      for (var id = 1; id <= 64; id++) {
         input.add(
           utf8.encode(
             '${_rpc(id, 'tools/call', <String, Object?>{
@@ -2850,7 +3262,7 @@ void main() {
       input.add(
         utf8.encode(
           '{"jsonrpc":"2.0","method":"notifications/cancelled",'
-          '"params":{"requestId":0}}\n',
+          '"params":{"requestId":1}}\n',
         ),
       );
       await Future<void>.delayed(const Duration(milliseconds: 50));
@@ -2870,43 +3282,46 @@ void main() {
     },
   );
 
-  test(
-    'stdin close cancels a long wait and seals against late output',
-    () async {
-      pushCount(0);
-      await bridge.ready;
-      final input = StreamController<List<int>>();
-      final sink = _CaptureSink();
-      addTearDown(input.close);
-      final serverFut = runMcpServer(
-        bridge: bridge,
-        input: input.stream,
-        output: sink,
-      );
-      input.add(
-        utf8.encode(
-          '${_rpc(7, 'tools/call', <String, Object?>{
-            'name': 'wait_for_change',
-            'arguments': <String, Object?>{'timeout_ms': 60000},
-          })}\n',
-        ),
-      );
-      await Future<void>.delayed(const Duration(milliseconds: 50));
+  test('stdin close cancels a long wait and seals against late output', () async {
+    pushCount(0);
+    await bridge.ready;
+    final input = StreamController<List<int>>();
+    final sink = _CaptureSink();
+    addTearDown(input.close);
+    final serverFut = runMcpServer(
+      bridge: bridge,
+      input: input.stream,
+      output: sink,
+    );
+    input.add(
+      utf8.encode(
+        '${_rpc(0, 'initialize', <String, Object?>{'protocolVersion': mcpLegacyProtocolVersion, 'capabilities': <String, Object?>{}})}\n',
+      ),
+    );
+    await waitUntil(() => sink.lines.any((line) => line.contains('"id":0')));
+    input.add(
+      utf8.encode(
+        '${_rpc(7, 'tools/call', <String, Object?>{
+          'name': 'wait_for_change',
+          'arguments': <String, Object?>{'timeout_ms': 60000},
+        })}\n',
+      ),
+    );
+    await Future<void>.delayed(const Duration(milliseconds: 50));
 
-      await input.close();
-      await serverFut.timeout(const Duration(seconds: 1));
-      final linesAtReturn = sink.lines.length;
-      await Future<void>.delayed(const Duration(milliseconds: 50));
-      expect(sink.lines, hasLength(linesAtReturn));
-      expect(
-        sink.lines.where(
-          (line) => (jsonDecode(line) as Map<String, Object?>)['id'] == 7,
-        ),
-        isEmpty,
-        reason: 'cancelled shutdown waits produce no response after sealing',
-      );
-    },
-  );
+    await input.close();
+    await serverFut.timeout(const Duration(seconds: 1));
+    final linesAtReturn = sink.lines.length;
+    await Future<void>.delayed(const Duration(milliseconds: 50));
+    expect(sink.lines, hasLength(linesAtReturn));
+    expect(
+      sink.lines.where(
+        (line) => (jsonDecode(line) as Map<String, Object?>)['id'] == 7,
+      ),
+      isEmpty,
+      reason: 'cancelled shutdown waits produce no response after sealing',
+    );
+  });
 
   test('runMcpServer ends cleanly when a write fails (broken pipe)', () async {
     pushCount(0);
@@ -3086,6 +3501,30 @@ String _rpc(int id, String method, [Map<String, Object?>? params]) {
     'id': id,
     'method': method,
     'params': ?params,
+  });
+}
+
+String _modernRpc(
+  int id,
+  String method, [
+  Map<String, Object?>? params,
+  String protocolVersion = mcpProtocolVersion,
+]) {
+  return jsonEncode(<String, Object?>{
+    'jsonrpc': '2.0',
+    'id': id,
+    'method': method,
+    'params': <String, Object?>{
+      ...?params,
+      '_meta': <String, Object?>{
+        'io.modelcontextprotocol/protocolVersion': protocolVersion,
+        'io.modelcontextprotocol/clientInfo': const <String, Object?>{
+          'name': 'fleury-test',
+          'version': '1.0.0',
+        },
+        'io.modelcontextprotocol/clientCapabilities': const <String, Object?>{},
+      },
+    },
   });
 }
 

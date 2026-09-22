@@ -8,14 +8,18 @@ import 'package:fleury_samples/samples.dart';
 ///   dart run packages/samples/bin/samples.dart <app>
 ///   fleury dev samples <app>            (via tool/fleury_dev.dart)
 ///
-/// Apps: dashboard | files | editor | agent | finance | forms | state | themes |
-/// asteroids | sprite | commands | debug.
+/// Apps: dashboard | files | editor | agent | agent-guide | finance | forms |
+/// state | themes | asteroids | sprite | commands | debug.
 const Map<String, (String, Widget Function())>
 _apps = <String, (String, Widget Function())>{
   'dashboard': ('htop-style live system monitor', DashboardApp.new),
   'files': ('two-pane keyboard file manager', FileManagerApp.new),
   'editor': ('nano/vim file editor you can toggle live', EditorApp.new),
   'agent': ('Claude-Code-style coding-agent TUI', AgentApp.new),
+  'agent-guide': (
+    'small release checklist used by the agent-driving guide',
+    AgentGuideApp.new,
+  ),
   'finance': (
     'personal finance dashboard and transaction explorer',
     FinanceApp.new,
