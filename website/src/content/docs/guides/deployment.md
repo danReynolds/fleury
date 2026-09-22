@@ -98,7 +98,7 @@ as the command to run):
 | `--port=<n>` | `5777` | Port to listen on |
 | `--host=<addr>` | `127.0.0.1` | Bind address (`0.0.0.0` to expose) |
 | `--allow-origin=<origin>` | same-origin | Allow an embedding origin, or `*` |
-| `--token=<secret>` | none | Require `?token=<secret>` on the WebSocket |
+| `--token=<secret>` | none on loopback; generated otherwise | Require `?token=<secret>` on the WebSocket |
 | `--debug` | off | Expose frame, log, and full error diagnostics in spawn mode |
 | `--max-sessions=<n>` | `8` | Cap concurrent browser sessions in spawn mode |
 | `--spawn <cmd …>` | bridge mode | Spawn an isolated process per connection |
@@ -108,8 +108,10 @@ session — good for a local demo or IDE-driven debugging. **Spawn mode**
 (`--spawn dart run bin/run_app.dart`) gives every browser connection its own isolated
 subprocess, with a warm standby so reconnects start quickly.
 
-The default bind address is loopback. If you deliberately expose it on a trusted
-network, set `--token`, choose explicit origins, and prefer a trusted tunnel or
+The default bind address is loopback. A bind that is not loopback always
+requires a token: pass `--token`, or `serve` generates one for the run and
+prints the URL that carries it. If you deliberately expose it on a trusted
+network, also choose explicit origins, and prefer a trusted tunnel or
 authenticating reverse proxy. `serve` is not a hardened public hosting layer:
 any client that passes its gates can drive the app and read its redacted
 semantic tree.

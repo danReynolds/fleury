@@ -2,7 +2,7 @@
 //
 // Composed of three pieces:
 //   - TextEditingController — a Notifier holding the current
-//     TextEditingValue and compatibility text/cursor accessors.
+//     TextEditingValue plus text/selection/caret accessors over it.
 //   - TextInput — the widget. Creates a Focus node tagged as a
 //     TextInputClaimant / TextCompositionClaimant, so the InputDispatcher
 //     routes typed printable text and IME composition directly to it. Handles

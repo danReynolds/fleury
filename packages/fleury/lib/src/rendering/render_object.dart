@@ -88,7 +88,9 @@ final class RenderDamageTracker {
     _paintPassListeners.remove(listener);
   }
 
-  void recordLayoutOrConservativePaint() {
+  /// Records a layout invalidation: geometry may move, so the next frame
+  /// diffs in full and every derived geometry is recomputed.
+  void recordLayout() {
     _requiresFullDiff = true;
     _visualChange = true;
     _geometryEpoch++;
@@ -251,8 +253,8 @@ abstract class RenderObject implements ScreenGeometrySource {
   bool _needsPaint = true;
 
   /// Whether the enclosing boundary's cache has been invalidated. Set true
-  /// by [markNeedsPaint]; subclasses that implement a paint cache clear it
-  /// once they have re-painted into their cache.
+  /// by [markNeedsLayout] and [markNeedsPaintOnly]; subclasses that implement
+  /// a paint cache clear it once they have re-painted into their cache.
   @protected
   bool get needsPaint => _needsPaint;
 
@@ -336,33 +338,21 @@ abstract class RenderObject implements ScreenGeometrySource {
     if (parent == null) {
       // Terminal node of the invalidation walk: publish frame damage at the
       // root so the presenter falls back to a full diff this frame.
-      _frameDamage?.recordLayoutOrConservativePaint();
+      _frameDamage?.recordLayout();
       return;
     }
     parent._markNeedsLayoutUp();
   }
 
-  /// Marks this render object as visually stale and conservatively marks
-  /// layout dirty.
+  /// Marks this render object's painted output as stale without touching
+  /// layout.
   ///
-  /// This remains the compatibility-safe default for unaudited setters. Use
-  /// [markNeedsLayout] when the value can change size, child constraints,
-  /// offsets, or layout-derived paint state. Use [markNeedsPaintOnly] only
-  /// after verifying that the value cannot affect layout.
-  void markNeedsPaint() {
-    if (DebugInvalidations.isRecording) {
-      DebugInvalidations.recordPaint(_debugInvalidationLabel);
-    }
-    _markNeedsLayoutUp();
-    _markEnclosingRepaintBoundariesDirty();
-  }
-
-  /// Marks only the nearest enclosing repaint boundary as visually stale.
-  ///
-  /// Subclasses should use this for audited visual-only mutations such as
-  /// color, text style, cursor blink, or paint-time visibility toggles. It
-  /// intentionally does not mark this render object or its ancestors as layout
-  /// dirty, so the next same-constraint layout call can reuse cached sizes.
+  /// Use this for visual-only mutations such as color, text style, cursor
+  /// blink, or paint-time visibility toggles. It deliberately does not mark
+  /// this render object or its ancestors as layout dirty, so the next
+  /// same-constraint layout call reuses cached sizes. A value that can change
+  /// size, child constraints, offsets, or layout-derived paint state must call
+  /// [markNeedsLayout] instead, which also repaints.
   @protected
   void markNeedsPaintOnly() {
     if (DebugInvalidations.isRecording) {
@@ -379,8 +369,8 @@ abstract class RenderObject implements ScreenGeometrySource {
   // with pointer/semantic replay, re-register regions from a subtree that has
   // since changed). An already-dirty boundary short-circuits: it was marked by
   // an earlier walk this frame that already continued to the root, so its
-  // ancestors are dirty too. (Named for the audited paint-only path; also used
-  // by the conservative markNeedsPaint. Layout dirtiness is handled separately.)
+  // ancestors are dirty too. (Shared by markNeedsLayout and markNeedsPaintOnly;
+  // layout dirtiness is handled separately.)
   void _markEnclosingRepaintBoundariesDirty() {
     if (isRepaintBoundary) {
       if (_needsPaint) return;
@@ -511,7 +501,7 @@ abstract class RenderObject implements ScreenGeometrySource {
     _needsLayout = false;
     RenderLayoutDebugStats.recordPerformed();
     if (previousSize != null && previousSize != result) {
-      _rootFrameDamage?.recordLayoutOrConservativePaint();
+      _rootFrameDamage?.recordLayout();
       _markEnclosingRepaintBoundariesDirty();
     }
     return result;

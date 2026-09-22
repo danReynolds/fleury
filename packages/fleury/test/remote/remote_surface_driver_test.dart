@@ -548,8 +548,6 @@ void main() {
               tmuxPassthrough: false,
               images: InlineImageSupport.placements,
               hyperlinks: true,
-              // The current protocol is >=v4, so wantsHyperlinks makes the
-              // plan serialize the link.
             ),
           ),
         );
@@ -702,65 +700,38 @@ void main() {
     }
 
     test(
-      'presentFrame gates clipped image windows for v4 and v5 peers',
+      'presentFrame ships a clipped image with its original window',
       () async {
-        for (final (version, expectsWindow) in [(4, false), (5, true)]) {
-          final transport = _FakeTransport();
-          final driver = RemoteTerminalDriver(transport);
-          final entered = driver.enter(TerminalMode.interactive);
-          transport.emit(
-            InitFrame(
-              size: const CellSize(40, 10),
-              colorMode: ColorMode.truecolor,
-              imageProtocol: ImageProtocol.halfBlock,
-              tmuxPassthrough: false,
-              protocolVersion: version,
-            ),
+        final transport = _FakeTransport();
+        final driver = await connected(transport);
+        const size = CellSize(40, 10);
+        final next = CellBuffer(size)
+          ..writeImage(
+            const CellOffset(-1, 1),
+            Uint8List.fromList([1, 2, 3, 4]),
+            width: 4,
+            height: 3,
           );
-          await entered;
-          transport.sent.clear();
-          const size = CellSize(40, 10);
-          final next = CellBuffer(size)
-            ..writeImage(
-              const CellOffset(-1, 1),
-              Uint8List.fromList([1, 2, 3, 4]),
-              width: 4,
-              height: 3,
-            );
 
-          driver.presentFrame(CellBuffer(size), next, fullPlan(size));
+        driver.presentFrame(CellBuffer(size), next, fullPlan(size));
 
-          final plan = transport.sent.whereType<PlanFrame>().single.plan;
-          expect(
-            plan.includeImageWindows,
-            expectsWindow,
-            reason: 'peer v$version',
-          );
-          expect(encodeRemotePlan(plan).first & 4, expectsWindow ? 4 : 0);
-          if (expectsWindow) {
-            final placement = plan.placements.single;
-            expect(
-              [
-                placement.col,
-                placement.row,
-                placement.cols,
-                placement.rows,
-                placement.boxCols,
-                placement.boxRows,
-                placement.boxOffsetCol,
-                placement.boxOffsetRow,
-              ],
-              [0, 1, 3, 3, 4, 3, 1, 0],
-            );
-          } else {
-            expect(
-              plan.placements,
-              isEmpty,
-              reason: 'v4 must not silently re-fit a clipped source image',
-            );
-          }
-          await driver.restore();
-        }
+        final plan = transport.sent.whereType<PlanFrame>().single.plan;
+        expect(encodeRemotePlan(plan).first & 4, 4);
+        final placement = plan.placements.single;
+        expect(
+          [
+            placement.col,
+            placement.row,
+            placement.cols,
+            placement.rows,
+            placement.boxCols,
+            placement.boxRows,
+            placement.boxOffsetCol,
+            placement.boxOffsetRow,
+          ],
+          [0, 1, 3, 3, 4, 3, 1, 0],
+        );
+        await driver.restore();
       },
     );
 

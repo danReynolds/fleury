@@ -51,9 +51,9 @@ class _ScrollEdgesState extends State<ScrollEdges> {
             final first = scroll.offset + 1;
             final last =
                 scroll.offset + scroll.viewportExtent;
-            final edge = scroll.atTop
+            final edge = scroll.atStart
                 ? 'TOP'
-                : scroll.atBottom
+                : scroll.atEnd
                 ? 'BOTTOM'
                 : 'MIDDLE';
             return Text('Rows $first–$last / 8 · $edge');

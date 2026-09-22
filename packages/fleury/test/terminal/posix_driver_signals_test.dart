@@ -56,6 +56,27 @@ void main() {
       },
     );
 
+    test(
+      'a hangup is delivered and force-exits with 129 after grace',
+      () async {
+        final codes = <int>[];
+        final driver = PosixTerminalDriver(
+          signalGrace: const Duration(milliseconds: 50),
+          forceExitOverride: codes.add,
+        );
+        final events = <TuiEvent>[];
+        final sub = driver.events.listen(events.add);
+
+        driver.deliverSignal(AppSignal.hangup);
+        await wait(10);
+        expect(events, [const SignalEvent(AppSignal.hangup)]);
+
+        await wait(120);
+        expect(codes, [129], reason: '128 + SIGHUP after the grace deadline');
+        await sub.cancel();
+      },
+    );
+
     test('a second same-signal forces immediately', () async {
       final codes = <int>[];
       final driver = PosixTerminalDriver(

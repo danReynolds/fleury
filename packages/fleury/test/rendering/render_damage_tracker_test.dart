@@ -13,7 +13,7 @@ void main() {
       for (final phase in [RenderFramePhase.build, RenderFramePhase.layout]) {
         tracker.phase = phase;
         tracker.recordVisualChange();
-        tracker.recordLayoutOrConservativePaint();
+        tracker.recordLayout();
       }
       expect(requests, 0, reason: "this frame's paint covers them");
       expect(tracker.hasVisualChange, isTrue);
@@ -26,7 +26,7 @@ void main() {
       tracker.phase = RenderFramePhase.idle;
       tracker.recordVisualChange();
       expect(requests, 1);
-      tracker.recordLayoutOrConservativePaint();
+      tracker.recordLayout();
       expect(requests, 2);
     });
 
@@ -45,7 +45,7 @@ void main() {
       expect(tracker.takeVisualChange(), isTrue, reason: 'the next frame');
       expect(tracker.hasVisualChange, isFalse);
 
-      tracker.recordLayoutOrConservativePaint();
+      tracker.recordLayout();
       expect(tracker.takeRequiresFullDiff(), isTrue);
       expect(
         tracker.takeRequiresFullDiff(),

@@ -5,6 +5,78 @@ import 'package:fleury/fleury.dart';
 import 'package:test/test.dart';
 
 void main() {
+  group('writeGrapheme writes one cluster', () {
+    // The buffer stores a cell's grapheme verbatim and AnsiRenderer writes it
+    // verbatim, so anything past the first cluster would reach the terminal.
+    String ansiFor(CellBuffer next) {
+      final sink = StringAnsiSink();
+      const AnsiRenderer().renderDiff(CellBuffer(next.size), next, sink);
+      return sink.output;
+    }
+
+    test('a trailing escape sequence never reaches the terminal', () {
+      final buffer = CellBuffer(const CellSize(8, 1));
+      final advanced = buffer.writeGrapheme(
+        CellOffset.zero,
+        'a\x1b]52;c;SGVsbG8=\x07',
+      );
+
+      expect(advanced, 1);
+      expect(buffer.atColRow(0, 0).grapheme, 'a');
+      final ansi = ansiFor(buffer);
+      expect(ansi, contains('a'));
+      expect(ansi, isNot(contains(']52;')), reason: 'no OSC 52 payload');
+    });
+
+    test('a leading control writes nothing', () {
+      final buffer = CellBuffer(const CellSize(8, 1));
+      expect(buffer.writeGrapheme(CellOffset.zero, '\x1b[2J'), 0);
+      expect(buffer.atColRow(0, 0).role, CellRole.empty);
+      expect(ansiFor(buffer), isNot(contains('[2J')));
+    });
+
+    test('text keeps only its first cluster', () {
+      final buffer = CellBuffer(const CellSize(8, 1));
+      expect(buffer.writeGrapheme(CellOffset.zero, 'hello'), 1);
+      expect(buffer.atColRow(0, 0).grapheme, 'h');
+      expect(buffer.atColRow(1, 0).role, CellRole.empty);
+    });
+
+    test('single clusters of every shape are written whole', () {
+      for (final (grapheme, width) in [
+        ('x', 1),
+        ('│', 1),
+        ('\u{1CD00}', 1), // octant: one astral scalar (a surrogate pair)
+        ('中', 2),
+        ('😀', 2),
+        ('e\u0301', 1), // base + combining mark
+        ('👨\u200D👩\u200D👧', 2), // ZWJ family
+        ('🇺🇸', 2), // regional-indicator pair
+      ]) {
+        final buffer = CellBuffer(const CellSize(4, 1));
+        expect(
+          buffer.writeGrapheme(CellOffset.zero, grapheme),
+          width,
+          reason: grapheme,
+        );
+        expect(buffer.atColRow(0, 0).grapheme, grapheme, reason: grapheme);
+      }
+    });
+
+    test('a leading lone surrogate is dropped without throwing', () {
+      // Not a scalar value: it measures zero width, as it does in writeText,
+      // and segmentation must not trip over it.
+      final buffer = CellBuffer(const CellSize(4, 1));
+      late int advanced;
+      expect(
+        () => advanced = buffer.writeGrapheme(CellOffset.zero, '\uDC00x'),
+        returnsNormally,
+      );
+      expect(advanced, 0);
+      expect(buffer.atColRow(0, 0).role, CellRole.empty);
+    });
+  });
+
   group('Construction and access', () {
     test('new buffer is filled with Cell.empty', () {
       final buf = CellBuffer(const CellSize(3, 2));

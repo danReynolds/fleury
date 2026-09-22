@@ -35,6 +35,7 @@ import 'dart:typed_data' show Uint8List;
 import 'package:fleury/src/cli/create_command.dart';
 import 'package:fleury/src/cli/dart_sdk.dart';
 import 'package:fleury/src/cli/run_command.dart';
+import 'package:fleury/src/cli/serve_access.dart';
 import 'package:fleury/src/foundation/geometry.dart';
 import 'package:fleury/src/remote/bridge_app_link.dart';
 import 'package:fleury/src/remote/buffered_browser_input.dart';
@@ -116,7 +117,7 @@ void _printUsage() {
   );
   stderr.writeln(
     '                    --allow-origin=<origin>, --token=<secret> '
-    '(require ?token= on /ws),',
+    '(require ?token= on /ws; generated when the host is not loopback),',
   );
   stderr.writeln(
     '                    --spawn <cmd ...> '
@@ -619,16 +620,18 @@ Future<int> _runServe(List<String> args) async {
   // The wire carries full app control: semantic actions, key/text
   // injection, and the (redacted) semantic tree. Off loopback, anyone
   // who can reach the port owns the app — make that loud.
-  if (!_isLoopbackHost(host)) {
+  if (!isLoopbackServeHost(host)) {
     stderr.writeln(
       '[serve] WARNING: binding to $host exposes this app to the '
-      'network. Anyone who can reach the port can drive the UI and '
-      'read its (redacted) semantic tree.',
+      'network. Anyone who can reach the port and holds the token can drive '
+      'the UI and read its (redacted) semantic tree.',
     );
     if (token == null) {
+      // A network bind never runs open: the wire carries full app control.
+      token = resolveServeToken(host: host);
       stderr.writeln(
-        '[serve] WARNING: no --token set. Pass --token=<secret> and '
-        'share the URL as http://$host:$port/?token=<secret>.',
+        '[serve] no --token given; generated one for this run (it is part '
+        'of the browser URL below).',
       );
     }
   }
@@ -652,19 +655,13 @@ Future<int> _runServe(List<String> args) async {
         );
 }
 
-bool _isLoopbackHost(String host) {
-  if (host == 'localhost' || host == '127.0.0.1' || host == '::1') return true;
-  final parsed = InternetAddress.tryParse(host);
-  return parsed != null && parsed.isLoopback;
-}
-
 /// Token gate for the WebSocket endpoint. Origin checks stop cross-site
 /// browser pages; the token additionally stops any local process (or,
 /// off loopback, any network peer) that can open a socket but doesn't
 /// know the secret.
 bool _isAuthorizedWebSocketRequest(HttpRequest req, String? token) {
   if (token == null) return true;
-  return req.uri.queryParameters['token'] == token;
+  return serveTokenMatches(token, req.uri.queryParameters['token']);
 }
 
 Future<void> _rejectUnauthorizedWebSocket(HttpRequest req) async {
@@ -936,7 +933,7 @@ Future<int> _runServeBridge({
   // Do not let callers treat the bridge as ready until its listeners and
   // shutdown cleanup are fully armed.
   stderr.writeln('fleury serve ready (bridge mode)');
-  stderr.writeln('  browser:    http://$host:$port');
+  stderr.writeln('  browser:    ${serveBrowserUrl(host, port, token)}');
   stderr.writeln('  app handle: $socketPath');
   stderr.writeln('');
   stderr.writeln('Open the URL in your browser, then attach your app:');
@@ -1190,9 +1187,9 @@ bool _isAllowedWebSocketOrigin(
 /// `--allow-origin`, and non-loopback binds retain their explicit, warned-about
 /// trusted-network behavior.
 bool _isAllowedSameOriginHost(String requestHost, String boundHost) {
-  if (!_isLoopbackHost(boundHost)) return true;
+  if (!isLoopbackServeHost(boundHost)) return true;
   final uri = Uri.tryParse('http://${requestHost.trim()}');
-  return uri != null && uri.host.isNotEmpty && _isLoopbackHost(uri.host);
+  return uri != null && uri.host.isNotEmpty && isLoopbackServeHost(uri.host);
 }
 
 /// The scheme the browser actually used to reach this server, for the
@@ -1592,7 +1589,7 @@ Future<int> _runServeSpawn({
   // The ready marker is consumed by scripts, so emit it only after HTTP
   // admission, the warm-session machinery, and shutdown cleanup are armed.
   stderr.writeln('fleury serve ready (spawn mode)');
-  stderr.writeln('  browser: http://$host:$port');
+  stderr.writeln('  browser: ${serveBrowserUrl(host, port, token)}');
   stderr.writeln('  spawn:   ${command.join(' ')}');
   stderr.writeln(
     'Sessions are isolated; a warm standby is kept ready so connections '

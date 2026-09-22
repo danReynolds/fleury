@@ -40,12 +40,13 @@ const int maxRemoteGridCells = maxRemotePlanGridCells;
 
 /// The remote-rendering driver for `fleury shell` and `fleury serve`.
 ///
-/// One driver covers both legacy (ANSI) and structured (presentation-plan)
-/// peers. The handshake's protocol version decides: a v1 peer (a real
-/// terminal, e.g. `fleury shell`) receives ANSI via [write]; a v2 peer (the
-/// browser surface client) receives [PlanFrame]s via [presentPlan] and
-/// sends structured input. [wantsPresentationPlans] reflects the negotiated
-/// version and is read by [runApp] after [enter] completes.
+/// One driver covers both ANSI and structured (presentation-plan) peers. The
+/// handshake's protocol version decides: the ANSI host (a real terminal, e.g.
+/// `fleury shell`) receives ANSI via [write]; a structured peer at exactly
+/// [remoteProtocolVersion] (the browser surface client) receives [PlanFrame]s
+/// via [presentPlan] and sends structured input. Any other version is rejected
+/// at INIT. [wantsPresentationPlans] reflects the negotiated version and is
+/// read by [runApp] after [enter] completes.
 final class RemoteTerminalDriver
     implements TerminalDriver, RemoteSurfaceSink, OutputFlowControl {
   /// What the peer DECLARED in its INIT (RFC 0020 §11) — never an inference
@@ -150,20 +151,7 @@ final class RemoteTerminalDriver
   Future<void>? _restoreFuture;
 
   @override
-  bool get wantsPresentationPlans => _protocolVersion >= 2;
-
-  /// Whether the negotiated peer can decode OSC 8 links in the PLAN cell-style
-  /// entry (protocol v4, RFC 0017 §5). Frozen from the peer's INIT alongside
-  /// [_protocolVersion]. A pre-v4 peer (including a stale cached v3 browser
-  /// client) reports false, so [presentFrame] builds a plan that omits the
-  /// link bytes and stays byte-identical to v3 — the crux that keeps an older
-  /// client's decoder from misaligning on an unexpected URI.
-  bool get wantsHyperlinks => _protocolVersion >= 4;
-
-  /// Whether the peer understands protocol-v5 inline-image placement windows.
-  /// A v4 client still receives the legacy placement shape, while a v5 client
-  /// can preserve the original fit when only part of an image box is visible.
-  bool get wantsImageWindows => _protocolVersion >= 5;
+  bool get wantsPresentationPlans => _protocolVersion == remoteProtocolVersion;
 
   @override
   CellSize get size => _size;
@@ -284,7 +272,7 @@ final class RemoteTerminalDriver
             terminal: _capabilities,
             keyboard: keyboardCapabilities,
             surface: surfaceCapabilities,
-            // Legacy ANSI peers have no terminal query channel. Structured
+            // ANSI peers have no terminal query channel. Structured
             // peers do not use this presenter; ANSI stays conservative unless
             // the operator explicitly asserts mode-2026 support.
             synchronizedOutput:
@@ -304,7 +292,7 @@ final class RemoteTerminalDriver
   /// Overridable for tests.
   static Duration initTimeout = const Duration(seconds: 10);
 
-  /// Idle debounce used to disambiguate a lone ESC on the legacy raw-input
+  /// Idle debounce used to disambiguate a lone ESC on the ANSI raw-input
   /// path. Overridable for focused tests.
   static Duration inputFlushDelay = const Duration(milliseconds: 30);
 
@@ -363,12 +351,6 @@ final class RemoteTerminalDriver
       // the next full repaint. buildRemotePlan's debug oracle makes that
       // loud in dev/CI; release trusts the planner.
       dirtyRows: plan.dirtyRows,
-      // Serialize OSC 8 links only when the peer negotiated v>=4 (RFC 0017
-      // §5). A pre-v4 peer gets bit-6-clear, byte-identical-to-v3 output even
-      // if a cell carries a link, so a stale client can't misalign on a URI it
-      // doesn't expect.
-      includeLinks: wantsHyperlinks,
-      includeImageWindows: wantsImageWindows,
     );
     final boundedPlacements = _boundedImagePlacements(remotePlan, next);
     if (boundedPlacements.length != remotePlan.placements.length) {
@@ -379,8 +361,6 @@ final class RemoteTerminalDriver
         patches: remotePlan.patches,
         scrollUpRows: remotePlan.scrollUpRows,
         placements: boundedPlacements,
-        includeLinks: remotePlan.includeLinks,
-        includeImageWindows: remotePlan.includeImageWindows,
       );
     }
     // Ship the bytes for each image the peer does not yet hold, before the
@@ -575,35 +555,35 @@ final class RemoteTerminalDriver
         // size channel after the handshake is ResizeFrame. Ignore repeats.
         if (_handshakeReceived) break;
         _handshakeReceived = true;
-        _adoptInit(f);
-        // v3: echo INIT back with the app's protocol version so the peer
-        // can detect version skew (e.g. a cached client bundle). The
-        // echoed size/capabilities restate what the peer sent; only `v`
-        // carries new information. A v2 peer ignores it.
-        if (f.protocolVersion >= 3) {
-          _transport.send(
-            InitFrame(
-              size: _size,
-              colorMode: f.colorMode,
-              glyphTier: f.glyphTier,
-              imageProtocol: f.imageProtocol,
-              tmuxPassthrough: f.tmuxPassthrough,
-              // Restate the peer's own fields (only `v` carries new info). The
-              // client reads only `v` from the echo for skew detection, so this
-              // value drives no link decision; restating what the peer sent
-              // keeps a link-free echo byte-flat (false emits no `hyperlinks=`).
-              hyperlinks: f.hyperlinks,
-              keyboard: f.keyboard,
+        final version = f.protocolVersion;
+        if (version != remoteAnsiProtocolVersion &&
+            version != remoteProtocolVersion) {
+          // The wire is lockstep: a structured peer of any other version can
+          // neither decode this app's frames nor be decoded safely. Echo this
+          // app's version so the peer can report the skew, then fail the
+          // session closed instead of speaking a shape it may misread.
+          _transport.send(_initEcho(f));
+          _onTransportError(
+            RemoteProtocolException(
+              'the peer speaks wire protocol v$version but this app speaks '
+              'v$remoteProtocolVersion; use matching Fleury builds.',
+              recoverable: false,
             ),
+            StackTrace.current,
           );
+          break;
         }
+        _adoptInit(f);
+        // A structured peer gets the app's version back so it can confirm the
+        // lockstep before speaking anything else. The ANSI host takes no echo.
+        if (version == remoteProtocolVersion) _transport.send(_initEcho(f));
         _handshake?.complete();
       case ResizeFrame f:
         _size = _clampSize(f.size);
         if (_active) _events.add(ResizeEvent(_size));
       case InputFrame f:
-        // Raw ANSI input belongs exclusively to the negotiated v1 terminal
-        // path. A structured peer must use INPUT_EVENT; ignoring legacy bytes
+        // Raw ANSI input belongs exclusively to the negotiated ANSI terminal
+        // path. A structured peer must use INPUT_EVENT; ignoring raw bytes
         // here prevents it from reaching the stateful escape/paste parser and
         // removes an accidental second input channel after negotiation.
         if (!_handshakeReceived || wantsPresentationPlans) break;
@@ -676,6 +656,20 @@ final class RemoteTerminalDriver
     return CellSize(cols, rows);
   }
 
+  /// This app's INIT reply to [peer]. It restates the peer's own fields; only
+  /// `v` carries new information (the peer reads it to confirm the lockstep),
+  /// and restating what the peer sent keeps a link-free echo byte-flat (false
+  /// emits no `hyperlinks=`).
+  InitFrame _initEcho(InitFrame peer) => InitFrame(
+    size: _clampSize(peer.size),
+    colorMode: peer.colorMode,
+    glyphTier: peer.glyphTier,
+    imageProtocol: peer.imageProtocol,
+    tmuxPassthrough: peer.tmuxPassthrough,
+    hyperlinks: peer.hyperlinks,
+    keyboard: peer.keyboard,
+  );
+
   /// Takes a peer's negotiated size, protocol version, keyboard and
   /// capabilities on record.
   void _adoptInit(InitFrame f) {
@@ -685,10 +679,10 @@ final class RemoteTerminalDriver
     _capabilities = TerminalCapabilities(
       colorMode: f.colorMode,
       glyphTier: f.glyphTier,
-      // Legacy terminal peers used `tmux=1` as a session marker while
-      // still advertising host-native images. Normalize that combination
-      // at the trust boundary so old clients fail safe to cell art without
-      // changing TerminalCapabilities value/round-trip semantics.
+      // A shell peer inside tmux reports `tmux=1` alongside the host's
+      // native image protocol. Normalize that combination at the trust
+      // boundary so the relay fails safe to cell art without changing
+      // TerminalCapabilities value/round-trip semantics.
       imageProtocol: f.tmuxPassthrough
           ? ImageProtocol.halfBlock
           : f.imageProtocol,
@@ -710,7 +704,7 @@ final class RemoteTerminalDriver
             // MediaQuery.capabilitiesOf(context).hyperlinks == false and
             // never produces a linkUri (underlined-but-not-clickable).
             hyperlinks: f.hyperlinks,
-            pointer: f.protocolVersion >= 2
+            pointer: f.protocolVersion == remoteProtocolVersion
                 ? PointerPrecision.subCell
                 : PointerPrecision.cell,
           );

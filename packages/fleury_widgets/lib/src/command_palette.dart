@@ -43,10 +43,6 @@ class CommandPaletteItem {
   final void Function() onInvoke;
 }
 
-/// Deprecated source-compatible name for [CommandPaletteItem].
-@Deprecated('Use CommandPaletteItem instead.')
-typedef Command = CommandPaletteItem;
-
 bool _isSubsequence(String needle, String hay) {
   var i = 0;
   for (var j = 0; j < hay.length && i < needle.length; j++) {

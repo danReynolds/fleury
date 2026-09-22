@@ -5,6 +5,7 @@ import 'package:fleury/fleury.dart';
 Never _exitWith(AppExit appExit) => exit(switch (appExit.signal) {
   AppSignal.interrupt => 130,
   AppSignal.terminate => 143,
+  AppSignal.hangup => 129,
   null => 0,
 });
 

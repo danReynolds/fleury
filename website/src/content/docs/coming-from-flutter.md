@@ -151,8 +151,7 @@ Models used by widgets and services extend `Notifier`; widgets observe them
 with `NotifierBuilder` or `context.listen(model)`. `ValueNotifier<T>` handles
 notification automatically when its value changes. The
 [State management guide](/fleury/guides/state-management/) demonstrates all
-three levels. The older `ChangeNotifier`, `notifyListeners`, `ListenableBuilder`,
-and `ValueListenableBuilder` APIs remain available for compatibility.
+three levels.
 
 `EdgeInsets` keeps the familiar constructors (`all`, `symmetric`, `only`), but
 the values are cells:

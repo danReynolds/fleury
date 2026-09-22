@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:fleury/fleury.dart';
 import 'package:test/test.dart';
 
@@ -34,6 +36,38 @@ class _EqualSource extends _CustomSource {
 
   @override
   int get hashCode => 0;
+}
+
+class _Capture extends StatefulWidget {
+  const _Capture();
+
+  @override
+  State<_Capture> createState() => _CaptureState();
+}
+
+class _CaptureState extends State<_Capture> {
+  int builds = 0;
+
+  @override
+  Widget build(BuildContext context) {
+    builds += 1;
+    return const Text('inner');
+  }
+}
+
+_CaptureState _findCapture(Element root) {
+  _CaptureState? found;
+  void visit(Element element) {
+    if (found != null) return;
+    if (element is StatefulElement && element.state is _CaptureState) {
+      found = element.state as _CaptureState;
+      return;
+    }
+    element.visitChildren(visit);
+  }
+
+  visit(root);
+  return found ?? (throw StateError('No _Capture below this element.'));
 }
 
 void main() {
@@ -275,5 +309,60 @@ void main() {
         expect(parentBuilds, 1);
       },
     );
+
+    test('an observer error is reported without stranding the builder', () {
+      final notifier = ValueNotifier(0);
+      addTearDown(notifier.dispose);
+      final error = StateError('observer failed');
+      final errors = <Object>[];
+      var rendered = -1;
+      notifier.addListener(() => throw error);
+      final owner = BuildOwner();
+      final root = owner.mountRoot(
+        NotifierBuilder(
+          notifier: notifier,
+          builder: (context, current) {
+            rendered = current.value;
+            return Text('value=${current.value}');
+          },
+        ),
+      );
+      addTearDown(root.unmount);
+
+      for (var value = 1; value <= 2; value++) {
+        runZonedGuarded(() => notifier.value = value, (e, _) => errors.add(e));
+        owner.flushBuild();
+        expect(rendered, value);
+      }
+      expect(errors, [same(error), same(error)]);
+    });
+
+    test('a prebuilt subtree captured by the builder is reused', () {
+      // The replacement for ListenableBuilder's `child:`: a widget built
+      // outside the builder is the same instance on every rebuild, so
+      // reconciliation keeps its element and State without rebuilding them.
+      final notifier = ValueNotifier(0);
+      addTearDown(notifier.dispose);
+      const reused = _Capture();
+      final owner = BuildOwner();
+      final root = owner.mountRoot(
+        NotifierBuilder(
+          notifier: notifier,
+          builder: (context, current) =>
+              Column(children: [Text('${current.value}'), reused]),
+        ),
+      );
+      addTearDown(root.unmount);
+      final state = _findCapture(root);
+      final builds = state.builds;
+
+      notifier.value = 1;
+      owner.flushBuild();
+      notifier.value = 2;
+      owner.flushBuild();
+
+      expect(identical(_findCapture(root), state), isTrue);
+      expect(state.builds, builds);
+    });
   });
 }

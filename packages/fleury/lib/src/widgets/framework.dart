@@ -1860,7 +1860,7 @@ class BuildOwner {
       // A root this owner has not driven before: invalidations recorded while
       // its subtree was built detached never reached the tracker, so start
       // the frame with conservative damage.
-      renderDamageTracker.recordLayoutOrConservativePaint();
+      renderDamageTracker.recordLayout();
     }
     // Loose constraints at root: the root widget chooses its own size up
     // to the buffer's dimensions. Anything it doesn't claim stays empty.
@@ -2003,9 +2003,8 @@ abstract class RenderObjectElement extends Element {
     _dependenciesChanged = false;
     newWidget.updateRenderObject(this, _renderObject!);
     // Render-object setters own their invalidation. Keeping that decision at
-    // the setter is what lets audited paint-only updates avoid relayout while
-    // layout-affecting setters still call markNeedsLayout or the conservative
-    // markNeedsPaint compatibility path.
+    // the setter is what lets paint-only updates (markNeedsPaintOnly) avoid
+    // relayout while layout-affecting setters call markNeedsLayout.
     rebuild(force: true);
   }
 

@@ -34,6 +34,7 @@ void _nativeWrite(String s) {
 Never _exitWith(AppExit appExit) => exit(switch (appExit.signal) {
   AppSignal.interrupt => 130,
   AppSignal.terminate => 143,
+  AppSignal.hangup => 129,
   null => 0,
 });
 
@@ -66,6 +67,13 @@ Future<void> main(List<String> args) async {
         ),
       ),
     );
+  }
+  final disposeArg = args
+      .where((a) => a.startsWith('--dispose-marker='))
+      .firstOrNull;
+  if (disposeArg != null) {
+    final marker = File(disposeArg.substring('--dispose-marker='.length));
+    _exitWith(await runApp(_DisposeMarkerApp(marker), enableHotReload: false));
   }
   if (args.contains('--stray-output')) {
     _exitWith(await runApp(const _StrayOutputApp(), enableHotReload: false));
@@ -210,6 +218,27 @@ class _PtySmokeApp extends StatelessWidget {
       children: [Text(label), Text('SIZE ${size.cols}x${size.rows}')],
     );
   }
+}
+
+/// Records that app-level cleanup ran: State.dispose writes [marker].
+class _DisposeMarkerApp extends StatefulWidget {
+  const _DisposeMarkerApp(this.marker);
+
+  final File marker;
+
+  @override
+  State<_DisposeMarkerApp> createState() => _DisposeMarkerAppState();
+}
+
+class _DisposeMarkerAppState extends State<_DisposeMarkerApp> {
+  @override
+  void dispose() {
+    widget.marker.writeAsStringSync('disposed');
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) => const _PtySmokeApp();
 }
 
 class _BoomWidget extends LeafRenderObjectWidget {

@@ -22,8 +22,7 @@ export 'src/canvas.dart'
     show Canvas, CanvasBounds, CanvasContext, CanvasMarker, CanvasPainter;
 export 'src/color_picker.dart' show ColorPicker;
 export 'src/command_button.dart' show CommandButton;
-export 'src/command_palette.dart'
-    show Command, CommandPalette, CommandPaletteItem;
+export 'src/command_palette.dart' show CommandPalette, CommandPaletteItem;
 export 'src/component_theme.dart' show FleuryWidgetTheme;
 export 'src/completion_text_input.dart'
     show

@@ -10,6 +10,8 @@ import 'dart:typed_data';
 
 import 'package:fleury/fleury.dart';
 import 'package:fleury/fleury_wire.dart';
+import 'package:fleury/src/remote/remote_protocol.dart'
+    show remoteAnsiProtocolVersion;
 import 'package:fleury/src/remote/remote_driver.dart';
 import 'package:test/test.dart';
 
@@ -347,9 +349,56 @@ void main() {
     );
 
     test(
-      'protocol v5 negotiates image windows while v4 stays legacy',
+      'a structured peer at any other protocol version fails closed',
       () async {
-        for (final (version, expected) in [(4, false), (5, true)]) {
+        for (final version in [
+          2,
+          remoteProtocolVersion - 1,
+          remoteProtocolVersion + 1,
+        ]) {
+          final transport = _FakeTransport();
+          final driver = RemoteTerminalDriver(transport);
+          final entering = driver.enter(TerminalMode.interactive);
+          transport.emit(
+            InitFrame(
+              size: const CellSize(80, 24),
+              colorMode: ColorMode.truecolor,
+              imageProtocol: ImageProtocol.halfBlock,
+              tmuxPassthrough: false,
+              protocolVersion: version,
+            ),
+          );
+
+          await expectLater(
+            entering,
+            throwsA(
+              isA<RemoteProtocolException>()
+                  .having((e) => e.recoverable, 'recoverable', isFalse)
+                  .having((e) => e.message, 'message', contains('v$version')),
+            ),
+            reason: 'peer v$version',
+          );
+          // The app still answers with its own version first, so the peer can
+          // report the skew instead of seeing a bare disconnect.
+          expect(
+            transport.sent.whereType<InitFrame>().single.protocolVersion,
+            remoteProtocolVersion,
+            reason: 'peer v$version',
+          );
+          expect(transport.sent.whereType<PlanFrame>(), isEmpty);
+          expect(driver.wantsPresentationPlans, isFalse);
+          await driver.restore();
+        }
+      },
+    );
+
+    test(
+      'the ANSI host and the exact structured version are accepted',
+      () async {
+        for (final (version, structured) in [
+          (remoteAnsiProtocolVersion, false),
+          (remoteProtocolVersion, true),
+        ]) {
           final transport = _FakeTransport();
           final driver = RemoteTerminalDriver(transport);
           final entering = driver.enter(TerminalMode.interactive);
@@ -364,7 +413,17 @@ void main() {
           );
           await entering;
 
-          expect(driver.wantsImageWindows, expected, reason: 'peer v$version');
+          expect(
+            driver.wantsPresentationPlans,
+            structured,
+            reason: 'v$version',
+          );
+          // Only a structured peer is echoed; the ANSI host takes no echo.
+          expect(
+            transport.sent.whereType<InitFrame>().length,
+            structured ? 1 : 0,
+            reason: 'v$version',
+          );
           await driver.restore();
         }
       },
@@ -589,7 +648,7 @@ void main() {
             glyphTier: GlyphTier.ascii,
             imageProtocol: ImageProtocol.kitty,
             tmuxPassthrough: false,
-            protocolVersion: 2,
+            protocolVersion: remoteProtocolVersion,
           ),
         );
         await entering;

@@ -463,6 +463,9 @@ final class DevBootstrap {
 
     forward(ProcessSignal.sigterm, Duration.zero);
     forward(ProcessSignal.sigint, devSignalForwardBackstop);
+    // A real hangup reaches the child too; its driver takes a repeat as the
+    // same hangup, so the backstop copy only matters for a direct kill.
+    forward(ProcessSignal.sighup, devSignalForwardBackstop);
     final code = await child.exitCode;
     exited = true;
     for (final sub in subs) {
@@ -555,7 +558,11 @@ final class DevBootstrap {
     // driver posts [kDevSignalAckEvent] over the VM service the supervisor
     // already holds, and the ack cancels the pending forward positively.
     // See [_onSupervisorSignal].
-    for (final signal in [ProcessSignal.sigint, ProcessSignal.sigterm]) {
+    for (final signal in [
+      ProcessSignal.sigint,
+      ProcessSignal.sigterm,
+      ProcessSignal.sighup,
+    ]) {
       try {
         _signalSubs.add(
           signal.watch().listen((_) => _onSupervisorSignal(signal)),

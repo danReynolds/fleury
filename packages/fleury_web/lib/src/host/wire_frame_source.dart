@@ -42,7 +42,6 @@ final class WireFrameSource implements BrowserFrameSource {
   bool _handshakeSent = false;
   int? _appProtocolVersion;
   bool _resizePendingDuringNegotiation = false;
-  bool _warnedUnsafeSemanticAction = false;
   bool _closed = false;
   int _nextPasteId = 1;
   CellRect? _lastCaret;
@@ -194,19 +193,6 @@ final class WireFrameSource implements BrowserFrameSource {
     components.semanticPresenter?.onSemanticActionRequest = (id, action) {
       String? targetToken;
       if (isPositionalSemanticId(id.value)) {
-        if ((_appProtocolVersion ?? 0) <
-            semanticActionTargetTokenProtocolVersion) {
-          if (!_warnedUnsafeSemanticAction) {
-            _warnedUnsafeSemanticAction = true;
-            web.console.warn(
-              'fleury: ignored a positional semantic action because the app '
-                      'has not negotiated target verification; reload with a '
-                      'matching client and app build.'
-                  .toJS,
-            );
-          }
-          return;
-        }
         targetToken = components.semanticPresenter?.actionTargetToken(id);
         if (targetToken == null) return;
       }

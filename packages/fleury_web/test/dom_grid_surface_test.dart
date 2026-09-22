@@ -175,7 +175,7 @@ void main() {
           buffer.writeText(const CellOffset(0, 1), 'cccc');
           buffer.writeText(const CellOffset(0, 2), 'dddd');
           buffer.writeText(const CellOffset(0, 3), 'eeee');
-          damage.recordLayoutOrConservativePaint();
+          damage.recordLayout();
         },
       )!;
       final plan = planner.build(reason: 'scroll', frame: second);

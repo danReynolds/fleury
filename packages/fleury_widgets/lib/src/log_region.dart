@@ -169,7 +169,7 @@ class LogRegionController extends Notifier {
   }
 
   bool get isFollowing => _list.isFollowing;
-  bool get atBottom => _list.atBottom;
+  bool get atBottom => _list.atEnd;
   int get unseenCount => _list.unseenCount;
 
   ({int first, int last})? get visibleRange => _list.visibleRange;
@@ -184,7 +184,7 @@ class LogRegionController extends Notifier {
   void scrollToBottom() {
     _checkNotDisposed();
     _list.followTail = true;
-    _list.jumpToBottom();
+    _list.jumpToEnd();
   }
 
   void _checkNotDisposed() {

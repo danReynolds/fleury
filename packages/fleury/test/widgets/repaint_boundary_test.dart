@@ -1210,7 +1210,7 @@ class _RenderDirtyFromPaint extends RenderObject {
   @override
   void performPaint(CellBuffer buffer, CellOffset offset) {
     buffer.writeGrapheme(offset, 'x');
-    markNeedsPaint();
+    markNeedsPaintOnly();
   }
 }
 

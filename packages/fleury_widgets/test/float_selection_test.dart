@@ -147,7 +147,7 @@ void main() {
   testWidgets('a CommandPalette is not copyable chrome', (tester) {
     tester.pumpWidget(
       const CommandPalette(
-        commands: [Command(label: 'Open File', onInvoke: _noop)],
+        commands: [CommandPaletteItem(label: 'Open File', onInvoke: _noop)],
         width: 24,
         maxVisible: 3,
       ),

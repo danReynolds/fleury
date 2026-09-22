@@ -635,12 +635,15 @@ final class CellBuffer {
     );
   }
 
-  /// Writes a single grapheme cluster at [position] using [style].
+  /// Writes one grapheme cluster at [position] using [style].
   ///
-  /// [grapheme] must be a single Unicode grapheme cluster (per UAX #29);
-  /// pre-split with the `characters` package. [grapheme] must also be
-  /// safe — i.e. already passed through `sanitizeForDisplay` if it came
-  /// from arbitrary input. The buffer does not re-sanitize on every write.
+  /// Only the first grapheme cluster of [grapheme] (per UAX #29) is written;
+  /// anything after it is ignored — use [writeText] for text. A control
+  /// character is always its own cluster and measures zero width, so it
+  /// writes nothing: no string passed here can put a raw control sequence in
+  /// front of the terminal. Text from arbitrary input should still pass
+  /// through `sanitizeForDisplay` first, so a replacement glyph shows where a
+  /// control was instead of nothing.
   ///
   /// Returns the number of columns the write actually advanced (0, 1, or
   /// 2). A grapheme of width 0 (combining-only) is dropped. Out-of-bounds
@@ -656,7 +659,7 @@ final class CellBuffer {
     return _writeGraphemeAt(
       position.col,
       position.row,
-      grapheme,
+      _firstCluster(grapheme),
       style: _paintStyle(style),
       widthResolver: widthResolver,
       policy: policy,
@@ -1424,4 +1427,21 @@ final class CellBufferDiff {
   /// The shape [detectBeneficialScrollUp] consumes.
   ({int dirtyCells, bool hasOverlayCells}) get stats =>
       (dirtyCells: dirtyCells, hasOverlayCells: hasOverlayCells);
+}
+
+/// The first grapheme cluster of [text]. One scalar value — a single code
+/// unit, or a surrogate pair — is already exactly one cluster, which covers
+/// every glyph the framework's painters write, so only longer strings pay for
+/// segmentation.
+String _firstCluster(String text) {
+  final length = text.length;
+  if (length <= 1) return text;
+  if (length == 2) {
+    final high = text.codeUnitAt(0);
+    final low = text.codeUnitAt(1);
+    if (high >= 0xD800 && high <= 0xDBFF && low >= 0xDC00 && low <= 0xDFFF) {
+      return text;
+    }
+  }
+  return text.characters.first;
 }

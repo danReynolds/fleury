@@ -1,6 +1,8 @@
 // Compile-checked source for the Loading data guide.
 
 import 'dart:async';
+import 'dart:isolate';
+import 'dart:typed_data';
 
 import 'package:fleury/fleury.dart';
 import 'package:fleury_widgets/fleury_widgets.dart';
@@ -157,6 +159,15 @@ Future<img.Image> fetchPhoto(int seed) async {
   return img.decodeImage(response.bodyBytes) ??
       (throw const FormatException('Response was not an image'));
 }
+
+/// Decodes on another isolate, so frames, input, and Ctrl+C stay live while
+/// the work runs. Terminal and `fleury serve` apps only: a browser embed
+/// compiles to JavaScript, which has no isolates.
+Future<img.Image> decodePhotoInBackground(Uint8List bytes) => Isolate.run(
+  () =>
+      img.decodeImage(bytes) ??
+      (throw const FormatException('Response was not an image')),
+);
 
 class PhotoViewer extends StatefulWidget {
   const PhotoViewer({super.key, required this.loadPhoto});

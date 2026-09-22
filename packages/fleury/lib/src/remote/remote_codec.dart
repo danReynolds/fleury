@@ -55,8 +55,6 @@ final class RemotePlan {
     required this.patches,
     this.scrollUpRows,
     this.placements = const <ImagePlacement>[],
-    this.includeLinks = false,
-    this.includeImageWindows = true,
   });
 
   final CellSize size;
@@ -65,26 +63,6 @@ final class RemotePlan {
 
   /// Distinct styles used by the patches, referenced by index from runs.
   final List<CellStyle> styleTable;
-
-  /// Whether [encodeRemotePlan] serializes `CellStyle.linkUri` for this plan's
-  /// styles — the v4 spare-set-mask-bit encoding (RFC 0017 §5). It is an
-  /// ENCODE-time policy set by [buildRemotePlan] from the negotiated peer
-  /// version: true only for a peer that speaks v>=4, so a stale v3 client never
-  /// receives the extra link bytes its decoder can't align on. When false the
-  /// wire is byte-identical to v3 even if styles carry links (bit 6 stays clear,
-  /// no URI is written). [decodeRemotePlan] leaves it at its default — a decoded
-  /// mirror plan is applied, never re-encoded to a downstream peer — while the
-  /// link itself still round-trips through the styles' `linkUri`.
-  final bool includeLinks;
-
-  /// Whether [encodeRemotePlan] serializes the original image-box geometry
-  /// needed to render a clipped placement without re-fitting its visible
-  /// fragment. Protocol v5 peers set this; older peers receive the legacy
-  /// visible-rectangle-only shape and therefore keep their decoder aligned.
-  ///
-  /// The encoder only claims the v5 PLAN flag when there is at least one
-  /// placement, so an image-free plan remains byte-identical to older plans.
-  final bool includeImageWindows;
 
   /// Changed column-range patches.
   final List<RemoteRowPatch> patches;
@@ -121,7 +99,7 @@ final class ImagePlacement {
   final int rows;
 
   /// Size of the unclipped placement box that [fit] resolves against.
-  /// Defaults to the visible size for legacy/full placements.
+  /// Defaults to the visible size (an unclipped placement).
   final int boxCols;
   final int boxRows;
 
@@ -320,8 +298,8 @@ class _Reader {
 
   bool boolean() => u8() != 0;
 
-  /// Whether any bytes remain — lets a decoder treat an absent trailing field as
-  /// its default (e.g. a pre-value SEMANTIC_ACTION frame from an older peer).
+  /// Whether any bytes remain — lets a decoder treat an absent optional
+  /// trailing extension as its default.
   bool get hasMore => _pos < _data.length;
 
   void _need(int n) {
@@ -388,14 +366,12 @@ Color? _readColor(_Reader r) {
 
 // CellStyle bool? attributes pack into two bytes: a "set" mask and a
 // "value" mask, so the tri-state (null / true / false) round-trips exactly.
-// The set mask uses bits 0–5 for attributes; bits 6–7 are spare. v4 claims
-// bit 6 as "has link" (RFC 0017 §5): when [includeLinks] and the style carries
-// a URI, bit 6 is set and a varint-prefixed UTF-8 URI is written at a FIXED
-// position — immediately after the two mask bytes and before the colors — so
-// the reader knows exactly where to find it. When [includeLinks] is false (a
-// pre-v4 peer) or the style has no link, bit 6 stays clear and no URI is
-// written, leaving the bytes IDENTICAL to v3.
-void _writeStyle(_Writer w, CellStyle s, {required bool includeLinks}) {
+// The set mask uses bits 0–5 for attributes; bit 6 is "has link" (RFC 0017
+// §5): when the style carries a URI, bit 6 is set and a varint-prefixed UTF-8
+// URI is written at a FIXED position — immediately after the two mask bytes
+// and before the colors — so the reader knows exactly where to find it. A
+// link-free style leaves bit 6 clear and writes no URI. Bit 7 is spare.
+void _writeStyle(_Writer w, CellStyle s) {
   var setMask = 0;
   var valMask = 0;
   void bit(int i, bool? v) {
@@ -410,7 +386,7 @@ void _writeStyle(_Writer w, CellStyle s, {required bool includeLinks}) {
   bit(3, s.underlineOrNull);
   bit(4, s.inverseOrNull);
   bit(5, s.strikethroughOrNull);
-  final hasLink = includeLinks && s.linkUri != null;
+  final hasLink = s.linkUri != null;
   if (hasLink) setMask |= 1 << 6;
   w
     ..u8(setMask)
@@ -423,6 +399,9 @@ void _writeStyle(_Writer w, CellStyle s, {required bool includeLinks}) {
 CellStyle _readStyle(_Reader r) {
   final setMask = r.u8();
   final valMask = r.u8();
+  if (setMask & 0x80 != 0) {
+    throw const RemoteCodecException('unknown style attribute bit 7');
+  }
   bool? bit(int i) =>
       (setMask & (1 << i)) == 0 ? null : (valMask & (1 << i)) != 0;
   // Mirror the writer exactly: the optional link URI sits right after the two
@@ -460,9 +439,9 @@ Uint8List encodeRemotePlan(RemotePlan plan) {
   var flags = 0;
   if (plan.fullRepaint) flags |= 1;
   if (plan.scrollUpRows != null) flags |= 2;
-  final includeImageWindows =
-      plan.includeImageWindows && plan.placements.isNotEmpty;
-  if (includeImageWindows) flags |= 4;
+  // Bit 2 declares the per-placement window fields; it is set exactly when the
+  // plan carries placements, so an image-free plan pays nothing.
+  if (plan.placements.isNotEmpty) flags |= 4;
   w
     ..u8(flags)
     ..varint(plan.size.cols)
@@ -470,7 +449,7 @@ Uint8List encodeRemotePlan(RemotePlan plan) {
   if (plan.scrollUpRows != null) w.varint(plan.scrollUpRows!);
   w.varint(plan.styleTable.length);
   for (final style in plan.styleTable) {
-    _writeStyle(w, style, includeLinks: plan.includeLinks);
+    _writeStyle(w, style);
   }
   w.varint(plan.patches.length);
   for (final patch in plan.patches) {
@@ -492,14 +471,11 @@ Uint8List encodeRemotePlan(RemotePlan plan) {
       ..varint(p.col)
       ..varint(p.cols)
       ..varint(p.rows)
-      ..varint(p.fit.index);
-    if (includeImageWindows) {
-      w
-        ..varint(p.boxCols)
-        ..varint(p.boxRows)
-        ..varint(p.boxOffsetCol)
-        ..varint(p.boxOffsetRow);
-    }
+      ..varint(p.fit.index)
+      ..varint(p.boxCols)
+      ..varint(p.boxRows)
+      ..varint(p.boxOffsetCol)
+      ..varint(p.boxOffsetRow);
   }
   return w.take();
 }
@@ -508,6 +484,11 @@ Uint8List encodeRemotePlan(RemotePlan plan) {
 RemotePlan decodeRemotePlan(Uint8List bytes) {
   final r = _Reader(bytes);
   final flags = r.u8();
+  if (flags & ~7 != 0) {
+    throw RemoteCodecException(
+      'unknown plan flags 0x${flags.toRadixString(16)}',
+    );
+  }
   final hasImageWindows = (flags & 4) != 0;
   final cols = r.varint();
   final rows = r.varint();
@@ -564,6 +545,11 @@ RemotePlan decodeRemotePlan(Uint8List bytes) {
   }
   final placementCount = r.varint();
   _checkPlanCount('image placement', placementCount, maxRemotePlanPlacements);
+  if (placementCount > 0 && !hasImageWindows) {
+    throw const RemoteCodecException(
+      'image placements without window geometry (plan flag bit 2)',
+    );
+  }
   final placements = <ImagePlacement>[];
   for (var i = 0; i < placementCount; i++) {
     final id = r.vstr();
@@ -572,10 +558,10 @@ RemotePlan decodeRemotePlan(Uint8List bytes) {
     final pcols = r.varint();
     final prows = r.varint();
     final fitIndex = r.varint();
-    final boxCols = hasImageWindows ? r.varint() : pcols;
-    final boxRows = hasImageWindows ? r.varint() : prows;
-    final boxOffsetCol = hasImageWindows ? r.varint() : 0;
-    final boxOffsetRow = hasImageWindows ? r.varint() : 0;
+    final boxCols = r.varint();
+    final boxRows = r.varint();
+    final boxOffsetCol = r.varint();
+    final boxOffsetRow = r.varint();
     if (id.isEmpty || id.length > 256) {
       throw RemoteCodecException(
         'image placement $i id length is outside 1..256',
@@ -604,9 +590,12 @@ RemotePlan decodeRemotePlan(Uint8List bytes) {
         '${boxCols}x$boxRows source box',
       );
     }
-    final fit = fitIndex < InlineImageFit.values.length
-        ? InlineImageFit.values[fitIndex]
-        : InlineImageFit.contain;
+    if (fitIndex >= InlineImageFit.values.length) {
+      throw RemoteCodecException(
+        'image placement $i has unknown fit $fitIndex',
+      );
+    }
+    final fit = InlineImageFit.values[fitIndex];
     placements.add(
       ImagePlacement(
         id: id,
@@ -630,7 +619,6 @@ RemotePlan decodeRemotePlan(Uint8List bytes) {
     styleTable: List.unmodifiable(styleTable),
     patches: List.unmodifiable(patches),
     placements: List.unmodifiable(placements),
-    includeImageWindows: hasImageWindows,
   );
 }
 
@@ -683,26 +671,11 @@ void _checkPlanCount(String label, int count, int maximum) {
 /// A debug oracle re-runs the unbounded build under `assert` and fails
 /// loudly if a hint ever under-covers, so a broken damage producer is
 /// caught in dev/CI instead of desyncing a live peer's mirror.
-///
-/// [includeLinks] is the negotiated-peer gate (RFC 0017 §5): when true (a
-/// v>=4 peer) the returned plan serializes `CellStyle.linkUri` on the wire;
-/// when false (the default, and every pre-v4 peer) the encoding is
-/// byte-identical to v3 regardless of whether cells carry links. It only
-/// affects encoding — the style table is built link-aware either way (two
-/// runs differing only by link stay distinct entries), so this parameter
-/// never changes which rows or runs the plan contains.
-///
-/// [includeImageWindows] is the protocol-v5 peer gate. When true, placements
-/// retain their original fit box and visible-window offsets. When false,
-/// unclipped placements use the legacy wire shape and clipped placements are
-/// omitted rather than re-fitted incorrectly by an older peer.
 RemotePlan buildRemotePlan(
   CellBuffer prev,
   CellBuffer next, {
   required bool fullRepaint,
   TuiDirtyRows? dirtyRows,
-  bool includeLinks = false,
-  bool includeImageWindows = true,
 }) {
   final full = fullRepaint || prev.size != next.size;
   final rows = next.size.rows;
@@ -781,12 +754,7 @@ RemotePlan buildRemotePlan(
     scrollUpRows: scrollUpRows,
     styleTable: styleTable,
     patches: patches,
-    placements: _imagePlacements(
-      next,
-      includeImageWindows: includeImageWindows,
-    ),
-    includeLinks: includeLinks,
-    includeImageWindows: includeImageWindows,
+    placements: _imagePlacements(next),
   );
   // Full frames ignore the hint entirely, so only steady-state bounded
   // builds are oracle-checked.
@@ -819,18 +787,8 @@ bool _boundedPlanOracleHolds(
   required bool fullRepaint,
   required RemotePlan bounded,
 }) {
-  // Encode the unbounded truth with the SAME link policy as the bounded plan:
-  // the oracle checks damage-bounding (which rows/runs ship), which is
-  // link-independent, so both sides must serialize links the same way or a
-  // linked frame would diverge on the link bytes alone and trip a false alarm.
   final truth = encodeRemotePlan(
-    buildRemotePlan(
-      prev,
-      next,
-      fullRepaint: fullRepaint,
-      includeLinks: bounded.includeLinks,
-      includeImageWindows: bounded.includeImageWindows,
-    ),
+    buildRemotePlan(prev, next, fullRepaint: fullRepaint),
   );
   final got = encodeRemotePlan(bounded);
   if (got.length != truth.length) return false;
@@ -845,10 +803,7 @@ bool _boundedPlanOracleHolds(
 /// current set every frame, so a static image isn't dropped on an unchanged
 /// frame and the same bytes drawn twice keep independent geometry. Empty when
 /// no image was placed, so image-free frames pay nothing.
-List<ImagePlacement> _imagePlacements(
-  CellBuffer next, {
-  required bool includeImageWindows,
-}) {
+List<ImagePlacement> _imagePlacements(CellBuffer next) {
   final placements = next.visibleImagePlacements;
   if (placements.isEmpty) return const <ImagePlacement>[];
   return [
@@ -858,11 +813,7 @@ List<ImagePlacement> _imagePlacements(
       // cells instead of emitting a plan its own browser would reject (or an
       // enormous CSS element that is almost entirely clipped away).
       if (p.boxCols <= maxRemotePlanGridCols &&
-          p.boxRows <= maxRemotePlanGridRows &&
-          // A legacy peer would re-fit the full source into the visible slice,
-          // which is observably wrong. Degrade a clipped placement to blank;
-          // full placements keep the old wire shape.
-          (includeImageWindows || !p.isClipped))
+          p.boxRows <= maxRemotePlanGridRows)
         ImagePlacement(
           id: p.id,
           col: p.col,
@@ -1041,8 +992,8 @@ void _writeKeyPayload(_Writer w, KeyEvent e) {
 }
 
 /// The RFC 0020 extension pair (position, synthesized). Bare key events
-/// write it only when non-default (old-peer byte compatibility); the batch
-/// shape — a new tag old peers never receive — always writes it.
+/// write it only when non-default, keeping the common key compact; the batch
+/// shape always writes it.
 void _writeKeyExtension(_Writer w, KeyEvent e) {
   w.u8(e.position == null ? 0 : e.position!.index + 1);
   w.boolean(e.synthesized);
@@ -1091,16 +1042,13 @@ Uint8List encodeInputEvent(TuiEvent event) {
       _writeKeyPayload(w, e);
       // RFC 0020 positional identity + synthesized flag ride as an optional
       // trailing extension, like segmented-paste metadata: absent for
-      // default values, so pre-0020 events stay byte-identical and old
-      // decoders never see the fields. KeyPosition.index is append-only by
-      // contract (events.dart) so the +1-biased wire value stays stable.
+      // default values, so the common key stays compact. The +1-biased
+      // position value reserves 0 for "no position".
       if (e.position != null || e.synthesized) {
         _writeKeyExtension(w, e);
       }
     case InputBatch e:
-      // RFC 0020 §5: the correlated key+text unit. A new tag, so it is only
-      // sent to peers whose handshake accepted this protocol revision; old
-      // peers keep receiving split KeyEvent/TextInputEvent traffic.
+      // RFC 0020 §5: the correlated key+text unit.
       w.u8(_evBatch);
       w.boolean(e.key != null);
       if (e.key != null) {
@@ -1136,11 +1084,8 @@ Uint8List encodeInputEvent(TuiEvent event) {
     case PasteEvent e:
       w.u8(_evPaste);
       w.str(e.text);
-      // Complete paste keeps the pre-segmentation payload byte-for-byte
-      // identical. Segment metadata is an optional trailing extension: current
-      // decoders accept its absence, while old decoders cannot consume a
-      // segmented event (production browser peers only originate complete
-      // paste events).
+      // Segment metadata is an optional trailing extension, absent for a
+      // complete paste (the only kind production browser peers originate).
       if (e.phase != PasteEventPhase.single) {
         w.u8(e.phase.index);
         w.u32(e.pasteId!);
@@ -1280,9 +1225,8 @@ Uint8List encodeSemanticAction(
   w.boolean(value != null);
   if (value != null) w.vstr(jsonEncode(value));
   if (targetToken != null) {
-    // Deliberately omit even the presence byte when absent: stable-id actions
-    // then retain their exact pre-v6 payload and remain readable by older
-    // peers. Callers must version-gate the non-null extension.
+    // The token is a trailing extension, present only for a positional id; a
+    // stable-id action omits even its presence byte.
     w.boolean(true);
     w.vstr(targetToken, maxBytes: 64, field: 'semantic action target token');
   }
@@ -1290,8 +1234,8 @@ Uint8List encodeSemanticAction(
 }
 
 /// Decodes a semantic-action request. Throws [RemoteCodecException] on an
-/// unrecognized action name (e.g. a peer on a newer protocol) or a malformed
-/// payload so the caller rejects it rather than misinterpreting it.
+/// unrecognized action name or a malformed payload so the caller rejects it
+/// rather than misinterpreting it.
 ({SemanticNodeId id, SemanticAction action, Object? value, String? targetToken})
 decodeSemanticAction(Uint8List bytes) {
   final r = _Reader(bytes);
@@ -1302,11 +1246,7 @@ decodeSemanticAction(Uint8List bytes) {
   );
   final actionName = r.vstr();
   Object? value;
-  // The value byte is additive (protocol v3). Tolerate its absence so a frame
-  // from an older peer — e.g. a stale cached browser asset that still sends the
-  // 2-field id+action form — decodes as a plain parameterless action instead of
-  // throwing 'truncated payload' and killing the connection.
-  if (r.hasMore && r.boolean()) {
+  if (r.boolean()) {
     final raw = r.vstr();
     try {
       value = jsonDecode(raw);
@@ -1315,9 +1255,8 @@ decodeSemanticAction(Uint8List bytes) {
     }
   }
   String? targetToken;
-  // Version-gated after the v3 value field. Its complete absence keeps
-  // stable-id actions byte-compatible with older peers; positional ids fail
-  // closed at dispatch when a peer cannot supply the claim.
+  // A trailing extension, absent for stable-id actions; a positional id
+  // without a token fails closed at dispatch.
   if (r.hasMore && r.boolean()) {
     targetToken = r.vstr(
       maxBytes: 64,
@@ -1340,9 +1279,8 @@ decodeSemanticAction(Uint8List bytes) {
 }
 
 /// Encodes the app's answer to a peer's semantic-action request: the node id
-/// and action echoed back, plus the invocation status. Status travels by name
-/// (like the action) so the encoding stays additive-tolerant rather than
-/// index-coupled.
+/// and action echoed back, plus the invocation status. Status travels by name,
+/// like the action.
 Uint8List encodeSemanticActionResult(
   SemanticNodeId id,
   SemanticAction action,

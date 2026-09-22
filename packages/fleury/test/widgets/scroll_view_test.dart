@@ -220,14 +220,14 @@ void main() {
     );
   });
 
-  testWidgets('clamps at the bottom and reports atBottom', (tester) {
+  testWidgets('clamps at the end and reports atEnd', (tester) {
     final ctl = ScrollController();
     tester.pumpWidget(ScrollView(controller: ctl, child: _rows(10)));
     _lines(tester, rows: 3); // populate metrics
 
-    ctl.scrollToBottom();
+    ctl.scrollToEnd();
     expect(ctl.offset, 7, reason: 'maxOffset = 10 - 3');
-    expect(ctl.atBottom, isTrue);
+    expect(ctl.atEnd, isTrue);
     expect(_lines(tester, rows: 3), ['r7', 'r8', 'r9']);
 
     ctl.scrollBy(100); // over-scroll is clamped
@@ -311,15 +311,15 @@ void main() {
       expect(ctl.contentExtent, 10);
       expect(ctl.viewportExtent, 3);
       expect(ctl.maxOffset, 7);
-      expect(ctl.atTop, isFalse);
-      expect(ctl.atBottom, isFalse);
+      expect(ctl.atStart, isFalse);
+      expect(ctl.atEnd, isFalse);
 
       const message = 'ScrollController has been disposed.';
       expect(() => ctl.offset = 0, _stateError(message));
       expect(() => ctl.scrollBy(1), _stateError(message));
       expect(() => ctl.jumpTo(0), _stateError(message));
-      expect(() => ctl.scrollToTop(), _stateError(message));
-      expect(() => ctl.scrollToBottom(), _stateError(message));
+      expect(() => ctl.scrollToStart(), _stateError(message));
+      expect(() => ctl.scrollToEnd(), _stateError(message));
     },
   );
 }

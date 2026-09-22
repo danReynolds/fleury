@@ -392,15 +392,10 @@ void main() {
           reason: 'the diff opens a real OSC 8 hyperlink for the run',
         );
 
-        // (3) WIRE — build a v4 plan, round-trip the bytes, apply to a client
+        // (3) WIRE — build a plan, round-trip the bytes, apply to a client
         // mirror; the decoded mirror cell carries the link (the browser <a>
         // rendering of it is covered in fleury_web).
-        final plan = buildRemotePlan(
-          CellBuffer(size),
-          next,
-          fullRepaint: true,
-          includeLinks: true,
-        );
+        final plan = buildRemotePlan(CellBuffer(size), next, fullRepaint: true);
         final mirror = CellBuffer(size);
         applyRemotePlanToBuffer(
           decodeRemotePlan(encodeRemotePlan(plan)),

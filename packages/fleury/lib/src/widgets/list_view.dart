@@ -49,15 +49,12 @@ class ListController extends Notifier {
   /// The index is clamped to the available items. This does not select the row
   /// or take keyboard focus; use [ListView.autofocus] to request focus.
   /// An explicit viewport request or [followTail] takes precedence over reveal.
-  ListController({
-    int? initialIndex = 0,
-    bool followTail = false,
-    @Deprecated('Use followTail instead.') bool? pinToBottom,
-  }) : _currentIndex = initialIndex,
-       _restoreCurrentWhenNonEmpty = initialIndex != null,
-       _followTail = pinToBottom ?? followTail,
-       _isFollowing = pinToBottom ?? followTail,
-       _pendingBottom = pinToBottom ?? followTail;
+  ListController({int? initialIndex = 0, bool followTail = false})
+    : _currentIndex = initialIndex,
+      _restoreCurrentWhenNonEmpty = initialIndex != null,
+      _followTail = followTail,
+      _isFollowing = followTail,
+      _pendingBottom = followTail;
 
   int? _currentIndex;
   int _itemCount = 0;
@@ -99,15 +96,12 @@ class ListController extends Notifier {
 
   /// Refreshes consumers after externally managed list content changes.
   @override
-  void notify() => super.notify();
-
-  @override
-  void notifyListeners() {
+  void notify() {
     // Consume the kind before invoking listeners: a nested command or explicit
     // refresh must advance the view revision even during metric delivery.
     if (!_nextNotificationIsMetrics) _viewRevision++;
     _nextNotificationIsMetrics = false;
-    super.notifyListeners();
+    super.notify();
   }
 
   /// Whether new output should be followed while the viewport is at its end.
@@ -132,28 +126,9 @@ class ListController extends Notifier {
   /// history, even when [followTail] remains enabled.
   bool get isFollowing => _isFollowing;
 
-  @Deprecated(
-    'Read isFollowing; set followTail to enable or disable following.',
-  )
-  bool get pinToBottom => isFollowing;
-  @Deprecated('Use followTail instead.')
-  set pinToBottom(bool value) {
-    if (value && followTail) {
-      jumpToBottom();
-    } else {
-      followTail = value;
-    }
-  }
-
   /// Whether the viewport includes the start / end of the content.
   bool get atStart => _atTop;
   bool get atEnd => _atBottom;
-
-  /// Vertical spelling of [atStart].
-  bool get atTop => atStart;
-
-  /// Vertical spelling of [atEnd].
-  bool get atBottom => atEnd;
 
   /// Appended items not yet seen at the end of an ordered feed. Prepends do not
   /// count when stable item keys are provided. Mixed reorders and insertions are
@@ -250,9 +225,6 @@ class ListController extends Notifier {
     _unseenCount = 0;
     notify();
   }
-
-  /// Vertical spelling of [jumpToEnd].
-  void jumpToBottom() => jumpToEnd();
 
   void _clearRequests() {
     _pendingJumpIndex = null;

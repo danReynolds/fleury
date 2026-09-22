@@ -249,15 +249,13 @@ final class FleuryAppBridge {
   /// the late result. It resolves to null only when the bridge disconnects
   /// after the frame was sent but before its result arrives; callers must then
   /// inspect [isRunning] and [protocolError]. A positional id must include the
-  /// [targetToken] observed in the semantic snapshot; the bridge sends
-  /// that claim only after the app negotiates support for verification.
+  /// [targetToken] observed in the semantic snapshot; the app verifies it.
   Future<SemanticActionInvocationStatus?> invokeAction(
     SemanticNodeId id,
     SemanticAction action, {
     String? targetToken,
   }) {
     _requireActionSession();
-    _requireTargetTokenSupport(targetToken);
     final status = _expectActionResult(id, action);
     try {
       _send(SemanticActionFrame(id, action, targetToken: targetToken));
@@ -282,7 +280,6 @@ final class FleuryAppBridge {
     String? targetToken,
   }) {
     _requireActionSession();
-    _requireTargetTokenSupport(targetToken);
     final status = _expectActionResult(id, SemanticAction.setValue);
     try {
       _send(
@@ -302,19 +299,6 @@ final class FleuryAppBridge {
       rethrow;
     }
     return status;
-  }
-
-  void _requireTargetTokenSupport(String? targetToken) {
-    if (targetToken == null) return;
-    if ((_appProtocolVersion ?? 0) >=
-        semanticActionTargetTokenProtocolVersion) {
-      return;
-    }
-    throw const FleuryAppBridgeException(
-      'The app has not negotiated positional semantic-target verification. '
-      'Rebuild the app and fleury_mcp against the same Fleury version before '
-      'retrying this action.',
-    );
   }
 
   void _requireActionSession() {

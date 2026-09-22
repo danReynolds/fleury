@@ -6,7 +6,7 @@
 //   GestureDetector → SelectionArea._onDragStart/Update →
 //   SelectionContainerDelegate.dispatchSelectionEvent →
 //   RenderText.dispatchSelectionEvent (per leaf) →
-//   geometry change → markNeedsPaint → next render shows highlight.
+//   geometry change → markNeedsPaintOnly → next render shows highlight.
 
 import 'package:fleury/fleury.dart';
 import '../../support/harness.dart';

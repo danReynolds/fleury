@@ -3,7 +3,7 @@
 // A selection-range change moves which cells are highlighted but never the
 // text's size or wrap, so it must NOT force a relayout. `_recomputeGeometry`
 // in `SelectableTextMixin` therefore uses `markNeedsPaintOnly`; if it ever
-// regresses back to `markNeedsLayout`/`markNeedsPaint`, the measured render
+// regresses back to `markNeedsLayout`, the measured render
 // below reports performed (non-cached) layouts and this fails.
 //
 // Mechanics: `sendMouse` flushes builds but does not run layout, so the

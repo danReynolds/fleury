@@ -1,10 +1,46 @@
 # Changelog
 
+- **Breaking:** compatibility names are gone, with no aliases: `ChangeNotifier`
+  (use `Notifier`), `notifyListeners()` (override and call `notify()`),
+  `ListenableBuilder` and `ValueListenableBuilder` (use `NotifierBuilder` or
+  `context.listen`; where `child:` kept a subtree from rebuilding, build that
+  widget once outside the builder and reference it inside), and
+  `ListController.pinToBottom` (use `followTail` and `isFollowing`). The
+  vertical spellings `atTop` / `atBottom` / `jumpToBottom` on `ListController`
+  and `atTop` / `atBottom` / `scrollToTop` / `scrollToBottom` on
+  `ScrollController` are removed in favour of `atStart` / `atEnd` /
+  `jumpToEnd` / `scrollToStart` / `scrollToEnd`.
+- **Breaking:** `RenderObject.markNeedsPaint()` is removed. It invalidated
+  layout as well as paint, as a safe default for unaudited setters; call
+  `markNeedsLayout()` when a change can affect size, constraints, or offsets,
+  and `markNeedsPaintOnly()` when it cannot.
+  `RenderDamageTracker.recordLayoutOrConservativePaint()` is now
+  `recordLayout()`.
+- **Breaking:** the remote wire is lockstep in the app as well as in its peers.
+  The app rejects a structured peer of any other protocol version at INIT —
+  after echoing its own so the peer can report the skew — instead of serving
+  it down-shifted plans. Links and clipped-image windows are always encoded,
+  decoders reject unknown frame types and image fits, and
+  `semanticActionTargetTokenProtocolVersion` is removed from `fleury_wire.dart`.
+- **Breaking:** `AppSignal` gains `hangup`. A terminal hangup (window closed,
+  SSH session dropped) — seen as SIGHUP or as the terminal's input ending —
+  now arrives once as `SignalEvent(AppSignal.hangup)`, so the app exits through
+  its normal path with its cleanup intact (exit code 129 by convention).
+  Previously SIGHUP's default action killed the process before any cleanup.
+- `CellBuffer.writeGrapheme` writes only the first grapheme cluster of its
+  argument, so a string carrying a control sequence can no longer reach the
+  terminal through it; use `writeText` for text.
+- Layout and paint error panels sanitize the error text like any other
+  displayed string.
+- `fleury serve` never runs a network bind without a token: without
+  `--token`, it generates one for the run. The ready banner prints the full
+  browser URL including the token (IPv6 hosts bracketed), and the token check
+  is constant-time.
+- The `runApp` shutdown example uses the real `onEvent:` parameter.
 - Add `Notifier.notify()`, typed `NotifierBuilder`, `ScopeBuilder`, and
   build-time `context.listen(model)` / `context.scope<T>()` readers. Readers
   automatically detach dependencies no longer used by their widget.
-  `ValueNotifier` uses the same consumers. The legacy notifier names and
-  builders remain compatible.
+  `ValueNotifier` uses the same consumers.
 - **Breaking:** scopes now take their value or factory positionally:
   `Scope(model, child: ...)` and `Scope.create(Model.new, child: ...)`.
   Context-dependent factories use
@@ -123,8 +159,8 @@
   layout metrics change.
 - **Following output.** Use `followTail` for the enabled policy and `isFollowing`
   for its current state. Leaving the end pauses following; returning resumes it
-  only when enabled. Following appends preserve the current item. `pinToBottom`
-  is deprecated, and `jumpToBottom` no longer enables following on ordinary lists.
+  only when enabled. Following appends preserve the current item. `jumpToEnd`
+  does not enable following on ordinary lists.
 - **List interaction.** Primary down moves the cursor and focuses the list;
   a completed click or Enter selects the item. Dragging away, cancellation, or
   removing the keyed item cancels the choice. Replace `ListView.onActivate` with

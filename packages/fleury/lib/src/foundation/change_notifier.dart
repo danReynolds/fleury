@@ -117,22 +117,15 @@ mixin class Notifier implements Listenable {
     _listeners[_count] = null;
   }
 
-  /// Publishes changes through the legacy notification hook, preserving existing
-  /// subclass overrides. Listener failures do not prevent other subscriptions
-  /// from observing the committed state.
-  @protected
-  void notify() => notifyListeners();
-
-  /// Compatibility notification hook. New models can call [notify].
+  /// Publishes a change to every listener registered when the pass began.
   ///
-  /// Invokes every listener registered when the pass began. A listener added
-  /// during notification runs on the next pass, not this one; one removed
-  /// during notification (or lost to [dispose]) is skipped.
+  /// A listener added during notification runs on the next pass, not this
+  /// one; one removed during notification (or lost to [dispose]) is skipped.
   /// Listener errors are reported to the current zone without skipping the
   /// remaining listeners: the state change has already been committed.
   @protected
-  void notifyListeners() {
-    _checkNotDisposed('notifyListeners');
+  void notify() {
+    _checkNotDisposed('notify');
     if (_count == 0) return;
     _notificationDepth += 1;
     // Snapshot the length only; read live slots each step so a mid-pass
@@ -169,9 +162,9 @@ mixin class Notifier implements Listenable {
 
   /// Marks this notifier as disposed and drops its listeners. Nulls the slots
   /// in place (rather than replacing the backing list) so a [dispose] called
-  /// from within a listener leaves any in-progress [notifyListeners] walk
+  /// from within a listener leaves any in-progress [notify] walk
   /// reading valid, now-empty slots. After disposal, [addListener] and
-  /// [notifyListeners] throw; [removeListener] remains safe for cleanup.
+  /// [notify] throw; [removeListener] remains safe for cleanup.
   @mustCallSuper
   void dispose() {
     _disposed = true;
@@ -181,9 +174,6 @@ mixin class Notifier implements Listenable {
     _count = 0;
   }
 }
-
-/// Previous name for [Notifier], retained for existing subclasses and mixins.
-typedef ChangeNotifier = Notifier;
 
 class _NotifierSubscription {
   _NotifierSubscription(this._notifier, this._listener);

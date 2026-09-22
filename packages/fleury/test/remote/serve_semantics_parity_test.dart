@@ -52,7 +52,7 @@ class _RenderOrphanText extends RenderObject {
   set text(String value) {
     if (value == _text) return;
     _text = value;
-    markNeedsPaint();
+    markNeedsLayout();
   }
 
   @override

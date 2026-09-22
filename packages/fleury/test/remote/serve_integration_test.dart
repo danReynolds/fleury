@@ -640,6 +640,33 @@ void main() {
       await ws.close();
     });
 
+    test('requires the token on the WebSocket when one is set', () async {
+      final tempDir = Directory.systemTemp.createTempSync(
+        'fleury_serve_token_',
+      );
+      addTearDown(() => tempDir.deleteSync(recursive: true));
+      final port = 6300 + Random.secure().nextInt(100);
+      final serveProcess = await _startServeProcess(
+        pkgRoot: pkgRoot,
+        tempDir: tempDir,
+        port: port,
+        args: const ['--token=s3cret'],
+      );
+      addTearDown(() => _stopProcess(serveProcess));
+
+      for (final query in ['', '?token=wrong', '?token=s3cre']) {
+        await expectLater(
+          WebSocket.connect('ws://127.0.0.1:$port/ws$query'),
+          throwsA(isA<WebSocketException>()),
+          reason: 'query "$query"',
+        );
+      }
+      final ws = await WebSocket.connect(
+        'ws://127.0.0.1:$port/ws?token=s3cret',
+      );
+      await ws.close();
+    });
+
     test('rejects invalid allow-origin values before binding', () async {
       final tempDir = Directory.systemTemp.createTempSync(
         'fleury_serve_bad_origin_',

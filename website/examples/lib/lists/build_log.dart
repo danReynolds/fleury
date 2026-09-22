@@ -56,7 +56,7 @@ class _BuildLogState extends State<BuildLog> {
             onPressed: () =>
                 setState(() => lines.add('Step ${lines.length + 1} complete')),
           ),
-          Button(text: 'Latest', onPressed: log.jumpToBottom),
+          Button(text: 'Latest', onPressed: log.jumpToEnd),
           // #enddocregion interaction
           Button(
             text: 'Grow last entry',

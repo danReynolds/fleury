@@ -769,6 +769,96 @@ void main() {
   }, timeout: const Timeout(Duration(seconds: 15)));
 
   test(
+    'a terminal hangup is one SignalEvent whether EOF or SIGHUP comes first',
+    () async {
+      // Losing the terminal is observed twice: its stdin ends, and SIGHUP
+      // arrives. Both must report the same single hangup — a second delivery
+      // would read as the user overruling a slow shutdown and force-exit
+      // past the app's cleanup.
+      final trace = <String>[];
+      final input = _FakeStdin(terminal: true);
+      late final _RecordingStdout out;
+      out = _RecordingStdout(
+        terminal: true,
+        trace: trace,
+        onWrite: (bytes) {
+          if (bytes.contains('\x1B[6n')) {
+            scheduleMicrotask(
+              () => input.push('\x1B[1;2R\x1B[?1;2c'.codeUnits),
+            );
+          } else if (bytes.contains('\x1B[c')) {
+            scheduleMicrotask(() => input.push('\x1B[?1;2c'.codeUnits));
+          }
+        },
+      );
+      final watchers = <ProcessSignal, void Function(ProcessSignal)>{};
+      final codes = <int>[];
+      final driver = PosixTerminalDriver(
+        stdinOverride: input,
+        stdoutOverride: out,
+        terminalModeController: _FakeModeController(trace),
+        selfStopOverride: () => true,
+        signalGrace: const Duration(seconds: 30),
+        forceExitOverride: codes.add,
+        signalWatcherOverride: (signal, onSignal) {
+          watchers[signal] = onSignal;
+          return _TraceSignalSubscription(signal, trace);
+        },
+      );
+      final events = <TuiEvent>[];
+      var closed = false;
+      final sub = driver.events.listen(events.add, onDone: () => closed = true);
+      try {
+        await driver.enter(TerminalMode.interactive);
+        expect(watchers, contains(ProcessSignal.sighup));
+
+        await input.close(); // the terminal's input ends
+        await _pump();
+        watchers[ProcessSignal.sighup]!(ProcessSignal.sighup);
+        await _pump();
+
+        expect(events.whereType<SignalEvent>(), [
+          const SignalEvent(AppSignal.hangup),
+        ]);
+        expect(codes, isEmpty, reason: 'no force-exit past app cleanup');
+        expect(closed, isFalse, reason: 'the app exits via the signal');
+      } finally {
+        await driver.restore();
+        await sub.cancel();
+      }
+    },
+  );
+
+  test('cooked-mode terminal EOF ends the session, not a hangup', () async {
+    // Without raw input, Ctrl+D at the start of a line is an EOF the user
+    // typed; the terminal is still there.
+    final trace = <String>[];
+    final input = _FakeStdin(terminal: true);
+    final driver = PosixTerminalDriver(
+      stdinOverride: input,
+      stdoutOverride: _RecordingStdout(terminal: true, trace: trace),
+      terminalModeController: _FakeModeController(trace),
+      selfStopOverride: () => true,
+      signalWatcherOverride: (signal, onSignal) =>
+          _TraceSignalSubscription(signal, trace),
+    );
+    final events = <TuiEvent>[];
+    final done = Completer<void>();
+    final sub = driver.events.listen(events.add, onDone: done.complete);
+    try {
+      await driver.enter(
+        const TerminalMode(rawInput: false, alternateScreen: false),
+      );
+      await input.close();
+      await done.future.timeout(const Duration(seconds: 1));
+      expect(events.whereType<SignalEvent>(), isEmpty);
+    } finally {
+      await driver.restore();
+      await sub.cancel();
+    }
+  });
+
+  test(
     'restore() keeps SIGINT/SIGTERM shielded until the terminal is back',
     () async {
       // Cancelling the last subscription to a signal restores the OS default
@@ -837,6 +927,11 @@ void main() {
         expect(
           trace.where((e) => e == 'unwatch:${ProcessSignal.sigterm.name}'),
           hasLength(2),
+        );
+        expect(
+          trace.where((e) => e == 'unwatch:${ProcessSignal.sighup.name}'),
+          hasLength(2),
+          reason: 'SIGHUP gets the same real watcher + shield: $trace',
         );
       } finally {
         await driver.restore();

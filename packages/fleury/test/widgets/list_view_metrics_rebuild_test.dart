@@ -10,11 +10,11 @@ class _ObservedController extends ListController {
   bool deliver = true;
 
   @override
-  void notifyListeners() {
+  void notify() {
     notifications.add(visibleRange);
     if (!deliver) return;
     if (beforeSuper) onNotification?.call();
-    super.notifyListeners();
+    super.notify();
     if (!beforeSuper) onNotification?.call();
   }
 }
@@ -23,13 +23,13 @@ class _RedirectingController extends ListController {
   bool redirected = false;
 
   @override
-  void notifyListeners() {
+  void notify() {
     if (visibleRange?.first == 20 && !redirected) {
       redirected = true;
       jumpToIndex(60);
       return; // The nested command already notified listeners.
     }
-    super.notifyListeners();
+    super.notify();
   }
 }
 

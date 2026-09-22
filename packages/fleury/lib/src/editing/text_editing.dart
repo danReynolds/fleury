@@ -160,8 +160,8 @@ final class TextEditingValue {
 
 /// Pure editing operations over [TextEditingValue].
 ///
-/// Public offsets remain Dart string offsets for compatibility with existing
-/// controller APIs, but every operation snaps to extended-grapheme-cluster
+/// Public offsets are Dart string (UTF-16 code unit) offsets, like every other
+/// text API in Dart, but every operation snaps to extended-grapheme-cluster
 /// boundaries before mutating. That keeps emoji, CJK, and combining sequences
 /// from being split by cursor movement or deletion.
 final class TextEditingModel {

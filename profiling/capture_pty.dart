@@ -103,6 +103,7 @@ const _fGetfl = 3;
 final int _oNonblock = Platform.isMacOS ? 0x0004 : 0x800;
 const _wnohang = 1;
 const _wuntraced = 2;
+const _sighup = 1;
 const _sigint = 2;
 const _sigterm = 15;
 const _sigkill = 9;
@@ -275,6 +276,7 @@ void main(List<String> args) {
   int? inputAfterOutputMs;
   int? terminateAfterMs;
   int? terminateAfterOutputMs;
+  int? hangupAfterOutputMs;
   int? suspendAfterMs;
   int? suspendAfterOutputMs;
   int? continueAfterSuspendMs;
@@ -347,6 +349,11 @@ void main(List<String> args) {
       terminateAfterOutputMs = int.parse(args[++i]);
       if (terminateAfterOutputMs <= 0) {
         _fail('--terminate-after-output-ms must be a positive integer');
+      }
+    } else if (a == '--hangup-after-output-ms') {
+      hangupAfterOutputMs = int.parse(args[++i]);
+      if (hangupAfterOutputMs <= 0) {
+        _fail('--hangup-after-output-ms must be a positive integer');
       }
     } else if (a == '--suspend-after-ms') {
       suspendAfterMs = int.parse(args[++i]);
@@ -466,6 +473,7 @@ void main(List<String> args) {
     var inputSent = inputBytes == null || inputBytes.isEmpty;
     var interruptSent = false;
     var terminateSent = false;
+    var hungUp = false;
     var suspendSent = false;
     var continueSent = false;
     double? suspendAtMs;
@@ -482,6 +490,26 @@ void main(List<String> args) {
 
     while (true) {
       final elapsedMs = sw.elapsedMicroseconds / 1000.0;
+      // After a hangup the master is closed: nothing may touch it again, so
+      // only wait for the child's exit.
+      if (hungUp) {
+        if (_waitpid(pid, status, _wnohang) == pid) {
+          childStatus = status.value;
+          childExited = true;
+          break;
+        }
+        if (elapsedMs > timeout * 1000) {
+          timedOut = true;
+          _kill(pid, _sigkill);
+          if (_waitpid(pid, status, 0) == pid) {
+            childStatus = status.value;
+            childExited = true;
+          }
+          break;
+        }
+        sleep(const Duration(milliseconds: 2));
+        continue;
+      }
       while (
           pendingReplies.isNotEmpty && pendingReplies.first.$1 <= elapsedMs) {
         _writeAll(masterFd, pendingReplies.removeAt(0).$2.codeUnits, arena);
@@ -525,6 +553,22 @@ void main(List<String> args) {
           'signal': 'sigterm',
         });
         terminateSent = true;
+      }
+      if (!hungUp &&
+          hangupAfterOutputMs != null &&
+          outputAgeMs != null &&
+          outputAgeMs >= hangupAfterOutputMs) {
+        // A terminal hangup as the kernel performs it: the terminal side goes
+        // away first — every later read or write on the slave fails — and
+        // then the process gets SIGHUP. Nothing more can be captured.
+        _close(masterFd);
+        _kill(pid, _sighup);
+        signals.add(<String, Object?>{
+          'tMs': double.parse(elapsedMs.toStringAsFixed(3)),
+          'signal': 'sighup',
+        });
+        hungUp = true;
+        continue;
       }
       if (!suspendSent &&
           ((suspendAfterMs != null && elapsedMs >= suspendAfterMs) ||
@@ -633,7 +677,7 @@ void main(List<String> args) {
       }
       sleep(const Duration(milliseconds: 2));
     }
-    _close(masterFd);
+    if (!hungUp) _close(masterFd);
     if (childStatus == null && _waitpid(pid, status, 0) == pid) {
       childStatus = status.value;
     }

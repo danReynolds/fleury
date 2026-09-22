@@ -388,9 +388,9 @@ class _SelectionAreaState extends State<SelectionArea> {
     // the visible bottom (e.g. user yanks down hard) should keep
     // scrolling, not stop because it's "below the zone." Symmetric
     // for the top.
-    final inTopZone = cursor.row < region.top + edge && !controller.atTop;
+    final inTopZone = cursor.row < region.top + edge && !controller.atStart;
     final inBottomZone =
-        cursor.row >= region.bottom - edge && !controller.atBottom;
+        cursor.row >= region.bottom - edge && !controller.atEnd;
     _autoScrollCursor = cursor;
     if (inTopZone) {
       _startAutoScroll(-1);
@@ -411,7 +411,7 @@ class _SelectionAreaState extends State<SelectionArea> {
   }
 
   /// Stops the timer and clears in-flight state. Does NOT bump the
-  /// generation counter — self-termination (reaching atTop/atBottom,
+  /// generation counter — self-termination (reaching atStart/atEnd,
   /// cursor leaving the edge zone) leaves any queued post-frame
   /// dispatch valid, since it would correctly extend the selection
   /// to the final cursor position. Use [_cancelAutoScroll] when the
@@ -440,7 +440,7 @@ class _SelectionAreaState extends State<SelectionArea> {
       _stopAutoScroll();
       return;
     }
-    if (_autoScrollDirection < 0 ? controller.atTop : controller.atBottom) {
+    if (_autoScrollDirection < 0 ? controller.atStart : controller.atEnd) {
       _stopAutoScroll();
       return;
     }

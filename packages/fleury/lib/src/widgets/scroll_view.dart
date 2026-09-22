@@ -147,12 +147,6 @@ class ScrollController extends Notifier {
   bool get atStart => _offset <= 0;
   bool get atEnd => _offset >= _maxOffset;
 
-  /// Vertical spelling of [atStart].
-  bool get atTop => atStart;
-
-  /// Vertical spelling of [atEnd].
-  bool get atBottom => atEnd;
-
   /// Scrolls by [delta] cells along the scrolling axis (negative moves back).
   void scrollBy(int delta) {
     _checkNotDisposed();
@@ -176,12 +170,6 @@ class ScrollController extends Notifier {
     _checkNotDisposed();
     offset = _metricsKnown ? _maxOffset : _offset;
   }
-
-  /// Vertical spelling of [scrollToStart].
-  void scrollToTop() => scrollToStart();
-
-  /// Vertical spelling of [scrollToEnd].
-  void scrollToBottom() => scrollToEnd();
 
   /// Layout writes metrics immediately; observers are notified after the frame.
   void _applyMetrics(int contentExtent, int viewportExtent) {

@@ -48,9 +48,9 @@ void main(List<String> args) {
       final relayout = <_Sample>[];
       for (var i = 0; i < frames; i++) {
         idle.add(host.frame());
-        host.deepestLeaf().markNeedsPaint();
+        host.deepestLeaf().markNeedsLayout();
         leaf.add(host.frame());
-        host.visitRenderObjects((r) => r.markNeedsPaint());
+        host.visitRenderObjects((r) => r.markNeedsLayout());
         full.add(host.frame());
         host.rootRenderObject.markNeedsLayout();
         relayout.add(host.frame());

@@ -406,7 +406,7 @@ class RenderRichText extends RenderObject
         : _flattenPreserved(runs, factory);
   }
 
-  /// The byte-identical legacy path: per-span grapheme walk, no detection.
+  /// The preserve path: per-span grapheme walk, no sequence detection.
   /// Every unprobed/preserve surface goes through here unchanged (property
   /// gate 2).
   List<_Glyph> _flattenPreserved(

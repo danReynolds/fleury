@@ -45,9 +45,9 @@
 //     0x1A SEMANTIC_ACTION_RESULT payload = `<nodeId><action><status>` (see
 //                   remote_codec) — the invocation status for a peer's
 //                   SEMANTIC_ACTION, so agents/AT get real outcomes instead
-//                   of guessing from tree diffs. The app also echoes INIT
-//                   (v3+) after receiving the peer's, carrying its protocol
-//                   version so the client can detect skew.
+//                   of guessing from tree diffs. The app also echoes INIT to
+//                   a structured peer after receiving the peer's, carrying
+//                   its protocol version so the peer can detect skew.
 //     0x1C DEBUG_RESPONSE payload = [u32 seq][u8 kindLen][kind][json] — the
 //                   app's answer to a DEBUG_REQUEST: the recent records for the
 //                   requested kind (shape is per-kind)
@@ -62,64 +62,37 @@
 //                   the visual grid
 //     0x1B DEBUG_REQUEST payload = JSON `{seq,kind,limit}` — a pull-style debug
 //                   query ("send me your recent <kind> records"); answered by
-//                   DEBUG_RESPONSE, or silently dropped by apps predating this
-//                   frame type (unknown discriminators are skipped)
+//                   DEBUG_RESPONSE
 //
 //   Either direction
 //     0x11 BYE      payload = empty, signals a clean shutdown
 //
-// The INIT payload carries `v=<n>` (protocol version). v2 added the
-// structured PLAN/SEMANTICS/INPUT_EVENT frames; a peer omitting `v`
-// is treated as v1 (ANSI host). The payload size is a 32-bit unsigned
+// The INIT payload carries `v=<n>` (protocol version). A peer omitting `v`
+// is the ANSI host (`fleury shell`, [remoteAnsiProtocolVersion]); structured
+// peers send [remoteProtocolVersion]. The payload size is a 32-bit unsigned
 // length so a single frame can hold a fat-screen full repaint.
 //
-// Versioning rule (the one rule, stated once): NEW FRAME TYPES are additive
-// because decoders skip unknown type discriminators. A trailing field is
-// additive only when the older decoder already tolerates trailing data;
-// otherwise its emission is version-gated. CELL/ENUM ENCODINGS inside existing
-// frames are version-gated too. The browser client ships in the server binary;
-// separately launched first-party peers must use a matching Fleury build and
-// reject an echoed INIT version mismatch.
+// Versioning rule: the wire is LOCKSTEP. A structured peer and the app speak
+// exactly [remoteProtocolVersion]. The app echoes its INIT to a structured
+// peer and then rejects any other structured version; first-party peers reject
+// an echo that does not match their own. Any change to a frame's encoding bumps
+// the version — there are no emission gates or down-shifted shapes for other
+// versions. The browser client ships in the server binary; separately launched
+// first-party peers must use a matching Fleury build.
 //
-// Under that rule: SEMANTIC_ACTION's optional trailing value byte
-// (set_value) was additive. v3 added SEMANTIC_ACTION_RESULT (0x1A)
-// and the app-side INIT echo — both additive: a v2 peer skips the
-// result frame and ignores the echo; a v3 client merely can't show
-// action results or detect version skew against a v2 app.
-//
-// v4 is a version-GATED encoding change (not additive): the PLAN frame's
-// cell-style entry gains an OPTIONAL OSC 8 link. The style's spare
-// set-mask bit 6 flags "has link" and, when set, a varint-length-prefixed
-// UTF-8 URI rides immediately AFTER the two mask bytes and BEFORE the
-// colors. A link-free style leaves bit 6 clear and writes no URI, so a
-// link-free frame is byte-identical to v3. The app serializes links only
-// to a peer that negotiated v>=4 (RemoteTerminalDriver.wantsHyperlinks),
-// so a stale v3 client — whose decoder would misalign on the unexpected
-// URI — never receives the extra bytes (RFC 0017 §5).
-//
-// The INIT `hyperlinks=<0|1>` param is the OTHER half and is purely ADDITIVE
-// (like `images=`): a peer that can RENDER links sets it so the server-side
-// producer gate emits a link in the first place. Absent ⇒ false, so v3/older
-// peers (and the version-skew INIT echo) are unaffected and stay byte-flat.
-// The two are independent: `hyperlinks=` decides whether a link is PRODUCED;
-// v>=4 decides whether the wire SERIALIZES it. Both must hold for a browser to
-// receive a clickable cell-grid anchor.
-//
-// v5 is another version-gated PLAN change. Flag bit 2 declares four extra
-// varints after each inline-image placement: original box columns/rows and the
-// visible window's column/row offset within that box. A v5 decoder treats an
-// absent flag as the legacy full-box placement, while the app emits the flag
-// only to a peer that negotiated v>=5. This preserves both compatibility
-// directions while letting clipped images retain their original fit geometry.
-//
-// v6 version-gates an optional target token on SEMANTIC_ACTION. A peer echoes
-// the app-issued token it observed for a positional semantic id, and the app
-// rejects the action if a different contributor now occupies that slot or its
-// role/label/advertised-action signature changed.
-// Stable-id actions omit the field and retain their exact v5 byte shape.
-// First-party peers send positional actions only after the app echoes the exact
-// matching protocol version (currently v6). Any version skew fails the session
-// closed; a mismatched peer cannot safely verify or decode the action.
+// Encodings worth calling out (remote_codec holds the layouts):
+//   - PLAN cell styles: set-mask bit 6 flags an OSC 8 link, and a
+//     varint-prefixed UTF-8 URI follows the two mask bytes, before the colors
+//     (RFC 0017 §5). The INIT `hyperlinks=<0|1>` param is independent: it
+//     tells the app's producers whether the peer can render a link at all.
+//   - PLAN flag bit 2 is set whenever the plan carries inline-image
+//     placements; each placement then carries four varints — the original box
+//     columns/rows and the visible window's offset inside that box — so a
+//     clipped image keeps its fit geometry instead of being re-fitted.
+//   - SEMANTIC_ACTION carries an optional trailing value (set_value) and, for a
+//     positional semantic id, the app-issued target token the peer observed.
+//     The app rejects the action if a different contributor now occupies that
+//     slot or its role/label/advertised-action signature changed.
 //
 // The normative statement of this protocol — the version, the frame table
 // above, the additive-vs-version-gated rule, and the launch-relevant caveat
@@ -141,21 +114,10 @@ import '../input/events.dart';
 import '../input/keyboard_state.dart';
 import 'remote_codec.dart';
 
-/// Current serve/shell protocol version. Bumped when frame semantics
-/// change incompatibly; carried in the INIT handshake (and, since v3,
-/// echoed app → peer so the client can detect version skew).
-///
-/// v4 version-gates the optional OSC 8 link in the PLAN cell-style entry
-/// (RFC 0017 §5). v5 adds an explicitly flagged original-box window to
-/// inline-image placements so clipped images keep their fit and source crop.
-/// v6 adds an app-issued target token to positional semantic actions.
-/// These additions are emitted only to peers that negotiated the corresponding
-/// version; payloads without the feature remain byte-compatible with older
-/// peers.
+/// The structured wire protocol version. Bumped on any change to a frame's
+/// encoding; carried in the INIT handshake and echoed app → peer. The wire is
+/// lockstep: a structured peer and the app must speak exactly this version.
 const int remoteProtocolVersion = 6;
-
-/// First protocol version that can verify a positional semantic-action target.
-const int semanticActionTargetTokenProtocolVersion = 6;
 
 /// The ANSI terminal-host protocol spoken by `fleury shell`.
 ///
@@ -199,7 +161,7 @@ const int maxRemoteControlFramePayloadLength = 64 * 1024;
 /// Text, paste, clipboard, and semantic-action input accepted in one event.
 const int maxRemoteInputFramePayloadLength = 1024 * 1024;
 
-/// Structured plans, semantic snapshots, debug records, and legacy output.
+/// Structured plans, semantic snapshots, debug records, and ANSI output.
 const int maxRemoteDocumentFramePayloadLength = 8 * 1024 * 1024;
 
 /// One encoded inline image. Images remain the only frame allowed up to the
@@ -329,19 +291,17 @@ final class InitFrame extends RemoteFrame {
   final ImageProtocol imageProtocol;
   final bool tmuxPassthrough;
 
-  /// The peer's neutral image capability (v3 `images=` param). Null from
-  /// older peers — the app projects [imageProtocol] instead.
+  /// The peer's neutral image capability (`images=` param). Null from the ANSI
+  /// host (`fleury shell`), whose image support the app projects from
+  /// [imageProtocol] instead.
   final InlineImageSupport? images;
 
   /// Whether the peer's surface can render real hyperlinks (OSC 8 on a
-  /// terminal, `<a>` anchors in the browser). Optional additive `hyperlinks=`
-  /// INIT param: absent from older peers, decoded as false. Threaded into the
-  /// app-side [SurfaceCapabilities.hyperlinks] so the server-side producer gate
-  /// (e.g. `MarkdownText`) only emits a `linkUri` when the peer can actually
-  /// show it. Distinct from [protocolVersion] and the remote driver's internal
-  /// `wantsHyperlinks` gate,
-  /// which gates whether the wire *serializes* a link at all (v>=4); this gates
-  /// whether one is ever *produced*.
+  /// terminal, `<a>` anchors in the browser). Optional `hyperlinks=` INIT
+  /// param, decoded as false when absent. Threaded into the app-side
+  /// [SurfaceCapabilities.hyperlinks] so the server-side producer gate (e.g.
+  /// `MarkdownText`) only emits a `linkUri` when the peer can actually show
+  /// it.
   final bool hyperlinks;
 
   /// What the peer's keyboard has been CONFIRMED to guarantee (RFC 0020
@@ -355,8 +315,8 @@ final class InitFrame extends RemoteFrame {
   /// identical wire version and have completely different keyboards.
   final KeyboardCapabilities? keyboard;
 
-  /// Negotiated protocol version. A peer omitting `v` in INIT is read as
-  /// v1 (the legacy ANSI host).
+  /// Protocol version. A peer omitting `v` in INIT is read as
+  /// [remoteAnsiProtocolVersion] (the ANSI host, `fleury shell`).
   final int protocolVersion;
 
   /// A supervisor's greeting, not a handshake.
@@ -505,9 +465,7 @@ final class SemanticActionResultFrame extends RemoteFrame {
 /// DevTools): "send me your recent [kind] records". Peer → app. [seq]
 /// correlates the [DebugResponseFrame]; [limit] bounds how many records the
 /// app returns (newest last). Kinds are strings so the set can grow without
-/// a protocol change; unknown kinds get an empty response, and apps older
-/// than this frame type skip it entirely (unknown-type frames are dropped
-/// by design) — peers must treat a missing response as "unsupported".
+/// a protocol change; unknown kinds get an empty response.
 final class DebugRequestFrame extends RemoteFrame {
   const DebugRequestFrame(this.seq, this.kind, {this.limit = 50});
   final int seq;
@@ -822,11 +780,15 @@ final class FrameDecoder {
       final payloadEnd = frameStart + total;
       _start = payloadEnd;
       if (type == null) {
-        // Unknown discriminator — skip silently rather than crash the
-        // session. A peer running a newer protocol can extend the
-        // type space without breaking older apps.
+        // The wire is lockstep, so an unknown discriminator is a protocol
+        // violation, not a newer peer to tolerate. Framing has already
+        // advanced past the frame, so the error is recoverable in the same
+        // sense as a malformed known frame: it cannot recur on these bytes.
+        final code = _buffer[frameStart];
         _releaseBufferIfEmpty();
-        continue;
+        throw RemoteProtocolException(
+          'unknown frame type 0x${code.toRadixString(16).padLeft(2, '0')}',
+        );
       }
       // Copy exactly one completed payload. Partial feeds are retained in the
       // amortized byte buffer above instead of repeatedly materializing and
