@@ -12,63 +12,48 @@ class _Model extends Notifier {
   }
 }
 
-class _LegacyModel extends ChangeNotifier {
-  void publish() => notifyListeners();
-}
-
 class _MixedModel with Notifier {
   void publish() => notify();
-}
-
-class _LegacyMixedModel with ChangeNotifier {
-  void publish() => notifyListeners();
 }
 
 class _OverriddenValue extends ValueNotifier<int> {
   _OverriddenValue() : super(0);
 
-  int modernCalls = 0;
-  int legacyCalls = 0;
+  int calls = 0;
 
   @override
   void notify() {
-    modernCalls += 1;
+    calls += 1;
     super.notify();
   }
-
-  @override
-  void notifyListeners() {
-    legacyCalls += 1;
-    super.notifyListeners();
-  }
 }
 
-class _LegacyScrollController extends ScrollController {
+class _ObservedScrollController extends ScrollController {
   int notifications = 0;
 
   @override
-  void notifyListeners() {
+  void notify() {
     notifications++;
-    super.notifyListeners();
+    super.notify();
   }
 }
 
-class _LegacyRenderText extends RenderText {
-  _LegacyRenderText() : super(text: 'select me');
+class _ObservedRenderText extends RenderText {
+  _ObservedRenderText() : super(text: 'select me');
 
   int notifications = 0;
 
   @override
-  void notifyListeners() {
+  void notify() {
     notifications++;
-    super.notifyListeners();
+    super.notify();
   }
 }
 
 void main() {
   group('Notifier', () {
-    test('migrated controllers preserve legacy notification overrides', () {
-      final controller = _LegacyScrollController();
+    test('controller subclasses observe notifications through notify', () {
+      final controller = _ObservedScrollController();
       addTearDown(controller.dispose);
       var calls = 0;
       controller.listen(() => calls++);
@@ -79,22 +64,25 @@ void main() {
       expect(calls, 1);
     });
 
-    test('selection notifications preserve legacy renderer overrides', () {
-      final text = _LegacyRenderText();
-      addTearDown(text.dispose);
-      text.layout(const CellConstraints());
-      text.paint(CellBuffer(const CellSize(12, 1)), CellOffset.zero);
-      final before = text.notifications;
-      var calls = 0;
-      text.listen(() => calls++);
+    test(
+      'selection notifications route through a renderer notify override',
+      () {
+        final text = _ObservedRenderText();
+        addTearDown(text.dispose);
+        text.layout(const CellConstraints());
+        text.paint(CellBuffer(const CellSize(12, 1)), CellOffset.zero);
+        final before = text.notifications;
+        var calls = 0;
+        text.listen(() => calls++);
 
-      text.dispatchSelectionEvent(
-        const SelectionGranularEvent(granularity: SelectionGranularity.all),
-      );
+        text.dispatchSelectionEvent(
+          const SelectionGranularEvent(granularity: SelectionGranularity.all),
+        );
 
-      expect(text.notifications, before + 1);
-      expect(calls, 1);
-    });
+        expect(text.notifications, before + 1);
+        expect(calls, 1);
+      },
+    );
 
     test(
       'a listener failure reaches its zone without skipping later listeners',
@@ -232,45 +220,38 @@ void main() {
       expect(model.increment, throwsStateError);
     });
 
-    test('legacy constructors, inheritance, and mixins remain compatible', () {
+    test('Notifier works directly, as a superclass, and as a mixin', () {
       final instances = <Notifier>[
-        ChangeNotifier(),
-        _LegacyModel(),
+        Notifier(),
+        _Model(),
         _MixedModel(),
-        _LegacyMixedModel(),
         ValueNotifier(0),
       ];
       var calls = 0;
       for (final notifier in instances) {
         addTearDown(notifier.dispose);
         notifier.listen(() => calls += 1);
-        expect(notifier, isA<ChangeNotifier>());
         expect(notifier, isA<Listenable>());
       }
 
-      (instances[1] as _LegacyModel).publish();
+      (instances[1] as _Model).increment();
       (instances[2] as _MixedModel).publish();
-      (instances[3] as _LegacyMixedModel).publish();
-      (instances[4] as ValueNotifier<int>).value = 1;
+      (instances[3] as ValueNotifier<int>).value = 1;
 
-      expect(calls, 4);
+      expect(calls, 3);
     });
 
-    test(
-      'value assignment honors modern and legacy notification overrides',
-      () {
-        final value = _OverriddenValue();
-        addTearDown(value.dispose);
-        final seen = <int>[];
-        value.listen(() => seen.add(value.value));
+    test('value assignment routes through a notify override', () {
+      final value = _OverriddenValue();
+      addTearDown(value.dispose);
+      final seen = <int>[];
+      value.listen(() => seen.add(value.value));
 
-        value.value = 1;
-        value.value = 1;
+      value.value = 1;
+      value.value = 1;
 
-        expect(seen, [1]);
-        expect(value.modernCalls, 1);
-        expect(value.legacyCalls, 1);
-      },
-    );
+      expect(seen, [1]);
+      expect(value.calls, 1);
+    });
   });
 }

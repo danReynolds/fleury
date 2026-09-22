@@ -96,13 +96,9 @@ mixin SelectableTextMixin on RenderObject implements Selectable {
   /// Terminal policy passed to [selectionWidthResolver].
   CellWidthPolicy get selectionPolicy;
 
-  /// Subclass hook: notify the framework that listener-attached
-  /// observers should run. Hosts mixing in `Notifier` provide this legacy
-  /// hook, retained for existing custom renderers.
-  void notifyListeners();
-
-  /// Publishes selection changes while preserving legacy renderer hooks.
-  void notify() => notifyListeners();
+  /// Publishes selection changes to listener-attached observers. Hosts
+  /// provide it by mixing in `Notifier` ahead of this mixin.
+  void notify();
 
   // ----- Mixin state -------------------------------------------------
 

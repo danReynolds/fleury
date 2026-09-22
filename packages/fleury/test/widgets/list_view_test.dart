@@ -857,7 +857,7 @@ void main() {
       tester.pumpWidget(list(20));
       tester.render(size: const CellSize(20, 5));
       controller.currentIndex = null;
-      controller.jumpToBottom();
+      controller.jumpToEnd();
       tester.render(size: const CellSize(20, 5));
       expect(controller.visibleRange, (first: 15, last: 19));
     });
@@ -913,7 +913,7 @@ void main() {
         0,
         reason: 'following scrolls without selecting a different item',
       );
-      expect(controller.atBottom, isTrue);
+      expect(controller.atEnd, isTrue);
 
       // Simulate a new message arriving.
       tester.pumpWidget(
@@ -1274,7 +1274,7 @@ void main() {
         tester.render(size: const CellSize(12, 3));
         expect(controller.currentIndex, 2);
         expect(controller.isFollowing, isTrue);
-        expect(controller.atBottom, isTrue);
+        expect(controller.atEnd, isTrue);
 
         items = ['c', 'a', 'b'];
         tester.pumpWidget(app());
@@ -1287,7 +1287,7 @@ void main() {
           reason:
               'following describes the viewport, independently of the cursor',
         );
-        expect(controller.atBottom, isTrue);
+        expect(controller.atEnd, isTrue);
         expect(controller.unseenCount, 0);
 
         items = [...items, 'd'];
@@ -1324,7 +1324,7 @@ void main() {
         reason: 'an eviction is not a reorder',
       );
       expect(controller.currentIndex, 1, reason: 'cursor remains on c');
-      expect(controller.atBottom, isTrue);
+      expect(controller.atEnd, isTrue);
       expect(controller.unseenCount, 0);
 
       items = ['c', 'd', 'e'];
@@ -1366,7 +1366,7 @@ void main() {
       controller.currentIndex = null;
       tester.render(size: const CellSize(12, 2));
       expect(controller.isFollowing, isTrue);
-      expect(controller.atBottom, isTrue);
+      expect(controller.atEnd, isTrue);
 
       items = ['c', 'a', 'b'];
       tester.pumpWidget(app());
@@ -1374,7 +1374,7 @@ void main() {
 
       expect(controller.currentIndex, isNull);
       expect(controller.isFollowing, isTrue);
-      expect(controller.atBottom, isTrue);
+      expect(controller.atEnd, isTrue);
       expect(controller.visibleRange?.last, 2);
     });
 

@@ -1,21 +1,21 @@
 import 'package:fleury/fleury.dart';
 import 'package:test/test.dart';
 
-class _Counter extends ChangeNotifier {
+class _Counter extends Notifier {
   int value = 0;
   void increment() {
     value += 1;
-    notifyListeners();
+    notify();
   }
 }
 
-class _Emitter extends ChangeNotifier {
-  void emit() => notifyListeners();
+class _Emitter extends Notifier {
+  void emit() => notify();
 }
 
 void main() {
-  group('ChangeNotifier', () {
-    test('fires every registered listener on notifyListeners', () {
+  group('Notifier listener contract', () {
+    test('fires every registered listener on notify', () {
       final c = _Counter();
       var a = 0;
       var b = 0;
@@ -171,31 +171,28 @@ void main() {
       },
     );
 
-    test(
-      'reentrant notifyListeners fires each level without corrupting state',
-      () {
-        final c = _Counter();
-        var outer = 0;
-        var inner = 0;
-        var reentered = false;
-        c.addListener(() {
-          outer += 1;
-          if (!reentered) {
-            reentered = true;
-            c.increment(); // reentrant notifyListeners from inside a pass
-          }
-        });
-        c.addListener(() => inner += 1);
+    test('reentrant notify fires each level without corrupting state', () {
+      final c = _Counter();
+      var outer = 0;
+      var inner = 0;
+      var reentered = false;
+      c.addListener(() {
+        outer += 1;
+        if (!reentered) {
+          reentered = true;
+          c.increment(); // reentrant notify from inside a pass
+        }
+      });
+      c.addListener(() => inner += 1);
 
-        c.increment();
+      c.increment();
 
-        // Both listeners fire on the outer pass AND the nested reentrant pass;
-        // the nested pass must not compact early or skip a slot.
-        expect(outer, 2);
-        expect(inner, 2);
-        expect(c.hasListeners, isTrue);
-      },
-    );
+      // Both listeners fire on the outer pass AND the nested reentrant pass;
+      // the nested pass must not compact early or skip a slot.
+      expect(outer, 2);
+      expect(inner, 2);
+      expect(c.hasListeners, isTrue);
+    });
 
     test('a listener added twice and removed once still fires once', () {
       final c = _Counter();

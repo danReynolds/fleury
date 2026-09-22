@@ -185,7 +185,7 @@ void main() {
     tester.pumpWidget(
       _wall(
         const CommandPalette(
-          commands: [Command(label: 'Open File', onInvoke: _noop)],
+          commands: [CommandPaletteItem(label: 'Open File', onInvoke: _noop)],
           width: 24,
           maxVisible: 3,
         ),

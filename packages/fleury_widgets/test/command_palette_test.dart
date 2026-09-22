@@ -73,19 +73,6 @@ void main() {
     CommandPaletteItem(label: 'Close Window', onInvoke: () => onRun('close')),
   ];
 
-  test('deprecated Command remains a type-identical list alias', () {
-    // ignore: deprecated_member_use
-    final List<Command> legacy = [
-      // ignore: deprecated_member_use
-      Command(label: 'Open File', onInvoke: () {}),
-    ];
-    final palette = CommandPalette(commands: legacy);
-    // ignore: deprecated_member_use
-    final List<Command> typedRead = palette.commands!;
-
-    expect(identical(typedRead, legacy), isTrue);
-  });
-
   testWidgets('palette is bounded to its content, not the full viewport', (
     tester,
   ) {

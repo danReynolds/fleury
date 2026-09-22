@@ -252,14 +252,14 @@ void main() {
           }
           expect(frame, contains('Outside'));
           expect(c.currentIndex, 0);
-          expect(c.atBottom, isFalse);
+          expect(c.atEnd, isFalse);
           c.scrollBy(1);
           t.pump();
           expect(t.renderToString(), contains('Next item'));
-          expect(c.atBottom, isTrue);
+          expect(c.atEnd, isTrue);
           c.scrollBy(-100);
           t.pump();
-          expect(c.atTop, isTrue);
+          expect(c.atStart, isTrue);
         },
         viewportSize: const CellSize(20, 6),
       );
@@ -282,7 +282,7 @@ void main() {
           expect(c.visibleRange, (first: 6, last: 10));
           t.sendKey(KeyEvent(KeyCode.end));
           t.pump();
-          expect(c.atBottom, isTrue);
+          expect(c.atEnd, isTrue);
         },
         viewportSize: const CellSize(20, 5),
       );
@@ -298,14 +298,14 @@ void main() {
           t.sendMouse(mouse(MouseEventKind.down, 19, 0));
           t.pump();
           t.sendMouse(mouse(MouseEventKind.up, 19, 0));
-          expect(c.atTop, isTrue);
-          expect(c.atBottom, isFalse);
+          expect(c.atStart, isTrue);
+          expect(c.atEnd, isFalse);
           expect(c.isFollowing, isFalse);
           expect(c.followTail, isTrue);
           t.pumpWidget(app(21));
           expect(c.visibleRange, (first: 0, last: 4));
           expect(c.unseenCount, 1);
-          c.jumpToBottom();
+          c.jumpToEnd();
           t.pump();
           expect(c.isFollowing, isTrue);
           expect(c.unseenCount, 0);
@@ -333,13 +333,13 @@ void main() {
           t.sendMouse(mouse(MouseEventKind.down, 19, 4));
           t.pump();
           t.sendMouse(mouse(MouseEventKind.up, 19, 4));
-          expect(c.atBottom, isTrue);
+          expect(c.atEnd, isTrue);
           expect(c.scrollFraction, 1);
           expect(t.renderToString(), contains('Line 19'));
           c.jumpToFraction(0.5);
           t.pump();
-          expect(c.atTop, isFalse);
-          expect(c.atBottom, isFalse);
+          expect(c.atStart, isFalse);
+          expect(c.atEnd, isFalse);
         },
         viewportSize: const CellSize(20, 5),
       );
@@ -358,7 +358,7 @@ void main() {
           expect(t.renderToString(), contains('Line 7'));
           t.pumpWidget(app(12));
           expect(t.renderToString(), contains('Line 11'));
-          expect(c.atBottom, isTrue);
+          expect(c.atEnd, isTrue);
           c.scrollBy(-2);
           t.pump();
           final before = t.renderToString();
@@ -377,7 +377,7 @@ void main() {
           c.followTail = false;
           c.jumpToIndex(2);
           t.pump();
-          c.jumpToBottom();
+          c.jumpToEnd();
           t.pump();
           expect(c.isFollowing, isFalse);
           t.pumpWidget(list(c, lazy: lazy, count: 22));
@@ -521,14 +521,14 @@ void main() {
                   )
                 : ListView(controller: c, children: List.generate(3, row)),
           );
-          expect(c.atTop, isTrue);
-          expect(c.atBottom, isTrue);
+          expect(c.atStart, isTrue);
+          expect(c.atEnd, isTrue);
           expect(c.visibleFraction, 1);
           c.jumpToIndex(2);
           t.pump();
           expect(t.renderToString(), contains('Only content'));
-          expect(c.atTop, isTrue);
-          expect(c.atBottom, isTrue);
+          expect(c.atStart, isTrue);
+          expect(c.atEnd, isTrue);
           c.scrollBy(10);
           t.pump();
           expect(t.renderToString(), contains('Only content'));

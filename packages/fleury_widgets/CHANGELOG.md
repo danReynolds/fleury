@@ -1,5 +1,7 @@
 ## 0.1.0
 
+- **Breaking:** the deprecated `Command` alias is removed; use
+  `CommandPaletteItem`.
 - `FormController.submit()` returns false when the submit callback leaves a
   mounted, enabled field with an error. Callback updates and temporarily locked
   controls are applied before this final check, which focuses the invalid field.
