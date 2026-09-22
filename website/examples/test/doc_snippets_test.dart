@@ -364,6 +364,12 @@ void main() {
     expect(tester.renderToString(emptyMark: ' '), isNot(contains('stale.log')));
   });
 
+  test('loading data guide decodes a photo on another isolate', () async {
+    final png = img.encodePng(img.Image(width: 3, height: 2));
+    final decoded = await loading_data.decodePhotoInBackground(png);
+    expect([decoded.width, decoded.height], [3, 2]);
+  });
+
   testWidgets('loading data guide photo viewer renders a decoded image', (
     tester,
   ) async {

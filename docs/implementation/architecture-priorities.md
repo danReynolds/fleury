@@ -1,7 +1,8 @@
 # Architecture Priorities
 
 **Status:** Living priority list (arch track)
-**Last updated:** 2026-06-04
+**Last updated:** 2026-09-22 (release-readiness re-verification; the
+backlog below predates it except where marked)
 **Frame:** Architecture + feature set + DX first; performance ballpark, not
 beat-native. Pre-launch — the breaking-change window is open, so API-shape
 decisions are timing-sensitive.
@@ -138,10 +139,11 @@ of the API track until after the storybook work, not arch blockers.
 
 ## ▶ Active — Tier 2 (additive; address real workloads)
 
-3. **Async-compute seam (`Isolate.run`).** A `compute`-style affordance in the
-   effects/task model with cancellation, mount-safety, and an above-threshold
-   guard. Removes the single-isolate ceiling for sort/filter/parse/diff on the
-   data-heavy workloads Fleury targets. ~1 week, no strategic decision needed.
+3. **Async-compute seam (`Isolate.run`).** Documented 2026-09-22: the Loading
+   data guide teaches `Isolate.run` for CPU-bound work in terminal and serve
+   apps (a browser embed has no isolates). A framework seam with
+   cancellation and mount-safety remains unbuilt; the effects/task model it
+   was meant to live in was removed on 2026-09-01.
 
 4. ✅ **Frame-rate coalescing under high-rate updates.** *(done — 2026-06-04)*
    Confirmed the runtime coalesced only within an event-loop turn (microtask),

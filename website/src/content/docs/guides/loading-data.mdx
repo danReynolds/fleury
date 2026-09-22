@@ -271,6 +271,29 @@ On browser surfaces and terminals with inline-image support, `Image` renders
 true pixels. Other terminals fall back to colored glyph art from the same
 decoded image.
 
+## Keep heavy work off the UI isolate
+
+A Fleury app renders, reads input, and handles signals on one Dart isolate.
+Waiting on I/O costs nothing, but synchronous CPU work — decoding a large
+image, parsing a big JSON document, sorting or diffing a large dataset — holds
+all of it until the work finishes: no frames, no keystrokes, and not even
+Ctrl+C, which arrives as input. Move that work to another isolate with
+[`Isolate.run`](https://api.dart.dev/dart-isolate/Isolate/run.html) and give
+the resulting future to a builder as usual:
+
+```dart
+Future<img.Image> decodePhotoInBackground(Uint8List bytes) => Isolate.run(
+  () =>
+      img.decodeImage(bytes) ??
+      (throw const FormatException('Response was not an image')),
+);
+```
+
+`Isolate.run` works in terminal apps and under `fleury serve`, where the app
+runs as a native process. A browser embed compiles to JavaScript, which has no
+isolates, so keep work there small — which is why the live photo example above
+decodes inline.
+
 ## Streaming updates
 
 Use `StreamBuilder` when values keep arriving. This demo treats a tiny star-map
