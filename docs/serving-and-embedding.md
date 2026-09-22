@@ -105,12 +105,12 @@ There are two lifecycle models:
 # Run any fleury app and open it in a browser at http://127.0.0.1:5777
 fleury serve --spawn dart run bin/run_app.dart
 
-# Advanced: exposed on a trusted network — set a token
+# Advanced: exposed on a trusted network. A network bind always requires a
+# token: pass --token, or serve generates one and prints it in the URL.
 fleury serve --port=8080 --host=0.0.0.0 \
              --allow-origin=https://example.com \
-             --token=$(openssl rand -hex 16) \
              --spawn dart run bin/run_app.dart
-# → open http://<host>:8080/?token=<secret>
+# → open the printed http://<host>:8080/?token=<secret>
 ```
 
 `--spawn` selects the isolated, managed-process model. Without it, `serve`
@@ -157,11 +157,13 @@ gates and nothing else:
   `--allow-origin` adds origins. This stops *cross-site browser pages* from
   attaching — it does not stop non-browser clients, which simply omit the
   Origin header.
-- **`--token=<secret>`.** Requires `?token=` on the WebSocket URL (the served
-  page forwards its own `?token=` query automatically). This is the gate that
-  covers non-browser clients and other local users; always set it when the
-  host is not loopback. Prefer HTTPS/WSS termination in front (a reverse
-  proxy) so the token and session aren't readable on the wire.
+- **Token.** `--token=<secret>` requires `?token=` on the WebSocket URL (the
+  served page forwards its own `?token=` query automatically, and the startup
+  banner prints the full URL). This is the gate that covers non-browser
+  clients and other local users. A bind that is not loopback never runs
+  without one: when `--token` is absent, `serve` generates a random 128-bit
+  token for the run. Prefer HTTPS/WSS termination in front (a reverse proxy)
+  so the token and session aren't readable on the wire.
 
 `fleury serve` is not a hardened public hosting layer. For anything beyond a
 trusted network, keep it on loopback and put it behind access control you
