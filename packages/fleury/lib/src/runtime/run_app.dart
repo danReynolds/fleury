@@ -218,7 +218,7 @@ const _maxPendingRemoteSemanticActions = 64;
 /// restored — so the caller owns process-exit semantics:
 ///
 /// ```dart
-/// final exit = await runApp(app, onTrigger: (event) {
+/// final exit = await runApp(app, onEvent: (event) {
 ///   if (event is SignalEvent) {
 ///     beginShutdown(event.signal);        // async teardown → requestExit()
 ///     return const EventHandled();        // claim it: don't die yet
@@ -229,11 +229,12 @@ const _maxPendingRemoteSemanticActions = 64;
 /// io.exit(switch (exit.signal) {          // POSIX-conventional codes
 ///   AppSignal.interrupt => 130,
 ///   AppSignal.terminate => 143,
+///   AppSignal.hangup => 129,
 ///   null => 0,
 /// });
 /// ```
 ///
-/// SIGINT/SIGTERM arrive as [SignalEvent]s (never `exit()` inside the driver);
+/// SIGINT/SIGTERM/SIGHUP arrive as [SignalEvent]s (never `exit()` inside the driver);
 /// an unclaimed one terminates with [AppExit.signal]. The POSIX driver arms a
 /// grace deadline at delivery ([PosixTerminalDriver.signalGrace], default 5s)
 /// and force-terminates a hung app — a second same-signal forces immediately —

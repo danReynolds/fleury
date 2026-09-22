@@ -135,6 +135,12 @@ class PosixTerminalDriver
   StreamSubscription<ProcessSignal>? _resizeSubscription;
   StreamSubscription<ProcessSignal>? _intSubscription;
   StreamSubscription<ProcessSignal>? _termSubscription;
+  StreamSubscription<ProcessSignal>? _hupSubscription;
+
+  // A hangup is observed up to twice — a terminal stdin reaching its end and
+  // SIGHUP — but it is one event. Delivering it twice would read as the user
+  // overruling a slow shutdown and force-exit past the app's cleanup.
+  bool _hangupDelivered = false;
   Timer? _flushTimer;
   Timer? _pasteIdleTimer;
   Timer? _graceTimer;
@@ -280,12 +286,20 @@ class PosixTerminalDriver
     }
   }
 
-  /// 128 + signal number (SIGINT=2, SIGTERM=15): the conventional
-  /// death-by-signal exit codes.
+  /// 128 + signal number (SIGHUP=1, SIGINT=2, SIGTERM=15): the
+  /// conventional death-by-signal exit codes.
   static int _signalExitCode(AppSignal signal) => switch (signal) {
     AppSignal.interrupt => 130,
     AppSignal.terminate => 143,
+    AppSignal.hangup => 129,
   };
+
+  static AppSignal _appSignalOf(ProcessSignal signal) =>
+      signal == ProcessSignal.sighup
+      ? AppSignal.hangup
+      : signal == ProcessSignal.sigterm
+      ? AppSignal.terminate
+      : AppSignal.interrupt;
 
   /// Last resort: restore the terminal and end the process with the
   /// conventional code. Used when the app ignores a signal past
@@ -337,6 +351,12 @@ class PosixTerminalDriver
     _emitPendingSignalIfListened();
     _graceTimer?.cancel();
     _graceTimer = Timer(signalGrace, () => _forceExit(signal));
+  }
+
+  void _deliverHangup() {
+    if (_hangupDelivered) return;
+    _hangupDelivered = true;
+    deliverSignal(AppSignal.hangup);
   }
 
   void _emitPendingSignalIfListened() {
@@ -449,6 +469,13 @@ class PosixTerminalDriver
       postDevSignalAck(ProcessSignal.sigterm);
       deliverSignal(AppSignal.terminate);
     });
+    // Unwatched, SIGHUP's default action kills the process on the spot: no
+    // State.dispose, no app cleanup. The terminal is already gone then, so
+    // restore's writes fail and are contained like any teardown fault.
+    _hupSubscription = _watchSignal(ProcessSignal.sighup, (_) {
+      postDevSignalAck(ProcessSignal.sighup);
+      _deliverHangup();
+    });
 
     // Raw mode only makes sense on a terminal stdin; reading lineMode/
     // echoMode throws on a pipe, so guard rather than catch. Piped input
@@ -487,17 +514,31 @@ class PosixTerminalDriver
         _schedulePasteIdleFlush();
       },
       onError: (Object error, StackTrace stack) {
+        // A terminal read fails once the terminal is gone (EIO after a
+        // hangup): that is the hangup itself, not an application error.
+        if (_stdinIsTerminal) {
+          _deliverHangup();
+          return;
+        }
         if (!_events.isClosed) _events.addError(error, stack);
       },
       onDone: () {
-        // stdin EOF / PTY disconnect is the end of a local terminal session.
-        // Closing the driver event stream lets runApp's onDone path exit and
-        // restore instead of waiting forever on an input source that vanished.
         _flushTimer?.cancel();
         _flushTimer = null;
         _pasteIdleTimer?.cancel();
         _pasteIdleTimer = null;
         _parser.finish(_sink); // finalizes any in-progress paste at EOF
+        if (_stdinIsTerminal) {
+          // A terminal never ends its input on its own — in raw mode Ctrl+D
+          // is just a byte — so EOF means it hung up (window closed, SSH
+          // dropped). Report the hangup SIGHUP also reports; the app exits
+          // through its normal path with its cleanup intact.
+          _deliverHangup();
+          return;
+        }
+        // Piped input ended: the scripted session is over. Closing the driver
+        // event stream lets runApp's onDone path exit and restore instead of
+        // waiting forever on an input source that vanished.
         if (!_events.isClosed) unawaited(_events.close());
       },
       cancelOnError: false,
@@ -1163,7 +1204,8 @@ class PosixTerminalDriver
         _stdinSubscription == null &&
         _resizeSubscription == null &&
         _intSubscription == null &&
-        _termSubscription == null) {
+        _termSubscription == null &&
+        _hupSubscription == null) {
       _terminalState = null;
       _sink.target = null;
       _restoring = false;
@@ -1176,8 +1218,8 @@ class PosixTerminalDriver
     _pasteIdleTimer?.cancel();
     _pasteIdleTimer = null;
 
-    // Shield the rest of restore from SIGINT/SIGTERM. Cancelling the LAST
-    // subscription to a signal restores the OS default disposition, so a
+    // Shield the rest of restore from SIGINT/SIGTERM/SIGHUP. Cancelling the
+    // LAST subscription to a signal restores the OS default disposition, so a
     // signal arriving while the remaining cleanup yields — the hot-reload
     // supervisor forwards one 300 ms after delivery — killed the process raw,
     // mid-restore: capture teardown skipped, nothing after `await runApp`
@@ -1191,14 +1233,18 @@ class PosixTerminalDriver
     final restoreClock = Stopwatch()..start();
     var shieldedSignals = 0;
     final shields = <StreamSubscription<ProcessSignal>>[];
-    for (final signal in const [ProcessSignal.sigint, ProcessSignal.sigterm]) {
+    for (final signal in const [
+      ProcessSignal.sigint,
+      ProcessSignal.sigterm,
+      ProcessSignal.sighup,
+    ]) {
       final shield = _watchSignal(signal, (received) {
         shieldedSignals++;
         if (shieldedSignals < 2 &&
             restoreClock.elapsed < const Duration(seconds: 2)) {
           return;
         }
-        final code = received == ProcessSignal.sigterm ? 143 : 130;
+        final code = _signalExitCode(_appSignalOf(received));
         final force = _forceExitOverride;
         if (force != null) {
           force(code);
@@ -1219,6 +1265,10 @@ class PosixTerminalDriver
       await _termSubscription?.cancel();
     } catch (_) {}
     _termSubscription = null;
+    try {
+      await _hupSubscription?.cancel();
+    } catch (_) {}
+    _hupSubscription = null;
 
     try {
       await _stdinSubscription?.cancel();

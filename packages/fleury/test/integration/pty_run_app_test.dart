@@ -207,6 +207,38 @@ void main() {
       _expectTerminalRestored(capture.output);
     }, skip: skipPty);
 
+    test('a terminal hangup still runs app cleanup and exits 129', () async {
+      // The terminal side closes first and then SIGHUP lands, as when an SSH
+      // session drops. The terminal cannot be restored; the app's own cleanup
+      // (State.dispose here) must still run instead of the default SIGHUP
+      // action killing the process on the spot.
+      final marker = File('${tempDir.path}/hangup-dispose.txt');
+      final capture = await _capturePty(
+        tempDir,
+        'hangup',
+        fixtureArgs: ['--dispose-marker=${marker.path}'],
+        extraArgs: const [
+          '--cols',
+          '40',
+          '--rows',
+          '8',
+          '--hangup-after-output-ms',
+          '700',
+          '--allow-exit-code',
+          '129',
+        ],
+      );
+      if (capture == null) return;
+
+      expect(capture.metadata['timedOut'], isFalse);
+      expect(capture.metadata['exitCode'], 129);
+      expect(capture.output, contains('PTY-FIRST-FRAME'));
+      expect(
+        marker.existsSync() ? marker.readAsStringSync() : null,
+        'disposed',
+      );
+    }, skip: skipPty);
+
     test('startup SIGTERM after terminal entry still restores modes', () async {
       final capture = await _capturePty(
         tempDir,

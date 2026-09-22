@@ -121,6 +121,7 @@ Future<void> main() async {
   exit(switch (appExit.signal) {
     AppSignal.interrupt => 130,
     AppSignal.terminate => 143,
+    AppSignal.hangup => 129,
     null => 0,
   });
 }
@@ -755,6 +756,7 @@ Future<void> main() async {
   exit(switch (appExit.signal) {
     AppSignal.interrupt => 77,
     AppSignal.terminate => 78,
+    AppSignal.hangup => 79,
     null => 0,
   });
 }

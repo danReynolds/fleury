@@ -2357,8 +2357,8 @@ final class ResizeEvent extends TuiEvent {
 
 /// A termination request delivered to the app, in platform-neutral terms.
 ///
-/// On POSIX these map from SIGINT / SIGTERM; a remote host may synthesize
-/// them (e.g. a server shutting a session down). Kept free of `dart:io`
+/// On POSIX these map from SIGINT / SIGTERM / SIGHUP; a remote host may
+/// synthesize them (e.g. a server shutting a session down). Kept free of `dart:io`
 /// types so non-POSIX drivers can emit them too.
 enum AppSignal {
   /// Interactive interrupt — SIGINT (`kill -INT`). Note the in-terminal
@@ -2367,6 +2367,12 @@ enum AppSignal {
 
   /// Termination request — SIGTERM (supervisors, `kill`, service managers).
   terminate,
+
+  /// Terminal hangup — SIGHUP: the controlling terminal went away (window
+  /// closed, SSH session dropped). The terminal cannot be restored, but the
+  /// app's own cleanup — state saved, children stopped, logs flushed — still
+  /// runs through the normal exit path.
+  hangup,
 }
 
 /// The process received a termination request ([AppSignal]).
