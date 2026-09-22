@@ -307,7 +307,7 @@ void main() {
     });
 
     test(
-      'unknown frame type is skipped, valid frames after it still decode',
+      'an unknown frame type is a recoverable protocol error; framing holds',
       () {
         // Hand-craft a frame with an unrecognised type byte (0xAB).
         final unknown = BytesBuilder()
@@ -318,9 +318,16 @@ void main() {
         final decoder = FrameDecoder()
           ..feed(unknown.toBytes())
           ..feed(good);
-        final out = decoder.drain().toList();
-        expect(out, hasLength(1));
-        expect(out.single, isA<ByeFrame>());
+        expect(
+          () => decoder.drain().toList(),
+          throwsA(
+            isA<RemoteProtocolException>()
+                .having((e) => e.recoverable, 'recoverable', isTrue)
+                .having((e) => e.message, 'message', contains('0xab')),
+          ),
+        );
+        // The unknown frame was consumed, so the next drain resumes cleanly.
+        expect(decoder.drain().single, isA<ByeFrame>());
       },
     );
 

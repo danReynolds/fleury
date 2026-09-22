@@ -537,9 +537,9 @@ void main() {
           ws.listen((data) {
             if (data is List<int>) inbound.add(data);
           });
-          // v2 = the STRUCTURED (presentation-plan) path — the only path
-          // where runApp wires onDebugRequest at all. A v1 init would make
-          // the OFF assertion vacuous (no negotiatedSink → never answered).
+          // The STRUCTURED (presentation-plan) path — the only path where
+          // runApp wires onDebugRequest at all. An ANSI init would make the
+          // OFF assertion vacuous (no negotiatedSink → never answered).
           ws.add(
             encodeFrame(
               const InitFrame(
@@ -547,7 +547,7 @@ void main() {
                 colorMode: ColorMode.truecolor,
                 imageProtocol: ImageProtocol.halfBlock,
                 tmuxPassthrough: false,
-                protocolVersion: 2,
+                protocolVersion: remoteProtocolVersion,
               ),
             ),
           );

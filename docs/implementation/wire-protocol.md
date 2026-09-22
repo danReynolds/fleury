@@ -28,9 +28,9 @@ transport; their names and library docs make this unstable tier explicit. The
 browser client bundle is
 **embedded in the Fleury binary**, so a server and the client it serves ship
 from the same build. Separately launched first-party peers, notably
-`fleury_mcp`, must resolve a matching Fleury build and reject an echoed INIT
-version mismatch. That check prevents silent misdecoding; it is not a
-cross-version compatibility promise.
+`fleury_mcp`, must resolve a matching Fleury build. Both sides reject any
+other version at INIT (see [Lockstep rule](#lockstep-rule)); there is no
+cross-version compatibility lane.
 
 ## Frame envelope
 
@@ -55,19 +55,22 @@ individual diff-bearing frame.
 
 ## Protocol version
 
-The latest structured-host version is **6** (`remoteProtocolVersion`). It is
-carried in the INIT handshake as `v=<n>`; `fleury shell` deliberately
-negotiates **v1** (`remoteAnsiProtocolVersion`) because it is the active ANSI
-terminal host.
+The structured protocol version is **6** (`remoteProtocolVersion`). It is
+carried in the INIT handshake as `v=<n>`; `fleury shell` negotiates
+`remoteAnsiProtocolVersion` (**1**) because it is the ANSI terminal host, which
+receives raw OUTPUT bytes instead of structured frames.
 
-| Version | Added |
+| Version | Introduced |
 | --- | --- |
-| v1 | Baseline ANSI host: INIT / INPUT / RESIZE / OUTPUT / BYE. |
-| v2 | Structured host: PLAN, SEMANTICS, INPUT_EVENT (and the frames that support them). |
-| v3 | SEMANTIC_ACTION_RESULT, and the app-side INIT echo (app → peer) so the client can detect version skew. |
-| v4 | Optional OSC 8 link in the PLAN cell-style entry: spare set-mask bit 6 flags "has link" and, when set, a varint-prefixed UTF-8 URI rides after the two mask bytes (before the colors). Version-gated — a link-free style leaves bit 6 clear and writes no URI, so link-free frames stay byte-identical to v3, and the app emits links only to a peer that negotiated v>=4. |
-| v5 | Original-box geometry for clipped inline-image placements in PLAN: plan flag bit 2 declares four varints after each placement (`boxCols`, `boxRows`, `boxOffsetCol`, `boxOffsetRow`). Version-gated — the app emits the fields only to a peer that negotiated v>=5; an absent flag decodes as an unclipped legacy placement. |
-| v6 | Optional app-issued target token on SEMANTIC_ACTION. A first-party peer echoes it for positional ids only after the app echoes the exact matching protocol version; any skew rejects the session. The app also fails closed when the claim is absent or no longer matches. Stable-id actions omit the extension and retain their exact v5 payload. |
+| v1 | The ANSI host: INIT / INPUT / RESIZE / OUTPUT / BYE. |
+| v2 | The structured host: PLAN, SEMANTICS, INPUT_EVENT (and the frames that support them). |
+| v3 | SEMANTIC_ACTION_RESULT, and the app-side INIT echo (app → peer). |
+| v4 | OSC 8 links in the PLAN cell-style entry: set-mask bit 6 flags a link, and a varint-prefixed UTF-8 URI follows the two mask bytes, before the colors. |
+| v5 | Original-box geometry for inline-image placements: PLAN flag bit 2 declares four varints after each placement (`boxCols`, `boxRows`, `boxOffsetCol`, `boxOffsetRow`). |
+| v6 | The app-issued target token on SEMANTIC_ACTION for positional ids. |
+
+The table is history, not a support matrix: an app and a structured peer speak
+exactly the current version.
 
 ## Frame types
 
@@ -77,15 +80,15 @@ frame, so test harnesses can inject either side. "Peer" is `serve` / `shell`;
 
 | Code | Frame | Direction | Purpose |
 | --- | --- | --- | --- |
-| `0x01` | INIT | Peer → App | Handshake: display size, color mode, glyph tier, image protocol, tmux passthrough, protocol version. Sent once before any input; echoed app → peer since v3. |
-| `0x02` | INPUT | Peer → App | Raw stdin bytes (escape sequences, key chords, paste) — legacy byte input path. |
+| `0x01` | INIT | Peer → App | Handshake: display size, color mode, glyph tier, image protocol, tmux passthrough, protocol version. Sent once before any input; the app echoes its own to a structured peer. |
+| `0x02` | INPUT | Peer → App | Raw stdin bytes (escape sequences, key chords, paste) — the ANSI host's input path. |
 | `0x03` | RESIZE | Peer → App | Remote display resized (`cols`, `rows`). |
-| `0x10` | OUTPUT | App → Peer | Raw ANSI render bytes for the v1 `fleury shell` host; structured hosts emit PLAN/SEMANTICS instead. |
+| `0x10` | OUTPUT | App → Peer | Raw ANSI render bytes for the `fleury shell` ANSI host; structured hosts emit PLAN/SEMANTICS instead. |
 | `0x11` | BYE | Either | Clean shutdown. Empty payload. |
 | `0x12` | PLAN | App → Peer | Binary presentation plan — the structured host's per-frame output driving a visual surface. |
 | `0x13` | SEMANTICS | App → Peer | UTF-8 JSON semantic snapshot of the rendered frame (accessibility + agent drivability). |
 | `0x14` | INPUT_EVENT | Peer → App | Structured `TuiEvent` (key / mouse / paste / resize / composition) — the structured input path that replaces raw INPUT. |
-| `0x15` | SEMANTIC_ACTION | Peer → App | The peer activates a node in its accessible tree (screen reader / agent driving semantics, not the visual grid). Since v6, positional ids carry the app-issued target token observed by the peer so a recycled id cannot silently target another mounted contributor, and role/label/advertised-action changes on a reused contributor also invalidate the claim. |
+| `0x15` | SEMANTIC_ACTION | Peer → App | The peer activates a node in its accessible tree (screen reader / agent driving semantics, not the visual grid). Positional ids carry the app-issued target token observed by the peer so a recycled id cannot silently target another mounted contributor, and role/label/advertised-action changes on a reused contributor also invalidate the claim. |
 | `0x16` | INLINE_IMAGE | App → Peer | One inline image (browser surface), keyed by content-hash id; sent once before the first PLAN that places it, then referenced by id so bytes ride the wire only once. |
 | `0x17` | CLIPBOARD_WRITE | App → Peer | Place text on the peer's (the user's) clipboard; answered by CLIPBOARD_RESULT. |
 | `0x18` | CLIPBOARD_RESULT | Peer → App | Outcome of a CLIPBOARD_WRITE: written / denied / unavailable. |
@@ -94,49 +97,19 @@ frame, so test harnesses can inject either side. "Peer" is `serve` / `shell`;
 | `0x1B` | DEBUG_REQUEST | Peer → App | Pull-style debug query ("send me your recent `<kind>` records"); answered by DEBUG_RESPONSE. |
 | `0x1C` | DEBUG_RESPONSE | App → Peer | The app's answer to a DEBUG_REQUEST: JSON records for the requested kind. |
 
-## Compatibility rule
+## Lockstep rule
 
-One rule, in two halves:
-
-1. **Only explicitly tolerant changes are additive.** New frame types require
-   no version bump because a decoder skips unknown type discriminators. A
-   trailing payload field is additive only when the older decoder already
-   tolerates trailing data; a newer decoder tolerating an absent field is only
-   half of the compatibility requirement.
-
-2. **Other encoding changes are version-gated.** Changing the cell/enum
-   encoding inside an existing frame, or appending data an older decoder would
-   reject, requires a version bump and an emission gate. The embedded browser
-   has a same-build invariant; separately launched first-party peers enforce
-   lockstep through the echoed INIT version.
-
-Worked examples:
-
-- SEMANTIC_ACTION's optional trailing `set_value` byte was added additively (no
-  bump).
-- v3 added SEMANTIC_ACTION_RESULT (`0x1A`) and the app-side INIT echo, both
-  additive: a v2 peer skips the result frame and ignores the echo; a v3 client
-  merely can't show action results or detect version skew against a v2 app.
-- DEBUG_REQUEST / DEBUG_RESPONSE (`0x1B` / `0x1C`) are new frame types: an app
-  predating them drops the request (unknown discriminator), and the peer treats
-  a missing response as "unsupported".
-- v4's optional OSC 8 link in the PLAN cell-style entry is a version-gated
-  *encoding* change (a spare set-mask bit + a URI inside an existing frame), so
-  it took a version bump rather than riding as an additive field. The app
-  serializes links only to a peer that negotiated v>=4; a stale v3 client — whose
-  decoder would misalign on the unexpected URI and lose stream framing — never
-  receives them, and a link-free frame is byte-identical to v3 either way.
-- v5's inline-image window is also a version-gated PLAN encoding. When plan
-  flag bit 2 is set, the four trailing placement varints preserve the original
-  fit box plus the visible window's offset inside it, so clipping never causes
-  the browser to re-fit the image fragment. A v5 decoder treats an absent flag
-  as `boxCols=cols`, `boxRows=rows`, and zero offsets, which keeps plans from an
-  older app readable. A v5 app emits the flag only to v5 peers; for a v4 peer it
-  keeps full placements on the legacy shape and omits clipped placements rather
-  than rendering a silently mis-fitted image.
-- v6's semantic target token is a version-gated trailing extension to
-  SEMANTIC_ACTION. A stable-id action omits the extension entirely and is
-  byte-identical to v5. A first-party peer sends a positional-id action only
-  after the app echoes the exact matching protocol version (currently v6).
-  Any version skew fails the session closed because a mismatched app cannot
-  safely verify or decode the action.
+1. **One version.** A structured peer and the app speak exactly
+   `remoteProtocolVersion`. The app echoes its INIT to a structured peer; for
+   any other structured version it sends that echo — so the peer can report
+   the skew — and then fails the session closed. First-party peers reject an
+   echo that does not match their own and send nothing but INIT until it does.
+2. **Every encoding change bumps the version.** A new frame type, a new field,
+   or a changed cell/enum encoding is a new version. There are no emission
+   gates, no down-shifted shapes for an older peer, and no tolerance for a
+   newer one.
+3. **Decoders are strict.** An unknown frame type, an unknown enum value, or a
+   field the current encoding requires is a protocol error. Optional trailing
+   extensions are part of the current encoding, and absent means default: the
+   key-event position/synthesized pair, paste segment metadata, and the
+   positional target token on SEMANTIC_ACTION.

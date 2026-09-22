@@ -171,7 +171,7 @@ void main() {
       );
     });
 
-    test('v5 placement windows round-trip without losing original fit box', () {
+    test('placement windows round-trip without losing the original box', () {
       const plan = RemotePlan(
         size: CellSize(10, 6),
         fullRepaint: false,
@@ -195,7 +195,6 @@ void main() {
 
       final decoded = decodeRemotePlan(encodeRemotePlan(plan));
       final placement = decoded.placements.single;
-      expect(decoded.includeImageWindows, isTrue);
       expect(
         [
           placement.col,
@@ -212,43 +211,34 @@ void main() {
       expect(placement.fit, InlineImageFit.cover);
     });
 
-    test('legacy placement wire defaults the original box to its window', () {
+    test('placements without window geometry are rejected', () {
       const plan = RemotePlan(
         size: CellSize(10, 6),
         fullRepaint: false,
         styleTable: [],
         patches: [],
-        includeImageWindows: false,
         placements: [
-          ImagePlacement(
-            id: 'legacy',
-            col: 2,
-            row: 1,
-            cols: 3,
-            rows: 2,
-            boxCols: 7,
-            boxRows: 5,
-            boxOffsetCol: 2,
-            boxOffsetRow: 1,
-          ),
+          ImagePlacement(id: 'img', col: 2, row: 1, cols: 3, rows: 2),
         ],
       );
+      final bytes = encodeRemotePlan(plan);
+      expect(bytes.first & 4, 4, reason: 'placements declare their windows');
 
-      final decoded = decodeRemotePlan(encodeRemotePlan(plan));
-      final placement = decoded.placements.single;
-      expect(decoded.includeImageWindows, isFalse);
+      // The same plan without flag bit 2 is not a shape any sender produces.
+      final stripped = Uint8List.fromList(bytes)..[0] &= ~4;
       expect(
-        [
-          placement.boxCols,
-          placement.boxRows,
-          placement.boxOffsetCol,
-          placement.boxOffsetRow,
-        ],
-        [3, 2, 0, 0],
+        () => decodeRemotePlan(stripped),
+        throwsA(
+          isA<RemoteCodecException>().having(
+            (e) => e.message,
+            'message',
+            contains('window geometry'),
+          ),
+        ),
       );
     });
 
-    test('a legacy peer gets blank instead of a mis-fitted clipped image', () {
+    test('a clipped image keeps its placement and original box', () {
       final next = CellBuffer(const CellSize(4, 3))
         ..writeImage(
           const CellOffset(3, 2),
@@ -261,14 +251,16 @@ void main() {
         CellBuffer(const CellSize(4, 3)),
         next,
         fullRepaint: true,
-        includeImageWindows: false,
       );
 
-      expect(plan.placements, isEmpty);
-      expect(() => decodeRemotePlan(encodeRemotePlan(plan)), returnsNormally);
+      final placement = decodeRemotePlan(
+        encodeRemotePlan(plan),
+      ).placements.single;
+      expect([placement.cols, placement.rows], [1, 1]);
+      expect([placement.boxCols, placement.boxRows], [2, 2]);
     });
 
-    test('a v5 window extending outside its original box is rejected', () {
+    test('a window extending outside its original box is rejected', () {
       const plan = RemotePlan(
         size: CellSize(10, 6),
         fullRepaint: false,
@@ -316,9 +308,7 @@ void main() {
       expect(decoded.placements.single.fit, InlineImageFit.cover);
     });
 
-    test('an out-of-range fit index decodes to contain (forward-compat)', () {
-      // A future sender could ship a fit ordinal this build doesn't know;
-      // the decoder must not throw — it falls back to the safe default.
+    test('an out-of-range fit index is rejected', () {
       final next = CellBuffer(const CellSize(6, 3))
         ..writeImage(
           const CellOffset(0, 0),
@@ -331,15 +321,20 @@ void main() {
           CellBuffer(const CellSize(6, 3)),
           next,
           fullRepaint: true,
-          includeImageWindows: false,
         ),
       );
-      // The final byte is the single placement's fit ordinal (0 = contain);
-      // bump it past the known range and confirm graceful fallback.
-      final tampered = Uint8List.fromList(bytes)..last = 0x7F;
+      // The single placement ends with its fit ordinal followed by the four
+      // one-byte window varints; bump the fit past the known range.
+      final tampered = Uint8List.fromList(bytes)..[bytes.length - 5] = 0x7F;
       expect(
-        decodeRemotePlan(tampered).placements.single.fit,
-        InlineImageFit.contain,
+        () => decodeRemotePlan(tampered),
+        throwsA(
+          isA<RemoteCodecException>().having(
+            (e) => e.message,
+            'message',
+            contains('unknown fit 127'),
+          ),
+        ),
       );
     });
 
