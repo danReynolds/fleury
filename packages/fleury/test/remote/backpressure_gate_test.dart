@@ -108,7 +108,7 @@ class _RenderImageProbe extends RenderObject {
   set generation(int value) {
     if (value == _generation) return;
     _generation = value;
-    markNeedsPaint();
+    markNeedsPaintOnly();
   }
 
   @override

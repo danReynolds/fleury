@@ -30,7 +30,7 @@ void main() {
           buffer.writeText(const CellOffset(0, 1), 'cccc');
           buffer.writeText(const CellOffset(0, 2), 'dddd');
           buffer.writeText(const CellOffset(0, 3), 'eeee');
-          damage.recordLayoutOrConservativePaint();
+          damage.recordLayout();
         },
       )!;
 
@@ -61,7 +61,7 @@ void main() {
         paint: (buffer) {
           buffer.writeText(const CellOffset(0, 0), 'zzzz');
           buffer.writeText(const CellOffset(0, 1), 'yyyy');
-          damage.recordLayoutOrConservativePaint();
+          damage.recordLayout();
         },
       )!;
 
@@ -142,7 +142,7 @@ void main() {
             rows: const [0, 2],
           );
           buffer.writeText(const CellOffset(0, 1), 'hullo');
-          damage.recordLayoutOrConservativePaint();
+          damage.recordLayout();
         },
       )!;
 

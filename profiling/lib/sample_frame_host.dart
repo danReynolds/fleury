@@ -75,7 +75,7 @@ final class SampleFrameHost {
       _text?.text = '${iteration & 1} $_originalText';
     } else if (mode == 'full') {
       for (final render in renderObjects) {
-        render.markNeedsPaint();
+        render.markNeedsLayout();
       }
     }
     var build = Duration.zero;

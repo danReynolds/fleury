@@ -71,7 +71,7 @@ void main() {
           outer.paint(CellBuffer(size), CellOffset.zero);
 
           leaf.fail = true;
-          leaf.markNeedsPaint();
+          leaf.markNeedsLayout();
           outer.layout(const CellConstraints(maxCols: 2, maxRows: 1));
           expect(
             () => outer.paint(CellBuffer(size), CellOffset.zero),
@@ -122,14 +122,14 @@ void main() {
     );
     driver.renderNow('initial');
     leaf.fail = true;
-    leaf.markNeedsPaint();
+    leaf.markNeedsLayout();
     driver.renderNow('failure');
     expect(errors, hasLength(1));
     expect(presenter.frames.last, contains('transient'));
     expect(driver.renderUnrecoverable, isFalse);
 
     // Do not rebuild or re-invalidate the failed subtree as part of recovery.
-    sibling.markNeedsPaint();
+    sibling.markNeedsLayout();
     driver.renderNow('sibling');
     expect(presenter.frames.last.split('\n').first.trim(), 'OK');
     expect(leaf.paints, 3);

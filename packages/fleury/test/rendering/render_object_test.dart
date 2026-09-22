@@ -119,23 +119,6 @@ void main() {
       expect(child.layoutCount, 2);
     });
 
-    test('paint invalidation conservatively invalidates layout', () {
-      final child = _CountingRenderObject(const CellSize(3, 2));
-      final parent = _CountingParentRenderObject(child);
-      const constraints = CellConstraints(maxCols: 10, maxRows: 10);
-
-      parent.layout(constraints);
-      parent.layout(constraints);
-      expect(parent.layoutCount, 1);
-      expect(child.layoutCount, 1);
-
-      child.markNeedsPaint();
-      parent.layout(constraints);
-
-      expect(parent.layoutCount, 2);
-      expect(child.layoutCount, 2);
-    });
-
     test('paint-only invalidation preserves cached layout', () {
       final child = _CountingRenderObject(const CellSize(3, 2));
       final parent = _CountingParentRenderObject(child);
@@ -200,7 +183,6 @@ void main() {
       final before = DebugInvalidations.debugLabelsBuilt;
       for (var i = 0; i < 100; i++) {
         render.markNeedsLayout();
-        render.markNeedsPaint();
         render.markPaintOnly();
       }
       expect(DebugInvalidations.debugLabelsBuilt, before);
@@ -216,7 +198,7 @@ void main() {
 
       DebugInvalidations.reset();
       final before = DebugInvalidations.debugLabelsBuilt;
-      render.markNeedsPaint();
+      render.markPaintOnly();
       expect(DebugInvalidations.debugLabelsBuilt, before + 1);
       expect(
         DebugInvalidations.drain(),

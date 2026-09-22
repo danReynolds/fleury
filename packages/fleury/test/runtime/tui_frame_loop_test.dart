@@ -227,7 +227,7 @@ void main() {
         size: size,
         paint: (buffer) {
           buffer.writeText(const CellOffset(1, 0), 'b');
-          damage.recordLayoutOrConservativePaint();
+          damage.recordLayout();
         },
       )!;
 
