@@ -1,6 +1,6 @@
 ---
 title: Input & gestures
-description: Build a notes workspace, from built-in controls to custom gestures and nested input.
+description: Choose built-in controls, selection boundaries, and custom gestures for a notes interface.
 ---
 
 import CodeDemoSplit from '../../../components/CodeDemoSplit.astro';
@@ -11,12 +11,11 @@ In Fleury, widgets own their interactions. A click goes to the control under
 the pointer; keys go through focus. Start with controls that handle both,
 then add gestures where your interface needs them.
 
-Let's build the interactions for a notes workspace: edit a note, open its
-preview, then add a file tile, a resizable divider, and a browsing pane.
-The checklists follow your input. Each first tab shows the relevant method
-from the running example; full source and tests are alongside it.
+Explore the pieces of a notes interface below. Each example runs independently,
+with a checklist that follows your input. The first source tab highlights the
+interaction; full source and tests are alongside it.
 
-## 1. Let the editor handle editing
+## Let the editor handle editing
 
 Our note starts with a title and a body. `TextInput` and `TextArea` already
 own caret placement, selection, and keyboard editing. Try both fields:
@@ -32,9 +31,9 @@ there are no pointer handlers to write.
 Click changes focus; Tab moves it. Selection stays inside the field being
 edited. We'll use that same idea when the preview becomes selectable.
 
-## 2. Open the note with a button
+## Open the note with a button
 
-Now give the workspace an **Open** action. Hold the button to see its pressed
+Give the note an **Open** action. Hold the mouse button to see its pressed
 style, then release to reveal the note. Right-click swaps the preview for
 file details; **Details** offers the same action from the keyboard.
 
@@ -43,14 +42,15 @@ file details; **Details** offers the same action from the keyboard.
 <InputGuideCode slot="code-1" file="file_actions.dart" full />
 <InputGuideCode slot="code-2" file="note_preview.dart" full />
 <InputGuideCode slot="code-3" file="file_actions_test.dart" test />
-<InputPractice slot="demo" id="input.actions" cols={38} rows={14} />
+<InputPractice slot="demo" id="input.actions" cols={38} rows={17} />
 </CodeDemoSplit>
 
 `Button` owns focus, activation, and cancellation. You provide the action and
 its `pressed:` style. `onSecondaryPressed` adds right-click; disabling the
 button with `onPressed: null` disables both actions.
+Enter and Space activate immediately; the current `pressed:` style tracks pointer holds.
 
-## 3. Select from the preview
+## Select from the preview
 
 The open note is text, so readers should be able to quote it. `FleuryApp`
 already makes ordinary text selectable. Give this preview its own
@@ -67,23 +67,25 @@ Selecting the note takes keyboard focus: **Ctrl+A** selects it, **Ctrl+C**
 copies it, and **Esc** clears it. In the browser, macOS also uses **⌘A/⌘C**.
 Click **Reply** to return to editing. The selection count is outside the boundary.
 
-## 4. Turn a file tile into a press target
+## Observe a custom press
 
-Suppose the file browser uses a larger tile with its own held and cancelled
-states. This is where `GestureDetector` earns its place. It supplies the
-press lifecycle; the tile still opens the same preview as our button.
+A file tile can still be a `Button`: use `child` for composed content and
+`appearance: ButtonAppearance.plain` to remove the brackets. Reach for
+`GestureDetector` when you need the press lifecycle itself. This example reports
+**Pressed…** and **Cancelled** separately from the preview's open state.
 
 <CodeDemoSplit files={['Press lifecycle', 'Full source', 'Preview', 'Tests']} codeLabel="The custom part of the tile" demoLabel="Hold the tile, then release or move away" codeMaxHeight="28rem">
 <InputGuideCode slot="code-0" file="press_tile.dart" />
 <InputGuideCode slot="code-1" file="press_tile.dart" full />
 <InputGuideCode slot="code-2" file="note_preview.dart" full />
 <InputGuideCode slot="code-3" file="press_tile_test.dart" test />
-<InputPractice slot="demo" id="input.press" cols={38} rows={16} />
+<InputPractice slot="demo" id="input.press" cols={38} rows={19} />
 </CodeDemoSplit>
 
 Press and release in the same cell to open. Moving to another cell cancels
-the tap, even inside the tile. `onTapDown` starts feedback; `onTapUp` or
+the tap, even inside the tile. `onTapDown` starts the held feedback; `onTapUp` or
 `onTapCancel` ends it.
+Try cancelling after opening the note: the existing preview stays open.
 
 <details>
 <summary>What the full tile adds around the gesture</summary>
@@ -98,17 +100,17 @@ observe an inner button's taps: the innermost target owns the press.
 
 </details>
 
-## 5. Make room for the note
+## Make room for the note
 
-Our workspace now has a file pane and a preview. Add a divider to resize them.
-Unlike a tap, this interaction uses movement: the handle captures the drag
+Add a divider between a file pane and its preview. Unlike a tap, this
+interaction uses movement: the handle captures the drag
 and keeps receiving it when the pointer leaves its bounds.
 
 <CodeDemoSplit files={['Drag lifecycle', 'Full source', 'Tests']} codeLabel="Movement is measured in cells" demoLabel="Resize the workspace" codeMaxHeight="28rem">
 <InputGuideCode slot="code-0" file="split_pane.dart" />
 <InputGuideCode slot="code-1" file="split_pane.dart" full />
 <InputGuideCode slot="code-2" file="split_pane_test.dart" test />
-<InputPractice slot="demo" id="input.splitter" cols={38} rows={9} />
+<InputPractice slot="demo" id="input.splitter" cols={38} rows={10} />
 </CodeDemoSplit>
 
 Apply `details.delta.col` in `onDragUpdate`. The arrow keys call the same
@@ -126,7 +128,7 @@ its target. Clipping limits it and cancels a gesture if the target disappears.
 
 </details>
 
-## 6. Compose the browsing pane
+## Compose the browsing pane
 
 Finally, let readers browse more notes. The row should stay highlighted while
 its **Pin** button owns clicks. A `MouseRegion` observes hover across its

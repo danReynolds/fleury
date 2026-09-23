@@ -13,9 +13,16 @@ class _PressTileState extends State<PressTile> {
   bool focused = false;
   bool pressed = false;
   String status = 'Ready';
+  String? feedback;
 
-  void open() => setState(() => status = 'Opened notes.md');
-  void details() => setState(() => status = 'notes.md · Markdown · 2 KB');
+  void open() => setState(() {
+    status = 'Opened notes.md';
+    feedback = null;
+  });
+  void details() => setState(() {
+    status = 'notes.md · Markdown · 2 KB';
+    feedback = null;
+  });
 
   @override
   void dispose() {
@@ -29,7 +36,7 @@ class _PressTileState extends State<PressTile> {
     onTapUp: (_) => setState(() => pressed = false),
     onTapCancel: () => setState(() {
       pressed = false;
-      status = 'Cancelled';
+      feedback = 'Cancelled';
     }),
     onTap: open,
     onSecondaryTap: details,
@@ -37,12 +44,18 @@ class _PressTileState extends State<PressTile> {
   );
   // #enddocregion focus
 
-  Widget get fileTile => Text(
-    '  notes.md                     \n  Planning notes               \n  Open preview                 ',
-    style: CellStyle(
-      inverse: pressed,
-      underline: focused,
-      foreground: pressed ? Colors.yellow : Colors.cyan,
+  Widget get fileTile => SizedBox(
+    width: 31,
+    child: Padding(
+      padding: const EdgeInsets.only(left: 2),
+      child: Text(
+        'notes.md\nPlanning notes\nOpen preview',
+        style: CellStyle(
+          inverse: pressed,
+          underline: focused,
+          foreground: pressed ? Colors.yellow : Colors.cyan,
+        ),
+      ),
     ),
   );
 
@@ -84,13 +97,19 @@ class _PressTileState extends State<PressTile> {
           ),
         ),
       ),
+      const SizedBox(height: 1),
       Button(text: 'Details', onPressed: details),
       const SizedBox(height: 1),
-      NotePreview(status: pressed ? 'Pressed…' : status),
+      NotePreview(status: status, feedback: pressed ? 'Pressed…' : feedback),
+      const SizedBox(height: 1),
       Button(
         text: 'Close preview',
-        onPressed: () => setState(() => status = 'Ready'),
+        onPressed: () => setState(() {
+          status = 'Ready';
+          feedback = null;
+        }),
       ),
+      const SizedBox(height: 1),
       const Text('Enter: open · I: details', style: CellStyle(dim: true)),
     ],
   );

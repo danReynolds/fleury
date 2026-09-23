@@ -5,6 +5,24 @@ import '../../lib/input/press_tile.dart';
 import 'pointer_test_helpers.dart';
 
 void main() {
+  testWidgets('cancelling another press preserves the current preview', (
+    tester,
+  ) {
+    tester.pumpFleuryHome(const PressTile());
+    tester.press(KeySequence.enter);
+    pointer(tester, MouseEventKind.down, 3, 0);
+    expect(tester.renderToString(), contains('Bring the sketches.'));
+    pointer(tester, MouseEventKind.drag, 7, 0);
+    pointer(tester, MouseEventKind.up, 7, 0);
+    expect(tester.exists(text('Cancelled')), isTrue);
+    expect(tester.renderToString(), contains('Bring the sketches.'));
+    tester.press(KeySequence.i);
+    pointer(tester, MouseEventKind.down, 3, 0);
+    pointer(tester, MouseEventKind.cancel, 0, 0);
+    expect(tester.exists(text('Cancelled')), isTrue);
+    expect(tester.renderToString(), contains('Location: /notes'));
+  });
+
   testWidgets('custom tile shows focus and opts its label out of selection', (
     tester,
   ) async {

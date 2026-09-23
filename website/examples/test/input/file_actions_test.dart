@@ -7,8 +7,8 @@ import 'pointer_test_helpers.dart';
 
 void main() {
   for (final (name, example, rows) in [
-    ('button', const FileActions(), 14),
-    ('tile', const PressTile(), 16),
+    ('button', const FileActions(), 17),
+    ('tile', const PressTile(), 19),
   ]) {
     testWidgets(
       '$name preview fits the guide and can be closed',

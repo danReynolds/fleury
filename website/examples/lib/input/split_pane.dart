@@ -112,6 +112,7 @@ class _SplitPaneState extends State<SplitPane> {
         ),
       ),
       Text(dragging ? 'Resizing…' : 'Width: $leftWidth · ← → resize'),
+      const SizedBox(height: 1),
       Button(
         text: 'Reset width',
         onPressed: () => setState(() => leftWidth = 14),

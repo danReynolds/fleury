@@ -33,13 +33,16 @@ class _FileActionsState extends State<FileActions> {
     crossAxisAlignment: CrossAxisAlignment.start,
     children: [
       openButton,
+      const SizedBox(height: 1),
       Button(text: 'Details', onPressed: details),
       const SizedBox(height: 1),
       NotePreview(status: status),
+      const SizedBox(height: 1),
       Button(
         text: 'Close preview',
         onPressed: () => setState(() => status = 'Ready'),
       ),
+      const SizedBox(height: 1),
       const Text(
         'Tab: next · Enter / Space: activate',
         style: CellStyle(dim: true),
