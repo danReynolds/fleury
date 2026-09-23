@@ -1,16 +1,16 @@
 ---
 import DemoSource from './DemoSource.astro';
-const sources = import.meta.glob<string>('../../examples/{lib,test}/input/*.dart', {
+const sources = import.meta.glob<string>('../../examples/lib/input/*.dart', {
   query: '?raw', import: 'default', eager: true,
 });
-interface Props { file: string; test?: boolean; full?: boolean }
-const { file, test = false, full = false } = Astro.props;
-const code = sources[`../../examples/${test ? 'test' : 'lib'}/input/${file}`];
+interface Props { file: string; full?: boolean }
+const { file, full = false } = Astro.props;
+const code = sources[`../../examples/lib/input/${file}`];
 if (!code) throw new Error(`Input guide file is missing: ${file}`);
 const region = code.match(/^[ \t]*\/\/ #docregion focus\r?\n([\s\S]*?)^[ \t]*\/\/ #enddocregion focus[ \t]*$/m)?.[1];
-if (!test && !full && !region) throw new Error(`Input guide focus is missing: ${file}`);
+if (!full && !region) throw new Error(`Input guide focus is missing: ${file}`);
 const lines = region?.trimEnd().split('\n') ?? [];
 const indent = Math.min(...lines.filter(line => line.trim()).map(line => line.match(/^ */)![0].length));
 const focused = lines.map(line => line.slice(indent)).join('\n');
 ---
-<DemoSource code={test || full ? code : focused} />
+<DemoSource code={full ? code : focused} />
