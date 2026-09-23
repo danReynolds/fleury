@@ -1,6 +1,6 @@
 ---
 title: Input & gestures
-description: Start with built-in controls, add custom gestures, and understand how nested input is routed.
+description: Choose controls for actions, translate gestures into app behavior, and combine input in nested widgets.
 ---
 
 import CodeDemoSplit from '../../../components/CodeDemoSplit.astro';
@@ -8,61 +8,81 @@ import InputGuideCode from '../../../components/InputGuideCode.astro';
 import InputPractice from '../../../components/InputPractice.astro';
 import FleuryExample from '../../../components/FleuryExample.astro';
 
-Fleury apps can be used with a keyboard, a mouse, or both. Built-in controls
-handle common interactions such as pressing a button and editing text. In this
-guide, you'll open a note, resize a pane, and explore how a hover region works
-around a button.
+Opening a file should work the same way from a click or the keyboard. Fleury's
+controls connect those inputs to one application action and handle focus and
+activation for you. Gestures let you build interactions that depend on
+movement, such as resizing a pane. The examples below show when to use each
+and how to combine them in nested widgets.
 
-## Let controls handle input
+## Use a control for an action
 
-This button opens and closes a note using the same action for mouse and keyboard
-input. Click **Open note**, then press **Enter** or **Space** to close it.
+A button represents an action, such as opening a note. Give it a callback that
+performs the action, and Fleury connects mouse clicks, keyboard activation, and
+assistive tools to that callback. Each way of activating the button therefore
+changes application state in the same way.
 
-<CodeDemoSplit files={['Interaction', 'Full source']} codeLabel="State, action, and result" demoLabel="Open with a click, close with a key" codeMaxHeight="32rem">
+<CodeDemoSplit files={['Interaction', 'Full source']} codeLabel="One action for mouse and keyboard" demoLabel="Click Open note, then press Enter" codeMaxHeight="32rem">
 <InputGuideCode slot="code-0" file="file_actions.dart" />
 <InputGuideCode slot="code-1" file="file_actions.dart" full />
 <FleuryExample slot="demo" id="input.actions" cols={38} rows={11} interactive />
 </CodeDemoSplit>
 
-The button handles focus and activation, so the example only needs to change
-whether the note is open. Hold the mouse button to see its pressed appearance.
-Keyboard activation is immediate and doesn't show a pressed state.
+Focus determines which control receives keyboard input. Clicking this button
+focuses it; **Enter** and **Space** then invoke its action. The underline makes
+that focus visible. The callback only changes whether the note is open; it
+doesn't need to distinguish a click from a key press.
 
-A button can also look like a file tile or offer a right-click action. The
-[button reference](/fleury/widgets/button/) covers custom appearances and
-secondary actions. Give secondary actions a keyboard route too.
+Choose a control for the interaction it provides. A clickable file tile can
+still be a button with custom content and a plain appearance. Likewise, text
+fields provide caret movement, selection, and editing. Reusing those behaviors
+leaves your code responsible for the action or value your application needs.
 
-Text fields follow the same approach: caret placement, selection, and keyboard
-editing are built in. The [forms guide](/fleury/guides/forms/) shows how to
-collect and validate their values.
+<details>
+<summary>Button appearance and secondary actions</summary>
 
-## Add a gesture when movement matters
+The pressed style gives feedback while the mouse button is held. Keyboard
+activation is immediate and doesn't currently show a held state. Customizing
+this appearance preserves the button's focus and activation behavior.
 
-A resize handle needs movement throughout a drag. `GestureDetector` keeps the
-drag active even when the pointer leaves the handle. Drag the divider, then try
-**← / →**: both use the same resize function.
+The [button reference](/fleury/widgets/button/) covers custom content, plain
+appearance, and right-click actions. Provide a keyboard route for any secondary
+action as well. For text entry, continue with the [forms guide](/fleury/guides/forms/).
 
-<CodeDemoSplit files={['Pointer', 'Keyboard', 'Full source']} codeLabel="One resize operation" demoLabel="Resize by pointer and keyboard" codeMaxHeight="32rem">
+</details>
+
+## Turn dragging into a resize
+
+Resizing a pane requires a stream of movement while the pointer is held down.
+`GestureDetector` recognizes the drag and reports its progress. Your application
+decides what that movement means: here, horizontal movement changes the width
+of the file pane.
+
+<CodeDemoSplit files={['Pointer', 'Keyboard', 'Full source']} codeLabel="Translate movement into a width change" demoLabel="Drag past the divider, then try the arrow keys" codeMaxHeight="32rem">
 <InputGuideCode slot="code-0" file="split_pane.dart" />
 <InputGuideCode slot="code-1" file="split_pane.dart" region="keyboard" />
 <InputGuideCode slot="code-2" file="split_pane.dart" full />
 <FleuryExample slot="demo" id="input.splitter" cols={38} rows={10} interactive />
 </CodeDemoSplit>
 
-Drag distances are measured in terminal cells. The update callback adds
-horizontal movement to the pane's width. Releasing or cancelling ends the drag
-and leaves the width where you put it. Press **Tab** to reach **Reset width**.
+Once a drag starts, the handle **captures** it: movement and release keep
+reaching that handle after the pointer leaves its bounds. This lets a narrow
+divider keep working as you move away from it. Each update reports a delta—the
+movement since the previous report—in terminal cells. Adding that delta to the
+width makes the pane follow the pointer.
 
-Make a custom handle focusable, attach the arrow bindings, and expose its width
-and resize actions to assistive tools. The full source shows how these fit
-around the drag handler.
+The arrow keys call the same resize function, so dragging and keyboard input
+share the width limits. A gesture detector supplies only the pointer behavior.
+The full example also makes the handle focusable and exposes its value and
+resize actions to assistive tools. These are responsibilities the button
+provided for us in the first example.
 
 <details>
-<summary>Press feedback and cancellation</summary>
+<summary>Keep press feedback separate from app state</summary>
 
-Use the press callbacks when your UI needs to distinguish a held press from a
-completed or cancelled tap. Open this tile, then press and drag away: the
-attempt is cancelled and the existing preview stays open.
+Pressing a control starts an interaction; it doesn't yet mean the action should
+happen. A custom target may need to show that a press is in progress and clear
+that feedback if the user cancels. Keep this temporary feedback separate from
+lasting state, such as which file is open.
 
 <CodeDemoSplit files={['Press lifecycle', 'Full source']} codeLabel="Transient feedback, persistent preview" demoLabel="Open the note, then cancel another press" codeMaxHeight="30rem">
 <InputGuideCode slot="code-0" file="press_tile.dart" />
@@ -76,68 +96,81 @@ attempt is cancelled and the existing preview stays open.
 <InputPractice slot="demo" id="input.press" cols={38} rows={19} />
 </CodeDemoSplit>
 
-The tile brightens while held. Releasing in the same cell opens the note;
-moving to another cell cancels the tap, even within the tile. Cancellation
-clears only the press feedback, so a previously opened note stays visible.
-The full source includes keyboard access and keeps the tile's label out of
-text selection.
+Only a completed tap invokes the action. In Fleury, moving to another cell
+cancels the tap even if the pointer remains inside the target. The cancellation
+handler clears the held feedback; it leaves the open note alone. Use a standard
+button when you only need its pressed appearance.
 
 </details>
 
 <details>
-<summary>Coordinates and capture</summary>
+<summary>Coordinates and target bounds</summary>
 
-`localPosition` is relative to the target; `globalPosition` is relative to the
-app. A captured drag can have local coordinates outside the target.
-The first movement reports both the start and update of a drag. Apply its delta
-only in the update callback so the handle doesn't move twice. Padding inside a
-detector enlarges its target. Clipping limits it and cancels a gesture if the
-target disappears.
+Use `localPosition` to locate a pointer within a target and `globalPosition` to
+locate it within the app. During a captured drag, the pointer can be outside the
+target, so local coordinates can fall outside its bounds.
+
+For resizing, use the movement delta. The handle itself moves as the pane
+changes width, while the delta still describes the pointer's movement. The
+first movement reports both drag start and update; apply its delta only in the
+update callback to avoid resizing twice.
+
+A detector's target is the area laid out for its child. Put padding inside the
+detector to give a small handle a larger hit area. Clipping limits that area;
+if the target disappears, the gesture is cancelled.
 
 </details>
 
-## Compose input without taking it over
+## Add hover to a group of controls
 
-The outline marks one hover region, including **Pin**. Its border lights up
-anywhere inside: over the filename, the gap, or the button. Clicking **Pin**
-changes the pinned state while the parent region stays hovered.
+Some visual feedback belongs to a whole item, even when that item contains
+several controls. A file row, for example, should stay highlighted as the
+pointer moves from its name to a button inside it. `MouseRegion` treats the row
+and its children as one area and reports when the pointer enters or leaves it.
 
-<CodeDemoSplit files={['Interaction', 'Full source']} codeLabel="The row observes; the button acts" demoLabel="Move into and out of the outlined row" codeMaxHeight="32rem">
+<CodeDemoSplit files={['Interaction', 'Full source']} codeLabel="Hover on the parent, action on the button" demoLabel="Move from the filename to Pin, then outside the row" codeMaxHeight="32rem">
 <InputGuideCode slot="code-0" file="nested_row.dart" />
 <InputGuideCode slot="code-1" file="nested_row.dart" full />
 <FleuryExample slot="demo" id="input.nesting" cols={38} rows={9} interactive />
 </CodeDemoSplit>
 
-The button handles its own presses. Wrapping it in another gesture detector
-won't observe those taps. Use the button's callback for actions and
-`MouseRegion` for the surrounding hover feedback.
+A pointer over a child is also inside its parent's bounds. That's why moving
+onto **Pin** keeps the row hovered: the pointer hasn't left the enclosing area.
+The border makes that area visible, including the space between the filename
+and button.
 
-Wheel input has a different rule: a scroll view can pass it to an ancestor
-at its edge. [Nested scrolling](/fleury/guides/lists-and-scrolling/#nested-wheel-input)
-shows when to let it continue and when to contain it.
+A tap follows a different rule. The button receives presses directed at it; an
+enclosing gesture detector won't receive a second copy. Put the action on the
+button and shared hover feedback on the containing row.
+
+Scrolling has its own handoff: when an inner pane reaches its edge, an outer
+pane can continue scrolling. See [nested scrolling](/fleury/guides/lists-and-scrolling/#nested-wheel-input)
+for choosing whether wheel input stays in a pane or reaches its parent.
 
 <details>
-<summary>Give selectable text its own boundary</summary>
+<summary>Keep copied text separate from controls</summary>
 
-Ordinary app text is selectable by default. Use a `SelectionArea` when a region
-needs its own selection callback or options. Keep labels and status messages
-outside that boundary if they shouldn't be copied with the content. For text
-that acts as a handle, use `allowSelect: false`.
+Ordinary app text is selectable by default. If a note should be copied without
+the status messages around it, wrap just the note in a `SelectionArea`. That
+boundary also gives it its own selection callback and options. For text used as
+a handle, set `allowSelect: false` so dragging manipulates the control without
+selecting its label.
 
 </details>
 
 ## Enable pointer input in a terminal
 
-The browser demos receive pointer input automatically. In a terminal, enable
-clicks, drags, scrolling, and hover when starting the app:
+Terminals normally keep mouse input for their own text selection. An interactive
+app must ask the terminal to send that input to it instead. Enable mouse
+reporting when starting the app:
 
 ```dart
 runApp(const MyApp(), mode: const TerminalMode(mouseMotion: true));
 ```
 
-Mouse reporting is opt-in because it takes over terminal text selection.
-Use `mouse: true` when hover isn't needed. A terminal-specific modifier may
-bypass the app for native selection.
+This enables clicks, drags, scrolling, and hover. Use `mouse: true` when hover
+isn't needed. The browser demos already receive pointer input. In a terminal,
+a terminal-specific modifier may bypass the app for native text selection.
 
 Continue with [key bindings](/fleury/guides/focus-and-keyboard/),
 [focus](/fleury/guides/focus/), or [interactive styles](/fleury/guides/theming/).
