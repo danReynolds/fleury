@@ -30,8 +30,11 @@ class _PressTileState extends State<PressTile> {
       // #docregion interaction
       KeyBindings(
         bindings: [
-          KeyBinding(KeySequence.enter, onTrigger: (_) => open()),
-          KeyBinding(KeySequence.space, onTrigger: (_) => open()),
+          KeyBinding(
+            KeySequence.enter,
+            aliases: [KeySequence.space],
+            onTrigger: (_) => open(),
+          ),
           KeyBinding(KeySequence.i, onTrigger: (_) => details()),
         ],
         child: FocusDetector(
