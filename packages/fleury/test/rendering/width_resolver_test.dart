@@ -207,14 +207,21 @@ void main() {
       expect(resolver.widthOfGrapheme('́', spec), 0);
     });
 
-    test('a leading Prepend mark takes the width of its base', () {
-      // Each is one extended grapheme cluster: Prepend × base.
-      expect('\u0600T'.characters.length, 1);
-      expect(resolver.widthOfGrapheme('\u0600T', spec), 1);
-      expect(resolver.widthOfGrapheme('\u0600\u06DD\u070F\u08E2T', spec), 1);
-      expect(resolver.widthOfGrapheme('\u0600漢', spec), 2);
-      // Nothing spacing to draw: still zero width.
-      expect(resolver.widthOfGrapheme('\u0600\u0301', spec), 0);
+    test('leading zero-width code points take the width of the base', () {
+      // Each is one extended grapheme cluster: Prepend × base, or a mark with
+      // no base followed by a spacing mark.
+      const widths = {
+        '؀T': 1,
+        '؀۝܏࣢T': 1,
+        '؀漢': 2,
+        '́ः': 1,
+        // Nothing spacing to draw: still zero width.
+        '؀́': 0,
+      };
+      widths.forEach((cluster, width) {
+        expect(cluster.characters.length, 1, reason: cluster);
+        expect(resolver.widthOfGrapheme(cluster, spec), width, reason: cluster);
+      });
     });
 
     test('ZWJ alone has width 0', () {
@@ -277,6 +284,15 @@ void main() {
       }
     });
 
+    test('a cluster led by a zero-width code point is uncertain', () {
+      // wcwidth gives a prepended concatenation mark a cell of its own; the
+      // width model does not. Pinning keeps the disagreement to one cell.
+      for (final g in ['۝١', '؀T', '؀\u{1F44D}\u{1F3FD}', '́ः']) {
+        expect(g.characters.length, 1, reason: 'g=$g');
+        expect(hasUncertainWidth(g), isTrue, reason: 'g=$g');
+      }
+    });
+
     test('empty input is certain', () {
       expect(hasUncertainWidth(''), isFalse);
     });
@@ -303,6 +319,19 @@ void main() {
       );
       expect(resolver.widthOfText(keycap, spec), 2);
       expect(resolver.widthOfText('a${keycap}b', spec), 4);
+    });
+
+    test('an ASCII base keeps every mark that joins its cluster', () {
+      // A SpacingMark, an Extend outside the common combining blocks, or a
+      // ZWNJ still belongs to the ASCII character before it. The fast path
+      // must hand that base back rather than measure the mark on its own.
+      for (final text in ['aः', 'a᷀ः', 'x‌', 'ok aः b']) {
+        final summed = text.characters.fold<int>(
+          0,
+          (sum, g) => sum + resolver.widthOfGrapheme(g, spec),
+        );
+        expect(resolver.widthOfText(text, spec), summed, reason: text);
+      }
     });
 
     test('a flag emoji in mixed text counts as 2', () {
