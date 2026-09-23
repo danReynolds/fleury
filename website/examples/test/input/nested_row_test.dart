@@ -9,17 +9,22 @@ void main() {
     'a child action keeps the row hovered and keyboard access intact',
     (tester) {
       tester.pumpFleuryHome(const SizedBox(width: 36, child: NestedRow()));
-      pointer(tester, MouseEventKind.moved, 1, 0);
-      expect(tester.render().atColRow(1, 0).style.inverse, isTrue);
-      pointer(tester, MouseEventKind.moved, 32, 0);
-      expect(tester.exists(text('Row hovered')), isTrue);
-      pointer(tester, MouseEventKind.down, 32, 0);
-      pointer(tester, MouseEventKind.up, 32, 0);
+      for (final col in [0, 3, 10, 14, 25]) {
+        pointer(tester, MouseEventKind.moved, col, 1);
+        expect(tester.render().atColRow(0, 0).style.foreground, Colors.cyan);
+        expect(tester.exists(text('Inside file row')), isTrue);
+      }
+      pointer(tester, MouseEventKind.down, 14, 1);
+      pointer(tester, MouseEventKind.up, 14, 1);
       expect(tester.exists(text('Pinned to sidebar')), isTrue);
-      expect(tester.exists(text('Row hovered')), isTrue);
-      pointer(tester, MouseEventKind.leave, 40, 0);
-      expect(tester.exists(text('Row not hovered')), isTrue);
-      expect(tester.render().atColRow(1, 0).style.inverse, isFalse);
+      expect(tester.exists(text('Inside file row')), isTrue);
+      pointer(tester, MouseEventKind.moved, 28, 1);
+      expect(tester.exists(text('Outside file row')), isTrue);
+      expect(
+        tester.render().atColRow(0, 0).style.foreground,
+        isNot(Colors.cyan),
+      );
+      expect(tester.exists(text('Pinned to sidebar')), isTrue);
       tester.press(KeySequence.enter);
       expect(tester.exists(text('Not pinned')), isTrue);
     },

@@ -6,6 +6,7 @@ description: Start with built-in controls, add custom gestures, and understand h
 import CodeDemoSplit from '../../../components/CodeDemoSplit.astro';
 import InputGuideCode from '../../../components/InputGuideCode.astro';
 import InputPractice from '../../../components/InputPractice.astro';
+import FleuryExample from '../../../components/FleuryExample.astro';
 
 Start with the control that owns the interaction. `Button` handles activation,
 text fields handle editing, and scroll views handle scrolling. Add a gesture
@@ -19,7 +20,7 @@ or **Space**: `Button` supplies focus, keyboard access, and semantics.
 <CodeDemoSplit files={['Interaction', 'Full source']} codeLabel="State, action, and result" demoLabel="Open with a click, close with a key" codeMaxHeight="32rem">
 <InputGuideCode slot="code-0" file="file_actions.dart" />
 <InputGuideCode slot="code-1" file="file_actions.dart" full />
-<InputPractice slot="demo" id="input.actions" cols={38} rows={11} />
+<FleuryExample slot="demo" id="input.actions" cols={38} rows={11} interactive />
 </CodeDemoSplit>
 
 The app owns `open`; the button owns how input reaches `onPressed`.
@@ -45,7 +46,7 @@ Drag the divider, then resize with **← / →**: both paths call `resize`.
 <InputGuideCode slot="code-0" file="split_pane.dart" />
 <InputGuideCode slot="code-1" file="split_pane.dart" region="keyboard" />
 <InputGuideCode slot="code-2" file="split_pane.dart" full />
-<InputPractice slot="demo" id="input.splitter" cols={38} rows={10} />
+<FleuryExample slot="demo" id="input.splitter" cols={38} rows={10} interactive />
 </CodeDemoSplit>
 
 Movement is measured in terminal cells. Apply `details.delta.col` in
@@ -96,14 +97,14 @@ its target. Clipping limits it and cancels a gesture if the target disappears.
 
 ## Compose input without taking it over
 
-Hover belongs to a region; a press belongs to its target. Move across the file
-row and onto **Pin**. The row stays highlighted while the button handles the
-click. `MouseRegion` observes its children without replacing their controls.
+The outlined file row is one `MouseRegion`, including **Pin**. Its border lights
+up anywhere inside: over the filename, the gap, or the button. Clicking **Pin**
+runs the button's action while the parent region stays hovered.
 
-<CodeDemoSplit files={['Interaction', 'Full source']} codeLabel="The row observes; the button acts" demoLabel="Pin the note while its row stays hovered" codeMaxHeight="32rem">
+<CodeDemoSplit files={['Interaction', 'Full source']} codeLabel="The row observes; the button acts" demoLabel="Move into and out of the outlined row" codeMaxHeight="32rem">
 <InputGuideCode slot="code-0" file="nested_row.dart" />
 <InputGuideCode slot="code-1" file="nested_row.dart" full />
-<InputPractice slot="demo" id="input.nesting" cols={38} rows={7} />
+<FleuryExample slot="demo" id="input.nesting" cols={38} rows={9} interactive />
 </CodeDemoSplit>
 
 An outer `GestureDetector` doesn't observe an inner button's taps: the
@@ -118,19 +119,9 @@ shows when to let it continue and when to contain it.
 <summary>Give selectable text its own boundary</summary>
 
 `FleuryApp` makes ordinary text selectable. Add a `SelectionArea` when a region
-needs its own selection callback or options. Here the count sits outside the
-note, so selecting the note won't include it.
-
-<CodeDemoSplit files={['Selection', 'Full source']} codeLabel="Select the note, count the result" demoLabel="Select a quote, then clear it" codeMaxHeight="30rem">
-<InputGuideCode slot="code-0" file="selectable_note.dart" />
-<InputGuideCode slot="code-1" file="selectable_note.dart" full />
-<InputPractice slot="demo" id="input.selection" cols={38} rows={12} />
-</CodeDemoSplit>
-
-Selecting the note takes keyboard focus: **Ctrl+A** selects it, **Ctrl+C**
-copies it, and **Esc** clears it. In the browser, macOS also uses **⌘A/⌘C**.
-Click **Reply** to return to editing. For text that acts as a handle, use
-`allowSelect: false`.
+needs its own selection callback or options. Keep labels and status messages
+outside that boundary if they shouldn't be copied with the content. For text
+that acts as a handle, use `allowSelect: false`.
 
 </details>
 

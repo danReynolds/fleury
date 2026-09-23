@@ -2276,7 +2276,7 @@ form.clearErrors();''',
     category: 'Guide examples',
     blurb: 'A child button acts while its surrounding row stays hovered.',
     cols: 38,
-    rows: 7,
+    rows: 9,
     interactive: true,
     builder: () =>
         const Padding(padding: EdgeInsets.all(1), child: input.NestedRow()),
