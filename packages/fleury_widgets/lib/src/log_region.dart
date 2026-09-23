@@ -1,4 +1,5 @@
 import 'dart:async' show unawaited;
+import 'dart:collection' show ListBase;
 
 import 'package:characters/characters.dart';
 import 'package:fleury/fleury.dart';
@@ -368,7 +369,7 @@ class _LogRegionState extends State<LogRegion> {
       _cachedOrderEntries = null;
       _cachedOrderFilter = null;
       _cachedOrder = null;
-      return List<int>.generate(entries.length, (index) => index);
+      return _IdentityOrder(entries.length);
     }
 
     final cachedOrder = _cachedOrder;
@@ -440,15 +441,43 @@ class _LogRegionState extends State<LogRegion> {
     }
   }
 
+  // The ids of the rows last shown, in view order, validated distinct and
+  // non-null; null when a row had no id or an id repeated.
+  List<Object>? _rowIds;
+  Set<Object>? _rowIdSet;
+
   /// An `itemKeyBuilder` over [LogEntry.id], or null when the ids cannot
-  /// identify rows. Recomputed per build alongside `order`, which is already
-  /// an O(n) pass over the same entries.
+  /// identify rows.
+  ///
+  /// A tailing log is mostly appends, so the rows validated last build are
+  /// re-checked by equality — no hashing — and only new rows are hashed. Any
+  /// other change re-validates from scratch.
   Object Function(int)? _stableIds(List<int> order) {
-    final seen = <Object>{};
-    for (final sourceIndex in order) {
-      final id = widget.entries[sourceIndex].id;
-      if (id == null || !seen.add(id)) return null;
+    final entries = widget.entries;
+    var ids = _rowIds;
+    var seen = _rowIdSet;
+    var start = 0;
+    if (ids != null && seen != null && ids.length <= order.length) {
+      while (start < ids.length && entries[order[start]].id == ids[start]) {
+        start++;
+      }
     }
+    if (ids == null || seen == null || start < ids.length) {
+      ids = <Object>[];
+      seen = <Object>{};
+      start = 0;
+    }
+    for (var i = start; i < order.length; i++) {
+      final id = entries[order[i]].id;
+      if (id == null || !seen.add(id)) {
+        _rowIds = null;
+        _rowIdSet = null;
+        return null;
+      }
+      ids.add(id);
+    }
+    _rowIds = ids;
+    _rowIdSet = seen;
     return (viewIndex) => widget.entries[order[viewIndex]].id!;
   }
 
@@ -1052,4 +1081,26 @@ CellStyle _styleForSeverity(
     LogSeverity.error => widgetTheme.resolveLogError(theme),
     LogSeverity.success => widgetTheme.resolveLogSuccess(theme),
   };
+}
+
+/// The unfiltered view order: view index i shows entry i. A view, so a
+/// rebuild of a long log allocates nothing proportional to its length.
+final class _IdentityOrder extends ListBase<int> {
+  _IdentityOrder(this.length);
+
+  @override
+  final int length;
+
+  @override
+  set length(int value) => throw UnsupportedError('An unmodifiable order.');
+
+  @override
+  int operator [](int index) {
+    RangeError.checkValidIndex(index, this, 'index', length);
+    return index;
+  }
+
+  @override
+  void operator []=(int index, int value) =>
+      throw UnsupportedError('An unmodifiable order.');
 }

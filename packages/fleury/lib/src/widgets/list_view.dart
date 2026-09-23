@@ -620,17 +620,23 @@ class _ListItemIdentities {
     final count = widget.effectiveItemCount;
     var index = 0;
     Object? changedKey;
-    if (previous != null && previous.keys.length == count) {
-      for (; index < count; index++) {
+    if (previous != null && previous.keys.length <= count) {
+      final previousCount = previous.keys.length;
+      for (; index < previousCount; index++) {
         final key = keyBuilder(index);
         if (key != previous.keys[index]) {
           changedKey = key;
           break;
         }
       }
-      // Every key was checked, including offscreen keys. The previously
-      // validated lookup still applies; no key array or map was allocated.
-      if (index == count) return previous;
+      // Every previous key was checked, including offscreen keys, and is
+      // unchanged: the previously validated lookup still applies, and an
+      // append only has to validate and index its new keys.
+      if (index == previousCount) {
+        return count == previousCount
+            ? previous
+            : previous._appended(keyBuilder, count);
+      }
     }
     final keys = index == 0 ? <Object>[] : previous!.keys.sublist(0, index);
     final indexByKey = <Object, int>{};
@@ -642,17 +648,38 @@ class _ListItemIdentities {
       final key = changedKey ?? keyBuilder(index);
       changedKey = null;
       final prior = indexByKey[key];
-      if (prior != null) {
-        throw StateError(
-          'Duplicate ListView item key $key at indices $prior and $index. '
-          'itemKeyBuilder must return a unique, stable key for each item.',
-        );
-      }
+      if (prior != null) throw _duplicateKey(key, prior, index);
       keys.add(key);
       indexByKey[key] = index;
     }
     return _ListItemIdentities(keys, indexByKey);
   }
+
+  /// This snapshot extended with the keys of the items appended up to
+  /// [count]. The new keys are validated before anything is shared, so a
+  /// duplicate leaves this snapshot intact for a retry.
+  _ListItemIdentities _appended(Object Function(int) keyBuilder, int count) {
+    final added = <Object>[];
+    final addedIndex = <Object, int>{};
+    for (var index = keys.length; index < count; index++) {
+      final key = keyBuilder(index);
+      final prior = indexByKey[key] ?? addedIndex[key];
+      if (prior != null) throw _duplicateKey(key, prior, index);
+      added.add(key);
+      addedIndex[key] = index;
+    }
+    // The previous snapshot is dropped by its only owner, so its storage is
+    // extended rather than copied.
+    keys.addAll(added);
+    indexByKey.addAll(addedIndex);
+    return _ListItemIdentities(keys, indexByKey);
+  }
+
+  static StateError _duplicateKey(Object key, int prior, int index) =>
+      StateError(
+        'Duplicate ListView item key $key at indices $prior and $index. '
+        'itemKeyBuilder must return a unique, stable key for each item.',
+      );
 }
 
 class _ListViewState extends State<ListView> {

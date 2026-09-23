@@ -1,5 +1,8 @@
 # Changelog
 
+- A keyed `ListView` that grows by appending validates and indexes only the
+  new keys instead of rebuilding its key index; a duplicate in the append
+  still throws and leaves the previous keys intact.
 - A list that follows its tail keeps its cursor on the newest item:
   `ListController(followTail: true)` starts on the last item and carries the
   cursor along as items arrive, until an arrow key, click, or `currentIndex`
