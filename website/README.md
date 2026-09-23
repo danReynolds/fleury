@@ -11,6 +11,12 @@ explain why the result follows. The reader should be able to apply the idea in
 another app. Describing what lights up or telling the reader where to click is
 an invitation to try a demo, not the lesson itself; keep that in its caption.
 
+Assume readers know UI and programming fundamentals. Spend prose on Fleury's
+contracts, implementation choices, and pitfalls, rather than defining buttons,
+focus, callbacks, or other familiar concepts. Link to the relevant guide when a
+topic already has one. Cut sentences that only restate the example's purpose
+or describe behavior the code and demo already make obvious.
+
 Explain behavior in prose; reserve inline code for exact API names or values the
 reader needs to identify. Link to reference pages for lists of options instead
 of turning the explanation into an API inventory.
