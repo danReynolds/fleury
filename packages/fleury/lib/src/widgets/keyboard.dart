@@ -132,7 +132,7 @@ final class Keyboard {
   /// bumps [KeyboardSnapshot.sessionGeneration] on the same handle rather
   /// than replacing it, so caching the handle in a `State` field is safe.
   static Keyboard of(BuildContext context) {
-    final notifier = Scope.maybeOf<KeyboardStateNotifier>(context);
+    final notifier = dependOnScope<KeyboardStateNotifier>(context);
     if (notifier == null) {
       throw StateError(
         'Keyboard.of() found no KeyboardScope.\n'
@@ -148,9 +148,7 @@ final class Keyboard {
   static InputDispatcher _dispatcherOf(BuildContext context) {
     // Non-subscribing: nextKey is normally called from a callback, where
     // establishing a build dependency would be wrong.
-    final notifier = Scope.maybeOfWithoutDependency<KeyboardStateNotifier>(
-      context,
-    );
+    final notifier = readScope<KeyboardStateNotifier>(context);
     if (notifier == null) {
       throw StateError('Keyboard.nextKey() found no KeyboardScope.');
     }
@@ -197,9 +195,7 @@ final class KeyboardScope extends Scope<KeyboardStateNotifier> {
   /// or null outside a running app. Non-subscribing — a widget reaching for
   /// the observation lane must not rebuild on capability changes.
   static InputDispatcher? maybeDispatcherOf(BuildContext context) =>
-      Scope.maybeOfWithoutDependency<KeyboardStateNotifier>(
-        context,
-      )?.dispatcher;
+      readScope<KeyboardStateNotifier>(context)?.dispatcher;
 }
 
 /// Conditional, widget-internal key handling — the framework's floor.

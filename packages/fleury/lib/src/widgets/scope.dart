@@ -2,9 +2,12 @@ import 'framework.dart';
 
 /// Rebuilds a subtree when its nearest [Scope] changes or its value notifies.
 ///
-/// The builder receives the value and its own build context. Dependencies are
-/// reconciled after every build, and the scope retains ownership of its value.
-class ScopeBuilder<T extends Object> extends StatelessWidget {
+/// The widget form of [BuildContext.scope]: it reads exactly what
+/// `context.scope<T>()` reads and subscribes the same way, but rebuilds only
+/// this builder rather than the enclosing widget. A nullable type argument
+/// (`ScopeBuilder<Model?>`) makes the scope optional. The scope keeps
+/// ownership of its value.
+class ScopeBuilder<T> extends StatelessWidget {
   const ScopeBuilder({super.key, required this.builder});
 
   /// Builds from the nearest scoped value whenever it changes or notifies.

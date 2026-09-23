@@ -51,7 +51,7 @@ class FormControlScope extends Scope<FormControlRegistration> {
   final String? error;
 
   static FormControlRegistration? maybeOf(BuildContext context) =>
-      Scope.maybeOf<FormControlRegistration>(context);
+      dependOnScope<FormControlRegistration>(context);
 
   @override
   bool updateShouldNotify(FormControlScope oldWidget) =>

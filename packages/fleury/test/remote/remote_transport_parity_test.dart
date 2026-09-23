@@ -236,13 +236,19 @@ void main() {
       expect(decoded.targetToken, 'element.3');
     });
 
-    test('a stable-id semantic action retains its pre-v6 byte shape', () {
+    test('a stable-id semantic action writes an absent token byte', () {
       final encoded = encodeSemanticAction(
         const SemanticNodeId('x'),
         SemanticAction.activate,
       );
 
-      expect(encoded, <int>[1, 0x78, 8, ...utf8.encode('activate'), 0]);
+      expect(encoded, <int>[1, 0x78, 8, ...utf8.encode('activate'), 0, 0]);
+      expect(
+        () => decodeSemanticAction(
+          Uint8List.sublistView(encoded, 0, encoded.length - 1),
+        ),
+        throwsA(isA<RemoteCodecException>()),
+      );
       final decoded = decodeSemanticAction(encoded);
       expect(decoded.id, const SemanticNodeId('x'));
       expect(decoded.action, SemanticAction.activate);

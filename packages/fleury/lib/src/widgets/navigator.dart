@@ -271,7 +271,7 @@ class Navigator extends StatefulWidget {
     // this context lives in; fall back to an ancestor-state walk for a
     // context sitting between a Navigator and its routes' scope. A
     // non-dependent read: callers are event handlers.
-    final navigator = Scope.maybeOfWithoutDependency<NavigatorState>(context);
+    final navigator = readScope<NavigatorState>(context);
     if (navigator != null) return navigator;
     return context.findAncestorStateOfType<NavigatorState>();
   }
@@ -1075,7 +1075,7 @@ class _PopScopeState extends State<PopScope> {
     super.didChangeDependencies();
     // The enclosing route's Scope<_Route>, so the veto registers with the
     // right route (and re-registers if a move changes it).
-    final route = Scope.maybeOf<_Route>(context);
+    final route = dependOnScope<_Route>(context);
     if (!identical(route, _route)) {
       _route?.guards.remove(this);
       _route = route;

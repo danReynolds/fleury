@@ -351,7 +351,7 @@ class CommandRegistryScope extends Scope<CommandRegistry> {
   }
 
   static CommandRegistry? maybeOf(BuildContext context) =>
-      Scope.maybeOf<CommandRegistry>(context);
+      dependOnScope<CommandRegistry>(context);
 }
 
 /// Adds commands to the active app command scope.

@@ -298,10 +298,6 @@ class _Reader {
 
   bool boolean() => u8() != 0;
 
-  /// Whether any bytes remain — lets a decoder treat an absent optional
-  /// trailing extension as its default.
-  bool get hasMore => _pos < _data.length;
-
   void _need(int n) {
     if (_pos + n > _data.length) {
       throw const RemoteCodecException('truncated payload');
@@ -439,9 +435,6 @@ Uint8List encodeRemotePlan(RemotePlan plan) {
   var flags = 0;
   if (plan.fullRepaint) flags |= 1;
   if (plan.scrollUpRows != null) flags |= 2;
-  // Bit 2 declares the per-placement window fields; it is set exactly when the
-  // plan carries placements, so an image-free plan pays nothing.
-  if (plan.placements.isNotEmpty) flags |= 4;
   w
     ..u8(flags)
     ..varint(plan.size.cols)
@@ -484,12 +477,11 @@ Uint8List encodeRemotePlan(RemotePlan plan) {
 RemotePlan decodeRemotePlan(Uint8List bytes) {
   final r = _Reader(bytes);
   final flags = r.u8();
-  if (flags & ~7 != 0) {
+  if (flags & ~3 != 0) {
     throw RemoteCodecException(
       'unknown plan flags 0x${flags.toRadixString(16)}',
     );
   }
-  final hasImageWindows = (flags & 4) != 0;
   final cols = r.varint();
   final rows = r.varint();
   _validatePlanGrid(cols, rows);
@@ -545,11 +537,6 @@ RemotePlan decodeRemotePlan(Uint8List bytes) {
   }
   final placementCount = r.varint();
   _checkPlanCount('image placement', placementCount, maxRemotePlanPlacements);
-  if (placementCount > 0 && !hasImageWindows) {
-    throw const RemoteCodecException(
-      'image placements without window geometry (plan flag bit 2)',
-    );
-  }
   final placements = <ImagePlacement>[];
   for (var i = 0; i < placementCount; i++) {
     final id = r.vstr();
@@ -991,9 +978,8 @@ void _writeKeyPayload(_Writer w, KeyEvent e) {
   w.u8(e.type.index);
 }
 
-/// The RFC 0020 extension pair (position, synthesized). Bare key events
-/// write it only when non-default, keeping the common key compact; the batch
-/// shape always writes it.
+/// The RFC 0020 pair (position, synthesized), written after every key
+/// payload. The +1-biased position value reserves 0 for "no position".
 void _writeKeyExtension(_Writer w, KeyEvent e) {
   w.u8(e.position == null ? 0 : e.position!.index + 1);
   w.boolean(e.synthesized);
@@ -1040,13 +1026,7 @@ Uint8List encodeInputEvent(TuiEvent event) {
     case KeyEvent e:
       w.u8(_evKey);
       _writeKeyPayload(w, e);
-      // RFC 0020 positional identity + synthesized flag ride as an optional
-      // trailing extension, like segmented-paste metadata: absent for
-      // default values, so the common key stays compact. The +1-biased
-      // position value reserves 0 for "no position".
-      if (e.position != null || e.synthesized) {
-        _writeKeyExtension(w, e);
-      }
+      _writeKeyExtension(w, e);
     case InputBatch e:
       // RFC 0020 §5: the correlated key+text unit.
       w.u8(_evBatch);
@@ -1084,12 +1064,10 @@ Uint8List encodeInputEvent(TuiEvent event) {
     case PasteEvent e:
       w.u8(_evPaste);
       w.str(e.text);
-      // Segment metadata is an optional trailing extension, absent for a
-      // complete paste (the only kind production browser peers originate).
-      if (e.phase != PasteEventPhase.single) {
-        w.u8(e.phase.index);
-        w.u32(e.pasteId!);
-      }
+      // A complete paste (the only kind browser peers originate) is its phase
+      // byte alone; a segment also names the paste it belongs to.
+      w.u8(e.phase.index);
+      if (e.phase != PasteEventPhase.single) w.u32(e.pasteId!);
     case ResizeEvent e:
       w.u8(_evResize);
       w
@@ -1114,11 +1092,7 @@ TuiEvent decodeInputEvent(Uint8List bytes) {
       final code = _readKeyCode(r);
       final mods = _readModifiers(r);
       final type = r.enumValue(KeyEventType.values);
-      KeyPosition? position;
-      var synthesized = false;
-      if (r.hasMore) {
-        (position, synthesized) = _readKeyExtension(r);
-      }
+      final (position, synthesized) = _readKeyExtension(r);
       event = KeyEvent(
         code,
         modifiers: mods,
@@ -1184,17 +1158,10 @@ TuiEvent decodeInputEvent(Uint8List bytes) {
       );
     case _evPaste:
       final text = r.str();
-      if (!r.hasMore) {
-        event = PasteEvent(text);
-      } else {
-        final phase = r.enumValue(PasteEventPhase.values);
-        if (phase == PasteEventPhase.single) {
-          throw const RemoteCodecException(
-            'segmented paste cannot use single phase',
-          );
-        }
-        event = PasteEvent.segment(text, phase: phase, pasteId: r.u32());
-      }
+      final phase = r.enumValue(PasteEventPhase.values);
+      event = phase == PasteEventPhase.single
+          ? PasteEvent(text)
+          : PasteEvent.segment(text, phase: phase, pasteId: r.u32());
     case _evResize:
       event = ResizeEvent(CellSize(r.u16(), r.u16()));
     case _evSignal:
@@ -1224,10 +1191,9 @@ Uint8List encodeSemanticAction(
   w.vstr(action.name);
   w.boolean(value != null);
   if (value != null) w.vstr(jsonEncode(value));
+  // The token is present only for a positional id.
+  w.boolean(targetToken != null);
   if (targetToken != null) {
-    // The token is a trailing extension, present only for a positional id; a
-    // stable-id action omits even its presence byte.
-    w.boolean(true);
     w.vstr(targetToken, maxBytes: 64, field: 'semantic action target token');
   }
   return w.take();
@@ -1255,9 +1221,9 @@ decodeSemanticAction(Uint8List bytes) {
     }
   }
   String? targetToken;
-  // A trailing extension, absent for stable-id actions; a positional id
-  // without a token fails closed at dispatch.
-  if (r.hasMore && r.boolean()) {
+  // Absent for stable-id actions; a positional id without a token fails
+  // closed at dispatch.
+  if (r.boolean()) {
     targetToken = r.vstr(
       maxBytes: 64,
       field: 'semantic action target token',

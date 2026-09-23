@@ -99,7 +99,7 @@ class _ReparentState extends State<_Reparent> {
 final class _Tag {
   const _Tag(this.label);
   final String label;
-  static String of(BuildContext c) => Scope.of<_Tag>(c).label;
+  static String of(BuildContext c) => c.scope<_Tag>().label;
   @override
   bool operator ==(Object other) => other is _Tag && other.label == label;
   @override

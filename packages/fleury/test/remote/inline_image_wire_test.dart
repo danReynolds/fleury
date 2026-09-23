@@ -211,7 +211,7 @@ void main() {
       expect(placement.fit, InlineImageFit.cover);
     });
 
-    test('placements without window geometry are rejected', () {
+    test('plan flags beyond repaint and scroll are rejected', () {
       const plan = RemotePlan(
         size: CellSize(10, 6),
         fullRepaint: false,
@@ -222,17 +222,16 @@ void main() {
         ],
       );
       final bytes = encodeRemotePlan(plan);
-      expect(bytes.first & 4, 4, reason: 'placements declare their windows');
+      expect(bytes.first, 0, reason: 'placements need no flag of their own');
 
-      // The same plan without flag bit 2 is not a shape any sender produces.
-      final stripped = Uint8List.fromList(bytes)..[0] &= ~4;
+      final flagged = Uint8List.fromList(bytes)..[0] |= 4;
       expect(
-        () => decodeRemotePlan(stripped),
+        () => decodeRemotePlan(flagged),
         throwsA(
           isA<RemoteCodecException>().having(
             (e) => e.message,
             'message',
-            contains('window geometry'),
+            contains('unknown plan flags 0x4'),
           ),
         ),
       );

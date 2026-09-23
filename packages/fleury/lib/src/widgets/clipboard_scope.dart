@@ -40,5 +40,5 @@ class ClipboardScope extends Scope<Clipboard> {
 
   /// Like [of], but null when no scope is installed.
   static Clipboard? maybeOf(BuildContext context) =>
-      Scope.maybeOfWithoutDependency<Clipboard>(context);
+      readScope<Clipboard>(context);
 }

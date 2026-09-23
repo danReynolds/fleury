@@ -213,7 +213,7 @@ class Form extends StatefulWidget {
 
   /// The controller for the nearest enclosing form, if one exists.
   static FormController? maybeOf(BuildContext context) =>
-      Scope.maybeOf<FormController>(context);
+      dependOnScope<FormController>(context);
 
   @override
   State<Form> createState() => _FormWidgetState();

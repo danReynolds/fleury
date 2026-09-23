@@ -120,8 +120,8 @@ abstract interface class SelectionRegistrar {
 /// ancestor `SelectionArea` — useful for forms or interactive panels
 /// embedded inside a selectable region that shouldn't themselves
 /// participate in selection. Read the registrar through [maybeOf]: a
-/// direct `Scope.of<SelectionRegistrar>` below a masked subtree returns the
-/// no-op registrar that stands in for `null`, not `null` itself.
+/// direct `context.scope<SelectionRegistrar>()` below a masked subtree returns
+/// the no-op registrar that stands in for `null`, not `null` itself.
 class SelectionScope extends Scope<SelectionRegistrar> {
   /// [registrar] is the registrar that ought to own Selectables in this
   /// subtree, or `null` to disable selection for the subtree (Selectables
@@ -137,9 +137,7 @@ class SelectionScope extends Scope<SelectionRegistrar> {
   /// nearest scope's registrar is null — Selectables under either
   /// condition silently no-op their registration.
   static SelectionRegistrar? maybeOf(BuildContext context) {
-    final registrar = Scope.maybeOfWithoutDependency<SelectionRegistrar>(
-      context,
-    );
+    final registrar = readScope<SelectionRegistrar>(context);
     return registrar is _NoSelection ? null : registrar;
   }
 }

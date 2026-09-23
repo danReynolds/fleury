@@ -150,7 +150,7 @@ class AppStatusBar extends StatelessWidget {
   Widget build(BuildContext context) {
     // FleuryApp shares its StatusController in a scope; reading it here
     // subscribes the bar, so it rebuilds as items change.
-    final status = Scope.maybeOf<StatusController>(context);
+    final status = dependOnScope<StatusController>(context);
     if (status == null) {
       throw StateError('No FleuryApp status scope found in context.');
     }

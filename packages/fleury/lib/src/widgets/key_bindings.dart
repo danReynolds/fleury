@@ -495,7 +495,7 @@ class KeyBindings extends StatefulWidget {
   /// cancelled — a which-key popup depends on this. Null unless `runApp`
   /// installed a [PendingSequenceScope] (it does by default).
   static PendingKeySequenceMatch? pendingOf(BuildContext context) =>
-      Scope.maybeOf<PendingSequenceNotifier>(context)?.value;
+      dependOnScope<PendingSequenceNotifier>(context)?.value;
 
   /// Cancels the in-flight sequence [pendingOf] reports, as if the user
   /// pressed Esc — for a which-key popup's close control or any custom
@@ -503,9 +503,7 @@ class KeyBindings extends StatefulWidget {
   /// [PendingSequenceScope] is installed. Reads the scope WITHOUT a rebuild
   /// dependency (it's an action, not a value read).
   static void cancelPending(BuildContext context) =>
-      Scope.maybeOfWithoutDependency<PendingSequenceNotifier>(
-        context,
-      )?.cancel();
+      readScope<PendingSequenceNotifier>(context)?.cancel();
 
   @override
   State<KeyBindings> createState() => _KeyBindingsState();
@@ -552,7 +550,7 @@ class _KeyBindingsState extends State<KeyBindings> implements KeyBindingSource {
     // Subscribe to keyboard capability changes (Scope listens to the
     // Listenable notifier) so a mid-session demotion re-runs hold sync and
     // unregisters the observation-lane latch when held-state is lost.
-    Scope.maybeOf<KeyboardStateNotifier>(context);
+    dependOnScope<KeyboardStateNotifier>(context);
     _syncHoldObserver();
   }
 

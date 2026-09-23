@@ -56,7 +56,7 @@ void main() {
     );
 
     test(
-      'positional target tokens require v6 and are forwarded intact',
+      'positional target tokens wait for the echo and are forwarded intact',
       () async {
         final transport = _EncodingTransport();
         final bridge = FleuryAppBridge(transport)..start();

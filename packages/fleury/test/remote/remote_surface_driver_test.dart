@@ -716,7 +716,6 @@ void main() {
         driver.presentFrame(CellBuffer(size), next, fullPlan(size));
 
         final plan = transport.sent.whereType<PlanFrame>().single.plan;
-        expect(encodeRemotePlan(plan).first & 4, 4);
         final placement = plan.placements.single;
         expect(
           [

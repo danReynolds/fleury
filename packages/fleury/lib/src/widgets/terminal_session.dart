@@ -41,7 +41,7 @@ final class TerminalSession {
 
   /// The nearest session, or null on a surface without one (the browser).
   static TerminalSession? maybeOf(BuildContext context) =>
-      Scope.maybeOf<TerminalSession>(context);
+      dependOnScope<TerminalSession>(context);
 
   /// The nearest session; throws when there is none.
   static TerminalSession of(BuildContext context) {

@@ -2824,7 +2824,7 @@ final class _DocsExampleTheme {
   final ThemeData data;
 
   static ThemeData? maybeOf(BuildContext context) =>
-      Scope.maybeOf<_DocsExampleTheme>(context)?.data;
+      context.scope<_DocsExampleTheme?>()?.data;
 
   @override
   bool operator ==(Object other) =>

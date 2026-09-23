@@ -176,7 +176,7 @@ class FleuryAppScope extends Scope<FleuryAppController> {
   }
 
   static FleuryAppController? maybeOf(BuildContext context) =>
-      Scope.maybeOf<FleuryAppController>(context);
+      dependOnScope<FleuryAppController>(context);
 }
 
 extension FleuryCommandContext on CommandContext {
