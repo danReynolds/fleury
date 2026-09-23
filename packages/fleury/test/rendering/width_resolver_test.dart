@@ -207,6 +207,16 @@ void main() {
       expect(resolver.widthOfGrapheme('́', spec), 0);
     });
 
+    test('a leading Prepend mark takes the width of its base', () {
+      // Each is one extended grapheme cluster: Prepend × base.
+      expect('\u0600T'.characters.length, 1);
+      expect(resolver.widthOfGrapheme('\u0600T', spec), 1);
+      expect(resolver.widthOfGrapheme('\u0600\u06DD\u070F\u08E2T', spec), 1);
+      expect(resolver.widthOfGrapheme('\u0600漢', spec), 2);
+      // Nothing spacing to draw: still zero width.
+      expect(resolver.widthOfGrapheme('\u0600\u0301', spec), 0);
+    });
+
     test('ZWJ alone has width 0', () {
       expect(resolver.widthOfGrapheme('‍', spec), 0);
     });

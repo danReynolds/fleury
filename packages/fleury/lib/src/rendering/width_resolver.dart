@@ -74,7 +74,16 @@ final class DefaultWidthResolver implements WidthResolver {
     // (`👩‍⚕️` contains FE0F; `emojiVariationSequence: one` may not narrow it).
     final iterator = grapheme.runes.iterator;
     if (!iterator.moveNext()) return 0;
-    final base = iterator.current;
+    // A cluster may open with zero-width Prepend code points (U+0600 ARABIC
+    // NUMBER SIGN and the other prepended concatenation marks) that attach to
+    // the next character. The cluster is as wide as its first spacing code
+    // point; keying off the Prepend would measure `U+0600 T` as zero cells and
+    // the visible T would never be painted. A cluster with no spacing code
+    // point (a lone combining mark) stays zero width.
+    var base = iterator.current;
+    while (_scalarClassOf(base) == 1 && iterator.moveNext()) {
+      base = iterator.current;
+    }
     var hasZwj = false;
     var hasKeycap = false;
     var hasTag = false;

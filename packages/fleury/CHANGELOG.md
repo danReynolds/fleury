@@ -52,6 +52,10 @@
   terminal through it; use `writeText` for text.
 - Layout and paint error panels sanitize the error text like any other
   displayed string.
+- A grapheme cluster that opens with a Prepend mark (U+0600 ARABIC NUMBER SIGN
+  and the other prepended concatenation marks) is as wide as its base
+  character. It measured zero cells, so the visible character was never
+  painted.
 - `fleury serve` never runs a network bind without a token: without
   `--token`, it generates one for the run. The ready banner prints the full
   browser URL including the token (IPv6 hosts bracketed), and the token check
