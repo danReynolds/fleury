@@ -8,14 +8,15 @@ import InputGuideCode from '../../../components/InputGuideCode.astro';
 import InputPractice from '../../../components/InputPractice.astro';
 import FleuryExample from '../../../components/FleuryExample.astro';
 
-Start with the control that owns the interaction. `Button` handles activation,
-text fields handle editing, and scroll views handle scrolling. Add a gesture
-when your interface needs behavior those controls don't provide.
+Fleury apps can be used with a keyboard, a mouse, or both. Built-in controls
+handle common interactions such as pressing a button and editing text. In this
+guide, you'll open a note, resize a pane, and explore how a hover region works
+around a button.
 
 ## Let controls handle input
 
-One callback opens and closes this note. Click the button, then use **Enter**
-or **Space**: `Button` supplies focus, keyboard access, and semantics.
+This button opens and closes a note using the same action for mouse and keyboard
+input. Click **Open note**, then press **Enter** or **Space** to close it.
 
 <CodeDemoSplit files={['Interaction', 'Full source']} codeLabel="State, action, and result" demoLabel="Open with a click, close with a key" codeMaxHeight="32rem">
 <InputGuideCode slot="code-0" file="file_actions.dart" />
@@ -23,24 +24,23 @@ or **Space**: `Button` supplies focus, keyboard access, and semantics.
 <FleuryExample slot="demo" id="input.actions" cols={38} rows={11} interactive />
 </CodeDemoSplit>
 
-The app owns `open`; the button owns how input reaches `onPressed`.
-Hold the mouse button to see its `pressed:` style. Keyboard activation is
-immediate; held keyboard styling isn't currently supplied.
+The button handles focus and activation, so the example only needs to change
+whether the note is open. Hold the mouse button to see its pressed appearance.
+Keyboard activation is immediate and doesn't show a pressed state.
 
-A different appearance still uses `Button`: provide a composed `child` and
-`appearance: ButtonAppearance.plain` for a file tile without brackets.
-`onSecondaryPressed` adds a right-click action; give that action a keyboard
-route too. `onPressed: null` disables the control.
+A button can also look like a file tile or offer a right-click action. The
+[button reference](/fleury/widgets/button/) covers custom appearances and
+secondary actions. Give secondary actions a keyboard route too.
 
-The same principle applies to `TextInput` and `TextArea`: caret placement,
-drag selection, and keyboard editing are built in. See
-[forms & validation](/fleury/guides/forms/) for collecting and using their values.
+Text fields follow the same approach: caret placement, selection, and keyboard
+editing are built in. The [forms guide](/fleury/guides/forms/) shows how to
+collect and validate their values.
 
 ## Add a gesture when movement matters
 
-A resize handle needs movement, not just activation. `GestureDetector`
-captures its drag and keeps receiving updates beyond the handle's bounds.
-Drag the divider, then resize with **← / →**: both paths call `resize`.
+A resize handle needs movement throughout a drag. `GestureDetector` keeps the
+drag active even when the pointer leaves the handle. Drag the divider, then try
+**← / →**: both use the same resize function.
 
 <CodeDemoSplit files={['Pointer', 'Keyboard', 'Full source']} codeLabel="One resize operation" demoLabel="Resize by pointer and keyboard" codeMaxHeight="32rem">
 <InputGuideCode slot="code-0" file="split_pane.dart" />
@@ -49,13 +49,13 @@ Drag the divider, then resize with **← / →**: both paths call `resize`.
 <FleuryExample slot="demo" id="input.splitter" cols={38} rows={10} interactive />
 </CodeDemoSplit>
 
-Movement is measured in terminal cells. Apply `details.delta.col` in
-`onDragUpdate`; ending or cancelling the drag clears feedback and keeps the
-width reached. **Tab** moves to Reset width.
+Drag distances are measured in terminal cells. The update callback adds
+horizontal movement to the pane's width. Releasing or cancelling ends the drag
+and leaves the width where you put it. Press **Tab** to reach **Reset width**.
 
-A custom gesture supplies pointer behavior. Attach the arrow bindings with
-`KeyBindings` around the handle's `Focus`. The full example also uses `Semantics`
-to expose the width and resize actions. Every input path calls the same operation.
+Make a custom handle focusable, attach the arrow bindings, and expose its width
+and resize actions to assistive tools. The full source shows how these fit
+around the drag handler.
 
 <details>
 <summary>Press feedback and cancellation</summary>
@@ -76,11 +76,11 @@ attempt is cancelled and the existing preview stays open.
 <InputPractice slot="demo" id="input.press" cols={38} rows={19} />
 </CodeDemoSplit>
 
-`onTapDown` starts the held feedback. A completed tap calls `onTapUp`, then
-`onTap`; cancellation calls `onTapCancel`. Moving to another terminal cell
-cancels the tap, even inside the tile. Keep that feedback separate from
-application state. The full example adds focus, Enter/Space, and semantic
-activation; `SelectionArea.disabled` keeps the tile's label out of selection.
+The tile brightens while held. Releasing in the same cell opens the note;
+moving to another cell cancels the tap, even within the tile. Cancellation
+clears only the press feedback, so a previously opened note stays visible.
+The full source includes keyboard access and keeps the tile's label out of
+text selection.
 
 </details>
 
@@ -89,17 +89,18 @@ activation; `SelectionArea.disabled` keeps the tile's label out of selection.
 
 `localPosition` is relative to the target; `globalPosition` is relative to the
 app. A captured drag can have local coordinates outside the target.
-The first movement calls both `onDragStart` and `onDragUpdate` with the same
-delta, so apply movement only in update. Padding inside a detector enlarges
-its target. Clipping limits it and cancels a gesture if the target disappears.
+The first movement reports both the start and update of a drag. Apply its delta
+only in the update callback so the handle doesn't move twice. Padding inside a
+detector enlarges its target. Clipping limits it and cancels a gesture if the
+target disappears.
 
 </details>
 
 ## Compose input without taking it over
 
-The outlined file row is one `MouseRegion`, including **Pin**. Its border lights
-up anywhere inside: over the filename, the gap, or the button. Clicking **Pin**
-runs the button's action while the parent region stays hovered.
+The outline marks one hover region, including **Pin**. Its border lights up
+anywhere inside: over the filename, the gap, or the button. Clicking **Pin**
+changes the pinned state while the parent region stays hovered.
 
 <CodeDemoSplit files={['Interaction', 'Full source']} codeLabel="The row observes; the button acts" demoLabel="Move into and out of the outlined row" codeMaxHeight="32rem">
 <InputGuideCode slot="code-0" file="nested_row.dart" />
@@ -107,9 +108,9 @@ runs the button's action while the parent region stays hovered.
 <FleuryExample slot="demo" id="input.nesting" cols={38} rows={9} interactive />
 </CodeDemoSplit>
 
-An outer `GestureDetector` doesn't observe an inner button's taps: the
-innermost tap/drag target owns the press. Use the button's callback for its
-action and `MouseRegion` for surrounding hover feedback.
+The button handles its own presses. Wrapping it in another gesture detector
+won't observe those taps. Use the button's callback for actions and
+`MouseRegion` for the surrounding hover feedback.
 
 Wheel input has a different rule: a scroll view can pass it to an ancestor
 at its edge. [Nested scrolling](/fleury/guides/lists-and-scrolling/#nested-wheel-input)
@@ -118,7 +119,7 @@ shows when to let it continue and when to contain it.
 <details>
 <summary>Give selectable text its own boundary</summary>
 
-`FleuryApp` makes ordinary text selectable. Add a `SelectionArea` when a region
+Ordinary app text is selectable by default. Use a `SelectionArea` when a region
 needs its own selection callback or options. Keep labels and status messages
 outside that boundary if they shouldn't be copied with the content. For text
 that acts as a handle, use `allowSelect: false`.

@@ -5,6 +5,11 @@ and a visible response. Keep the relevant state, handler, and result together in
 the source; full source can sit alongside. Tests belong in the repository unless
 testing is what the guide teaches.
 
+Open a guide by orienting the reader: what the topic covers and what the examples
+will help them do. Explain behavior in prose; reserve inline code for exact API
+names or values the reader needs to identify. Link to reference pages for lists
+of options instead of turning the explanation into an API inventory.
+
 Use guided tasks selectively when a reader could miss a behavior, an ordered
 sequence helps reveal it, and the demo can reliably detect the result. Keep the
 sequence short and optional. Accept equivalent input methods when they teach the
