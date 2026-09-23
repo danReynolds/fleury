@@ -560,7 +560,7 @@ const CORE = [
   { slug: 'streambuilder', guide: 'loading-data', widget: 'StreamBuilder',
     code: "StreamBuilder<int>(\n  stream: ticks,\n  initialData: 0,\n  builder: (context, snapshot) => Text('tick ${snapshot.data ?? 0}'),\n)" },
   { slug: 'gesturedetector', guide: 'input-and-gestures', widget: 'GestureDetector',
-    code: "GestureDetector(\n  onTap: _select,\n  onTapDown: (col, row) => _placeAt(col, row),\n  child: child,\n)" },
+    code: "GestureDetector(\n  onTap: _select,\n  onTapDown: (details) => _placeAt(details.localPosition),\n  child: child,\n)" },
   { slug: 'mouseregion', guide: 'input-and-gestures', widget: 'MouseRegion',
     code: "MouseRegion(\n  onEnter: () => setHover(true),\n  onExit: () => setHover(false),\n  child: Text('hover me'),\n)" },
   { slug: 'layoutbuilder', widget: 'LayoutBuilder',

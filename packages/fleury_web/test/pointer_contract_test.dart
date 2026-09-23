@@ -35,6 +35,37 @@ void pointer(
 }
 
 void main() {
+  test(
+    'numeric slider mirrors its current value and bounds after resizing',
+    () {
+      final tester = FleuryTester();
+      final root = web.document.createElement('div');
+      final presenter = SemanticDomPresenter(root: root);
+      addTearDown(tester.dispose);
+      addTearDown(presenter.dispose);
+      void present(int value) {
+        tester.pumpWidget(
+          Semantics(
+            role: SemanticRole.slider,
+            label: 'File pane width',
+            value: value,
+            state: const SemanticState({'min': 8, 'max': 24}),
+            child: const SizedBox(width: 1, height: 5),
+          ),
+        );
+        presenter.present(tester.semantics());
+      }
+
+      present(14);
+      final slider = root.querySelector('[role="slider"]')!;
+      expect(slider.getAttribute('aria-valuenow'), '14');
+      expect(slider.getAttribute('aria-valuemin'), '8');
+      expect(slider.getAttribute('aria-valuemax'), '24');
+      present(20);
+      expect(slider.getAttribute('aria-valuenow'), '20');
+    },
+  );
+
   test('cursor hints survive the wire and yield to a child control', () async {
     final tester = FleuryTester(viewportSize: const CellSize(20, 3));
     final root = web.document.createElement('div');
@@ -116,59 +147,76 @@ void main() {
     },
   );
 
-  for (final end in ['pointercancel', 'lostpointercapture', 'blur']) {
-    test('$end cancels a live core press and prevents a late tap', () {
-      final tester = FleuryTester(viewportSize: const CellSize(8, 3));
-      var pressed = false;
-      var taps = 0;
-      tester.pumpWidget(
-        GestureDetector(
-          onTapDown: (_) => pressed = true,
-          onTapUp: (_) => pressed = false,
-          onTapCancel: () => pressed = false,
-          onTap: () => taps++,
-          child: const SizedBox(width: 5, height: 1),
-        ),
+  for (final useButton in [false, true]) {
+    for (final end in ['pointercancel', 'lostpointercapture', 'blur']) {
+      test(
+        '$end cancels a live ${useButton ? 'Button' : 'detector'} press and prevents a late tap',
+        () {
+          final tester = FleuryTester(viewportSize: const CellSize(8, 3));
+          var pressed = false;
+          var taps = 0;
+          tester.pumpWidget(
+            useButton
+                ? Button(
+                    text: 'Go',
+                    onPressed: () => taps++,
+                    style: const CellStyle.interactive(
+                      focused: CellStyle.none,
+                      pressed: CellStyle(inverse: true),
+                    ),
+                  )
+                : GestureDetector(
+                    onTapDown: (_) => pressed = true,
+                    onTapUp: (_) => pressed = false,
+                    onTapCancel: () => pressed = false,
+                    onTap: () => taps++,
+                    child: const SizedBox(width: 5, height: 1),
+                  ),
+          );
+          final host = web.document.createElement('div');
+          web.document.body!.appendChild(host);
+          final source = DomInputSource(
+            hostElement: host,
+            cellMetrics: const _Metrics(),
+          );
+          addTearDown(() {
+            source.dispose();
+            tester.dispose();
+            host.remove();
+          });
+          source.start((event) {
+            if (event is MouseEvent) tester.sendMouse(event);
+          });
+          pointer(host, 'pointerdown');
+          bool isPressed() => useButton
+              ? tester.render().atColRow(1, 0).style.inverse
+              : pressed;
+          expect(isPressed(), isTrue);
+          if (end == 'blur') {
+            host
+                .querySelector('textarea')!
+                .dispatchEvent(web.FocusEvent('focusout'));
+          } else {
+            pointer(host, end, buttons: 0);
+          }
+          expect(isPressed(), isFalse);
+          pointer(host, 'pointerup', buttons: 0);
+          host.dispatchEvent(
+            web.MouseEvent(
+              'click',
+              web.MouseEventInit(
+                button: 0,
+                detail: 1,
+                clientX: 15,
+                clientY: 10,
+                bubbles: true,
+              ),
+            ),
+          );
+          expect(taps, 0);
+        },
       );
-      final host = web.document.createElement('div');
-      web.document.body!.appendChild(host);
-      final source = DomInputSource(
-        hostElement: host,
-        cellMetrics: const _Metrics(),
-      );
-      addTearDown(() {
-        source.dispose();
-        tester.dispose();
-        host.remove();
-      });
-      source.start((event) {
-        if (event is MouseEvent) tester.sendMouse(event);
-      });
-      pointer(host, 'pointerdown');
-      expect(pressed, isTrue);
-      if (end == 'blur') {
-        host
-            .querySelector('textarea')!
-            .dispatchEvent(web.FocusEvent('focusout'));
-      } else {
-        pointer(host, end, buttons: 0);
-      }
-      expect(pressed, isFalse);
-      pointer(host, 'pointerup', buttons: 0);
-      host.dispatchEvent(
-        web.MouseEvent(
-          'click',
-          web.MouseEventInit(
-            button: 0,
-            detail: 1,
-            clientX: 15,
-            clientY: 10,
-            bubbles: true,
-          ),
-        ),
-      );
-      expect(taps, 0);
-    });
+    }
   }
   test(
     'DOM surface leave clears hover and allows re-entry at the same cell',

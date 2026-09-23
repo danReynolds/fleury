@@ -2224,10 +2224,23 @@ form.clearErrors();''',
         const Padding(padding: EdgeInsets.all(1), child: input.ContactFields()),
   ),
   ExampleInfo(
+    id: 'input.actions',
+    widget: 'Button feedback',
+    category: 'Guide examples',
+    blurb:
+        'Style a held press and add a secondary action to an ordinary button.',
+    cols: 38,
+    rows: 8,
+    interactive: true,
+    builder: () =>
+        const Padding(padding: EdgeInsets.all(1), child: input.FileActions()),
+  ),
+  ExampleInfo(
     id: 'input.press',
     widget: 'Press and cancel',
     category: 'Guide examples',
-    blurb: 'Press, release outside to cancel, or right-click for details.',
+    blurb:
+        'Observe a press, move to another cell to cancel, or right-click for details.',
     cols: 38,
     rows: 8,
     interactive: true,
