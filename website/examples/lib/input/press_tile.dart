@@ -1,4 +1,5 @@
 import 'package:fleury/fleury_core.dart';
+import 'note_preview.dart';
 
 class PressTile extends StatefulWidget {
   const PressTile({super.key});
@@ -22,12 +23,34 @@ class _PressTileState extends State<PressTile> {
     super.dispose();
   }
 
+  // #docregion focus
+  Widget get pressTarget => GestureDetector(
+    onTapDown: (_) => setState(() => pressed = true),
+    onTapUp: (_) => setState(() => pressed = false),
+    onTapCancel: () => setState(() {
+      pressed = false;
+      status = 'Cancelled';
+    }),
+    onTap: open,
+    onSecondaryTap: details,
+    child: fileTile,
+  );
+  // #enddocregion focus
+
+  Widget get fileTile => Text(
+    '  notes.md                     \n  Planning notes               \n  Open preview                 ',
+    style: CellStyle(
+      inverse: pressed,
+      underline: focused,
+      foreground: pressed ? Colors.yellow : Colors.cyan,
+    ),
+  );
+
   @override
   Widget build(BuildContext context) => Column(
     mainAxisSize: MainAxisSize.min,
     crossAxisAlignment: CrossAxisAlignment.start,
     children: [
-      // #docregion interaction
       KeyBindings(
         bindings: [
           KeyBinding(
@@ -54,20 +77,7 @@ class _PressTileState extends State<PressTile> {
               child: SelectionArea.disabled(
                 child: MouseRegion(
                   cursor: MouseCursor.pointer,
-                  child: GestureDetector(
-                    onTapDown: (_) => setState(() => pressed = true),
-                    onTapUp: (_) => setState(() => pressed = false),
-                    onTapCancel: () => setState(() {
-                      pressed = false;
-                      status = 'Cancelled';
-                    }),
-                    onTap: open,
-                    onSecondaryTap: details,
-                    child: Text(
-                      '[ Open notes.md ]',
-                      style: CellStyle(inverse: pressed, underline: focused),
-                    ),
-                  ),
+                  child: pressTarget,
                 ),
               ),
             ),
@@ -75,9 +85,12 @@ class _PressTileState extends State<PressTile> {
         ),
       ),
       Button(text: 'Details', onPressed: details),
-      // #enddocregion interaction
       const SizedBox(height: 1),
-      Text(pressed ? 'Pressed…' : status),
+      NotePreview(status: pressed ? 'Pressed…' : status),
+      Button(
+        text: 'Close preview',
+        onPressed: () => setState(() => status = 'Ready'),
+      ),
       const Text('Enter: open · I: details', style: CellStyle(dim: true)),
     ],
   );

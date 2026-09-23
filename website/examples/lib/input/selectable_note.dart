@@ -10,25 +10,27 @@ class SelectableNote extends StatefulWidget {
 class _SelectableNoteState extends State<SelectableNote> {
   String selected = '';
 
+  // #docregion focus
+  Widget get notePreview => SelectionArea(
+    onSelectionChanged: (content) => setState(() {
+      selected = content?.plainText ?? '';
+    }),
+    child: const Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text('Planning notes', style: CellStyle(bold: true)),
+        Text('Meet on Tuesday.\nBring the sketches.'),
+      ],
+    ),
+  );
+  // #enddocregion focus
+
   @override
   Widget build(BuildContext context) => Column(
     mainAxisSize: MainAxisSize.min,
     crossAxisAlignment: CrossAxisAlignment.start,
     children: [
-      // #docregion interaction
-      SelectionArea(
-        onSelectionChanged: (content) => setState(() {
-          selected = content?.plainText ?? '';
-        }),
-        child: const Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text('Planning notes', style: CellStyle(bold: true)),
-            Text('Ship the guide.\nReview the gestures.'),
-          ],
-        ),
-      ),
-      // #enddocregion interaction
+      notePreview,
       const SizedBox(height: 1),
       Text(
         selected.isEmpty

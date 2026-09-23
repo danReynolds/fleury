@@ -25,6 +25,26 @@ class _SplitPaneState extends State<SplitPane> {
     super.dispose();
   }
 
+  // #docregion focus
+  Widget get dividerGesture => MouseRegion(
+    cursor: MouseCursor.resizeLeftRight,
+    child: GestureDetector(
+      onDragStart: (_) => setState(() => dragging = true),
+      onDragUpdate: (details) => resize(details.delta.col),
+      onDragEnd: (_) => finish(),
+      onDragCancel: finish,
+      child: SizedBox(
+        width: 1,
+        child: Text(
+          '│\n│\n│\n│\n│',
+          allowSelect: false,
+          style: CellStyle(inverse: focused, bold: dragging),
+        ),
+      ),
+    ),
+  );
+  // #enddocregion focus
+
   @override
   Widget build(BuildContext context) => Column(
     mainAxisSize: MainAxisSize.min,
@@ -37,7 +57,6 @@ class _SplitPaneState extends State<SplitPane> {
               width: leftWidth,
               child: const Text('Files\n\nnotes.md\nsketches.txt'),
             ),
-            // #docregion interaction
             KeyBindings(
               bindings: [
                 KeyBinding(
@@ -76,32 +95,17 @@ class _SplitPaneState extends State<SplitPane> {
                       if (action == SemanticAction.increment) resize(1);
                       if (action == SemanticAction.decrement) resize(-1);
                     },
-                    child: MouseRegion(
-                      cursor: MouseCursor.resizeLeftRight,
-                      child: GestureDetector(
-                        onDragStart: (_) => setState(() => dragging = true),
-                        onDragUpdate: (details) => resize(details.delta.col),
-                        onDragEnd: (_) => finish(),
-                        onDragCancel: finish,
-                        child: SizedBox(
-                          width: 1,
-                          child: Text(
-                            '│\n│\n│\n│\n│',
-                            allowSelect: false,
-                            style: CellStyle(inverse: focused, bold: dragging),
-                          ),
-                        ),
-                      ),
-                    ),
+                    child: dividerGesture,
                   ),
                 ),
               ),
             ),
-            // #enddocregion interaction
             const Expanded(
               child: Padding(
                 padding: EdgeInsets.only(left: 1),
-                child: Text('Preview\n\nReady to edit.'),
+                child: Text(
+                  'notes.md\n\nMeet on Tuesday.\nBring the sketches.',
+                ),
               ),
             ),
           ],

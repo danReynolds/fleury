@@ -2,9 +2,36 @@ import 'package:fleury/fleury.dart';
 import 'package:fleury_test/fleury_test.dart';
 import 'package:test/test.dart';
 import '../../lib/input/file_actions.dart';
+import '../../lib/input/press_tile.dart';
 import 'pointer_test_helpers.dart';
 
 void main() {
+  for (final (name, example, rows) in [
+    ('button', const FileActions(), 14),
+    ('tile', const PressTile(), 16),
+  ]) {
+    testWidgets(
+      '$name preview fits the guide and can be closed',
+      (tester) {
+        tester.pumpFleuryHome(
+          Padding(padding: const EdgeInsets.all(1), child: example),
+        );
+        tester.press(KeySequence.enter);
+        expect(tester.renderToString(), contains('Bring the sketches.'));
+        tester.press(KeySequence.tab);
+        tester.press(KeySequence.enter);
+        expect(tester.renderToString(), contains('Location: /notes'));
+        tester.press(KeySequence.tab);
+        tester.press(KeySequence.enter);
+        expect(
+          tester.renderToString(),
+          contains('Your note will appear here.'),
+        );
+      },
+      viewportSize: CellSize(38, rows),
+    );
+  }
+
   testWidgets('button keeps press, focus, secondary and keyboard behavior', (
     tester,
   ) async {

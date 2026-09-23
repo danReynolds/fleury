@@ -4,7 +4,7 @@ export const practiceSteps = {
     ['caret', 'Click to move the caret'],
     ['edit', 'Type something'],
     ['drag', 'Drag over some text'],
-    ['extend', 'Shift-click to extend'],
+    ['extend', 'Extend with Shift-click or Shift+←/→'],
     ['word', 'Double-click a word'],
     ['tab', 'Tab to the other field'],
   ],
@@ -46,15 +46,15 @@ export function completedSteps(id, before, after, action) {
   const key = action.kind === 'key' ? action.key : '';
   const unmodified = !action.ctrl && !action.alt && !action.shift;
   const activate = unmodified && (key === 'Enter' || key === ' ');
-  const field = after.focus === 'Name' || after.focus === 'Note';
+  const field = after.focus === 'Title' || after.focus === 'Note';
   const movedCaret = field && before.caret !== after.caret;
   switch (id) {
     case 'input.editing':
-      if (primary && /^(Name|Note)$/.test(action.target) && movedCaret) done.push('caret');
+      if (primary && /^(Title|Note)$/.test(action.target) && movedCaret) done.push('caret');
       if (action.kind === 'input' && before.fields !== after.fields) done.push('edit');
-      if (pointer && action.button === 0 && /^(Name|Note)$/.test(action.target) && action.drag && movedCaret) done.push('drag');
-      if (primary && action.shift && movedCaret) done.push('extend');
-      if (primary && action.clicks === 2 && /^(Name|Note)$/.test(action.target) && field) done.push('word');
+      if (pointer && action.button === 0 && /^(Title|Note)$/.test(action.target) && action.drag && movedCaret) done.push('drag');
+      if (action.shift && movedCaret && (primary || /^Arrow(Left|Right|Up|Down)$/.test(key))) done.push('extend');
+      if (primary && action.clicks === 2 && /^(Title|Note)$/.test(action.target) && field) done.push('word');
       if (key === 'Tab' && field && before.focus !== after.focus) done.push('tab');
       break;
     case 'input.actions':
@@ -74,7 +74,7 @@ export function completedSteps(id, before, after, action) {
       break;
     case 'input.selection':
       if (pointer && action.drag && after.selected > 0) done.push('select');
-      if (key.toLowerCase() === 'a' && action.ctrl && before.focus !== 'Reply' && after.selected === 'Planning notes\nShip the guide.\nReview the gestures.'.length) done.push('all');
+      if (key.toLowerCase() === 'a' && action.ctrl && before.focus !== 'Reply' && after.selected === 'Planning notes\nMeet on Tuesday.\nBring the sketches.'.length) done.push('all');
       if (key === 'Escape' && before.selected > 0 && after.selected === 0) done.push('clear');
       break;
     case 'input.scrolling':
@@ -105,9 +105,9 @@ function snapshot(host) {
 
 // Hit the semantic bounds using the same monospace pitch as the visible grid.
 // Reading these regions keeps the checklist accurate when a demo is expanded.
-function hitTarget(host, event) {
+function hitPoint(host, event) {
   const screen = host.querySelector('.fleury-screen');
-  if (!screen) return '';
+  if (!screen) return { target: '', col: -1, row: -1 };
   const style = getComputedStyle(screen);
   const context = document.createElement('canvas').getContext('2d');
   context.font = style.font;
@@ -128,7 +128,15 @@ function hitTarget(host, event) {
       area = width * rows;
     }
   }
-  return label;
+  return { target: label, col, row };
+}
+
+// TextPointerSelection counts presses in the same cell within 500 ms. Native
+// dblclick is unreliable here: repainting can replace its original DOM target.
+export function countFieldClicks(previous, point) {
+  return previous && point.target === previous.target && point.col === previous.col &&
+    point.row === previous.row && point.time - previous.time < 500 &&
+    !point.shift ? (previous.clicks % 3) + 1 : 1;
 }
 
 export function attachInputPractice(root) {
@@ -168,6 +176,7 @@ export function attachInputPractice(root) {
   let pending;
   let press;
   let selectionEscape;
+  let lastFieldPress;
   let frame = 0;
   let disposed = false;
   const abort = new AbortController();
@@ -202,20 +211,25 @@ export function attachInputPractice(root) {
   on('pointerdown', event => {
     evaluate();
     pending = undefined;
-    press = { before: snapshot(host), x: event.clientX, y: event.clientY, button: event.button, id: event.pointerId, target: hitTarget(host, event), drag: false };
+    const point = { ...hitPoint(host, event), time: event.timeStamp, shift: event.shiftKey };
+    const clicks = countFieldClicks(lastFieldPress, point);
+    if (event.button === 0 && /^(Title|Note)$/.test(point.target)) lastFieldPress = { ...point, clicks };
+    else lastFieldPress = undefined;
+    press = { before: snapshot(host), ...point, clicks, button: event.button, id: event.pointerId, drag: false };
   });
   on('pointermove', event => {
     if (press && press.id === event.pointerId && event.buttons) {
-      press.drag ||= Math.hypot(event.clientX - press.x, event.clientY - press.y) >= 6;
+      const point = hitPoint(host, event);
+      press.drag ||= point.col !== press.col || point.row !== press.row;
     } else if (!event.buttons && id === 'input.scrolling') queue({ kind: 'hover' });
   });
   on('pointerup', event => {
     const held = press;
     press = undefined;
     if (!held || held.id !== event.pointerId || held.button !== event.button) return;
-    queue({ kind: 'pointer', button: event.button, drag: held.drag, shift: event.shiftKey, clicks: event.detail, target: held.target, endTarget: hitTarget(host, event) }, held.before);
+    queue({ kind: 'pointer', button: event.button, drag: held.drag, shift: event.shiftKey, clicks: held.clicks, target: held.target, endTarget: hitPoint(host, event).target }, held.before);
   });
-  on('dblclick', event => queue({ kind: 'pointer', button: 0, drag: false, clicks: 2, shift: event.shiftKey, target: hitTarget(host, event), endTarget: hitTarget(host, event) }));
+  on('dblclick', event => queue({ kind: 'pointer', button: 0, drag: false, clicks: 2, shift: event.shiftKey, target: hitPoint(host, event).target, endTarget: hitPoint(host, event).target }));
   on('pointercancel', () => { press = pending = undefined; });
   on('keydown', event => {
     const before = snapshot(host);
@@ -234,10 +248,10 @@ export function attachInputPractice(root) {
   // editing lesson observes text insertion, so it cannot replace an I action.
   if (id === 'input.editing') on('beforeinput', () => queue({ kind: 'input' }));
   on('wheel', event => {
-    queue({ kind: 'wheel', delta: event.deltaY, inRecent: hitTarget(host, event) === 'Recent' });
+    queue({ kind: 'wheel', delta: event.deltaY, inRecent: hitPoint(host, event).target === 'Recent' });
   });
   reset.addEventListener('click', () => {
-    pending = press = undefined;
+    pending = press = lastFieldPress = undefined;
     cancelAnimationFrame(frame);
     done.clear();
     render();

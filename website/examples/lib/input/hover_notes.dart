@@ -22,18 +22,27 @@ class _HoverNotesState extends State<HoverNotes> {
     ],
   );
 
+  // #docregion focus
+  Widget get fileHover => MouseRegion(
+    onEnter: () => setState(() => overRow = true),
+    onExit: () => setState(() => overRow = false),
+    child: fileRow,
+  );
+
+  Widget get recentScroll => ScrollView(
+    edgeBehavior: contain ? EdgeBehavior.contain : EdgeBehavior.bubble,
+    child: const Text(
+      '1  Sketches\n2  Research\n3  Draft\n4  Feedback\n5  Revision\n6  Final',
+    ),
+  );
+  // #enddocregion focus
+
   @override
   Widget build(BuildContext context) => Column(
     mainAxisSize: MainAxisSize.min,
     crossAxisAlignment: CrossAxisAlignment.start,
     children: [
-      // #docregion interaction
-      MouseRegion(
-        onEnter: () => setState(() => overRow = true),
-        onExit: () => setState(() => overRow = false),
-        child: fileRow,
-      ),
-      // #enddocregion interaction
+      fileHover,
       Text(overRow ? 'Over the row · pins: $pins' : 'Move over the row or Pin'),
       Checkbox(
         label: 'Keep scrolling in Recent',
@@ -51,19 +60,7 @@ class _HoverNotesState extends State<HoverNotes> {
               children: [
                 SizedBox(
                   height: 6,
-                  child: Panel(
-                    title: 'Recent',
-                    // #docregion interaction
-                    child: ScrollView(
-                      edgeBehavior: contain
-                          ? EdgeBehavior.contain
-                          : EdgeBehavior.bubble,
-                      child: const Text(
-                        '1  Sketches\n2  Research\n3  Draft\n4  Feedback\n5  Revision\n6  Final',
-                      ),
-                    ),
-                    // #enddocregion interaction
-                  ),
+                  child: Panel(title: 'Recent', child: recentScroll),
                 ),
                 const Text('OLDER NOTES\nJuly\nJune\nMay\nApril'),
               ],

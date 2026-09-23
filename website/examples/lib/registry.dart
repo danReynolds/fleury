@@ -2230,7 +2230,7 @@ form.clearErrors();''',
     blurb:
         'Style a held press and add a secondary action to an ordinary button.',
     cols: 38,
-    rows: 8,
+    rows: 14,
     interactive: true,
     builder: () =>
         const Padding(padding: EdgeInsets.all(1), child: input.FileActions()),
@@ -2242,7 +2242,7 @@ form.clearErrors();''',
     blurb:
         'Observe a press, move to another cell to cancel, or right-click for details.',
     cols: 38,
-    rows: 8,
+    rows: 16,
     interactive: true,
     builder: () =>
         const Padding(padding: EdgeInsets.all(1), child: input.PressTile()),
