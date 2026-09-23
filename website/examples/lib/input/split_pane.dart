@@ -9,6 +9,7 @@ class SplitPane extends StatefulWidget {
 
 class _SplitPaneState extends State<SplitPane> {
   final focus = FocusNode();
+  // #docregion focus
   bool focused = false;
   int leftWidth = 14;
   bool dragging = false;
@@ -18,6 +19,7 @@ class _SplitPaneState extends State<SplitPane> {
   });
 
   void finish() => setState(() => dragging = false);
+  // #enddocregion focus
 
   @override
   void dispose() {
@@ -45,6 +47,21 @@ class _SplitPaneState extends State<SplitPane> {
   );
   // #enddocregion focus
 
+  // #docregion keyboard
+  List<KeyBinding> get resizeKeys => [
+    KeyBinding(
+      KeySequence.left,
+      includeRepeats: true,
+      onTrigger: (_) => resize(-1),
+    ),
+    KeyBinding(
+      KeySequence.right,
+      includeRepeats: true,
+      onTrigger: (_) => resize(1),
+    ),
+  ];
+  // #enddocregion keyboard
+
   @override
   Widget build(BuildContext context) => Column(
     mainAxisSize: MainAxisSize.min,
@@ -58,18 +75,7 @@ class _SplitPaneState extends State<SplitPane> {
               child: const Text('Files\n\nnotes.md\nsketches.txt'),
             ),
             KeyBindings(
-              bindings: [
-                KeyBinding(
-                  KeySequence.left,
-                  includeRepeats: true,
-                  onTrigger: (_) => resize(-1),
-                ),
-                KeyBinding(
-                  KeySequence.right,
-                  includeRepeats: true,
-                  onTrigger: (_) => resize(1),
-                ),
-              ],
+              bindings: resizeKeys,
               child: FocusDetector(
                 onFocusChange: (value) => setState(() => focused = value),
                 child: Focus(

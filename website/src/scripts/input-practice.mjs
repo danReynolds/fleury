@@ -9,9 +9,8 @@ export const practiceSteps = {
     ['tab', 'Tab to the other field'],
   ],
   'input.actions': [
-    ['open', 'Click Open notes.md'],
-    ['secondary', 'Right-click for details'],
-    ['keyboard', 'Activate a button with Enter or Space'],
+    ['open', 'Open the note with a click'],
+    ['keyboard', 'Close it with Enter or Space'],
   ],
   'input.press': [
     ['open', 'Press and release the tile'],
@@ -28,11 +27,9 @@ export const practiceSteps = {
     ['all', 'Select all with Ctrl+A / ⌘A'],
     ['clear', 'Clear with Esc'],
   ],
-  'input.scrolling': [
-    ['hover', 'Hover over the file row'],
-    ['pin', 'Click Pin'],
-    ['wheel', 'Scroll inside Recent'],
-    ['contain', 'Turn on scroll containment'],
+  'input.nesting': [
+    ['hover', 'Move onto Pin: the row stays highlighted'],
+    ['pin', 'Pin the note while the row stays highlighted'],
   ],
 };
 
@@ -58,9 +55,8 @@ export function completedSteps(id, before, after, action) {
       if (key === 'Tab' && field && before.focus !== after.focus) done.push('tab');
       break;
     case 'input.actions':
-      if (primary && action.target === 'Open notes.md' && after.text.includes('Opened notes.md')) done.push('open');
-      if (pointer && action.button === 2 && action.target === 'Open notes.md' && action.endTarget === action.target && !action.drag && after.text.includes('Markdown · 2 KB')) done.push('secondary');
-      if (activate && /^(Open notes.md|Details)$/.test(before.focus) && /Opened notes.md|Markdown · 2 KB/.test(after.text)) done.push('keyboard');
+      if (primary && action.target === 'Open note' && !before.noteOpen && after.noteOpen) done.push('open');
+      if (activate && before.focus === 'Close note' && before.noteOpen && !after.noteOpen) done.push('keyboard');
       break;
     case 'input.press':
       if (primary && action.target === 'Open notes' && after.text.includes('Opened notes.md')) done.push('open');
@@ -77,11 +73,9 @@ export function completedSteps(id, before, after, action) {
       if (key.toLowerCase() === 'a' && action.ctrl && before.focus !== 'Reply' && after.selected === 'Planning notes\nMeet on Tuesday.\nBring the sketches.'.length) done.push('all');
       if (key === 'Escape' && before.selected > 0 && after.selected === 0) done.push('clear');
       break;
-    case 'input.scrolling':
-      if (action.kind === 'hover' && after.text.includes('Over the row')) done.push('hover');
-      if (primary && after.pins > before.pins) done.push('pin');
-      if (action.kind === 'wheel' && action.inRecent && action.delta !== 0) done.push('wheel');
-      if (!before.contain && after.contain) done.push('contain');
+    case 'input.nesting':
+      if (action.kind === 'hover' && /^(Pin|Unpin)$/.test(action.target) && after.hovered) done.push('hover');
+      if (primary && action.target === 'Pin' && !before.pinned && after.pinned && after.hovered) done.push('pin');
       break;
   }
   return done;
@@ -98,8 +92,9 @@ function snapshot(host) {
     fields: Array.from(mirror?.querySelectorAll('input, textarea') ?? [], el => el.value).join('\n'),
     width: Number(mirror?.querySelector('[role="slider"]')?.getAttribute('aria-valuenow')),
     selected: Number(text.match(/(\d+) characters selected/)?.[1] ?? 0),
-    pins: Number(text.match(/pins: (\d+)/)?.[1] ?? 0),
-    contain: mirror?.querySelector('[role="checkbox"]')?.getAttribute('aria-checked') === 'true',
+    noteOpen: text.includes('Bring the sketches.'),
+    hovered: text.includes('Row hovered'),
+    pinned: text.includes('Pinned to sidebar'),
   };
 }
 
@@ -221,7 +216,7 @@ export function attachInputPractice(root) {
     if (press && press.id === event.pointerId && event.buttons) {
       const point = hitPoint(host, event);
       press.drag ||= point.col !== press.col || point.row !== press.row;
-    } else if (!event.buttons && id === 'input.scrolling') queue({ kind: 'hover' });
+    } else if (!event.buttons && id === 'input.nesting') queue({ kind: 'hover', target: hitPoint(host, event).target });
   });
   on('pointerup', event => {
     const held = press;
@@ -247,9 +242,6 @@ export function attachInputPractice(root) {
   // Printable shortcuts also produce beforeinput in some browsers. Only the
   // editing lesson observes text insertion, so it cannot replace an I action.
   if (id === 'input.editing') on('beforeinput', () => queue({ kind: 'input' }));
-  on('wheel', event => {
-    queue({ kind: 'wheel', delta: event.deltaY, inRecent: hitPoint(host, event).target === 'Recent' });
-  });
   reset.addEventListener('click', () => {
     pending = press = lastFieldPress = undefined;
     cancelAnimationFrame(frame);

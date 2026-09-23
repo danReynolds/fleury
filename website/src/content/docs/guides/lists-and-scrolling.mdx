@@ -5,6 +5,7 @@ description: Select list items, scroll content, and move between panes.
 
 import FleuryExample from '../../../components/FleuryExample.astro';
 import CodeDemoSplit from '../../../components/CodeDemoSplit.astro';
+import InputGuideCode from '../../../components/InputGuideCode.astro';
 import ListsGuideCode from '../../../components/ListsGuideCode.astro';
 import DemoSource from '../../../components/DemoSource.astro';
 import tableRows from '../../../../examples/lib/datatable_rows.dart?raw';
@@ -127,6 +128,22 @@ and try again. Now **↓** stays in the pane; **Tab** still leaves it.
 `ScrollView` lays out its whole child. Give it a bounded height with `SizedBox`
 or `Expanded`; keep large collections in `ListView.builder`.
 
+## Nested wheel input
+
+Scroll **Recent** to the end, then keep scrolling: the outer **All notes** pane
+moves and reveals older months. Enable **Keep scrolling in Recent** and try
+again. `EdgeBehavior.contain` keeps wheel input in the inner pane at its edge.
+
+<CodeDemoSplit files={['Scroll behavior', 'Full source']} codeLabel="Choose what happens at the edge" demoLabel="Reach the end of Recent" codeMaxHeight="29rem">
+<InputGuideCode slot="code-0" file="scroll_panes.dart" />
+<InputGuideCode slot="code-1" file="scroll_panes.dart" full />
+<FleuryExample slot="demo" id="input.scrolling" cols={38} rows={14} interactive />
+</CodeDemoSplit>
+
+`EdgeBehavior.bubble` is the default: an ancestor can use wheel input the inner
+pane cannot consume. Containment is useful when scrolling a small pane should
+leave the surrounding view in place.
+
 ## Go further
 
 The source files and tests above use the same widgets as the live demos.
@@ -134,5 +151,5 @@ Run them with `cd website/examples && dart test test/lists_guide_test.dart`.
 
 - [ListView reference](/fleury/widgets/listview/) includes `.separated` and controller options.
 - [Focus management](/fleury/guides/focus/) covers traversal between panes and controls.
-- [Input & gestures](/fleury/guides/input-and-gestures/#keep-hover-and-scrolling-together) demonstrates wheel input in nested panes.
+- [Input & gestures](/fleury/guides/input-and-gestures/#compose-input-without-taking-it-over) explains how hover regions and child controls share input.
 - Use [DataTable](/fleury/widgets/datatable/) for columns and [TreeTable](/fleury/widgets/treetable/) for hierarchical rows.

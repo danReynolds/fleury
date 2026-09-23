@@ -3,13 +3,14 @@ import DemoSource from './DemoSource.astro';
 const sources = import.meta.glob<string>('../../examples/lib/input/*.dart', {
   query: '?raw', import: 'default', eager: true,
 });
-interface Props { file: string; full?: boolean }
-const { file, full = false } = Astro.props;
+interface Props { file: string; full?: boolean; region?: string }
+const { file, full = false, region = 'focus' } = Astro.props;
 const code = sources[`../../examples/lib/input/${file}`];
 if (!code) throw new Error(`Input guide file is missing: ${file}`);
-const region = code.match(/^[ \t]*\/\/ #docregion focus\r?\n([\s\S]*?)^[ \t]*\/\/ #enddocregion focus[ \t]*$/m)?.[1];
-if (!full && !region) throw new Error(`Input guide focus is missing: ${file}`);
-const lines = region?.trimEnd().split('\n') ?? [];
+const regions = Array.from(code.matchAll(/^[ \t]*\/\/ #docregion (\w+)\r?\n([\s\S]*?)^[ \t]*\/\/ #enddocregion \1[ \t]*$/gm));
+const excerpt = regions.filter(match => match[1] === region).map(match => match[2].trimEnd()).join('\n\n');
+if (!full && !excerpt) throw new Error(`Input guide region ${region} is missing: ${file}`);
+const lines = excerpt.split('\n');
 const indent = Math.min(...lines.filter(line => line.trim()).map(line => line.match(/^ */)![0].length));
 const focused = lines.map(line => line.slice(indent)).join('\n');
 ---

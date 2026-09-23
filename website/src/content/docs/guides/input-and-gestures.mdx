@@ -1,116 +1,87 @@
 ---
 title: Input & gestures
-description: Choose built-in controls, selection boundaries, and custom gestures for a notes interface.
+description: Start with built-in controls, add custom gestures, and understand how nested input is routed.
 ---
 
 import CodeDemoSplit from '../../../components/CodeDemoSplit.astro';
 import InputGuideCode from '../../../components/InputGuideCode.astro';
 import InputPractice from '../../../components/InputPractice.astro';
 
-In Fleury, widgets own their interactions. A click goes to the control under
-the pointer; keys go through focus. Start with controls that handle both,
-then add gestures where your interface needs them.
+Start with the control that owns the interaction. `Button` handles activation,
+text fields handle editing, and scroll views handle scrolling. Add a gesture
+when your interface needs behavior those controls don't provide.
 
-Explore the pieces of a notes interface below. Each example runs independently,
-with a checklist that follows your input. The first source tab highlights the
-interaction; full source is alongside it.
+## Let controls handle input
 
-## Let the editor handle editing
+One callback opens and closes this note. Click the button, then use **Enter**
+or **Space**: `Button` supplies focus, keyboard access, and semantics.
 
-Our note starts with a title and a body. `TextInput` and `TextArea` already
-own caret placement, selection, and keyboard editing. Try both fields:
-there are no pointer handlers to write.
-
-<CodeDemoSplit files={['Editor', 'Full source']} codeLabel="Built-in editing" demoLabel="Write a planning note" codeMaxHeight="30rem">
-<InputGuideCode slot="code-0" file="contact_fields.dart" />
-<InputGuideCode slot="code-1" file="contact_fields.dart" full />
-<InputPractice slot="demo" id="input.editing" cols={38} rows={10} />
-</CodeDemoSplit>
-
-Click changes focus; Tab moves it. Selection stays inside the field being
-edited. We'll use that same idea when the preview becomes selectable.
-
-## Open the note with a button
-
-Give the note an **Open** action. Hold the mouse button to see its pressed
-style, then release to reveal the note. Right-click swaps the preview for
-file details; **Details** offers the same action from the keyboard.
-
-<CodeDemoSplit files={['Open action', 'Full source', 'Preview']} codeLabel="One action, mouse and keyboard" demoLabel="Open, inspect, and close the note" codeMaxHeight="28rem">
+<CodeDemoSplit files={['Interaction', 'Full source']} codeLabel="State, action, and result" demoLabel="Open with a click, close with a key" codeMaxHeight="32rem">
 <InputGuideCode slot="code-0" file="file_actions.dart" />
 <InputGuideCode slot="code-1" file="file_actions.dart" full />
-<InputGuideCode slot="code-2" file="note_preview.dart" full />
-<InputPractice slot="demo" id="input.actions" cols={38} rows={17} />
+<InputPractice slot="demo" id="input.actions" cols={38} rows={11} />
 </CodeDemoSplit>
 
-`Button` owns focus, activation, and cancellation. You provide the action and
-its `pressed:` style. `onSecondaryPressed` adds right-click; disabling the
-button with `onPressed: null` disables both actions.
-Enter and Space activate immediately; the current `pressed:` style tracks pointer holds.
+The app owns `open`; the button owns how input reaches `onPressed`.
+Hold the mouse button to see its `pressed:` style. Keyboard activation is
+immediate; held keyboard styling isn't currently supplied.
 
-## Select from the preview
+A different appearance still uses `Button`: provide a composed `child` and
+`appearance: ButtonAppearance.plain` for a file tile without brackets.
+`onSecondaryPressed` adds a right-click action; give that action a keyboard
+route too. `onPressed: null` disables the control.
 
-The open note is text, so readers should be able to quote it. `FleuryApp`
-already makes ordinary text selectable. Give this preview its own
-`SelectionArea` so the workspace can also show a selection count.
+The same principle applies to `TextInput` and `TextArea`: caret placement,
+drag selection, and keyboard editing are built in. See
+[forms & validation](/fleury/guides/forms/) for collecting and using their values.
 
-<CodeDemoSplit files={['Selectable preview', 'Full source']} codeLabel="A boundary around the note" demoLabel="Select a quote, then return to Reply" codeMaxHeight="28rem">
-<InputGuideCode slot="code-0" file="selectable_note.dart" />
-<InputGuideCode slot="code-1" file="selectable_note.dart" full />
-<InputPractice slot="demo" id="input.selection" cols={38} rows={12} />
-</CodeDemoSplit>
+## Add a gesture when movement matters
 
-Selecting the note takes keyboard focus: **Ctrl+A** selects it, **Ctrl+C**
-copies it, and **Esc** clears it. In the browser, macOS also uses **⌘A/⌘C**.
-Click **Reply** to return to editing. The selection count is outside the boundary.
+A resize handle needs movement, not just activation. `GestureDetector`
+captures its drag and keeps receiving updates beyond the handle's bounds.
+Drag the divider, then resize with **← / →**: both paths call `resize`.
 
-## Observe a custom press
-
-A file tile can still be a `Button`: use `child` for composed content and
-`appearance: ButtonAppearance.plain` to remove the brackets. Reach for
-`GestureDetector` when you need the press lifecycle itself. This example reports
-**Pressed…** and **Cancelled** separately from the preview's open state.
-
-<CodeDemoSplit files={['Press lifecycle', 'Full source', 'Preview']} codeLabel="The custom part of the tile" demoLabel="Hold the tile, then release or move away" codeMaxHeight="28rem">
-<InputGuideCode slot="code-0" file="press_tile.dart" />
-<InputGuideCode slot="code-1" file="press_tile.dart" full />
-<InputGuideCode slot="code-2" file="note_preview.dart" full />
-<InputPractice slot="demo" id="input.press" cols={38} rows={19} />
-</CodeDemoSplit>
-
-Press and release in the same cell to open. Moving to another cell cancels
-the tap, even inside the tile. `onTapDown` starts the held feedback; `onTapUp` or
-`onTapCancel` ends it.
-Try cancelling after opening the note: the existing preview stays open.
-
-<details>
-<summary>What the full tile adds around the gesture</summary>
-
-A custom target also needs keyboard focus, a visible focus cue, and semantics.
-The full source wraps the gesture with `Focus`, `KeyBindings`, and `Semantics`;
-Enter and Space share one binding through `aliases`. `SelectionArea.disabled`
-keeps dragging the tile from selecting its label.
-
-Use `Button` when its interaction fits. An outer `GestureDetector` cannot
-observe an inner button's taps: the innermost target owns the press.
-
-</details>
-
-## Make room for the note
-
-Add a divider between a file pane and its preview. Unlike a tap, this
-interaction uses movement: the handle captures the drag
-and keeps receiving it when the pointer leaves its bounds.
-
-<CodeDemoSplit files={['Drag lifecycle', 'Full source']} codeLabel="Movement is measured in cells" demoLabel="Resize the workspace" codeMaxHeight="28rem">
+<CodeDemoSplit files={['Pointer', 'Keyboard', 'Full source']} codeLabel="One resize operation" demoLabel="Resize by pointer and keyboard" codeMaxHeight="32rem">
 <InputGuideCode slot="code-0" file="split_pane.dart" />
-<InputGuideCode slot="code-1" file="split_pane.dart" full />
+<InputGuideCode slot="code-1" file="split_pane.dart" region="keyboard" />
+<InputGuideCode slot="code-2" file="split_pane.dart" full />
 <InputPractice slot="demo" id="input.splitter" cols={38} rows={10} />
 </CodeDemoSplit>
 
-Apply `details.delta.col` in `onDragUpdate`. The arrow keys call the same
-resize function; Tab reaches **Reset width**. Cancellation ends feedback and
-keeps the width already reached.
+Movement is measured in terminal cells. Apply `details.delta.col` in
+`onDragUpdate`; ending or cancelling the drag clears feedback and keeps the
+width reached. **Tab** moves to Reset width.
+
+A custom gesture supplies pointer behavior. Attach the arrow bindings with
+`KeyBindings` around the handle's `Focus`. The full example also uses `Semantics`
+to expose the width and resize actions. Every input path calls the same operation.
+
+<details>
+<summary>Press feedback and cancellation</summary>
+
+Use the press callbacks when your UI needs to distinguish a held press from a
+completed or cancelled tap. Open this tile, then press and drag away: the
+attempt is cancelled and the existing preview stays open.
+
+<CodeDemoSplit files={['Press lifecycle', 'Full source']} codeLabel="Transient feedback, persistent preview" demoLabel="Open the note, then cancel another press" codeMaxHeight="30rem">
+<InputGuideCode slot="code-0" file="press_tile.dart" />
+<Fragment slot="code-1">
+<InputGuideCode file="press_tile.dart" full />
+<details>
+<summary>Preview rendering</summary>
+<InputGuideCode file="note_preview.dart" full />
+</details>
+</Fragment>
+<InputPractice slot="demo" id="input.press" cols={38} rows={19} />
+</CodeDemoSplit>
+
+`onTapDown` starts the held feedback. A completed tap calls `onTapUp`, then
+`onTap`; cancellation calls `onTapCancel`. Moving to another terminal cell
+cancels the tap, even inside the tile. Keep that feedback separate from
+application state. The full example adds focus, Enter/Space, and semantic
+activation; `SelectionArea.disabled` keeps the tile's label out of selection.
+
+</details>
 
 <details>
 <summary>Coordinates and capture</summary>
@@ -123,34 +94,58 @@ its target. Clipping limits it and cancels a gesture if the target disappears.
 
 </details>
 
-## Compose the browsing pane
+## Compose input without taking it over
 
-Finally, let readers browse more notes. The row should stay highlighted while
-its **Pin** button owns clicks. A `MouseRegion` observes hover across its
-children without taking over their actions.
+Hover belongs to a region; a press belongs to its target. Move across the file
+row and onto **Pin**. The row stays highlighted while the button handles the
+click. `MouseRegion` observes its children without replacing their controls.
 
-<CodeDemoSplit files={['Hover and scroll', 'Full source']} codeLabel="Observe a region; contain a scroll" demoLabel="Browse Recent inside All notes" codeMaxHeight="30rem">
-<InputGuideCode slot="code-0" file="hover_notes.dart" />
-<InputGuideCode slot="code-1" file="hover_notes.dart" full />
-<InputPractice slot="demo" id="input.scrolling" cols={38} rows={16} />
+<CodeDemoSplit files={['Interaction', 'Full source']} codeLabel="The row observes; the button acts" demoLabel="Pin the note while its row stays hovered" codeMaxHeight="32rem">
+<InputGuideCode slot="code-0" file="nested_row.dart" />
+<InputGuideCode slot="code-1" file="nested_row.dart" full />
+<InputPractice slot="demo" id="input.nesting" cols={38} rows={7} />
 </CodeDemoSplit>
 
-Scroll **Recent** to its end, then keep going: the outer **All notes** pane
-moves. Enable containment and repeat. Scroll views offer wheel input to an
-ancestor at their edge; `EdgeBehavior.contain` keeps it in the inner pane.
+An outer `GestureDetector` doesn't observe an inner button's taps: the
+innermost tap/drag target owns the press. Use the button's callback for its
+action and `MouseRegion` for surrounding hover feedback.
 
-## Take the workspace to a terminal
+Wheel input has a different rule: a scroll view can pass it to an ancestor
+at its edge. [Nested scrolling](/fleury/guides/lists-and-scrolling/#nested-wheel-input)
+shows when to let it continue and when to contain it.
 
-The browser examples receive pointer input automatically. A native app enables
-clicks, drags, scrolling, and hover at startup:
+<details>
+<summary>Give selectable text its own boundary</summary>
+
+`FleuryApp` makes ordinary text selectable. Add a `SelectionArea` when a region
+needs its own selection callback or options. Here the count sits outside the
+note, so selecting the note won't include it.
+
+<CodeDemoSplit files={['Selection', 'Full source']} codeLabel="Select the note, count the result" demoLabel="Select a quote, then clear it" codeMaxHeight="30rem">
+<InputGuideCode slot="code-0" file="selectable_note.dart" />
+<InputGuideCode slot="code-1" file="selectable_note.dart" full />
+<InputPractice slot="demo" id="input.selection" cols={38} rows={12} />
+</CodeDemoSplit>
+
+Selecting the note takes keyboard focus: **Ctrl+A** selects it, **Ctrl+C**
+copies it, and **Esc** clears it. In the browser, macOS also uses **⌘A/⌘C**.
+Click **Reply** to return to editing. For text that acts as a handle, use
+`allowSelect: false`.
+
+</details>
+
+## Enable pointer input in a terminal
+
+The browser demos receive pointer input automatically. In a terminal, enable
+clicks, drags, scrolling, and hover when starting the app:
 
 ```dart
 runApp(const MyApp(), mode: const TerminalMode(mouseMotion: true));
 ```
 
-Mouse reporting is currently opt-in because it takes over terminal text
-selection. `mouse: true` enables clicks, drags, and scrolling without hover.
-A terminal-specific modifier may bypass the app for native selection.
+Mouse reporting is opt-in because it takes over terminal text selection.
+Use `mouse: true` when hover isn't needed. A terminal-specific modifier may
+bypass the app for native selection.
 
 Continue with [key bindings](/fleury/guides/focus-and-keyboard/),
 [focus](/fleury/guides/focus/), or [interactive styles](/fleury/guides/theming/).

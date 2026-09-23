@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { completedSteps, practiceSteps, countFieldClicks } from '../src/scripts/input-practice.mjs';
 
-const ready = { focus: 'Title', caret: '1,2', fields: 'Ada', text: '', width: 14, selected: 0, pins: 0, contain: false };
+const ready = { focus: 'Title', caret: '1,2', fields: 'Ada', text: '', width: 14, selected: 0, noteOpen: false, hovered: false, pinned: false };
 const click = { kind: 'pointer', button: 0, drag: false, target: 'Title', endTarget: 'Title' };
 const key = value => ({ kind: 'key', key: value });
 
@@ -19,17 +19,19 @@ test('editing requires a gesture and a changed caret, text, or focus', () => {
   assert.deepEqual(completedSteps('input.editing', ready, ready, { kind: 'input' }), []);
 });
 
-test('buttons exclude blank-space clicks, outside releases, and cancelled presses', () => {
-  const after = { ...ready, focus: 'Open notes.md', text: 'Opened notes.md' };
-  const action = { ...click, target: 'Open notes.md', endTarget: 'Open notes.md' };
-  assert.deepEqual(completedSteps('input.actions', ready, after, action), ['open']);
-  assert.deepEqual(completedSteps('input.actions', ready, after, { ...action, target: '', endTarget: '' }), []);
-  assert.deepEqual(completedSteps('input.actions', ready, after, { ...action, endTarget: '' }), []);
-  assert.deepEqual(completedSteps('input.actions', ready, after, { ...action, drag: true }), []);
-  assert.deepEqual(completedSteps('input.actions', ready, after, { ...action, button: 2 }), []);
-  const details = { ...after, text: 'notes.md · Markdown · 2 KB' };
-  assert.deepEqual(completedSteps('input.actions', ready, details, { ...action, button: 2 }), ['secondary']);
-  assert.deepEqual(completedSteps('input.actions', details, details, key('Enter')), ['keyboard']);
+test('button prompts require opening by pointer and closing by keyboard', () => {
+  const opened = { ...ready, focus: 'Close note', noteOpen: true };
+  const action = { ...click, target: 'Open note', endTarget: 'Open note' };
+  assert.deepEqual(completedSteps('input.actions', ready, opened, action), ['open']);
+  assert.deepEqual(completedSteps('input.actions', ready, ready, action), []);
+  assert.deepEqual(completedSteps('input.actions', ready, opened, { ...action, target: '', endTarget: '' }), []);
+  assert.deepEqual(completedSteps('input.actions', ready, opened, { ...action, endTarget: '' }), []);
+  assert.deepEqual(completedSteps('input.actions', ready, opened, { ...action, drag: true }), []);
+  assert.deepEqual(completedSteps('input.actions', ready, opened, { ...action, button: 2 }), []);
+  assert.deepEqual(completedSteps('input.actions', opened, ready, key('Enter')), ['keyboard']);
+  assert.deepEqual(completedSteps('input.actions', opened, opened, key('Enter')), []);
+  assert.deepEqual(completedSteps('input.actions', opened, ready, key(' ')), ['keyboard']);
+  assert.deepEqual(completedSteps('input.actions', { ...opened, focus: '' }, ready, key('Enter')), []);
 });
 
 test('custom tile needs a reported cancellation or shortcut result', () => {
@@ -63,12 +65,18 @@ test('selection needs selected text and excludes select-all in Reply', () => {
   assert.deepEqual(completedSteps('input.selection', ready, ready, key('Escape')), []);
 });
 
-test('scrolling excludes wheel outside Recent and uses control results', () => {
-  assert.deepEqual(completedSteps('input.scrolling', ready, ready, { kind: 'wheel', inRecent: false, delta: 10 }), []);
-  assert.deepEqual(completedSteps('input.scrolling', ready, ready, { kind: 'wheel', inRecent: true, delta: 10 }), ['wheel']);
-  assert.deepEqual(completedSteps('input.scrolling', ready, { ...ready, pins: 1 }, click), ['pin']);
-  assert.deepEqual(completedSteps('input.scrolling', ready, { ...ready, contain: true }, click), ['contain']);
-  assert.deepEqual(completedSteps('input.scrolling', ready, { ...ready, text: 'Over the row · pins: 0' }, { kind: 'hover' }), ['hover']);
+test('nested input prompts require the parent hover and child action together', () => {
+  const hovered = { ...ready, hovered: true };
+  const hoverPin = { kind: 'hover', target: 'Pin' };
+  assert.deepEqual(completedSteps('input.nesting', ready, ready, hoverPin), []);
+  assert.deepEqual(completedSteps('input.nesting', ready, hovered, hoverPin), ['hover']);
+  assert.deepEqual(completedSteps('input.nesting', ready, hovered, { kind: 'hover', target: '' }), []);
+  const pin = { ...click, target: 'Pin', endTarget: 'Pin' };
+  const pinned = { ...hovered, pinned: true };
+  assert.deepEqual(completedSteps('input.nesting', hovered, pinned, pin), ['pin']);
+  assert.deepEqual(completedSteps('input.nesting', hovered, { ...pinned, hovered: false }, pin), []);
+  assert.deepEqual(completedSteps('input.nesting', pinned, pinned, pin), []);
+  assert.deepEqual(completedSteps('input.nesting', hovered, hovered, pin), []);
 });
 
 test('every exercise has distinct steps and ignores unrelated input', () => {

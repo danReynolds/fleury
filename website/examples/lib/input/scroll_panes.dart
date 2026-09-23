@@ -1,34 +1,17 @@
 import 'package:fleury/fleury_core.dart';
 import 'package:fleury_widgets/fleury_widgets_web.dart';
 
-class HoverNotes extends StatefulWidget {
-  const HoverNotes({super.key});
+class ScrollPanes extends StatefulWidget {
+  const ScrollPanes({super.key});
 
   @override
-  State<HoverNotes> createState() => _HoverNotesState();
+  State<ScrollPanes> createState() => _ScrollPanesState();
 }
 
-class _HoverNotesState extends State<HoverNotes> {
-  bool overRow = false;
+class _ScrollPanesState extends State<ScrollPanes> {
   bool contain = false;
-  int pins = 0;
-
-  Widget get fileRow => Row(
-    children: [
-      Expanded(
-        child: Text('notes.md', style: CellStyle(inverse: overRow)),
-      ),
-      Button(text: 'Pin', onPressed: () => setState(() => pins++)),
-    ],
-  );
 
   // #docregion focus
-  Widget get fileHover => MouseRegion(
-    onEnter: () => setState(() => overRow = true),
-    onExit: () => setState(() => overRow = false),
-    child: fileRow,
-  );
-
   Widget get recentScroll => ScrollView(
     edgeBehavior: contain ? EdgeBehavior.contain : EdgeBehavior.bubble,
     child: const Text(
@@ -42,8 +25,6 @@ class _HoverNotesState extends State<HoverNotes> {
     mainAxisSize: MainAxisSize.min,
     crossAxisAlignment: CrossAxisAlignment.start,
     children: [
-      fileHover,
-      Text(overRow ? 'Over the row · pins: $pins' : 'Move over the row or Pin'),
       Checkbox(
         label: 'Keep scrolling in Recent',
         value: contain,

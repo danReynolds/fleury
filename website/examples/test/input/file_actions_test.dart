@@ -6,68 +6,46 @@ import '../../lib/input/press_tile.dart';
 import 'pointer_test_helpers.dart';
 
 void main() {
-  for (final (name, example, rows) in [
-    ('button', const FileActions(), 17),
-    ('tile', const PressTile(), 19),
-  ]) {
-    testWidgets(
-      '$name preview fits the guide and can be closed',
-      (tester) {
-        tester.pumpFleuryHome(
-          Padding(padding: const EdgeInsets.all(1), child: example),
-        );
-        tester.press(KeySequence.enter);
-        expect(tester.renderToString(), contains('Bring the sketches.'));
-        tester.press(KeySequence.tab);
-        tester.press(KeySequence.enter);
-        expect(tester.renderToString(), contains('Location: /notes'));
-        tester.press(KeySequence.tab);
-        tester.press(KeySequence.enter);
-        expect(
-          tester.renderToString(),
-          contains('Your note will appear here.'),
-        );
-      },
-      viewportSize: CellSize(38, rows),
-    );
-  }
+  testWidgets(
+    'the button opens by pointer and closes by keyboard in the guide viewport',
+    (tester) {
+      tester.pumpFleuryHome(
+        const Padding(padding: EdgeInsets.all(1), child: FileActions()),
+      );
+      expect(tester.renderToString(), contains('Preview closed'));
+      pointer(tester, MouseEventKind.down, 3, 1);
+      expect(tester.render().atColRow(3, 1).style.inverse, isTrue);
+      pointer(tester, MouseEventKind.up, 3, 1);
+      expect(tester.renderToString(), contains('Bring the sketches.'));
+      expect(tester.button('Close note'), isFocused);
+      tester.press(KeySequence.enter);
+      expect(tester.renderToString(), contains('Preview closed'));
+      tester.press(KeySequence.space);
+      expect(tester.renderToString(), contains('Bring the sketches.'));
+      pointer(tester, MouseEventKind.down, 3, 1);
+      pointer(tester, MouseEventKind.drag, 7, 1);
+      pointer(tester, MouseEventKind.up, 7, 1);
+      expect(tester.renderToString(), contains('Bring the sketches.'));
+      expect(tester.render().atColRow(3, 1).style.inverse, isFalse);
+    },
+    viewportSize: const CellSize(38, 11),
+  );
 
-  testWidgets('button keeps press, focus, secondary and keyboard behavior', (
-    tester,
-  ) async {
-    tester.pumpFleuryHome(const FileActions());
-    expect(tester.render().atColRow(2, 0).style.underline, isTrue);
-    pointer(tester, MouseEventKind.down, 3, 0);
-    expect(tester.render().atColRow(2, 0).style.inverse, isTrue);
-    pointer(tester, MouseEventKind.up, 3, 0);
-    expect(tester.exists(text('Opened notes.md')), isTrue);
-    expect(tester.render().atColRow(2, 0).style.inverse, isFalse);
-    pointer(tester, MouseEventKind.down, 3, 0, button: MouseButton.right);
-    pointer(tester, MouseEventKind.up, 3, 0, button: MouseButton.right);
-    expect(tester.exists(text('notes.md · Markdown · 2 KB')), isTrue);
-    tester.press(KeySequence.enter);
-    expect(tester.exists(text('Opened notes.md')), isTrue);
-    tester.press(KeySequence.tab);
-    expect(tester.render().atColRow(2, 0).style.underline, isFalse);
-    expect(
-      tester
-          .semantics()
-          .single(role: SemanticRole.button, label: 'Details')
-          .focused,
-      isTrue,
-    );
-    tester.press(KeySequence.space);
-    expect(tester.exists(text('notes.md · Markdown · 2 KB')), isTrue);
-    pointer(tester, MouseEventKind.down, 3, 0);
-    pointer(tester, MouseEventKind.drag, 7, 0);
-    pointer(tester, MouseEventKind.up, 7, 0);
-    tester.press(KeySequence.ctrl.c);
-    await tester.settle();
-    expect((tester.clipboard as InProcessClipboard).lastWritten, isNull);
-    expect(
-      tester.exists(text('notes.md · Markdown · 2 KB')),
-      isTrue,
-      reason: 'movement cancels activation without selecting the label',
-    );
-  });
+  testWidgets(
+    'custom tile preview fits the guide and can be closed',
+    (tester) {
+      tester.pumpFleuryHome(
+        const Padding(padding: EdgeInsets.all(1), child: PressTile()),
+      );
+      tester.press(KeySequence.enter);
+      expect(tester.renderToString(), contains('Bring the sketches.'));
+      tester.press(KeySequence.tab);
+      tester.press(KeySequence.enter);
+      expect(tester.renderToString(), contains('Location: /notes'));
+      tester.press(KeySequence.tab);
+      tester.press(KeySequence.enter);
+      expect(tester.renderToString(), contains('Your note will appear here.'));
+    },
+    viewportSize: const CellSize(38, 19),
+  );
 }
