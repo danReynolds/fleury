@@ -5,16 +5,25 @@
 // frame count, entirely in-process against a reused double-buffer (mirroring
 // the runtime's front/back buffers in tui_frame_loop, so NO per-frame
 // CellBuffer allocation pollutes the number). It samples the VM allocation
-// profile before/after the measured window and sums the bytes allocated by
-// `package:fleury` classes -> deterministic bytes/frame of project churn.
+// profile before/after the measured window -> bytes/frame on a fixed workload.
+//
+// Two measured axes:
+//   total   allocation bytes for classes with a Dart library, except vm_service;
+//   project allocation bytes for package:fleury classes only.
+//
+// Core Dart lists, strings, and iterators belong to dart:core even when the
+// framework creates them. The total axis includes them; the project axis does
+// not. Neither is a complete heap accounting: VM-internal classes and closure
+// contexts without library metadata are excluded. Core objects allocated while
+// decoding profiler responses remain in the total and add measurement noise.
 //
 // Steady-state per-frame churn is what RSS deltas hide and what GC pauses turn
 // into dropped frames. It's the axis the encoder zero-image fast path (#30) and
 // the reconcile redundant-copy cleanup (#35) both moved — and nothing gated it.
 //
-// The number is deterministic byte-for-byte on a fixed SDK, so a small
-// tolerance catches a real per-frame allocation without flaking. The absolute
-// baseline shifts with the Dart SDK (object layout / list growth) and the
+// The project axis is stable on a fixed SDK; the total includes bounded
+// profiler overhead. Separate tolerances catch allocation regressions. The
+// absolute baseline shifts with the Dart SDK (object layout / list growth) and the
 // scenario; regenerate with --update-baseline after an intentional change or an
 // SDK bump, exactly like the wire gate.
 //
@@ -37,6 +46,7 @@ import 'package:fleury/fleury.dart';
 import 'package:vm_service/vm_service.dart';
 import 'package:vm_service/vm_service_io.dart';
 
+import 'alloc_scenario.dart';
 import 'gate_support.dart';
 
 const _defaultFrames = 400;
@@ -47,71 +57,19 @@ const _defaultWarmup = 300;
 /// for SDK / machine drift, not run noise.
 const _failFraction = 0.10;
 
-/// A steady-state metric model bumped once per frame.
-class _Model extends Notifier {
-  int v = 0;
-  void bump() {
-    v++;
-    notify();
-  }
-}
+/// Includes core objects allocated by profiler response decoding as well as
+/// the frame. A 5% band allows bounded sampling noise on the pinned SDK; refresh
+/// the baseline after an intentional workload or SDK change.
+const _totalFailFraction = 0.05;
 
-/// Dashboard-shaped tree: a static header + a watched block whose three
-/// metric lines rebuild + repaint every frame. Exercises build, reconcile,
-/// layout (widths shift as values grow), and paint — the churn-producing path.
-///
-/// The watched block also carries explicit app-authored [Semantics]: one node
-/// whose label/value change every frame (the leaf-update path) and a small
-/// value-stable subtree (the equal-values update path). Semantics /
-/// _SemanticBounds / SemanticNodeId are a known per-frame allocation class;
-/// without these the gate only sees the Texts' implicit nodes and an
-/// app-semantics regression sits outside the window. The semantic strings are
-/// bounded-modulo AND zero-padded, so their width is fixed for ANY
-/// --warmup/--frames window (not just the default one, where warmup happens
-/// to push `v` to 3 digits) — layout, and therefore allocation, cannot drift
-/// as the tick grows.
-Widget _scenario(_Model m) {
-  return Column(
-    crossAxisAlignment: CrossAxisAlignment.start,
-    children: [
-      const Text('Fleury alloc-gate dashboard'),
-      const Text('────────────────────────────'),
-      NotifierBuilder(
-        notifier: m,
-        builder: (context, _) => Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text('requests : ${m.v}'),
-            Text('errors   : ${m.v % 97}'),
-            Text('rate/s   : ${(m.v * 7) % 1000}'),
-            Semantics(
-              role: SemanticRole.region,
-              label: 'metrics ${(m.v % 1000).toString().padLeft(3, '0')}',
-              value: 'r${(m.v % 97).toString().padLeft(2, '0')}',
-              child: Text(
-                'sem live : ${(m.v % 1000).toString().padLeft(3, '0')}',
-              ),
-            ),
-            Semantics(
-              role: SemanticRole.region,
-              label: 'alloc gate static region',
-              child: Semantics(
-                role: SemanticRole.text,
-                label: 'static leaf',
-                child: const Text('sem static: ok'),
-              ),
-            ),
-          ],
-        ),
-      ),
-    ],
-  );
-}
-
-/// Sums `package:fleury` accumulated allocation bytes over [work], and returns
-/// the total plus the top classes by bytes (for the diagnostic breakdown).
-Future<({int totalBytes, List<({String name, int bytes, int instances})> top})>
-    _measure(
+/// Sums accumulated allocation bytes over [work] on both axes, and returns the
+/// top classes by bytes (for the diagnostic breakdown).
+Future<
+    ({
+      int totalBytes,
+      int projectBytes,
+      List<({String name, String library, int bytes, int instances})> top,
+    })> _measure(
   VmService service,
   String isolateId, {
   required void Function() work,
@@ -120,21 +78,27 @@ Future<({int totalBytes, List<({String name, int bytes, int instances})> top})>
   work();
   final after = await service.getAllocationProfile(isolateId);
   var total = 0;
-  final classes = <({String name, int bytes, int instances})>[];
+  var project = 0;
+  final classes = <({String name, String library, int bytes, int instances})>[];
   for (final m in after.members ?? const <ClassHeapStats>[]) {
     final uri = m.classRef?.library?.uri ?? '';
-    if (!uri.startsWith('package:fleury')) continue;
+    // A class with no library is a VM-internal artifact (JIT code objects and
+    // closure contexts); vm_service is this gate's own profiler traffic.
+    // Neither is per-frame churn the framework controls.
+    if (uri.isEmpty || uri.startsWith('package:vm_service')) continue;
     final bytes = m.accumulatedSize ?? 0;
-    if (bytes == 0) continue;
+    if (bytes <= 0) continue;
     total += bytes;
+    if (uri.startsWith('package:fleury/')) project += bytes;
     classes.add((
       name: m.classRef?.name ?? '?',
+      library: uri,
       bytes: bytes,
       instances: m.instancesAccumulated ?? 0,
     ));
   }
   classes.sort((a, b) => b.bytes.compareTo(a.bytes));
-  return (totalBytes: total, top: classes);
+  return (totalBytes: total, projectBytes: project, top: classes);
 }
 
 Future<void> main(List<String> args) async {
@@ -149,7 +113,7 @@ Future<void> main(List<String> args) async {
       gate = true;
     } else if (arg == '--update-baseline') {
       update = true;
-    } else if (parseIntFlag(arg, 'frames') case final v?) {
+    } else if (parsePositiveIntFlag(arg, 'frames') case final v?) {
       frames = v;
     } else if (parseIntFlag(arg, 'warmup') case final v?) {
       warmup = v;
@@ -162,6 +126,11 @@ Future<void> main(List<String> args) async {
       exitCode = 64;
       return;
     }
+  }
+  if (warmup < 0 || top < 0) {
+    stderr.writeln('--warmup and --top must be nonnegative');
+    exitCode = 64;
+    return;
   }
 
   final info = await developer.Service.getInfo();
@@ -185,42 +154,10 @@ Future<void> main(List<String> args) async {
     final vm = await service.getVM();
     final isolateId = vm.isolates!.first.id!;
 
-    // Real per-frame path with reused double-buffers (front/back), like the
-    // runtime. paint into `back`, diff against `front`, swap.
-    const size = CellSize(80, 24);
-    const renderer = AnsiRenderer();
-    const sink = NullAnsiSink();
     final owner = BuildOwner();
-    final model = _Model();
-    final root = owner.mountRoot(_scenario(model));
-    final loop = TuiFrameLoop(renderDamage: owner.renderDamageTracker);
-
-    // Drive the REAL loop rather than re-implementing it. This gate used to
-    // hand-mirror TuiFrameLoop, and every change to the loop silently moved the
-    // gate off the production path — it was still arming damage tracking and
-    // rendering unbounded long after the loop stopped doing either.
-    void frame() {
-      model.bump();
-      final rendered = loop.render(
-        size: size,
-        paint: (buffer) => owner.renderFrame(root, buffer),
-      )!;
-      // Mirrors AnsiFramePresenter's switch, so the gate keeps measuring the
-      // path production actually takes.
-      final damage = rendered.damage;
-      renderer.renderDiff(
-        rendered.previous,
-        rendered.next,
-        sink,
-        dirtyBounds: damage.diffBounds,
-        scrollUpRows: switch (damage) {
-          FrameScrolled(:final scrollUpRows) => scrollUpRows,
-          FrameFullRepaint() || FrameUnchanged() || FrameChanged() => null,
-        },
-        hasChanges: damage is! FrameUnchanged,
-      );
-      loop.commit(rendered);
-    }
+    final model = AllocModel();
+    final root = owner.mountRoot(allocScenario(model));
+    final frame = allocFrameDriver(owner: owner, model: model, root: root);
 
     for (var i = 0; i < warmup; i++) {
       frame();
@@ -236,25 +173,37 @@ Future<void> main(List<String> args) async {
       },
     );
     final perFrame = result.totalBytes / frames;
+    final projectPerFrame = result.projectBytes / frames;
 
     if (update) {
       writeBaselineJson(baselinePath, {
         'bytesPerFrame': perFrame,
+        'projectBytesPerFrame': projectPerFrame,
         'totalBytes': result.totalBytes,
+        'projectBytes': result.projectBytes,
         'frames': frames,
       });
       stdout.writeln('alloc gate: wrote baseline $baselinePath '
-          '(${perFrame.toStringAsFixed(1)} B/frame over $frames frames).');
+          '(${perFrame.toStringAsFixed(1)} B/frame total, '
+          '${projectPerFrame.toStringAsFixed(1)} B/frame project, '
+          'over $frames frames).');
       return;
     }
 
-    stdout.writeln('per-frame project (package:fleury) allocation churn:');
-    stdout.writeln('  ${result.totalBytes} B over $frames frames = '
-        '${perFrame.toStringAsFixed(1)} B/frame');
-    stdout.writeln('  top $top allocating project classes (window):');
+    stdout.writeln('per-frame allocation churn over $frames frames:');
+    stdout.writeln('  total   ${perFrame.toStringAsFixed(1)} B/frame '
+        '(${result.totalBytes} B)');
+    stdout.writeln('  project ${projectPerFrame.toStringAsFixed(1)} B/frame '
+        '(${result.projectBytes} B, '
+        '${(result.projectBytes * 100 / result.totalBytes).toStringAsFixed(1)}%'
+        ' of total)');
+    stdout.writeln('  top $top allocating classes (window):');
     for (final c in result.top.take(top)) {
+      final lib = c.library.startsWith('package:fleury/src/')
+          ? 'f:${c.library.substring('package:fleury/src/'.length)}'
+          : c.library;
       stdout.writeln('    ${c.bytes.toString().padLeft(9)} B  '
-          '${c.instances.toString().padLeft(7)} inst  ${c.name}');
+          '${c.instances.toString().padLeft(7)} inst  ${c.name}  [$lib]');
     }
 
     if (!gate) return;
@@ -264,29 +213,66 @@ Future<void> main(List<String> args) async {
       exitCode = 64;
       return;
     }
-    final basePerFrame = (base['bytesPerFrame'] as num).toDouble();
-    final limit = basePerFrame * (1 + _failFraction);
-    final delta = (perFrame - basePerFrame) / basePerFrame * 100;
-    final line = 'alloc gate: ${perFrame.toStringAsFixed(1)} B/frame vs '
-        'baseline ${basePerFrame.toStringAsFixed(1)} '
-        '(${delta >= 0 ? '+' : ''}${delta.toStringAsFixed(1)}%, '
-        'limit +${(_failFraction * 100).toStringAsFixed(0)}%)';
-    if (perFrame <= limit) {
-      stdout.writeln('$line — pass.');
-      if (perFrame < basePerFrame * (1 - _failFraction)) {
-        stdout.writeln('alloc gate: per-frame churn improved '
-            '${delta.toStringAsFixed(1)}% below baseline — lock it in with '
-            '--update-baseline so the ceiling drops and a later regression '
-            "back up to today's baseline can't slip through.");
+
+    var failed = false;
+    void check(
+      String axis,
+      double measured,
+      num? baseline,
+      double failFraction,
+      String hint,
+    ) {
+      if (baseline == null) {
+        stdout.writeln('alloc gate [$axis]: no baseline recorded — '
+            're-baseline with --update-baseline.');
+        failed = true;
+        return;
       }
-    } else {
-      stdout.writeln('$line — FAIL.');
-      stderr.writeln('alloc gate: per-frame allocation churn regressed past '
-          'tolerance. A new per-frame allocation in build/reconcile/layout/'
-          'paint/diff? Inspect the top-classes breakdown above; if the change '
-          'is intentional, re-baseline with --update-baseline.');
-      exitCode = 1;
+      final basePerFrame = baseline.toDouble();
+      final limit = basePerFrame * (1 + failFraction);
+      final delta = (measured - basePerFrame) / basePerFrame * 100;
+      final line = 'alloc gate [$axis]: ${measured.toStringAsFixed(1)} B/frame '
+          'vs baseline ${basePerFrame.toStringAsFixed(1)} '
+          '(${delta >= 0 ? '+' : ''}${delta.toStringAsFixed(1)}%, '
+          'limit +${(failFraction * 100).toStringAsFixed(0)}%)';
+      if (measured <= limit) {
+        stdout.writeln('$line — pass.');
+        if (measured < basePerFrame * (1 - failFraction)) {
+          stdout.writeln('alloc gate [$axis]: per-frame churn improved '
+              '${delta.toStringAsFixed(1)}% below baseline — lock it in with '
+              '--update-baseline so the ceiling drops and a later regression '
+              "back up to today's baseline can't slip through.");
+        }
+      } else {
+        stdout.writeln('$line — FAIL.');
+        stderr.writeln('alloc gate [$axis]: $hint');
+        failed = true;
+      }
     }
+
+    check(
+      'total',
+      perFrame,
+      base['bytesPerFrame'] as num?,
+      _totalFailFraction,
+      'measured Dart allocation churn regressed past tolerance. This includes the '
+          'dart:core lists, strings and iterators that framework code creates '
+          'but does not own — inspect the top-classes breakdown above for the '
+          'classes, then use alloc-trace to locate call sites. If the change is '
+          'intentional, re-baseline with '
+          '--update-baseline.',
+    );
+    check(
+      'project',
+      projectPerFrame,
+      base['projectBytesPerFrame'] as num?,
+      _failFraction,
+      'package:fleury per-frame allocation churn regressed past tolerance. A '
+          'new per-frame allocation in build/reconcile/layout/paint/diff? '
+          'Inspect the top-classes breakdown above; if the change is '
+          'intentional, re-baseline with --update-baseline.',
+    );
+    if (failed) exitCode = 1;
   } finally {
     await service.dispose();
   }

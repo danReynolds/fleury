@@ -1278,6 +1278,9 @@ Uint8List remoteClientJs() => base64.decode(_remoteClientJsBase64);
       case 'alloc-gate':
         await benchmarkAllocGate(rest);
         return;
+      case 'alloc-trace':
+        await benchmarkAllocTrace(rest);
+        return;
       case 'input-alloc-gate':
         await benchmarkInputAllocGate(rest);
         return;
@@ -1686,6 +1689,17 @@ Uint8List remoteClientJs() => base64.decode(_remoteClientJsBase64);
       '--enable-vm-service=0',
       '--disable-service-auth-codes',
       'bin/alloc_gate.dart',
+      ...args,
+    ], workingDirectory: profiling);
+  }
+
+  /// Allocation stacks for the same dashboard used by alloc-gate.
+  Future<void> benchmarkAllocTrace(List<String> args) async {
+    await _run('dart', [
+      '--profiler',
+      '--enable-vm-service=0',
+      '--disable-service-auth-codes',
+      'bin/alloc_trace.dart',
       ...args,
     ], workingDirectory: profiling);
   }
@@ -6788,7 +6802,10 @@ void _printBenchmarkUsage() {
     '  bundle-size [--gate]    Served-browser first-load client raw + gzip',
   );
   stdout.writeln(
-    '  alloc-gate [--gate]     Per-frame package:fleury allocation churn',
+    '  alloc-gate [--gate]     Per-frame Dart and core-package allocations',
+  );
+  stdout.writeln(
+    '  alloc-trace [--class=…] Allocation stacks for the alloc-gate dashboard',
   );
   stdout.writeln(
     '  input-alloc-gate [--gate] Per-key input-path allocation churn',
