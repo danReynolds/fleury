@@ -31,6 +31,15 @@ dart tool/fleury_dev.dart benchmark gates
 The heavier PTY/subprocess gates (`wire-gate`, `serve-wire-live`) are not in the
 `gates` suite — run them explicitly when you touch their paths.
 
+`dart tool/fleury_dev.dart benchmark scenario-gate` runs every local scenario
+benchmark (SB.1–SB.8, SB.10–SB.12) once at a CI-sized scale (~17s) and fails if
+any scenario's own correctness oracle fails. It gates correctness, not timing:
+before it existed SB.4, SB.6 and SB.12 failed on main for weeks unnoticed — a
+tailing list had stopped selecting its tail, and two harnesses timed no-op frames
+after `pumpWidget` began completing the frame. CI runs it after the fast suite.
+Scenario harnesses build with `tester.mountWidget` so a measured render is the
+real frame.
+
 ## The gates
 
 | Gate | Protects | When to run (trigger) | Speed | Baseline |
@@ -92,8 +101,9 @@ CI (`.github/workflows/check.yml`) runs `analyze + test + dart2js smoke` and
 then the fast gate suite (`dart tool/fleury_dev.dart benchmark gates`):
 serve-semantics-gate, image-bench, bundle-size, alloc-gate, input-alloc-gate,
 paint-gate,
-selection-gate, runtime-gate. A regression on those paths fails CI, not just a
-local run. The
+selection-gate, runtime-gate — and then `benchmark scenario-gate`, which fails on
+any scenario benchmark whose correctness oracle fails. A regression on those
+paths fails CI, not just a local run. The
 CI SDK is pinned (see check.yml), which keeps the SDK-sensitive axes stable:
 
 - **`input-alloc-gate`** covers the axis `alloc-gate` structurally cannot: the
