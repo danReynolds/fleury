@@ -74,7 +74,19 @@ final class DefaultWidthResolver implements WidthResolver {
     // (`👩‍⚕️` contains FE0F; `emojiVariationSequence: one` may not narrow it).
     final iterator = grapheme.runes.iterator;
     if (!iterator.moveNext()) return 0;
-    final base = iterator.current;
+    // A cluster may open with zero-width code points: Prepend marks (U+0600
+    // ARABIC NUMBER SIGN and the other prepended concatenation marks) that
+    // attach to the next character, or marks with no base at the start of the
+    // text or after a control. The cluster is as wide as its first spacing code
+    // point; keying off the leading mark would measure `U+0600 T` as zero cells
+    // and the visible T would never be painted. A cluster with no spacing code
+    // point (a lone combining mark) stays zero width.
+    var base = iterator.current;
+    var scalarClass = _scalarClassOf(base);
+    while (scalarClass == 1 && iterator.moveNext()) {
+      base = iterator.current;
+      scalarClass = _scalarClassOf(base);
+    }
     var hasZwj = false;
     var hasKeycap = false;
     var hasTag = false;
@@ -99,7 +111,6 @@ final class DefaultWidthResolver implements WidthResolver {
       }
     }
 
-    final scalarClass = _scalarClassOf(base);
     if (scalarClass == 1) return 0; // Combining-only cluster.
 
     // 1. Recognized emoji ZWJ sequence → composite rule: keyed off the base
@@ -223,14 +234,15 @@ final class DefaultWidthResolver implements WidthResolver {
     }
     if (asciiPrefix == len) return len;
 
-    // The code unit that ended the run may be an Extend belonging to the LAST
-    // ASCII character's cluster — '1' + VS16 + U+20E3 (1️⃣) is a single cluster
-    // with an ASCII base. Peeling that base off measures the two halves
-    // separately and loses the cluster's real width, so hand the last ASCII
-    // character back to the grapheme path. (The fast path's premise — one ASCII
-    // code unit is one width-1 cluster — is only true when nothing combines
-    // onto it.)
-    if (asciiPrefix > 0 && _isExtender(text.codeUnitAt(asciiPrefix))) {
+    // The code unit that ended the run may belong to the LAST ASCII
+    // character's cluster: an Extend ('1' + VS16 + U+20E3 (1️⃣) is a single
+    // cluster with an ASCII base), a SpacingMark or a ZWJ. Peeling that base
+    // off measures the two halves separately and loses the cluster's real
+    // width, so unless the next unit provably starts its own cluster, hand the
+    // last ASCII character back to the grapheme path. (The fast path's premise
+    // — one ASCII code unit is one width-1 cluster — is only true when nothing
+    // combines onto it.)
+    if (asciiPrefix > 0 && !_isFreestanding(text.codeUnitAt(asciiPrefix))) {
       asciiPrefix--;
     }
 
@@ -276,17 +288,6 @@ final class DefaultWidthResolver implements WidthResolver {
   // whole Dingbats range as emoji, which desynced entire frames. Deliberate
   // deviations from the raw UCD live in the generator's `_curate`, documented
   // there. Do not add ranges here.
-
-  /// Code units that attach to a preceding base instead of starting their own
-  /// cluster. Only the ranges that can follow an ASCII base matter here — this
-  /// guards [widthOfText]'s fast path, nothing else. Not UCD-derived: it is a
-  /// cluster-boundary question, not a width one.
-  bool _isExtender(int c) =>
-      (c >= 0x0300 && c <= 0x036F) || // combining diacriticals
-      (c >= 0x20D0 && c <= 0x20FF) || // marks for symbols (incl. keycap U+20E3)
-      (c >= 0xFE00 && c <= 0xFE0F) || // variation selectors
-      (c >= 0xFE20 && c <= 0xFE2F) || // combining half marks
-      c == 0x200D; // ZWJ
 
   bool _isZeroWidth(int r) => widthRangesContain(zeroWidthRanges, r);
 }
@@ -345,6 +346,10 @@ bool hasUncertainWidth(String grapheme) {
   final iterator = grapheme.runes.iterator;
   if (!iterator.moveNext()) return false;
   final base = iterator.current;
+  // A cluster that opens with a zero-width code point (a prepended
+  // concatenation mark, or a mark with no base) has no agreed width: wcwidth
+  // gives the concatenation marks a cell of their own, the width model does not.
+  if (widthRangesContain(zeroWidthRanges, base)) return true;
   if (base >= 0x2600 && base <= 0x27BF) return true; // misc symbols, dingbats
   if (base >= 0x1F000 && base <= 0x1FAFF) return true; // emoji planes
   if (base >= 0x1F1E6 && base <= 0x1F1FF) return true; // regional indicators
