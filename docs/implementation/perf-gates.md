@@ -36,7 +36,7 @@ The heavier PTY/subprocess gates (`wire-gate`, `serve-wire-live`) are not in the
 | Gate | Protects | When to run (trigger) | Speed | Baseline |
 | --- | --- | --- | --- | --- |
 | `wire-gate` | Terminal ANSI **output bytes** (SB.1/6/9: startup, dashboard steady-state, untrusted-output encoding) | `lib/src/rendering/ansi_renderer.dart`, cell paint, any diff/cursor/SGR change | ~30s (PTY) | `profiling/wire_gate_baseline.json` |
-| `alloc-gate` | Per-frame **`package:fleury` allocation churn** (build → reconcile → layout → paint → diff) | `lib/src/widgets/framework.dart`, `lib/src/rendering/**`, anything on the per-frame path | ~10s (VM service) | `profiling/alloc_gate_baseline.json` |
+| `alloc-gate` | Per-frame **allocation churn**, measured across Dart-library classes and separately for `package:fleury` (build → reconcile → layout → paint → diff) | `lib/src/widgets/framework.dart`, `lib/src/rendering/**`, anything on the per-frame path | ~10s (VM service) | `profiling/alloc_gate_baseline.json` |
 | `input-alloc-gate` | Per-**key** `package:fleury` allocation churn (parser → dispatcher → session regularizer → binding/detector walk), driving a held key through lifecycle mode | `lib/src/input/**`, `lib/src/terminal/input_parser.dart`, `lib/src/runtime/input_dispatcher.dart`, `lib/src/widgets/key_bindings.dart`, `keyboard.dart`, `focus.dart` | ~5s (VM service) | `profiling/input_alloc_gate_baseline.json` |
 | `paint-gate` | Paint-walk pruning as **exact repaint-boundary counters**: the real `ListView.builder`'s auto-boundaries prune a localized update to one repaint; Overlay entry boundaries engage adaptively (dashboard+floater fixtures — real leaf widgets in bespoke two-entry scaffolding); the **lazy-layer convention** (the real `Toaster` with zero toasts idles pure pass-through: `boundaryCount == 0`); full-invalidate staleness (`cached == 0` when everything is dirty). Paint-phase µs is recorded warn-only (measured with debug stats on — not a clean paint time) and never fails | `lib/src/rendering/**` (esp. `render_repaint_boundary.dart`, cell paint), `lib/src/widgets/overlay.dart`, `lib/src/widgets/list_view.dart`, any widget that mounts overlay entries (toasts, banners, dropdowns) | ~4s (dart-run startup dominates; the measurement is <0.5s) | `profiling/paint_gate_baseline.json` (counters exact, tolerance 0; structural invariants also enforced in-code, even under `--update-baseline`) |
 | `selection-gate` | Default-on text **selection** driven through a **real `SelectionArea`** — press/drag/release, Ctrl+A, Ctrl+C, Esc, routed through a real `InputDispatcher` + `PointerRouter` against real painted geometry. Gated counters: chars a drag selects and copies, chars a select-all selects and copies, and the **highlight cells actually painted**. Structural invariants (a drag selects something; Esc clears the highlight to zero) hold even under `--update-baseline`. The per-frame µs a held selection adds is recorded **warn-only** (machine-dependent, and this path's per-frame allocation is JIT-sink-nondeterministic — a hard alloc gate would flap CI ~24×, so cost is surfaced, not gated) | `lib/src/widgets/selection/**`, `selectable_text_mixin.dart`, `selection_area.dart`, `pointer.dart`, the default-on wrap in `run_app.dart` | ~5s | `profiling/selection_gate_baseline.json` (counters exact, tolerance 0) |
@@ -103,9 +103,25 @@ CI SDK is pinned (see check.yml), which keeps the SDK-sensitive axes stable:
   runs the input path in **lifecycle mode** (`KeyboardCapabilities.full`)
   deliberately — under the legacy projection the session keeps no press
   records and the number would flatter us.
-- **`alloc-gate`** has ±10% headroom for machine drift on a fixed SDK. If a
-  deliberate SDK bump moves it past tolerance, re-baseline in the bump
-  commit — never loosen the tolerance.
+- **`alloc-gate`** checks two axes: `total`, covering classes with library
+  metadata except `package:vm_service`, and `project`, covering
+  `package:fleury` classes. The total includes the `dart:core` lists and strings
+  created by framework code, with a +5% regression limit. The project axis
+  retains its +10% limit. VM-internal objects and closure contexts without
+  library metadata are excluded. Profiler response decoding allocates some
+  core objects inside the measured window, so the total is not byte-exact and
+  does not represent complete heap allocation. Compare the same SDK, workload,
+  frame count, and warmup when refreshing either baseline.
+
+  `dart tool/fleury_dev.dart benchmark alloc-trace` traces allocation stacks
+  for the same dashboard and frame driver. It selects the top allocating
+  classes automatically; `--class=_List,_OneByteString`, `--frames=N`,
+  `--stacks=N`, and `--depth=N` narrow its output. Each class is traced in its
+  own timestamp-bounded window, with tracing disabled before results are
+  decoded. VM-service calls at the window boundaries can still appear. It is
+  a diagnostic with no regression threshold; invalid arguments and service
+  failures return a nonzero exit code. The launcher enables the profiler
+  without `--deterministic`, which would disable allocation tracing.
 - **`paint-gate`**'s gated axes are exact counters (machine- and
   SDK-independent); its µs axes are warn-only by design.
 - **`selection-gate`** gates exact counters (drag / select-all characters and
