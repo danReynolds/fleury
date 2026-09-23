@@ -4,6 +4,9 @@
 
 Initial public release.
 
+- Numeric sliders expose their current value and bounds to browser
+  accessibility, including custom resize handles.
+
 - Pixel images respect later popup paint and preserve the underlying cell
   background through transparent and letterboxed areas. Outer-edge corner
   glyphs U+1FB7C–U+1FB7F render as connected cell-edge rectangles.

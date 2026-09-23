@@ -1,5 +1,10 @@
 # Changelog
 
+- `Button.onSecondaryPressed` handles a completed right click while retaining
+  keyboard focus and the button's enabled state. `CellStyle.interactive(pressed:)`
+  styles a held primary pointer press on activatable controls; release,
+  cancellation, or disabling clears it. Keyboard and semantic activation remain
+  immediate actions. Custom controls can also pass `pressed:` to `CellStyle.resolve`.
 - **Breaking:** a scope is read one way, as a call or as a widget:
   `context.scope<T>()` or `ScopeBuilder<T>`, which behave the same.
   `Scope.of` and `Scope.maybeOf` are removed; an optional scope is read with a

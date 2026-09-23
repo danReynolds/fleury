@@ -8,6 +8,8 @@ class PressTile extends StatefulWidget {
 }
 
 class _PressTileState extends State<PressTile> {
+  final focus = FocusNode();
+  bool focused = false;
   bool pressed = false;
   String status = 'Ready';
 
@@ -15,42 +17,62 @@ class _PressTileState extends State<PressTile> {
   void details() => setState(() => status = 'notes.md · Markdown · 2 KB');
 
   @override
+  void dispose() {
+    focus.dispose();
+    super.dispose();
+  }
+
+  @override
   Widget build(BuildContext context) => Column(
     mainAxisSize: MainAxisSize.min,
     crossAxisAlignment: CrossAxisAlignment.start,
     children: [
+      // #docregion interaction
       KeyBindings(
         bindings: [
           KeyBinding(KeySequence.enter, onTrigger: (_) => open()),
           KeyBinding(KeySequence.space, onTrigger: (_) => open()),
           KeyBinding(KeySequence.i, onTrigger: (_) => details()),
         ],
-        child: Focus(
-          autofocus: true,
-          child: Semantics(
-            role: SemanticRole.button,
-            label: 'Open notes',
-            actions: const {SemanticAction.activate},
-            onAction: (_) => open(),
-            // #docregion interaction
-            child: GestureDetector(
-              onTapDown: (_) => setState(() => pressed = true),
-              onTapUp: (_) => setState(() => pressed = false),
-              onTapCancel: () => setState(() {
-                pressed = false;
-                status = 'Cancelled';
-              }),
-              onTap: open,
-              onSecondaryTap: details,
-              child: Text(
-                '[ Open notes.md ]',
-                style: CellStyle(inverse: pressed),
+        child: FocusDetector(
+          onFocusChange: (value) => setState(() => focused = value),
+          child: Focus(
+            focusNode: focus,
+            autofocus: true,
+            child: Semantics(
+              role: SemanticRole.button,
+              label: 'Open notes',
+              focused: focused,
+              actions: const {SemanticAction.focus, SemanticAction.activate},
+              onAction: (action) {
+                focus.requestFocus();
+                if (action == SemanticAction.activate) open();
+              },
+              child: SelectionArea.disabled(
+                child: MouseRegion(
+                  cursor: MouseCursor.pointer,
+                  child: GestureDetector(
+                    onTapDown: (_) => setState(() => pressed = true),
+                    onTapUp: (_) => setState(() => pressed = false),
+                    onTapCancel: () => setState(() {
+                      pressed = false;
+                      status = 'Cancelled';
+                    }),
+                    onTap: open,
+                    onSecondaryTap: details,
+                    child: Text(
+                      '[ Open notes.md ]',
+                      style: CellStyle(inverse: pressed, underline: focused),
+                    ),
+                  ),
+                ),
               ),
             ),
-            // #enddocregion interaction
           ),
         ),
       ),
+      Button(text: 'Details', onPressed: details),
+      // #enddocregion interaction
       const SizedBox(height: 1),
       Text(pressed ? 'Pressed…' : status),
       const Text('Enter: open · I: details', style: CellStyle(dim: true)),

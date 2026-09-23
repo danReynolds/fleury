@@ -298,6 +298,15 @@ final class SemanticDomPresenter
         valueText.isNotEmpty) {
       attributes['data-fleury-value'] = valueText;
     }
+    // A single-value slider needs numeric ARIA values as well as our data
+    // attribute; otherwise browser accessibility presents its default range.
+    if (core == SemanticRole.slider && node.value is num) {
+      attributes['aria-valuenow'] = node.value.toString();
+      final min = node.state['min'];
+      final max = node.state['max'];
+      if (min is num) attributes['aria-valuemin'] = min.toString();
+      if (max is num) attributes['aria-valuemax'] = max.toString();
+    }
     final bounds = node.bounds;
     if (bounds != null) {
       attributes['data-fleury-bounds-left'] = '${bounds.left}';

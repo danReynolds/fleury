@@ -7,9 +7,16 @@ import FleuryExample from '../../../components/FleuryExample.astro';
 import CodeDemoSplit from '../../../components/CodeDemoSplit.astro';
 import InputGuideCode from '../../../components/InputGuideCode.astro';
 
-Click a field, drag a handle, or scroll a pane. Fleury’s ordinary controls handle
-mouse input alongside the keyboard; `GestureDetector` and `MouseRegion` let you
-add those interactions to your own widgets.
+Click a field, drag a handle, or scroll a pane. Fleury routes pointer input to
+the widgets displayed at that cell. Start with the control that owns the
+interaction so pointer, keyboard, and semantic actions stay together:
+
+| What you are building | Start with |
+| --- | --- |
+| An action or editable field | `Button`, `TextInput`, or `TextArea` |
+| A custom press or draggable handle | `GestureDetector`, with keyboard focus and actions |
+| Hover feedback, a cursor hint, or custom wheel handling | `MouseRegion` |
+| A region of text to select and copy | `SelectionArea` |
 
 In a terminal, enable mouse reporting when starting your app. `mouseMotion`
 includes clicks, drags, scrolling, and hover:
@@ -21,6 +28,12 @@ runApp(const MyApp(), mode: const TerminalMode(mouseMotion: true));
 Mouse reporting is off by default to preserve the terminal’s native text
 selection. Use `mouse: true` when you only need clicks, drags, and scrolling.
 The browser demos already receive pointer input.
+
+Positions and movement are measured in **terminal cells**. A pointer region
+uses its child's laid-out size and respects clipping. Padding inside a detector
+enlarges its target; padding outside moves that target. `localPosition` starts
+at the receiving region's origin, while `globalPosition` starts at the app
+surface.
 
 ## Click to edit
 
@@ -38,11 +51,36 @@ The test sends a press and release at a cell, then types at the resulting caret.
 That checks the input path. A [logical `fill()` test](/fleury/guides/testing/)
 checks what the application does with the entered value.
 
-## Press, release, or cancel
+## Give a button press feedback
 
-Press **Open notes.md** to see its pressed state. Release on the tile to open
-it, or move outside before releasing to cancel. Right-click shows file details;
-Enter opens the file; **I** shows its details.
+Hold **Open notes.md** to see its pressed style. Release without moving to
+another cell to open the file. Right-click shows details. Tab moves to the
+**Details** button, which makes the same action available from the keyboard.
+The Open button is underlined while it has focus:
+
+<CodeDemoSplit files={['file_actions.dart', 'file_actions_test.dart']} codeLabel="Source and test" demoLabel="Hold, release, or right-click" layout="code-wide" codeMaxHeight="26rem">
+<InputGuideCode slot="code-0" file="file_actions.dart" />
+<InputGuideCode slot="code-1" file="file_actions_test.dart" test />
+<FleuryExample slot="demo" id="input.actions" cols={38} rows={8} interactive />
+</CodeDemoSplit>
+
+`Button` keeps Enter/Space activation, focus, semantics, and non-selectable
+content. `onSecondaryPressed` handles a completed right click without calling
+`onPressed`. Setting `onPressed: null` disables both actions.
+
+`CellStyle.interactive(pressed: …)` applies during a primary pointer press and
+clears on release, cancellation, or disabling. It layers after focus paint and
+before validation paint. Keyboard and semantic activation are immediate actions;
+they do not hold a pressed visual while waiting for a key release that a native
+terminal may not report. See [theming](/fleury/guides/theming/) for the style cascade.
+
+## Build a custom press target
+
+Use the lower-level callbacks when you need to react to a gesture's lifecycle.
+This tile reports **Pressed…**, **Opened notes.md**, or **Cancelled**. Press and
+release in the same cell to open it; moving to another cell cancels the tap,
+even inside the tile. A release outside or loss of surface input also cancels.
+Right-click or **I** shows details; Enter/Space opens; Tab moves to **Details**.
 
 <CodeDemoSplit files={['press_tile.dart', 'press_tile_test.dart']} codeLabel="Source and test" demoLabel="Press and drag away" layout="code-wide" codeMaxHeight="28rem">
 <InputGuideCode slot="code-0" file="press_tile.dart" />
@@ -50,16 +88,28 @@ Enter opens the file; **I** shows its details.
 <FleuryExample slot="demo" id="input.press" cols={38} rows={8} interactive />
 </CodeDemoSplit>
 
-`onTap` runs after a completed primary click. `onTapDown` starts the pressed
-visual; `onTapUp` and `onTapCancel` both clear it. `onSecondaryTap` handles a
-right click. Ordinary `Button` widgets already handle activation and keyboard
-focus. These callbacks let a custom target show its press and cancellation.
+`onTapDown` starts the visual. A completed primary click calls `onTapUp`, then
+`onTap`; a cancelled press calls `onTapCancel` instead. Right clicks use
+`onSecondaryTap` and do not start the primary pressed visual.
+
+The custom target supplies the behavior that `Button` normally owns:
+`Focus` and `KeyBindings` for keyboard access, `FocusDetector` for a visible
+focus cue, `Semantics` for its action, and `SelectionArea.disabled` so dragging
+its label does not select text. Its `FocusNode` is owned and disposed by the
+state, as shown in the complete source.
+
+The innermost tap/drag target owns the press. Wrapping a `Button` in another
+`GestureDetector` does not observe its presses or add a right-click handler;
+use the button's own style and action properties. Hover and wheel input have
+different ancestor behavior, demonstrated below. For an overlay that must block
+input to covered widgets, use `AbsorbPointer`; its child controls remain usable.
 
 ## Drag a handle
 
 Grab the vertical divider and move it left or right. Keep dragging beyond the
 handle, then release: it retains the gesture until you finish. You can also
-focus it and use **← / →**.
+focus it and use **← / →**. Held arrows keep resizing. Tab moves to **Reset
+width**, and Shift+Tab returns to the handle; its highlight follows focus.
 
 <CodeDemoSplit files={['split_pane.dart', 'split_pane_test.dart']} codeLabel="Source and test" demoLabel="Drag or use arrow keys" layout="code-wide" codeMaxHeight="28rem">
 <InputGuideCode slot="code-0" file="split_pane.dart" />
@@ -67,13 +117,19 @@ focus it and use **← / →**.
 <FleuryExample slot="demo" id="input.splitter" cols={38} rows={9} interactive />
 </CodeDemoSplit>
 
-`details.delta.col` is movement in **cells**, so the same handler works inside
-padding or a panel. When you need a position, `localPosition` starts at the
-receiving widget’s origin; `globalPosition` starts at the application surface.
+`details.delta.col` is movement since the previous report. It stays stable
+when resizing moves the handle itself. The first movement calls both
+`onDragStart` and `onDragUpdate` with the same delta: use start for visual state
+and apply movement in update, as above. Once captured, local positions can fall
+outside the handle's bounds. `globalPressPosition` retains the original press.
 
 `MouseRegion(cursor: MouseCursor.resizeLeftRight)` gives the handle its resize
-cursor in a browser. The cursor stays with the captured drag. `onDragEnd`
-handles release; `onDragCancel` handles interruption, such as losing focus.
+cursor in a browser and in terminals that negotiate pointer-shape support.
+The cursor stays with the captured drag. `onDragEnd` handles release;
+`onDragCancel` handles interruption, such as the app surface losing focus or
+the handle being clipped out of view. Cancellation ends feedback; this example
+keeps the width already reached. The separator text opts out of selection with
+`allowSelect: false`, and its semantics expose the current width and resize actions.
 
 ## Select text to copy
 
@@ -93,6 +149,11 @@ for a region with its own selection, callbacks, or options such as
 Copy, Select All, and Escape now act on the note. Clicking Reply returns focus
 to the field. You do not need an extra `Focus` wrapper.
 
+In a native terminal, a modifier used to bypass application mouse reporting
+may select terminal text instead of delivering a Shift-click to Fleury.
+The browser walkthrough demonstrates Fleury's own selection path; native
+selection and clipboard behavior depend on the terminal and host.
+
 ## Keep hover and scrolling together
 
 Move from **notes.md** onto **Pin**: the row stays hovered while the button
@@ -110,10 +171,16 @@ in Recent** and repeat to see the wheel stop at that pane’s edge.
 `edgeBehavior: EdgeBehavior.bubble` offers the event to a scrollable ancestor.
 The checkbox switches the inner pane to `EdgeBehavior.contain`.
 
+Hover follows the hit target's ancestors, so the row stays hovered over its
+button. For a custom wheel handler, `MouseRegion.onScroll` receives a cell
+delta; return `true` to consume it or `false` to offer it to an ancestor.
+Wheel events do not fall through to an obscured sibling. Shift+vertical wheel
+is delivered as horizontal movement.
+
 For shortcut sequences, text entry, and focus traversal, continue with
 [key handling](/fleury/guides/focus-and-keyboard/) and
 [focus management](/fleury/guides/focus/).
 
 The source and tests shown here are the files used by the live examples. Run
-all five from the checkout with `cd website/examples && dart test test/input_guide_test.dart`.
+all six examples' tests with `cd website/examples && dart test test/input_guide_test.dart`.
 Their shared `pointer_test_helpers.dart` sends a mouse event and pumps a frame.

@@ -5,12 +5,13 @@ import 'package:meta/meta.dart';
 /// Widgets use only the states that make sense for their surface. For example,
 /// a button never becomes [selected], while a checkbox uses [selected] for its
 /// checked value. Unsupported states are simply never emitted.
-enum CellStyleState { hovered, focused, selected, disabled, invalid }
+enum CellStyleState { hovered, focused, selected, disabled, invalid, pressed }
 
 const List<CellStyleState> _cellStyleStatePaintOrder = [
   CellStyleState.selected,
   CellStyleState.hovered,
   CellStyleState.focused,
+  CellStyleState.pressed,
   CellStyleState.invalid,
 ];
 
@@ -302,10 +303,14 @@ final class CellStyle {
   /// [base] is also the fallback when this value is used by a non-control API
   /// such as `Text(style:)`. A null state entry inherits the corresponding
   /// theme/widget default; [CellStyle.none] explicitly suppresses it.
+  /// [pressed] applies while a control holds a primary pointer press, until
+  /// release or cancellation. Keyboard and semantic activation are immediate
+  /// actions and do not latch this state.
   const factory CellStyle.interactive({
     CellStyle base,
     CellStyle? hovered,
     CellStyle? focused,
+    CellStyle? pressed,
     CellStyle? selected,
     CellStyle? disabled,
     CellStyle? invalid,
@@ -371,6 +376,7 @@ final class CellStyle {
     required Iterable<CellStyle?> cascade,
     bool hovered = false,
     bool focused = false,
+    bool pressed = false,
     bool selected = false,
     bool disabled = false,
     bool invalid = false,
@@ -379,6 +385,7 @@ final class CellStyle {
     states: {
       if (hovered) CellStyleState.hovered,
       if (focused) CellStyleState.focused,
+      if (pressed) CellStyleState.pressed,
       if (selected) CellStyleState.selected,
       if (disabled) CellStyleState.disabled,
       if (invalid) CellStyleState.invalid,
@@ -525,6 +532,7 @@ final class _InteractiveCellStyle extends CellStyle {
     this.base = CellStyle.none,
     this.hovered,
     this.focused,
+    this.pressed,
     this.selected,
     this.disabled,
     this.invalid,
@@ -534,6 +542,7 @@ final class _InteractiveCellStyle extends CellStyle {
   final CellStyle base;
   final CellStyle? hovered;
   final CellStyle? focused;
+  final CellStyle? pressed;
   final CellStyle? selected;
   final CellStyle? disabled;
   final CellStyle? invalid;
@@ -568,6 +577,7 @@ final class _InteractiveCellStyle extends CellStyle {
   CellStyle? _styleFor(CellStyleState state) => switch (state) {
     CellStyleState.hovered => hovered,
     CellStyleState.focused => focused,
+    CellStyleState.pressed => pressed,
     CellStyleState.selected => selected,
     CellStyleState.disabled => disabled,
     CellStyleState.invalid => invalid,
@@ -578,6 +588,7 @@ final class _InteractiveCellStyle extends CellStyle {
         base: nextBase,
         hovered: hovered,
         focused: focused,
+        pressed: pressed,
         selected: selected,
         disabled: disabled,
         invalid: invalid,
@@ -615,6 +626,7 @@ final class _InteractiveCellStyle extends CellStyle {
         base: base.merge(other.base),
         hovered: other.hovered ?? hovered,
         focused: other.focused ?? focused,
+        pressed: other.pressed ?? pressed,
         selected: other.selected ?? selected,
         disabled: other.disabled ?? disabled,
         invalid: other.invalid ?? invalid,
@@ -630,6 +642,7 @@ final class _InteractiveCellStyle extends CellStyle {
           other.base == base &&
           other.hovered == hovered &&
           other.focused == focused &&
+          other.pressed == pressed &&
           other.selected == selected &&
           other.disabled == disabled &&
           other.invalid == invalid;
@@ -640,6 +653,7 @@ final class _InteractiveCellStyle extends CellStyle {
     base,
     hovered,
     focused,
+    pressed,
     selected,
     disabled,
     invalid,
@@ -648,7 +662,7 @@ final class _InteractiveCellStyle extends CellStyle {
   @override
   String toString() =>
       'CellStyle.interactive(base: $base, hovered: $hovered, focused: $focused, '
-      'selected: $selected, disabled: $disabled, invalid: $invalid)';
+      'pressed: $pressed, selected: $selected, disabled: $disabled, invalid: $invalid)';
 }
 
 /// How a [Cell] participates in a (possibly wide) grapheme.
