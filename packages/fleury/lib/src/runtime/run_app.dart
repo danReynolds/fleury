@@ -885,6 +885,7 @@ Future<AppExit> _runAppImpl(
     // Must run even if every prior cleanup resource failed: this is the owner
     // of State.dispose, focus, pointer, binding, and inactive-element teardown.
     captureSync('runtime', runtime.dispose);
+    captureSync('debug controller', debugController.dispose);
 
     captureSync(
       'terminal restore marker',

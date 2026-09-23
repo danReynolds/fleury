@@ -1,72 +1,158 @@
 ---
 title: Terminal capabilities
-description: How Fleury detects what a terminal can do — native images, clickable hyperlinks — and degrades safely when it can't.
+description: Diagnose a terminal session, understand Fleury’s fallbacks, and fix differences in color, text, images, and input.
 ---
 
-Terminals differ in what they can actually render — native image protocols,
-clickable hyperlinks, color depth — and multiplexers like tmux sit in the
-middle rewriting escapes. Fleury combines conservative environment evidence
-with bounded protocol queries where a reliable query exists, uses the richest
-confirmed form, and keeps an explicit fallback. `fleury diagnose` and the
-debug shell's **Tree** tab report what was detected in your session.
+Fleury adapts its output to the terminal: colors can be reduced, images become
+cell art, and links can fall back to visible URLs. When an app behaves
+differently over SSH or inside tmux, inspect the session before changing the
+widget code.
 
-The launch support boundary is a modern UTF-8, xterm-compatible POSIX terminal.
-The Windows driver and native Sixel rendering are preview capabilities rather
-than part of that launch compatibility claim.
+## Inspect the affected session
 
-## Synchronized output
+Run this in the same terminal, SSH connection, and multiplexer pane as the app:
 
-Fleury uses DEC mode 2026 to avoid presenting a partially applied frame only
-when DECRQM reports mutable support. Unsupported terminals and transports
-without a query channel receive ordinary ANSI frames. Set
-`FLEURY_SYNC_OUTPUT=1` or `0` only as an explicit operator override for a
-terminal whose report or implementation is known to be wrong.
+```sh
+fleury diagnose
+```
+
+The report includes the environment, selected capabilities, and the reasons
+for fallbacks. For example, a supported outer terminal can still produce these
+rows inside tmux:
+
+```text title="Example: tmux fallback"
+Image protocol    halfBlock
+OSC 8 hyperlinks  suppressed-under-tmux
+
+image_multiplexer_fallback
+  Native images are disabled in this multiplexer session; images use cell art.
+```
+
+Here the renderer is deliberately choosing a fallback. Run the same app outside
+the multiplexer to isolate that difference; changing its image widget would
+not address the cause.
+
+To ask the terminal for additional evidence, run:
+
+```sh
+fleury diagnose --probe
+```
+
+Probes are bounded queries, including keyboard and graphics support and glyph
+width measurements. A timeout is **inconclusive**, not proof that a feature is
+unsupported. Over a slow connection, increase the per-query budget with
+`--probe-timeout=500`.
+
+The report distinguishes detected support from runtime behavior. In particular,
+**Mouse: availableOptIn** does not mean mouse reporting is enabled, and
+**OSC 52 clipboard: policyGated** does not prove that copying reached the system
+clipboard.
+
+## Match the symptom to the evidence
+
+| Symptom | Check | What to do next |
+| --- | --- | --- |
+| Colors are missing or reduced | Color mode, `NO_COLOR`, `COLORTERM`, `TERM` | Check the environment and compare color depths below. |
+| Borders or emoji misalign | Glyph tier, measured widths, width policy | Probe in the affected session; inspect which width values came from a probe or an override. |
+| Images turn into blocks | Image protocol and fallback reason | Compare a direct terminal session with the multiplexer session. |
+| Links show their URL as text | OSC 8 hyperlinks | Check whether links are unsupported, suppressed, or explicitly disabled. |
+| Clicks or held keys do nothing | App mouse mode; **Live → Keyboard** in the debugger | Check enabled input modes and negotiated key events, not only terminal support. |
+| Copy works only inside the app | Clipboard write report | Check the transport and policy used for that operation. |
+
+## Check color and text rendering
+
+Fleury maps colors to the detected depth. A non-empty `NO_COLOR` disables color,
+even when another setting requests it. Otherwise an explicit depth wins over
+environment detection. Use it to reproduce a reduced palette locally:
+
+```sh
+FLEURY_COLOR_DEPTH=16 dart run bin/main.dart
+FLEURY_COLOR_DEPTH=256 dart run bin/main.dart
+```
+
+The other accepted depths are `truecolor` and `none`. Choose colors in the
+[theme](/fleury/guides/theming/); use an override to test a terminal constraint
+or correct a known detection error.
+
+Text width is separate from color depth. A non-UTF-8 locale or a basic terminal
+can select ASCII drawing characters. Check `LC_ALL`, `LC_CTYPE`, and `LANG` in
+that order; the first configured locale wins. To test the ASCII fallback:
+
+```sh
+FLEURY_GLYPH_TIER=ascii dart run bin/main.dart
+```
+
+If Unicode is enabled but columns drift, inspect the probe's **Width policy**.
+Fleury records both the width and its source for ambiguous characters, emoji,
+and composed sequences. Prefer measured values; use an override such as
+`FLEURY_AMBIGUOUS_WIDTH=wide` only when you know the terminal uses that width.
+A missing measurement leaves the default in place.
 
 ## Terminal images through multiplexers
 
-`Image` uses native Kitty or iTerm2 graphics when that protocol is selected and
-falls back to cell art elsewhere. A native Sixel path exists, but remains
-experimental until Fleury replaces its conventional cell-pixel sizing with
-queried geometry. Fleury defaults to cell art inside tmux, GNU Screen, and
-Zellij because multiplexers can drop or transform native-image escapes and
-cannot safely model every protocol's raster lifecycle across redraws and
-resizes.
+The image widget selects native Kitty or iTerm2 output where supported, with
+cell art as the portable fallback. tmux, GNU Screen, and Zellij select cell art
+even when the outer terminal supports native images: a query response alone
+does not establish reliable image redraw and resize behavior through that path.
 
-Fleury currently keeps Kitty, iTerm2, and Sixel on cell art through those
-multiplexers. Direct sessions still use their native image protocol. `fleury
-diagnose` reports `image_multiplexer_fallback` when this policy suppresses a
-detected native protocol.
+Test both paths if images carry information in your app. The Windows driver and
+native Sixel rendering remain preview capabilities; the supported baseline is
+a modern UTF-8, xterm-compatible POSIX terminal.
 
 ## Terminal hyperlinks (OSC 8)
 
-Widgets like `MarkdownText` emit **real clickable links** (the OSC 8 escape) on
-terminals that support them, and fall back to plain underlined text with the
-URL shown inline everywhere else — so a destination is never hidden behind a
-link that doesn't work. The browser surface (`fleury serve`) always renders
-links as anchors; on the terminal, support is **detected from the environment**.
+Markdown links use clickable terminal hyperlinks when detected. Otherwise the
+label stays underlined and the URL is shown inline. The browser surface renders
+ordinary anchors.
 
-**Detected terminals** (auto-enabled, default-deny for anything unlisted):
+The diagnosis reports **supported**, **unsupported**, **suppressed-under-tmux**,
+or **disabled-by-override**. Multiplexers are suppressed by default. Supported
+terminal detection includes kitty, WezTerm, Ghostty, iTerm2 3.1+, VTE 0.50+, and
+Windows Terminal.
 
-| Terminal | Detected via |
-| --- | --- |
-| iTerm2 (≥ 3.1) | `TERM_PROGRAM=iTerm.app` + `TERM_PROGRAM_VERSION` |
-| WezTerm, Ghostty | `TERM_PROGRAM` |
-| GNOME Terminal / VTE (≥ 0.50) | `VTE_VERSION ≥ 5000` |
-| kitty | `KITTY_WINDOW_ID` or `TERM=xterm-kitty` |
-| Windows Terminal | `WT_SESSION` |
+To compare the fallback in the same app:
 
-**tmux (and other multiplexers) are suppressed by default.** OSC 8 through a
-multiplexer needs an explicit `terminal-features` opt-in in your tmux config and
-is unreliable without it, so detection reports links as unavailable under tmux
-regardless of the outer terminal. Escape tmux, or force it with
-`FLEURY_HYPERLINKS=1`.
+```sh
+FLEURY_HYPERLINKS=0 dart run bin/main.dart
+```
 
-**Override.** `FLEURY_HYPERLINKS` wins outright over detection: `1`/`true`/`yes`/
-`on` forces links on (even under tmux, and on terminals Fleury can't confirm);
-`0`/`false`/`no`/`off` forces them off. Leave it unset to use detection.
+Setting it to `1` forces hyperlink output, including through a multiplexer.
+Use that only after verifying that the whole terminal path handles OSC 8;
+the override requests output rather than proving delivery.
 
-**Check what was detected.** `fleury diagnose` reports the exact state —
-`supported`, `suppressed-under-tmux` (the outer terminal is capable but a
-multiplexer is in the way), `disabled-by-override` (`FLEURY_HYPERLINKS=0`), or
-`unsupported` — and the debug shell's **Tree** tab shows it alongside the other
-detected capabilities.
+## Check input and clipboard behavior
+
+Mouse reporting is an app setting. Enable clicks, dragging, and scrolling with
+`TerminalMode(mouse: true)`; use `mouseMotion: true` when the app also needs
+hover. See [Input & gestures](/fleury/guides/input-and-gestures/) for the widget
+side.
+
+Held keys require release events. Open the [debugger](/fleury/guides/debugging/)
+and inspect **Live → Keyboard** for the app's negotiated capabilities. A
+successful standalone keyboard probe is not evidence that this running session
+receives releases. [Key handling](/fleury/guides/focus-and-keyboard/) covers
+capability-aware input.
+
+For clipboard issues, inspect the result of `Clipboard.writeWithReport`.
+A successful platform-tool write, an emitted OSC 52 escape, and an in-process
+copy are different outcomes. OSC 52 emission is unverified until you paste into
+another application; over SSH, local platform tools are skipped by default.
+
+## Synchronized output
+
+Fleury brackets frames with synchronized output only when the terminal query
+confirms mutable DEC mode 2026 support. Otherwise it sends ordinary ANSI frames.
+For a terminal with a known incorrect report, `FLEURY_SYNC_OUTPUT=1` or `0`
+overrides that decision. This affects frame presentation, not build or layout
+cost; investigate slow frames in [Debugging](/fleury/guides/debugging/).
+
+## Save evidence without changing the session
+
+```sh
+fleury diagnose --probe --json-output=terminal-report.json
+```
+
+Use the file option instead of redirecting stdout: redirecting makes stdout
+non-interactive and prevents active probes. Include the report, the failing
+interaction, and whether it also fails outside SSH or the multiplexer when
+reporting a terminal-specific issue.

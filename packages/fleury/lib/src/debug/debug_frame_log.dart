@@ -4,10 +4,9 @@ import 'debug_events.dart';
 
 /// A bounded, subscribe-once ring of recent [FrameEvent]s off [DebugEvents].
 ///
-/// The in-terminal debug panel keeps its own history for rendering; this is
-/// the *headless* equivalent — a frame log a remote debug consumer (the agent
-/// bridge, a future browser DevTools panel) can pull from over the wire, in a
-/// session that has no panel. Constructing it makes [DebugEvents.hasListeners]
+/// Used by the debug controller and by remote debug consumers. Its lifetime
+/// is independent of the panel, so hiding the UI does not discard a recording.
+/// Constructing it makes [DebugEvents.hasListeners]
 /// true, which is what turns on per-frame timing capture — so create it only
 /// when a debug consumer is actually attached, and [dispose] it when they
 /// detach.

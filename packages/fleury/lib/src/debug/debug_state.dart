@@ -6,12 +6,13 @@ import '../foundation/change_notifier.dart';
 import '../runtime/runtime_error_overlay.dart' show RuntimeErrorRecord;
 import '../semantics/semantics.dart';
 import '../terminal/diagnostics.dart';
+import '../widgets/scroll_view.dart';
+import 'debug_events.dart';
+import 'debug_frame_log.dart';
 
 /// Three-state lifecycle of the debug surface.
-///   - off:        no panel mounted; user app uses full terminal;
-///                 zero-overhead enforced by the shell short-circuit
-///   - docked:     panel on the side; user app reflows into the
-///                 remaining cells
+///   - off:        no panel mounted; an already-started recording continues
+///   - docked:     panel overlays one edge without resizing the app
 ///   - fullscreen: panel covers the terminal; user app still mounted
 ///                 + ticking behind it (state preserved, just hidden)
 enum DebugMode { off, docked, fullscreen }
@@ -19,8 +20,7 @@ enum DebugMode { off, docked, fullscreen }
 /// Which edge the docked panel hugs.
 enum DebugPanelSide { right, bottom }
 
-/// Which tab in the panel is selected. Only `live` ships in P0;
-/// `tree`, `rebuilds`, `logs` are stubs that promote in P1.
+/// Which tab in the panel is selected.
 enum DebugTab { live, tree, rebuilds, logs, errors }
 
 /// Which sources the Logs tab shows, cycled with `s`.
@@ -77,7 +77,9 @@ class DebugConfig {
 /// Mutable runtime state — flips between modes, switches tabs,
 /// toggles in-panel options. The shell + panel listen and rebuild.
 class DebugController extends Notifier {
-  DebugController(this._config) : _mode = _config.startMode;
+  DebugController(this._config) : _mode = _config.startMode {
+    if (_mode != DebugMode.off) _startFrameRecording();
+  }
 
   final DebugConfig _config;
   DebugMode _mode;
@@ -91,6 +93,19 @@ class DebugController extends Notifier {
   SemanticTree? Function()? _semanticTreeProvider;
   TerminalDiagnosis? Function()? _terminalDiagnosisProvider;
   bool _disposed = false;
+  DebugFrameLog? _frameLog;
+
+  /// Recent frames, oldest first. Opening the shell starts a bounded recording
+  /// that survives hiding or expanding it, until this controller is disposed.
+  /// A disabled shell never starts recording.
+  List<FrameEvent> get frameHistory => _frameLog?.records ?? const [];
+
+  void _startFrameRecording() {
+    if (_config.enabled) _frameLog ??= DebugFrameLog(capacity: 60);
+  }
+
+  /// Scroll position of the current non-Logs report. Logs owns its viewport.
+  final detailScrollController = ScrollController();
 
   DebugConfig get config => _config;
   DebugMode get mode => _mode;
@@ -120,7 +135,7 @@ class DebugController extends Notifier {
 
   /// Set by the native runtime when this session can hot restart (a dev
   /// supervisor is listening — plain `dart run`). Non-null makes the shell
-  /// show and accept the `r` action; the debug layer itself stays free of
+  /// show and accept the F5 action; the debug layer itself stays free of
   /// `dart:io`/`dart:developer` by delegating the actual signal here.
   void setHotRestartHandler(void Function()? handler) {
     _checkNotDisposed();
@@ -170,6 +185,7 @@ class DebugController extends Notifier {
     _checkNotDisposed();
     if (_mode == DebugMode.off) {
       _mode = _lastOpen;
+      _startFrameRecording();
     } else {
       _lastOpen = _mode;
       _mode = DebugMode.off;
@@ -199,6 +215,7 @@ class DebugController extends Notifier {
     _checkNotDisposed();
     if (_tab == tab) return;
     _tab = tab;
+    detailScrollController.scrollToStart();
     notify();
   }
 
@@ -207,8 +224,7 @@ class DebugController extends Notifier {
   void nextTab([int delta = 1]) {
     _checkNotDisposed();
     final values = DebugTab.values;
-    _tab = values[(values.indexOf(_tab) + delta) % values.length];
-    notify();
+    selectTab(values[(values.indexOf(_tab) + delta) % values.length]);
   }
 
   void togglePaintFlash() {
@@ -299,6 +315,9 @@ class DebugController extends Notifier {
     _semanticTreeProvider = null;
     _terminalDiagnosisProvider = null;
     _hotRestartHandler = null;
+    _errorHistoryProvider = null;
+    _frameLog?.dispose();
+    detailScrollController.dispose();
     super.dispose();
   }
 }

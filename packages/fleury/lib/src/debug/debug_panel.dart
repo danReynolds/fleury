@@ -1,8 +1,5 @@
-// The actual UI of the debug panel. Subscribes to DebugEvents,
-// keeps a small rolling buffer of recent frames, renders the Live
-// metrics tab. Tab strip is there but the other tabs are placeholders
-// in P0 — they slot in cleanly in P1 without changing this file's
-// shape.
+// The debug panel renders the controller's recording. Its subscription only
+// refreshes the visible report; closing the panel does not discard evidence.
 
 import 'dart:async';
 
@@ -27,6 +24,7 @@ import '../widgets/layout_builder.dart';
 import '../widgets/output_capture_view.dart';
 import '../widgets/pointer.dart';
 import '../widgets/rich_text.dart';
+import '../widgets/scroll_view.dart';
 import '../widgets/theme.dart';
 import 'debug_events.dart';
 import 'debug_monitors.dart';
@@ -53,7 +51,6 @@ class DebugPanel extends StatefulWidget {
 }
 
 class _DebugPanelState extends State<DebugPanel> {
-  static const _historySize = 60;
   // Throttle panel rebuilds to ~10 fps regardless of how fast the
   // framework emits frames. Without this we'd loop: every FrameEvent
   // triggers setState → schedules a frame → emits another FrameEvent
@@ -64,19 +61,19 @@ class _DebugPanelState extends State<DebugPanel> {
   // perceive the lag in the live counters; the underlying history
   // still captures every frame.
   static const _rebuildIntervalMs = 100;
-  final List<FrameEvent> _history = <FrameEvent>[];
+  List<FrameEvent> get _history => widget.controller.frameHistory;
   // Wallclock receipt times (ms) of frames in the last second — the basis for a
   // REAL fps (frames actually rendered per second). Distinct from 1/avg-frame-
   // time, which is per-frame headroom and reads ~200 even on an idle app.
   final List<int> _frameStamps = <int>[];
   // Trailing decay: the panel only rebuilds on frame events, so after the app
   // goes idle the FPS row would freeze at its last value. One trailing rebuild
-  // ~1.2s after the last frame repaints it at 0. The flag marks that decay
-  // rebuild's OWN frame so its event doesn't re-arm the timer — the panel
+  // ~1.2s after the last frame repaints it at 0. A settling window marks that decay
+  // rebuild and its scroll-metrics frames so they do not re-arm the timer — the panel
   // quiesces instead of heartbeating forever (and the event lands inside the
   // 100ms rebuild throttle, so the momentary count of 1 is never displayed).
   Timer? _fpsDecayTimer;
-  bool _decayRebuild = false;
+  int? _decayUntilMs;
   StreamSubscription<DebugEvent>? _sub;
   // Null = never rebuilt: the first frame event must always repaint (the
   // monotonic SystemClock can read ~0 early in a process, so a zero sentinel
@@ -95,8 +92,6 @@ class _DebugPanelState extends State<DebugPanel> {
     super.initState();
     _sub = DebugEvents.stream.listen((event) {
       if (event is! FrameDebugEvent) return;
-      _history.add(event.frame);
-      if (_history.length > _historySize) _history.removeAt(0);
       // Sampled key state is NOT reactive and is illegal to read in build
       // (the handle asserts on it) — so latch it here, in the same
       // frame-driven callback that feeds the rest of the Live tab.
@@ -106,14 +101,16 @@ class _DebugPanelState extends State<DebugPanel> {
       while (_frameStamps.isNotEmpty && _frameStamps.first < now - 1000) {
         _frameStamps.removeAt(0);
       }
-      if (_decayRebuild) {
-        // This frame is the decay rebuild's own render — don't re-arm, or
-        // the panel would heartbeat forever while idle.
-        _decayRebuild = false;
-      } else {
+      if (widget.controller.tab == DebugTab.live &&
+          (_decayUntilMs == null || now >= _decayUntilMs!)) {
         _fpsDecayTimer?.cancel();
         _fpsDecayTimer = Timer(const Duration(milliseconds: 1200), () {
-          _decayRebuild = true;
+          // A scroll viewport can schedule a metrics repaint after this one.
+          // Suppress the whole settling window, not just the first frame, so
+          // those follow-up frames cannot keep the idle timer alive forever.
+          final now = widget.clock.now.inMilliseconds;
+          _decayUntilMs = now + _rebuildIntervalMs;
+          _lastRebuildMs = now;
           _rebuild();
         });
       }
@@ -157,7 +154,7 @@ class _DebugPanelState extends State<DebugPanel> {
         // narrow terminal. Content width = box minus border (2) and horizontal
         // padding (2); sparklines size off it so they can't overflow and wrap.
         _contentWidth =
-            (constraints.maxCols ?? widget.controller.config.panelWidth) - 4;
+            (constraints.maxCols ?? widget.controller.config.panelWidth) - 5;
         // Opaque surface: the panel now Positioned-floats over the app, so
         // every cell it covers must be painted or the app bleeds through the
         // gaps (border ring + unfilled interior). Surface fills the whole slot;
@@ -186,7 +183,19 @@ class _DebugPanelState extends State<DebugPanel> {
                   _Header(controller: widget.controller),
                   _TabStrip(controller: widget.controller),
                   const Text(''),
-                  ..._tabBody(),
+                  if (widget.controller.tab == DebugTab.logs)
+                    ..._tabBody()
+                  else
+                    Expanded(
+                      child: ScrollView(
+                        controller: widget.controller.detailScrollController,
+                        scrollbar: true,
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.stretch,
+                          children: _tabBody(),
+                        ),
+                      ),
+                    ),
                 ],
               ),
             ),
@@ -225,7 +234,7 @@ class _DebugPanelState extends State<DebugPanel> {
           style: CellStyle(dim: true),
         ),
         Text(
-          'callbacks collect here (newest last).',
+          'callbacks collect here (newest first).',
           style: CellStyle(dim: true),
         ),
       ];
@@ -234,18 +243,16 @@ class _DebugPanelState extends State<DebugPanel> {
       _row('Errors', '${errors.length} (last 50 kept)'),
       const Text(''),
     ];
-    // Newest first; one summary line + timestamp each. The Text widget
+    // Newest first, including full traces. The scrollable report keeps details
+    // reachable in a short terminal. The Text widget
     // sanitizes terminal-bound content, so hostile error strings are inert.
-    for (final record in errors.reversed.take(12)) {
+    for (final record in errors.reversed) {
       final at = record.when.toIso8601String().substring(11, 19);
-      final summary = record.error.toString().split('\n').first;
+      final summary = record.error.toString();
       rows
         ..add(Text('$at  $summary'))
         ..add(
-          Text(
-            '        ${record.stackTrace.toString().split('\n').first}',
-            style: const CellStyle(dim: true),
-          ),
+          Text(record.stackTrace.toString(), style: const CellStyle(dim: true)),
         );
     }
     return rows;
@@ -360,6 +367,11 @@ class _DebugPanelState extends State<DebugPanel> {
       _row('Sources', _sourceSummary(latest.dirtySources)),
       _row('Slow frames', '${_slowCount()}/${_history.length} >16ms'),
       _row('Worst frame', '#${worst.frameNumber} ${_us(worst.total)}'),
+      _row('Worst build', _us(worst.build)),
+      _row('Worst layout', _us(worst.layout)),
+      _row('Worst paint', _us(worst.paint)),
+      _row('Worst diff', _us(worst.diff)),
+      _row('Worst sources', _sourceSummary(worst.dirtySources)),
       _row('Max dirty', '#${maxDirty.frameNumber} ${maxDirty.dirtyCells}'),
       ..._dirtySourceRows(latest.dirtySources),
       const Text(''),
@@ -461,6 +473,9 @@ class _DebugPanelState extends State<DebugPanel> {
       _row('Color', capabilities.colorMode.name),
       _row('Glyphs', capabilities.glyphTier.name),
       _row('Images', capabilities.imageProtocol.name),
+      _row('OSC 8 links', capabilities.osc8Hyperlinks),
+      _row('Mouse policy', capabilities.mouse),
+      _row('OSC 52 policy', capabilities.osc52Clipboard),
       _row('Alt screen', capabilities.alternateScreen ? 'yes' : 'no'),
       _row('Hide cursor', capabilities.hideCursor ? 'yes' : 'no'),
       _row('tmux pass', capabilities.tmuxPassthrough ? 'yes' : 'no'),
@@ -1195,6 +1210,8 @@ class _Header extends StatelessWidget {
       children: [
         const Text('FLEURY DEBUG', style: CellStyle(bold: true)),
         Text(hint, style: const CellStyle(dim: true)),
+        if (controller.tab != DebugTab.logs)
+          const Text('PgUp/PgDn scroll', style: CellStyle(dim: true)),
       ],
     );
   }
