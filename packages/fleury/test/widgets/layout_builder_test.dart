@@ -299,7 +299,7 @@ void main() {
     tester,
   ) {
     // The builder runs during layout, where the active build target used to be
-    // unset — so an ElementDependency read (Animation.value) never subscribed,
+    // unset — so a listenable read (Animation.value) never subscribed,
     // and the memo then froze it. With the build target set, the read
     // subscribes the LayoutBuilder element and the value change invalidates
     // the memoized child even though constraints don't move.

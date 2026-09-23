@@ -95,9 +95,9 @@ class _LayoutBuilderElement extends RenderObjectElement {
   // Invoked by RenderLayoutBuilder.performLayout with the live constraints.
   void _buildChild(CellConstraints constraints) {
     // Run the builder with this element as the active build target (as
-    // ComponentElement.performRebuild does) so ElementDependency sources
-    // (e.g. Animation.value) read inside it auto-subscribe this element —
-    // their notifications then invalidate the memoized child. Without this,
+    // ComponentElement.performRebuild does) so listenables read inside it
+    // (e.g. Animation.value) subscribe this element — their notifications
+    // then invalidate the memoized child. Without this,
     // a listenable read in a layout-time builder never registers anywhere
     // and the memo would freeze it. Restored before updateChild so children
     // attribute their own reads.

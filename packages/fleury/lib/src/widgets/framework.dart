@@ -461,21 +461,6 @@ abstract interface class BuildContext {
 
 enum _ElementLifecycle { initial, active, inactive, defunct }
 
-/// A non-widget source of rebuilds an [Element] can depend on.
-///
-/// Implemented by things outside the widget tree that an element's
-/// `build` reads and should rebuild on — notably `Animation`, whose
-/// `value` getter registers the building element here. The framework
-/// stays decoupled from the animation layer: it only knows it has
-/// some dependencies to detach on unmount.
-abstract interface class ElementDependency {
-  /// Records [element] as depending on this source.
-  void addDependent(Element element);
-
-  /// Drops a previously-recorded dependent.
-  void removeDependent(Element element);
-}
-
 final class _ContextSubscription {
   _ContextSubscription(this._element, this._source, this.generation);
 
@@ -494,10 +479,17 @@ final class _ContextSubscription {
   }
 }
 
-// Allocated only for widgets that call context.listen. Structural elements keep
-// their allocation-free dependency storage fast path.
+// Allocated only for widgets that read a listenable during build
+// (context.listen, Animation.value). Structural elements keep their
+// allocation-free dependency storage fast path.
 final class _ContextDependencies {
   int generation = 0;
+
+  // Distinct sources read in the current build. When it equals the number of
+  // [sources], none is stale and the prune walk is skipped — the steady state
+  // of every widget that rebuilds on a listenable it keeps reading.
+  int readThisGeneration = 0;
+
   Map<Listenable, _ContextSubscription>? sources;
 }
 
@@ -557,24 +549,26 @@ abstract class Element implements BuildContext {
       _actionTargetIdentity = _nextElementActionTargetIdentity++;
 
   /// The element whose `build` is currently running, or null when no
-  /// build is in progress. Read by [ElementDependency] sources (e.g.
-  /// `Animation.value`) to auto-subscribe the building element. Maintained
-  /// as a stack via [runWithBuildTarget] so nested builds attribute
-  /// correctly.
+  /// build is in progress. Read by value getters that subscribe the widget
+  /// reading them, such as `Animation.value`. Maintained as a stack via
+  /// [runWithBuildTarget] so nested builds attribute correctly.
   static Element? get current => _current;
   static Element? _current;
 
   /// Runs [fn] with this element as the active build target ([current]),
-  /// so [ElementDependency] sources read inside auto-subscribe it. Restores
-  /// the previous target on the way out (stack discipline for nested
-  /// builds). For any element that invokes a build callback — including
-  /// outside the build phase (e.g. a layout-time builder).
+  /// so listenables read inside it (`context.listen`, `Animation.value`)
+  /// subscribe it for this build. Restores the previous target on the way
+  /// out (stack discipline for nested builds). For any element that invokes
+  /// a build callback — including outside the build phase (e.g. a
+  /// layout-time builder).
   @protected
   T runWithBuildTarget<T>(T Function() fn) {
     final previous = _current;
     final outermost = _contextBuildDepth++ == 0;
     if (outermost && _contextDependencies != null) {
-      _contextDependencies!.generation++;
+      _contextDependencies!
+        ..generation += 1
+        ..readThisGeneration = 0;
     }
     _current = this;
     Object? buildError;
@@ -673,11 +667,11 @@ abstract class Element implements BuildContext {
     errors.throwIfAny();
   }
 
-  /// Drops every dependency edge this element holds — scope
-  /// ([BuildContext.scope]), listened sources, and external (e.g.
-  /// `Animation`). Shared by [unmount]
-  /// (permanent) and [deactivate] (temporary; the next rebuild
-  /// re-establishes whatever the new tree position warrants).
+  /// Drops every dependency edge this element holds — scopes
+  /// ([BuildContext.scope]) and listenables read during build
+  /// ([BuildContext.listen], `Animation.value`). Shared by [unmount]
+  /// (permanent) and [deactivate] (temporary; activation re-resolves the
+  /// scopes and the next rebuild re-reads the listenables).
   void _detachDependencies() {
     final scopes = _scopeDependencies;
     if (scopes != null) {
@@ -688,23 +682,13 @@ abstract class Element implements BuildContext {
     }
 
     // Transfer ownership before callbacks: a re-entrant registration gets a
-    // fresh set, leaving this batch stable without allocating a list copy.
-    final dependencies = _externalDependencies;
-    _externalDependencies = null;
-    final contextDependencies = _contextDependencies;
+    // fresh record, leaving this batch stable without allocating a list copy.
+    final subscriptions = _contextDependencies?.sources;
     _contextDependencies = null;
-    if (dependencies == null && contextDependencies == null) return;
+    if (subscriptions == null) return;
     final errors = _TeardownErrors();
-    if (dependencies != null) {
-      for (final dep in dependencies) {
-        errors.capture(() => dep.removeDependent(this));
-      }
-    }
-    final subscriptions = contextDependencies?.sources;
-    if (subscriptions != null) {
-      for (final subscription in subscriptions.values) {
-        errors.capture(subscription.detach);
-      }
+    for (final subscription in subscriptions.values) {
+      errors.capture(subscription.detach);
     }
     errors.throwIfAny();
   }
@@ -768,7 +752,6 @@ abstract class Element implements BuildContext {
     assert(_lifecycle == _ElementLifecycle.active);
     _hadDependenciesWhenDeactivated =
         (_scopeDependencies?.isNotEmpty ?? false) ||
-        (_externalDependencies?.isNotEmpty ?? false) ||
         _contextDependencies != null;
     // A scope subscription belongs to the element, not to one tree position:
     // remember what it read by key so activation can re-resolve it wherever
@@ -871,10 +854,6 @@ abstract class Element implements BuildContext {
   // edge is registered.
   Set<ScopeElement>? _scopeDependencies;
 
-  // Non-widget dependencies (e.g. Animation) read during build. Detached
-  // on unmount so the source stops marking this element dirty.
-  Set<ElementDependency>? _externalDependencies;
-
   _ContextDependencies? _contextDependencies;
   int _contextBuildDepth = 0;
 
@@ -911,49 +890,52 @@ abstract class Element implements BuildContext {
   @override
   T listen<T extends Listenable>(T source) {
     _checkBuildReader('context.listen()');
+    _listenForThisBuild(source);
+    return source;
+  }
+
+  /// Subscribes this element to [source] until a build no longer reads it.
+  /// Repeated reads share one subscription, whichever way they arrive.
+  void _listenForThisBuild(Listenable source) {
     final dependencies = _contextDependencies ??= _ContextDependencies();
     final sources = dependencies.sources ??= Map.identity();
     final existing = sources[source];
     if (existing != null) {
-      existing.generation = dependencies.generation;
-    } else {
-      final subscription = _ContextSubscription(
-        this,
-        source,
-        dependencies.generation,
-      );
-      sources[source] = subscription;
-      try {
-        subscription.attach();
-      } catch (error, stack) {
-        sources.remove(source);
-        final errors = _TeardownErrors()..add(error, stack);
-        errors.capture(subscription.detach);
-        errors.throwIfAny();
+      if (existing.generation != dependencies.generation) {
+        existing.generation = dependencies.generation;
+        dependencies.readThisGeneration++;
       }
+      return;
     }
-    // Explicit reads take ownership of hybrid sources such as Animation, whose
-    // value getter otherwise creates an implicit ElementDependency as well.
-    if (source is ElementDependency) {
-      _retireImplicitDependency(source as ElementDependency);
+    final subscription = _ContextSubscription(
+      this,
+      source,
+      dependencies.generation,
+    );
+    sources[source] = subscription;
+    try {
+      subscription.attach();
+    } catch (error, stack) {
+      sources.remove(source);
+      final errors = _TeardownErrors()..add(error, stack);
+      errors.capture(subscription.detach);
+      errors.throwIfAny();
     }
-    return source;
+    dependencies.readThisGeneration++;
   }
 
-  void _retireImplicitDependency(ElementDependency source) {
-    final implicit = _externalDependencies;
-    if (implicit == null) return;
-    ElementDependency? previous;
-    for (final dependency in implicit) {
-      if (identical(dependency, source)) {
-        previous = dependency;
-        break;
+  /// A value getter's read of [source] during this element's build: the same
+  /// per-build subscription as [listen], skipped when a scope this element
+  /// reads already notifies for that value.
+  void _dependOnListenable(Listenable source) {
+    assert(identical(_current, this));
+    final scopes = _scopeDependencies;
+    if (scopes != null) {
+      for (final scope in scopes) {
+        if (identical(scope.value, source)) return;
       }
     }
-    if (previous != null) {
-      implicit.remove(previous);
-      previous.removeDependent(this);
-    }
+    _listenForThisBuild(source);
   }
 
   @override
@@ -994,64 +976,41 @@ abstract class Element implements BuildContext {
   }
 
   /// Subscribes this element to [ancestor] for as long as it stays in the
-  /// tree. The scope notifies on its value's behalf, so an implicit
-  /// dependency on that same value (an Animation's getter) is redundant.
+  /// tree. The scope notifies on its value's behalf, so a later implicit read
+  /// of that same value (an Animation's getter) adds no subscription of its
+  /// own; see [_dependOnListenable].
   void _addScopeEdge(ScopeElement ancestor) {
     ancestor._dependents.add(this);
     (_scopeDependencies ??= <ScopeElement>{}).add(ancestor);
-    final value = ancestor.value;
-    if (value is Listenable && value is ElementDependency) {
-      _retireImplicitDependency(value as ElementDependency);
-    }
   }
 
   void _pruneContextDependencies() {
     final dependencies = _contextDependencies;
     if (dependencies == null) return;
     final sources = dependencies.sources;
+    if (sources == null || sources.isEmpty) {
+      _contextDependencies = null;
+      return;
+    }
+    assert(dependencies.readThisGeneration <= sources.length);
+    // Every source was read again this build, so none is stale.
+    if (dependencies.readThisGeneration == sources.length) return;
     List<Listenable>? stale;
-    if (sources != null) {
-      for (final entry in sources.entries) {
-        if (entry.value.generation != dependencies.generation) {
-          (stale ??= []).add(entry.key);
-        }
+    for (final entry in sources.entries) {
+      if (entry.value.generation != dependencies.generation) {
+        (stale ??= []).add(entry.key);
       }
     }
     _TeardownErrors? errors;
     if (stale != null) {
       errors = _TeardownErrors();
       for (final source in stale) {
-        final subscription = sources!.remove(source)!;
+        final subscription = sources.remove(source)!;
         errors.capture(subscription.detach);
       }
     }
-    if (sources?.isEmpty ?? false) dependencies.sources = null;
-    if (dependencies.sources == null) _contextDependencies = null;
+    if (sources.isEmpty) _contextDependencies = null;
     errors?.throwIfAny();
-  }
-
-  /// Registers [dependency] as something this element's build read,
-  /// so it rebuilds when the dependency changes and detaches on
-  /// unmount. Idempotent. Called by [ElementDependency] sources.
-  void dependOnExternal(ElementDependency dependency) {
-    if (dependency is Listenable) {
-      final source = dependency as Listenable;
-      final reads = _contextDependencies;
-      if (reads != null &&
-          reads.sources?[source]?.generation == reads.generation) {
-        return;
-      }
-      // A scope this element reads already notifies for its value.
-      final scopes = _scopeDependencies;
-      if (scopes != null) {
-        for (final scope in scopes) {
-          if (identical(scope.value, source)) return;
-        }
-      }
-    }
-    if ((_externalDependencies ??= <ElementDependency>{}).add(dependency)) {
-      dependency.addDependent(this);
-    }
   }
 
   /// The nearest `Scope<T>` value above this element, registering this
@@ -1352,10 +1311,10 @@ abstract class ComponentElement extends Element {
 
   @override
   void performRebuild() {
-    // Build with this element as the active target so ElementDependency
-    // sources (e.g. Animation.value) read during buildChild auto-subscribe
-    // it; runWithBuildTarget restores before the catch/updateChild so the
-    // error builder and children attribute their own reads.
+    // Build with this element as the active target so listenables read
+    // during buildChild (e.g. Animation.value) subscribe it;
+    // runWithBuildTarget restores before the catch/updateChild so the error
+    // builder and children attribute their own reads.
     Widget? built;
     try {
       built = runWithBuildTarget(buildChild);
@@ -2895,3 +2854,11 @@ T? dependOnScope<T extends Object>(BuildContext context) =>
 /// fired from a handler, where a rebuild dependency would be wrong.
 T? readScope<T extends Object>(BuildContext context) =>
     (context as Element)._findScopeElementByKey(T)?.value as T?;
+
+/// Framework plumbing behind value getters that subscribe the widget reading
+/// them, such as `Animation.value`: subscribes [element], whose build is
+/// running ([Element.current]), to [source] exactly as [BuildContext.listen]
+/// would — until a build stops reading it. Unlike `context.listen` it may run
+/// in `didChangeDependencies`, because reading a value there is ordinary.
+void dependOnListenable(Element element, Listenable source) =>
+    element._dependOnListenable(source);
