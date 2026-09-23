@@ -12,6 +12,12 @@
   `GlobalKey` move carries the subscription to the same scope type at the new
   position (an `initState` read used to go deaf). `context.listen` in
   `didChangeDependencies` now throws: it subscribes a build.
+- **Breaking:** reading `Animation.value` in build subscribes the widget the
+  way `context.listen` does, so a widget whose build stops reading an
+  animation is no longer rebuilt on every tick. `Element.dependOnExternal` and
+  `Animation.debugDependentCount` are removed; test with `hasListeners`.
+  Widgets that keep reading the same listenables skip the per-build
+  reconcile walk.
 - **Breaking:** compatibility names are gone, with no aliases: `ChangeNotifier`
   (use `Notifier`), `notifyListeners()` (override and call `notify()`),
   `ListenableBuilder` and `ValueListenableBuilder` (use `NotifierBuilder` or

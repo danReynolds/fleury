@@ -21,8 +21,8 @@
 // first time a widget displays it; retargeting before first display is
 // deferred so animate-on-appear runs can begin once mounted.
 //
-// Consumption: reading `animation.value` during build auto-subscribes that
-// element. AnimationBuilder (animation_builder.dart) owns this lifecycle for
+// Consumption: reading `animation.value` during build subscribes that
+// element for that build, the way `context.listen` does. AnimationBuilder (animation_builder.dart) owns this lifecycle for
 // declarative target-following; manually owned animations must be disposed.
 
 import 'dart:async';
@@ -128,7 +128,7 @@ CellOffset _offsetFromVec(List<double> v) =>
 const Duration _maxStep = Duration(milliseconds: 66);
 
 /// A value that animates toward whatever you retarget it to.
-class Animation<T> extends Notifier implements ElementDependency {
+class Animation<T> extends Notifier {
   /// Creates a animation holding [value]. [type] is required only for
   /// non-built-in [T]; built-ins ([double], [int], [RgbColor],
   /// [CellOffset]) resolve automatically.
@@ -187,21 +187,17 @@ class Animation<T> extends Notifier implements ElementDependency {
   // tick's stale settle / loop / chained-run branches.
   int _requestGeneration = 0;
 
-  /// Elements that read [value] during their build, auto-subscribed
-  /// for rebuild on change. Distinct from [Notifier] listeners
-  /// (which AnimationBuilder uses).
-  final Set<Element> _dependents = <Element>{};
-
   /// The current interpolated value.
   ///
-  /// Reading this during a widget's build auto-subscribes that widget:
-  /// it rebuilds whenever the animation advances, and the animation attaches
-  /// to the enclosing [TuiBinding] so it can animate. Reading outside
-  /// a build is a plain value read with no subscription.
+  /// Reading this during a widget's build subscribes that widget the way
+  /// `context.listen` does: it rebuilds whenever the animation advances, until
+  /// a build no longer reads it, and the animation attaches to the enclosing
+  /// [TuiBinding] so it can animate. Reading outside a build is a plain value
+  /// read with no subscription.
   T get value {
     final element = Element.current;
     if (element != null && !_disposed) {
-      element.dependOnExternal(this);
+      dependOnListenable(element, this);
       if (_scheduler == null) {
         final binding = TuiBinding.maybeOf(element);
         if (binding != null) attach(binding);
@@ -228,30 +224,6 @@ class Animation<T> extends Notifier implements ElementDependency {
     if (ticker == null) return;
     ticker.muted =
         !TickerMode.of(element) || _policy == AnimationPolicy.disabled;
-  }
-
-  @override
-  void addDependent(Element element) {
-    if (_disposed) return;
-    _dependents.add(element);
-  }
-
-  @override
-  void removeDependent(Element element) => _dependents.remove(element);
-
-  /// How many elements are implicitly subscribed. Leak-invariant target for
-  /// tests: a disposed animation holds none.
-  @visibleForTesting
-  int get debugDependentCount => _dependents.length;
-
-  /// Notifies explicit listeners (AnimationBuilder) AND marks every
-  /// implicitly-subscribed element dirty.
-  void _notify() {
-    notify();
-    if (_dependents.isEmpty) return;
-    for (final element in _dependents.toList(growable: false)) {
-      element.markNeedsBuild();
-    }
   }
 
   /// The value this animation is currently heading toward.
@@ -286,7 +258,7 @@ class Animation<T> extends Notifier implements ElementDependency {
     _position = _type.toVector(value);
     _velocity = List<double>.filled(_position.length, 0.0);
     _target = List<double>.of(_position);
-    _notify();
+    notify();
   }
 
   /// Retargets to [target]. With no [curve], uses the spring engine
@@ -351,7 +323,7 @@ class Animation<T> extends Notifier implements ElementDependency {
         _position = List<double>.of(a);
         _target = List<double>.of(a);
         _value = _type.fromVector(_position);
-        _notify();
+        notify();
         return;
       }
       _position = List<double>.of(a);
@@ -369,7 +341,7 @@ class Animation<T> extends Notifier implements ElementDependency {
       _curveFrom = List<double>.of(a);
       _target = List<double>.of(b);
       _curveStart = _lastElapsed;
-      _notify();
+      notify();
     });
     return future;
   }
@@ -389,9 +361,6 @@ class Animation<T> extends Notifier implements ElementDependency {
     _scheduler?.unregisterReassembleCallback(_reassembleCallback);
     _stop(canceled: true);
     _ticker?.dispose();
-    // Nothing can notify through a disposed animation, so holding the
-    // elements that read it only keeps their subtrees alive.
-    _dependents.clear();
     super.dispose();
   }
 
@@ -410,8 +379,8 @@ class Animation<T> extends Notifier implements ElementDependency {
 
     _value = _type.fromVector(_position);
     final generation = _requestGeneration;
-    _notify();
-    // A listener invoked by _notify may have retargeted (to / loop), which
+    notify();
+    // A listener invoked by notify may have retargeted (to / loop), which
     // re-arms a fresh request via _beginRequest. The
     // `settled` snapshot above belongs to the now-superseded request;
     // falling through would snap to the freshly-set target and complete
@@ -582,7 +551,7 @@ class Animation<T> extends Notifier implements ElementDependency {
       }
     }
     _snapToTarget();
-    _notify();
+    notify();
   }
 
   void _scheduleDeferredCompletion(TickerFuture<T> future) {
@@ -687,7 +656,7 @@ class Animation<T> extends Notifier implements ElementDependency {
     _queue = null;
     _stop(canceled: true);
     _snapToTarget();
-    _notify();
+    notify();
   }
 
   @override

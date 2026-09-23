@@ -386,14 +386,14 @@ void main() {
       expect(tester.scheduler.activeTickerCount, 0);
     });
 
-    testWidgets('dispose drops implicit dependents', (tester) {
+    testWidgets('dispose drops the elements that read it', (tester) {
       // A disposed animation must not keep the elements that read it alive
       // either; nothing can legitimately notify through it afterwards.
       final m = Animation(0.0);
       _host(tester, m);
-      expect(m.debugDependentCount, greaterThan(0));
+      expect(m.hasListeners, isTrue);
       m.dispose();
-      expect(m.debugDependentCount, 0);
+      expect(m.hasListeners, isFalse);
     });
 
     testWidgets('a settled animation holds no active ticker', (tester) {
