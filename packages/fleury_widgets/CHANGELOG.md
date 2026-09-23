@@ -1,5 +1,12 @@
 ## 0.1.0
 
+- **Breaking:** `MarkdownView(markdown:)` no longer parses in its constructor;
+  the view parses its `markdown` source and keeps the result while the source
+  is unchanged. An appended source (streaming) re-parses only from its last
+  line, so a token appended to a 200 KB document costs about 2 ms instead of
+  38 ms, and a rebuild with unchanged text re-parses nothing. `document` is
+  null for `MarkdownView.new`; `MarkdownView.document` is unchanged.
+  `MarkdownText` renders incrementally the same way and reuses unchanged rows.
 - `LogRegion` and `MessageList` start with the cursor on the newest entry and
   keep it there while following, so Ctrl+C copies what the view is showing
   instead of the first entry. `LogRegionController` and
