@@ -4,6 +4,7 @@
 
 **Date:** 2026-09-07
 **API update:** 2026-09-21 — notifier terminology and build-time readers
+**API update:** 2026-09-22 — one reader: `context.scope` / `ScopeBuilder` (§3.1)
 **Builds on:** RFC 0007 framework, RFC 0023 reactive-state exploration (spike branch)
 
 ## 1. Summary
@@ -68,25 +69,38 @@ class Scope<T extends Object> extends ProxyWidget {
       {Key? key, void Function(T)? dispose, required Widget child});
 
   bool updateShouldNotify(covariant Scope<T> oldWidget);
-  static T of<T extends Object>(BuildContext context);
-  static T? maybeOf<T extends Object>(BuildContext context);
-  @internal static T? maybeOfWithoutDependency<T extends Object>(BuildContext context);
 }
+
+// On BuildContext, and as a widget:
+T scope<T>();                       // context.scope<Model>() / <Model?>()
+ScopeBuilder<T>(builder: (context, T value) => ...)
 ```
 
-- **Type-keyed, exact.** `Scope.of<T>` walks ancestors for the nearest
+- **Type-keyed, exact.** `context.scope<T>()` walks ancestors for the nearest
   `ScopeElement` whose type argument is exactly `T`. `Scope<Derived>` is not
   found for a `Scope<Base>` lookup, nor the reverse; nearest wins, so an inner
   scope shadows an outer one and tests override by wrapping. A missing type
   argument (`T == Object`) is an assertion.
-- **Build readers.** `context.scope<T>()` and `ScopeBuilder<T>` register a
-  dependency during their own build. Dependencies no longer read on a later
-  build are detached. `context.listen(model)` gives a widget the same
-  build-time subscription behavior for an externally supplied notifier.
-- **Lifecycle readers.** `Scope.of<T>` / `Scope.maybeOf<T>` remain available
-  in `build`, `initState`, and handlers. Their dependency lasts until the
-  element leaves the tree, even when it also uses a conditional build reader.
-  An element in `dispose` has left the tree; keep needed values in fields.
+- **One reader, two forms.** `context.scope<T>()` and `ScopeBuilder<T>` are
+  the same read: the builder calls `context.scope<T>()` and rebuilds only
+  itself. A nullable type argument (`context.scope<Model?>()`) makes the scope
+  optional and returns null when none is above; the non-nullable form throws.
+  A read is allowed wherever the framework runs the element's own code:
+  `build`, `initState`, `didChangeDependencies`, `createRenderObject` /
+  `updateRenderObject`, and `Scope.createWithContext` factories. Event
+  handlers and callbacks throw and use a value read in one of those places;
+  `dispose` throws because the element has left the tree.
+- **Subscriptions last as long as the element.** A reader stays subscribed
+  until it leaves the tree. A `GlobalKey` move re-resolves each subscription
+  by type at the new position, so a read made once — in `initState` — keeps
+  working after the move. (The 2026-09-21 design pruned scope reads a later
+  build did not repeat; that dropped reads made in `didChangeDependencies`,
+  which a plain `setState` does not call, and it made `initState` reads go deaf
+  after a move. Per-build tracking remains for `context.listen`, whose sources
+  are arbitrary objects rather than ancestors.)
+- **Framework accessors.** Widget accessors such as `Theme.of` use the same
+  subscription through internal plumbing that may also run from handlers and
+  element hooks; `fleury_internal.dart` exposes it to first-party packages.
 - **Listenable values.** When the value is a `Listenable` the element listens
   — attached before the child cascade mounts (a descendant's first build may
   notify), swapped on update with the replacement attached first, detached on
@@ -99,7 +113,7 @@ class Scope<T extends Object> extends ProxyWidget {
   for a narrower comparison.
 - **Owned values.** `Scope.create` runs its zero-argument factory once at
   mount. `Scope.createWithContext` supplies the scope element to factories
-  that need to read ancestors with `Scope.of`. On unmount, after the children
+  that need to read ancestors with `context.scope`. On unmount, after the children
   are gone, the original `dispose` callback runs; without one a `Notifier`
   is disposed and anything else is dropped. Rebuilding retains both the
   original value and cleanup callback. Switching between supplied and owned
@@ -108,7 +122,7 @@ class Scope<T extends Object> extends ProxyWidget {
   scope transfers ownership to the caller.
 - **No `read`, no `select`.** Public reads subscribe. A
   non-subscribing lookup exists for framework plumbing (render objects
-  registering with a service, actions from handlers) and is `@internal`.
+  registering with a service, actions from handlers) and is internal.
 
 ### 3.2 Under the hood
 
@@ -116,9 +130,10 @@ class Scope<T extends Object> extends ProxyWidget {
 `_InheritedNotifierElement` plus value ownership: the dependents set,
 `notifyDependents()`, `_markDependencyChanged`, the listener, and the
 `_owned` flag. `Element` keeps a nullable `Set<ScopeElement>` of the scopes it
-depends on through lifecycle reads; build-only scope and notifier dependencies
-use separate, lazily allocated bookkeeping and are reconciled after each
-build. `_detachDependencies` clears both kinds on unmount and deactivate.
+reads — the only scope-dependency record — and remembers their keys across a
+deactivation so activation can re-resolve them. `context.listen` sources use
+separate, lazily allocated bookkeeping reconciled after each build.
+`_detachDependencies` clears both on unmount and deactivate.
 The lookup tests the element class first (a cheap class check on
 every ancestor) and compares the `Type` key only at scope elements; measured
 against `widget is Scope<T>` the `Type ==` compare was faster in both JIT
@@ -155,7 +170,7 @@ Three cases needed a value type of their own instead of a flag:
   value stays non-null; `SelectionScope.maybeOf` maps it back to `null`.
 
 Two scopes changed behaviour on purpose: the status bar reads
-`Scope.of<StatusController>` directly (the `StatusHost` bridge and its scope
+`Scope<StatusController>` directly (the `StatusHost` bridge and its scope
 are gone), and `Form.of` now subscribes its reader to the controller — the
 `Scope` rule for a `Listenable` value — instead of notifying only on identity
 change.
@@ -165,11 +180,11 @@ change.
 - **Field-level reactivity / signals** (RFC 0023): measured too small a win
   for the second mental model. Coarse notification; "one notifier per rate of
   change" is the rule to teach, `NotifierBuilder` the narrowing tool.
-- **`Scope.read` / `Scope.select`**: dropped for simplicity. A handler that
-  reads with `Scope.of` becomes a dependent; that is the accepted cost.
+- **`Scope.read` / `Scope.select`**: dropped for simplicity. Handlers use a
+  value read in build rather than a second, non-subscribing lookup.
 - **Keeping `InheritedWidget` under `Scope`**: two mechanisms for one job.
   `Scope` *is* the inherited primitive.
-- **Covariant type matching** (`Scope.of<Base>` finding a `Scope<Derived>`):
+- **Covariant type matching** (`context.scope<Base>()` finding a `Scope<Derived>`):
   less predictable, and slower than the exact `Type` compare.
 - **A `listen: false` flag**: the same concept as `read`, in flag form.
 
@@ -188,7 +203,8 @@ change.
 - `scope_readers_test.dart`, `context_listen_test.dart`, and
   `notifier_builder_test.dart`: conditional dependency cleanup, identity-based
   subscriptions, nested builders, reparenting, failed attachment and cleanup,
-  original factory errors, and coexistence with lifecycle reads.
+  original factory errors, reads in `didChangeDependencies` across `setState`,
+  `initState` reads across a `GlobalKey` move, and where reads are allowed.
 - The dependency-lifecycle and reparenting suites retain their existing
   contracts. Repository checks and performance gates cover the framework
   changes; the original implementation's receipts remain in the execution

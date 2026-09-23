@@ -74,7 +74,7 @@ class MediaQuery extends Scope<MediaQueryData> {
   }
 
   static MediaQueryData? maybeOf(BuildContext context) =>
-      Scope.maybeOf<MediaQueryData>(context);
+      dependOnScope<MediaQueryData>(context);
 
   /// The surface size in cells — the common case. Prefer this over
   /// [of] so a widget only depends on the size.

@@ -740,15 +740,21 @@ void main() {
       );
     });
 
-    test('default RFC 0020 fields add no bytes (old-peer compatibility)', () {
-      // A default-fields event must encode without the trailing extension so
-      // pre-0020 decoders — which reject unread trailing bytes — still
-      // accept it. The wire proof: the extension adds exactly two bytes.
+    test('every key carries its RFC 0020 pair, so the shape is fixed', () {
       const plain = KeyEvent(KeyCode.enter);
-      const extended = KeyEvent(KeyCode.enter, synthesized: true);
+      const extended = KeyEvent(
+        KeyCode.enter,
+        position: KeyPosition.numpadEnter,
+        synthesized: true,
+      );
+      final bytes = encodeInputEvent(plain);
+      expect(bytes.length, encodeInputEvent(extended).length);
+      expect(bytes.sublist(bytes.length - 2), [0, 0]);
+      // A key missing the pair is truncated, not a default.
       expect(
-        encodeInputEvent(extended).length,
-        encodeInputEvent(plain).length + 2,
+        () =>
+            decodeInputEvent(Uint8List.sublistView(bytes, 0, bytes.length - 2)),
+        throwsA(isA<RemoteCodecException>()),
       );
     });
 
@@ -830,12 +836,16 @@ void main() {
       }
     });
 
-    test('complete paste retains its legacy byte encoding', () {
+    test('a complete paste is its text and the single phase byte', () {
       final encoded = encodeInputEvent(const PasteEvent('abc'));
-      expect(encoded, <int>[5, 0, 0, 0, 3, 97, 98, 99]);
+      expect(encoded, <int>[5, 0, 0, 0, 3, 97, 98, 99, 0]);
       expect(
         decodeInputEvent(Uint8List.fromList(encoded)),
         const PasteEvent('abc'),
+      );
+      expect(
+        () => decodeInputEvent(Uint8List.sublistView(encoded, 0, 8)),
+        throwsA(isA<RemoteCodecException>()),
       );
     });
 
@@ -896,16 +906,62 @@ void main() {
       expect((out.single as InitFrame).protocolVersion, remoteProtocolVersion);
     });
 
-    test('INIT without v defaults to protocol version 1', () {
-      const body = 'cols=80,rows=24,color=truecolor,image=halfBlock,tmux=0';
-      final payload = Uint8List.fromList(body.codeUnits);
-      final framed = BytesBuilder()
-        ..addByte(FrameType.init.code)
-        ..add((ByteData(4)..setUint32(0, payload.length)).buffer.asUint8List())
-        ..add(payload);
-      final out = (FrameDecoder()..feed(framed.toBytes())).drain().toList();
-      expect((out.single as InitFrame).protocolVersion, 1);
-    });
+    test(
+      'INIT rejects missing or unrecognized fields instead of defaulting',
+      () {
+        Uint8List framed(String body) {
+          final payload = Uint8List.fromList(body.codeUnits);
+          return (BytesBuilder()
+                ..addByte(FrameType.init.code)
+                ..add(
+                  (ByteData(
+                    4,
+                  )..setUint32(0, payload.length)).buffer.asUint8List(),
+                )
+                ..add(payload))
+              .toBytes();
+        }
+
+        const valid =
+            'cols=80,rows=24,color=truecolor,glyph=unicode,image=halfBlock,'
+            'tmux=0,v=1';
+        final init =
+            (FrameDecoder()..feed(framed(valid))).drain().single as InitFrame;
+        expect(init.protocolVersion, 1);
+        expect(init.images, isNull);
+        expect(init.keyboard, isNull);
+
+        for (final (body, message) in [
+          (valid.replaceFirst(',v=1', ''), 'missing `v`'),
+          (valid.replaceFirst('color=truecolor,', ''), 'missing `color`'),
+          (
+            valid.replaceFirst('glyph=unicode', 'glyph=emoji'),
+            'invalid `glyph`',
+          ),
+          (
+            valid.replaceFirst('image=halfBlock', 'image=sixel2'),
+            'invalid `image`',
+          ),
+          (valid.replaceFirst('tmux=0', 'tmux=yes'), 'invalid `tmux`'),
+          ('$valid,images=all', 'invalid `images`'),
+          ('$valid,hyperlinks=true', 'invalid `hyperlinks`'),
+          ('$valid,keyboard=16', 'invalid `keyboard`'),
+          ('$valid,debug=2', 'invalid `debug`'),
+        ]) {
+          expect(
+            () => (FrameDecoder()..feed(framed(body))).drain().toList(),
+            throwsA(
+              isA<RemoteProtocolException>().having(
+                (e) => e.message,
+                'message',
+                contains(message),
+              ),
+            ),
+            reason: body,
+          );
+        }
+      },
+    );
   });
 
   group('malformed payload fuzz', () {

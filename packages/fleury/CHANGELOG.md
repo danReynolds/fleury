@@ -1,5 +1,17 @@
 # Changelog
 
+- **Breaking:** a scope is read one way, as a call or as a widget:
+  `context.scope<T>()` or `ScopeBuilder<T>`, which behave the same.
+  `Scope.of` and `Scope.maybeOf` are removed; an optional scope is read with a
+  nullable type, `context.scope<T?>()` / `ScopeBuilder<T?>`. A scope can be
+  read in `build`, `initState`, `didChangeDependencies`,
+  `createRenderObject` / `updateRenderObject`, and `Scope.createWithContext`
+  factories; event handlers and callbacks use a value read there. A reader
+  stays subscribed until it leaves the tree — a read in
+  `didChangeDependencies` is no longer dropped by the next `setState`, and a
+  `GlobalKey` move carries the subscription to the same scope type at the new
+  position (an `initState` read used to go deaf). `context.listen` in
+  `didChangeDependencies` now throws: it subscribes a build.
 - **Breaking:** compatibility names are gone, with no aliases: `ChangeNotifier`
   (use `Notifier`), `notifyListeners()` (override and call `notify()`),
   `ListenableBuilder` and `ValueListenableBuilder` (use `NotifierBuilder` or
@@ -22,11 +34,19 @@
   it down-shifted plans. Links and clipped-image windows are always encoded,
   decoders reject unknown frame types and image fits, and
   `semanticActionTargetTokenProtocolVersion` is removed from `fleury_wire.dart`.
+- **Breaking:** remote wire protocol v7: every frame is fixed-shape. Key
+  events always carry their position/synthesized pair, a paste always carries
+  its phase, `SEMANTIC_ACTION` always carries its token-presence byte, and PLAN
+  flag bit 2 is gone (placements always carry their window). INIT requires `v`,
+  `color`, `glyph`, `image`, and `tmux`, and rejects an unrecognized value for
+  any param instead of defaulting it.
 - **Breaking:** `AppSignal` gains `hangup`. A terminal hangup (window closed,
   SSH session dropped) — seen as SIGHUP or as the terminal's input ending —
   now arrives once as `SignalEvent(AppSignal.hangup)`, so the app exits through
   its normal path with its cleanup intact (exit code 129 by convention).
   Previously SIGHUP's default action killed the process before any cleanup.
+  Only a read error that says the terminal is gone (EIO, ENXIO) counts as a
+  hangup; any other terminal read error reaches the app's event stream.
 - `CellBuffer.writeGrapheme` writes only the first grapheme cluster of its
   argument, so a string carrying a control sequence can no longer reach the
   terminal through it; use `writeText` for text.
@@ -38,14 +58,13 @@
   is constant-time.
 - The `runApp` shutdown example uses the real `onEvent:` parameter.
 - Add `Notifier.notify()`, typed `NotifierBuilder`, `ScopeBuilder`, and
-  build-time `context.listen(model)` / `context.scope<T>()` readers. Readers
-  automatically detach dependencies no longer used by their widget.
-  `ValueNotifier` uses the same consumers.
+  `context.listen(model)` / `context.scope<T>()` readers. `context.listen`
+  detaches sources a later build no longer reads. `ValueNotifier` uses the
+  same consumers.
 - **Breaking:** scopes now take their value or factory positionally:
   `Scope(model, child: ...)` and `Scope.create(Model.new, child: ...)`.
   Context-dependent factories use
   `Scope.createWithContext((context) => ..., child: ...)`.
-  Existing `Scope.of` / `Scope.maybeOf` lifecycle reads remain available.
 - Update first-party controllers, examples, Storybook, showcases, and guides
   to the local, tree, and global state APIs.
 

@@ -192,7 +192,12 @@ class ProjectLabel extends StatelessWidget {
 </CodeDemoSplit>
 
 `ScopeBuilder` rebuilds its builder; `context.scope` rebuilds the widget that
-reads the value. Both find the closest parent scope and follow its updates.
+reads the value. Otherwise they are the same read: both find the closest parent
+scope, follow its updates, and stay subscribed until the widget leaves the
+tree. Read a scope in `build`, `initState`, or `didChangeDependencies`; an event
+handler uses the value read there. When a scope is optional, add `?` to the
+type: `context.scope<Project?>()` returns null when no `Scope<Project>` is
+above.
 
 ## Global state
 

@@ -11,7 +11,7 @@ class _Build extends StatelessWidget {
 }
 
 class _StickyReader extends StatefulWidget {
-  const _StickyReader({required this.watch, required this.onBuild});
+  const _StickyReader({super.key, required this.watch, required this.onBuild});
 
   final bool watch;
   final VoidCallback onBuild;
@@ -24,7 +24,7 @@ class _StickyReaderState extends State<_StickyReader> {
   @override
   void initState() {
     super.initState();
-    Scope.of<_Model>(context);
+    context.scope<_Model>();
   }
 
   @override
@@ -33,6 +33,99 @@ class _StickyReaderState extends State<_StickyReader> {
     widget.onBuild();
     return const EmptyBox();
   }
+}
+
+class _DependencyReader extends StatefulWidget {
+  const _DependencyReader({super.key});
+
+  @override
+  State<_DependencyReader> createState() => _DependencyReaderState();
+}
+
+class _DependencyReaderState extends State<_DependencyReader> {
+  int dependencyChanges = 0;
+  int seen = 0;
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    dependencyChanges++;
+    seen = context.scope<_Model>().count;
+  }
+
+  void poke() => setState(() {});
+
+  @override
+  Widget build(BuildContext context) => const EmptyBox();
+}
+
+class _Label {
+  const _Label(this.text);
+  final String text;
+
+  @override
+  bool operator ==(Object other) => other is _Label && other.text == text;
+
+  @override
+  int get hashCode => text.hashCode;
+}
+
+// A render-object widget reading its scope where render-object widgets
+// configure themselves.
+class _LabelLeaf extends LeafRenderObjectWidget {
+  const _LabelLeaf();
+
+  @override
+  RenderObject createRenderObject(BuildContext context) =>
+      _RenderLabel()..text = context.scope<_Label>().text;
+
+  @override
+  void updateRenderObject(BuildContext context, RenderObject renderObject) {
+    (renderObject as _RenderLabel).text = context.scope<_Label>().text;
+  }
+}
+
+class _RenderLabel extends RenderObject {
+  static String last = '';
+  String _text = '';
+  set text(String value) {
+    _text = value;
+    last = value;
+  }
+
+  String get text => _text;
+
+  @override
+  CellSize performLayout(CellConstraints constraints) =>
+      constraints.constrain(const CellSize(1, 1));
+
+  @override
+  void performPaint(CellBuffer buffer, CellOffset offset) {}
+}
+
+class _ListenInDependencies extends StatefulWidget {
+  const _ListenInDependencies(this.model);
+  final _Model model;
+
+  @override
+  State<_ListenInDependencies> createState() => _ListenInDependenciesState();
+}
+
+class _ListenInDependenciesState extends State<_ListenInDependencies> {
+  Object? error;
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    try {
+      context.listen(widget.model);
+    } catch (e) {
+      error = e;
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) => const EmptyBox();
 }
 
 class _FilteredAnimationScope extends Scope<Animation<int>> {
@@ -310,7 +403,10 @@ void main() {
       expect(source.callbacks, isEmpty);
     });
 
-    test('drops dependencies after a conditional read disappears', () {
+    test('a read stays subscribed after a later build stops reading', () {
+      // A subscription belongs to the element until it leaves the tree, like
+      // any Flutter-style dependency; a build that stops reading pays at most
+      // an extra rebuild, never a missed one.
       final owner = BuildOwner();
       final model = _Model();
       var builds = 0;
@@ -326,26 +422,73 @@ void main() {
       model.increment();
       owner.flushBuild();
 
-      expect(builds, afterUpdate);
-      root.unmount();
-    });
-
-    test('pruning a build read retains a Scope.of lifecycle dependency', () {
-      final owner = BuildOwner();
-      final model = _Model();
-      var builds = 0;
-      Widget tree(bool watch) => Scope(
-        model,
-        child: _StickyReader(watch: watch, onBuild: () => builds++),
-      );
-      final root = owner.mountRoot(tree(true));
-      owner.updateRoot(root, tree(false));
-      final afterUpdate = builds;
-      model.increment();
-      owner.flushBuild();
       expect(builds, afterUpdate + 1);
       root.unmount();
       expect(model.hasListeners, isFalse);
+    });
+
+    test('a read in didChangeDependencies survives a plain setState', () {
+      // didChangeDependencies is where a State reacts to its dependencies. A
+      // plain setState does not call it, so a read made there must not be
+      // dropped by the rebuild that follows.
+      final owner = BuildOwner();
+      final model = _Model();
+      final key = GlobalKey<_DependencyReaderState>();
+      final root = owner.mountRoot(
+        Scope(model, child: _DependencyReader(key: key)),
+      );
+      final state = key.currentState!;
+      model.increment();
+      owner.flushBuild();
+      final beforeSetState = state.dependencyChanges;
+
+      state.poke();
+      owner.flushBuild();
+      model.increment();
+      owner.flushBuild();
+
+      expect(state.dependencyChanges, beforeSetState + 1);
+      expect(state.seen, 2);
+      root.unmount();
+      expect(model.hasListeners, isFalse);
+    });
+
+    test('an initState read follows the element across a GlobalKey move', () {
+      // initState never runs again, so the move must carry the subscription
+      // to the scope of the same type at the element's new position.
+      final owner = BuildOwner();
+      final left = _Model();
+      final right = _Model();
+      final key = GlobalKey();
+      var builds = 0;
+      Widget tree(bool onLeft) {
+        Widget slot(bool here) => here
+            ? _StickyReader(key: key, watch: false, onBuild: () => builds++)
+            : const EmptyBox();
+        return Column(
+          children: [
+            Scope(left, child: slot(onLeft)),
+            Scope(right, child: slot(!onLeft)),
+          ],
+        );
+      }
+
+      final root = owner.mountRoot(tree(true));
+      owner.updateRoot(root, tree(false));
+      owner.flushBuild();
+      final afterMove = builds;
+
+      right.increment();
+      owner.flushBuild();
+      expect(builds, afterMove + 1, reason: 'subscribed at the new position');
+
+      left.increment();
+      owner.flushBuild();
+      expect(builds, afterMove + 1, reason: 'no longer bound to the old one');
+
+      root.unmount();
+      expect(left.hasListeners, isFalse);
+      expect(right.hasListeners, isFalse);
     });
 
     test('a global-keyed consumer follows its new nearest scope', () {
@@ -636,37 +779,36 @@ void main() {
         },
       );
 
-      test(
-        'conditional reads detach animation (implicit first: $implicitFirst)',
-        () {
-          final owner = BuildOwner();
-          final animation = Animation(1);
-          final seen = <int>[];
-          Widget reader(bool watch) => _Build((context) {
-            if (watch) {
-              if (implicitFirst) animation.value;
-              seen.add(context.scope<Animation<int>>().value);
-            } else {
-              seen.add(-1);
-            }
-            return const EmptyBox();
-          });
-          final root = owner.mountRoot(Scope(animation, child: reader(true)));
+      test('a conditional read keeps one subscription (implicit first: '
+          '$implicitFirst)', () {
+        final owner = BuildOwner();
+        final animation = Animation(1);
+        final seen = <int>[];
+        Widget reader(bool watch) => _Build((context) {
+          if (watch) {
+            if (implicitFirst) animation.value;
+            seen.add(context.scope<Animation<int>>().value);
+          } else {
+            seen.add(-1);
+          }
+          return const EmptyBox();
+        });
+        final root = owner.mountRoot(Scope(animation, child: reader(true)));
 
-          owner.updateRoot(root, Scope(animation, child: reader(false)));
-          expect(seen, [1, -1]);
-          animation.snap(2);
-          owner.flushBuild();
-          expect(seen, [
-            1,
-            -1,
-          ], reason: 'the consumer no longer reads the scope');
+        owner.updateRoot(root, Scope(animation, child: reader(false)));
+        expect(seen, [1, -1]);
+        animation.snap(2);
+        owner.flushBuild();
+        expect(seen, [
+          1,
+          -1,
+          -1,
+        ], reason: 'one rebuild through the scope; the implicit read retired');
 
-          root.unmount();
-          expect(animation.hasListeners, isFalse);
-          animation.dispose();
-        },
-      );
+        root.unmount();
+        expect(animation.hasListeners, isFalse);
+        animation.dispose();
+      });
     }
   });
 
@@ -868,5 +1010,111 @@ void main() {
         expect(replacement.disposals, initiallyOwned ? 0 : 1);
       });
     }
+  });
+
+  group('Where scopes can be read', () {
+    test('a handler read throws and leaves no subscription', () {
+      final owner = BuildOwner();
+      final model = _Model();
+      late BuildContext captured;
+      var builds = 0;
+      final root = owner.mountRoot(
+        Scope(
+          model,
+          child: _Build((context) {
+            captured = context;
+            builds++;
+            return const EmptyBox();
+          }),
+        ),
+      );
+
+      expect(
+        () => captured.scope<_Model>(),
+        throwsA(
+          isA<StateError>().having(
+            (e) => e.message,
+            'message',
+            contains('keep it for event handlers'),
+          ),
+        ),
+      );
+      model.increment();
+      owner.flushBuild();
+      expect(builds, 1);
+      root.unmount();
+    });
+
+    test('context.listen in didChangeDependencies throws', () {
+      final owner = BuildOwner();
+      final model = _Model();
+      late _ListenInDependenciesState state;
+      final root = owner.mountRoot(
+        _Build((context) => _ListenInDependencies(model)),
+      );
+      void visit(Element element) {
+        if (element is StatefulElement &&
+            element.state is _ListenInDependenciesState) {
+          state = element.state as _ListenInDependenciesState;
+        }
+        element.visitChildren(visit);
+      }
+
+      visit(root);
+      expect(state.error, isA<StateError>());
+      expect(model.hasListeners, isFalse);
+      root.unmount();
+    });
+
+    test(
+      'an optional read is null when absent and subscribes when present',
+      () {
+        final owner = BuildOwner();
+        final model = _Model();
+        final seen = <int?>[];
+        Widget reader() => _Build((context) {
+          seen.add(context.scope<_Model?>()?.count);
+          return const EmptyBox();
+        });
+
+        final absent = owner.mountRoot(reader());
+        expect(seen, [null]);
+        absent.unmount();
+
+        final present = owner.mountRoot(Scope(model, child: reader()));
+        model.increment();
+        owner.flushBuild();
+        expect(seen, [null, 0, 1]);
+        present.unmount();
+        expect(model.hasListeners, isFalse);
+      },
+    );
+
+    test('ScopeBuilder takes a nullable type the same way', () {
+      final owner = BuildOwner();
+      final seen = <int?>[];
+      final root = owner.mountRoot(
+        ScopeBuilder<_Model?>(
+          builder: (context, model) {
+            seen.add(model?.count);
+            return const EmptyBox();
+          },
+        ),
+      );
+      expect(seen, [null]);
+      root.unmount();
+    });
+
+    test('a render-object widget follows a scope read while configuring', () {
+      final owner = BuildOwner();
+      const leaf = _LabelLeaf(); // identical instance: no widget update
+      final root = owner.mountRoot(const Scope(_Label('first'), child: leaf));
+      expect(_RenderLabel.last, 'first');
+
+      owner.updateRoot(root, const Scope(_Label('second'), child: leaf));
+      owner.flushBuild();
+      expect(_RenderLabel.last, 'second');
+      root.unmount();
+    });
   });
 }

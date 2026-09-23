@@ -67,10 +67,10 @@
 //   Either direction
 //     0x11 BYE      payload = empty, signals a clean shutdown
 //
-// The INIT payload carries `v=<n>` (protocol version). A peer omitting `v`
-// is the ANSI host (`fleury shell`, [remoteAnsiProtocolVersion]); structured
-// peers send [remoteProtocolVersion]. The payload size is a 32-bit unsigned
-// length so a single frame can hold a fat-screen full repaint.
+// The INIT payload carries `v=<n>` (protocol version, required). The ANSI
+// host (`fleury shell`) sends [remoteAnsiProtocolVersion]; structured peers
+// send [remoteProtocolVersion]. The payload size is a 32-bit unsigned length
+// so a single frame can hold a fat-screen full repaint.
 //
 // Versioning rule: the wire is LOCKSTEP. A structured peer and the app speak
 // exactly [remoteProtocolVersion]. The app echoes its INIT to a structured
@@ -85,11 +85,14 @@
 //     varint-prefixed UTF-8 URI follows the two mask bytes, before the colors
 //     (RFC 0017 §5). The INIT `hyperlinks=<0|1>` param is independent: it
 //     tells the app's producers whether the peer can render a link at all.
-//   - PLAN flag bit 2 is set whenever the plan carries inline-image
-//     placements; each placement then carries four varints — the original box
-//     columns/rows and the visible window's offset inside that box — so a
-//     clipped image keeps its fit geometry instead of being re-fitted.
-//   - SEMANTIC_ACTION carries an optional trailing value (set_value) and, for a
+//   - PLAN image placements each carry four varints after their fit — the
+//     original box columns/rows and the visible window's offset inside that
+//     box — so a clipped image keeps its fit geometry instead of being
+//     re-fitted.
+//   - Every frame is fixed-shape: an optional field is a presence byte (or,
+//     for a paste, its phase) followed by the value, never an absent trailing
+//     extension.
+//   - SEMANTIC_ACTION carries an optional value (set_value) and, for a
 //     positional semantic id, the app-issued target token the peer observed.
 //     The app rejects the action if a different contributor now occupies that
 //     slot or its role/label/advertised-action signature changed.
@@ -117,7 +120,7 @@ import 'remote_codec.dart';
 /// The structured wire protocol version. Bumped on any change to a frame's
 /// encoding; carried in the INIT handshake and echoed app → peer. The wire is
 /// lockstep: a structured peer and the app must speak exactly this version.
-const int remoteProtocolVersion = 6;
+const int remoteProtocolVersion = 7;
 
 /// The ANSI terminal-host protocol spoken by `fleury shell`.
 ///
@@ -152,7 +155,8 @@ const int serveSessionBusyCloseCode = 4002;
 ///
 /// Sixteen MiB leaves ample headroom for a large full repaint or inline image,
 /// while avoiding a 64 MiB allocation per frame/session. Known frame types have
-/// tighter limits below; this global cap also bounds additive unknown types.
+/// tighter limits below; this global cap also bounds an unknown type's length
+/// before the frame is rejected.
 const int defaultMaxRemoteFramePayloadLength = 16 * 1024 * 1024;
 
 /// Small handshake/control frames should never carry document-sized payloads.
@@ -297,26 +301,25 @@ final class InitFrame extends RemoteFrame {
   final InlineImageSupport? images;
 
   /// Whether the peer's surface can render real hyperlinks (OSC 8 on a
-  /// terminal, `<a>` anchors in the browser). Optional `hyperlinks=` INIT
-  /// param, decoded as false when absent. Threaded into the app-side
+  /// terminal, `<a>` anchors in the browser). Optional `hyperlinks=1` INIT
+  /// param, false when absent. Threaded into the app-side
   /// [SurfaceCapabilities.hyperlinks] so the server-side producer gate (e.g.
   /// `MarkdownText`) only emits a `linkUri` when the peer can actually show
   /// it.
   final bool hyperlinks;
 
   /// What the peer's keyboard has been CONFIRMED to guarantee (RFC 0020
-  /// §11). Optional additive `keyboard=<bits>` INIT param.
+  /// §11). Optional `keyboard=<bits>` INIT param.
   ///
-  /// Null from a peer that never learned the field — read as "declares
-  /// nothing", which is press-only. A peer's lifecycle support is never
+  /// Null when the peer declares nothing, which reads as press-only. A peer's lifecycle support is never
   /// inferred from [protocolVersion]: version says the codecs match, not
   /// that the terminal on the far end honoured flag 8. A `fleury shell`
   /// relay in front of Ghostty and one in front of Terminal.app speak the
   /// identical wire version and have completely different keyboards.
   final KeyboardCapabilities? keyboard;
 
-  /// Protocol version. A peer omitting `v` in INIT is read as
-  /// [remoteAnsiProtocolVersion] (the ANSI host, `fleury shell`).
+  /// Protocol version: [remoteProtocolVersion] for a structured peer,
+  /// [remoteAnsiProtocolVersion] for the ANSI host (`fleury shell`).
   final int protocolVersion;
 
   /// A supervisor's greeting, not a handshake.
@@ -552,18 +555,14 @@ String _encodeInit(InitFrame f) =>
     'glyph=${f.glyphTier.name},'
     'image=${f.imageProtocol.name},'
     'tmux=${f.tmuxPassthrough ? 1 : 0},'
+    // Optional fields are absent when null or false.
     '${f.images == null ? '' : 'images=${f.images!.name},'}'
-    // Optional additive param (like `images=`): emitted only when true, so a
-    // link-free INIT stays byte-identical to a peer that never learned the
-    // field. Absent ⇒ decoded as false.
     '${f.hyperlinks ? 'hyperlinks=1,' : ''}'
     // Semantic guarantees, never Kitty flags: a browser peer has no flags,
     // and the reader must not have to know the far end's protocol to
-    // understand its promises. Omitted when undeclared, so an INIT from a
-    // peer that never learned the field stays byte-identical.
+    // understand its promises.
     '${f.keyboard == null ? '' : 'keyboard=${f.keyboard!.wireBits},'}'
-    // Supervisor-only fields, additive like the others: absent on every
-    // peer INIT, so a peer's frame stays byte-identical.
+    // Supervisor-only fields, absent on every peer INIT.
     '${f.provisional ? 'provisional=1,' : ''}'
     '${f.debugWire == null ? '' : 'debug=${f.debugWire! ? 1 : 0},'}'
     'v=${f.protocolVersion}';
@@ -967,42 +966,77 @@ String _decodeUtf8Payload(Uint8List payload, String frameType) {
   }
 }
 
+/// Decodes an INIT. Every field a first-party encoder writes is required and
+/// validated: a missing or unrecognized value is a malformed frame, never a
+/// default.
 InitFrame _decodeInit(String body) {
   final params = _parseParams(body);
   return InitFrame(
     size: _decodeSize(params, 'INIT'),
-    colorMode: ColorMode.values.firstWhere(
-      (m) => m.name == params['color'],
-      orElse: () => ColorMode.truecolor,
+    colorMode: _decodeName(params, 'color', ColorMode.values)!,
+    glyphTier: _decodeName(params, 'glyph', GlyphTier.values)!,
+    imageProtocol: _decodeName(params, 'image', ImageProtocol.values)!,
+    tmuxPassthrough: _decodeFlag(params, 'tmux')!,
+    images: _decodeName(
+      params,
+      'images',
+      InlineImageSupport.values,
+      optional: true,
     ),
-    glyphTier: GlyphTier.values.firstWhere(
-      (t) => t.name == params['glyph'],
-      orElse: () => GlyphTier.unicode,
-    ),
-    imageProtocol: ImageProtocol.values.firstWhere(
-      (p) => p.name == params['image'],
-      orElse: () => ImageProtocol.halfBlock,
-    ),
-    tmuxPassthrough: params['tmux'] == '1',
-    images: switch (params['images']) {
-      'none' => InlineImageSupport.none,
-      'placements' => InlineImageSupport.placements,
-      _ => null,
-    },
-    hyperlinks: params['hyperlinks'] == '1',
-    keyboard: switch (int.tryParse(params['keyboard'] ?? '')) {
-      final bits? => KeyboardCapabilities.fromWireBits(bits),
-      null => null,
-    },
-    protocolVersion: int.tryParse(params['v'] ?? '') ?? 1,
-    provisional: params['provisional'] == '1',
-    debugWire: switch (params['debug']) {
-      '1' => true,
-      '0' => false,
-      _ => null,
-    },
+    hyperlinks: _decodeFlag(params, 'hyperlinks', optional: true) ?? false,
+    keyboard: _decodeKeyboard(params),
+    protocolVersion: _decodeInt(params, 'v', 'INIT', min: 1),
+    provisional: _decodeFlag(params, 'provisional', optional: true) ?? false,
+    debugWire: _decodeFlag(params, 'debug', optional: true),
   );
 }
+
+/// The [values] entry named by INIT param [key]; null only when [optional]
+/// and absent.
+T? _decodeName<T extends Enum>(
+  Map<String, String> params,
+  String key,
+  List<T> values, {
+  bool optional = false,
+}) {
+  final raw = params[key];
+  if (raw == null && optional) return null;
+  for (final value in values) {
+    if (value.name == raw) return value;
+  }
+  throw RemoteProtocolException(
+    raw == null
+        ? 'INIT frame is missing `$key`.'
+        : 'INIT frame has invalid `$key`: `$raw`.',
+  );
+}
+
+/// The optional `keyboard=<bits>` declaration; a bit this build does not
+/// define is a malformed frame.
+KeyboardCapabilities? _decodeKeyboard(Map<String, String> params) {
+  if (!params.containsKey('keyboard')) return null;
+  final bits = _decodeInt(params, 'keyboard', 'INIT', min: 0);
+  final keyboard = KeyboardCapabilities.fromWireBits(bits);
+  if (keyboard.wireBits != bits) {
+    throw RemoteProtocolException('INIT frame has invalid `keyboard`: $bits.');
+  }
+  return keyboard;
+}
+
+/// INIT param [key] as `0`/`1`; null only when [optional] and absent.
+bool? _decodeFlag(
+  Map<String, String> params,
+  String key, {
+  bool optional = false,
+}) => switch (params[key]) {
+  '1' => true,
+  '0' => false,
+  null when optional => null,
+  null => throw RemoteProtocolException('INIT frame is missing `$key`.'),
+  final raw => throw RemoteProtocolException(
+    'INIT frame has invalid `$key`: `$raw`.',
+  ),
+};
 
 CellSize _decodeSize(Map<String, String> params, String frameType) {
   final cols = _decodePositiveInt(params, 'cols', frameType);
@@ -1014,13 +1048,20 @@ int _decodePositiveInt(
   Map<String, String> params,
   String key,
   String frameType,
-) {
+) => _decodeInt(params, key, frameType, min: 1);
+
+int _decodeInt(
+  Map<String, String> params,
+  String key,
+  String frameType, {
+  required int min,
+}) {
   final raw = params[key];
   if (raw == null || raw.isEmpty) {
     throw RemoteProtocolException('$frameType frame is missing `$key`.');
   }
   final value = int.tryParse(raw);
-  if (value == null || value <= 0) {
+  if (value == null || value < min) {
     throw RemoteProtocolException(
       '$frameType frame has invalid `$key`: `$raw`.',
     );

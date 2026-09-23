@@ -1064,9 +1064,8 @@ class _TextInputState extends State<TextInput>
   @override
   void didChangeDependencies() {
     super.didChangeDependencies();
-    // Rebuild on focus change so cursor visibility flips.
-    // Scope.of subscribes us to the
-    // FocusManagerScope.
+    // Rebuild on focus change so cursor visibility flips: reading the
+    // manager subscribes us to its scope.
     FocusManager.maybeOf(context);
     final registration = FormControlScope.maybeOf(context);
     if (!identical(registration, _formRegistration)) {

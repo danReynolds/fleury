@@ -607,7 +607,7 @@ class PointerRouterScope extends Scope<PointerRouter> {
   final PointerRouter router;
 
   static PointerRouter? maybeOf(BuildContext context) =>
-      Scope.maybeOf<PointerRouter>(context);
+      dependOnScope<PointerRouter>(context);
 
   @override
   ScopeElement<PointerRouter> createElement() =>

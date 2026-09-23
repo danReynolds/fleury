@@ -398,7 +398,7 @@ class FocusManager extends Notifier {
 
   /// The surrounding [FocusManager], or null if there isn't one. See [of].
   static FocusManager? maybeOf(BuildContext context) =>
-      Scope.maybeOf<FocusManager>(context);
+      dependOnScope<FocusManager>(context);
 
   /// Returns the surrounding manager without rebuilding [context] when its
   /// focus or active bindings change.
@@ -408,13 +408,13 @@ class FocusManager extends Notifier {
   /// focus-change dependent. App/widget code should normally use [maybeOf].
   @internal
   static FocusManager? maybeOfWithoutDependency(BuildContext context) =>
-      Scope.maybeOfWithoutDependency<FocusManager>(context);
+      readScope<FocusManager>(context);
 
   /// Returns the surrounding manager and rebuilds only when that manager
   /// instance is replaced, not when its ordinary focus state changes.
   @internal
   static FocusManager? maybeOfIdentityDependency(BuildContext context) =>
-      Scope.maybeOf<_FocusManagerIdentity>(context)?.manager;
+      dependOnScope<_FocusManagerIdentity>(context)?.manager;
 
   /// All currently attached nodes, in attachment order. Used by the
   /// dispatcher to find the autofocus candidate, etc.
@@ -1712,7 +1712,7 @@ class _FocusScopeMarkerElement extends ComponentElement {
   // build so a temporarily-inactive subtree doesn't appear active.
   void _registerIfTrapping() {
     if (!_capturedTrapFocus) return;
-    final manager = Scope.maybeOf<_FocusManagerIdentity>(this)?.manager;
+    final manager = dependOnScope<_FocusManagerIdentity>(this)?.manager;
     if (identical(manager, _registeredManager)) return;
     final replacingManager = _registeredManager != null;
     _unregisterIfRegistered();
@@ -1845,7 +1845,7 @@ class _ExcludeFocusMarkerElement extends ComponentElement {
 
   void _registerIfExcluding() {
     if (!excluding) return;
-    final manager = Scope.maybeOf<_FocusManagerIdentity>(this)?.manager;
+    final manager = dependOnScope<_FocusManagerIdentity>(this)?.manager;
     if (identical(manager, _registeredManager)) return;
     _unregisterIfRegistered();
     if (manager == null) return;

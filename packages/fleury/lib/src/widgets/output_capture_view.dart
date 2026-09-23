@@ -26,7 +26,7 @@ class LogBufferScope extends Scope<LogBuffer> {
   }) : super(buffer);
 
   static LogBuffer? maybeOf(BuildContext context) =>
-      Scope.maybeOf<LogBuffer>(context);
+      dependOnScope<LogBuffer>(context);
 
   static LogBuffer of(BuildContext context) {
     final buffer = maybeOf(context);

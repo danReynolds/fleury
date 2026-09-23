@@ -4,6 +4,7 @@
 // lifecycle edges a reader can hit (initState, dispose).
 
 import 'package:fleury/fleury.dart';
+import 'package:fleury/src/widgets/framework.dart' show readScope;
 import 'package:test/test.dart';
 
 class _Model extends Notifier {
@@ -57,8 +58,8 @@ class _Reader extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final model = subscribe
-        ? Scope.of<_Model>(context)
-        : Scope.maybeOfWithoutDependency<_Model>(context)!;
+        ? context.scope<_Model>()
+        : readScope<_Model>(context)!;
     log.add(model.value);
     final ping = pingOnce;
     if (ping != null && !ping.sent && identical(model, ping.model)) {
@@ -94,7 +95,7 @@ class _ConfigReaderState extends State<_ConfigReader> {
 
   @override
   Widget build(BuildContext context) {
-    widget.log.add('build:${Scope.of<_Config>(context).n}');
+    widget.log.add('build:${context.scope<_Config>().n}');
     return const EmptyBox();
   }
 }
@@ -154,7 +155,7 @@ class _ThrowOnValue extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    Scope.of<_Model>(context);
+    context.scope<_Model>();
     if (value == 2) throw StateError('child update failed');
     return const EmptyBox();
   }
@@ -175,7 +176,7 @@ class _InitStateReaderState extends State<_InitStateReader> {
   @override
   void initState() {
     super.initState();
-    model = Scope.of<_Model>(context);
+    model = context.scope<_Model>();
     widget.log.add('init:${model.value}');
   }
 
@@ -199,7 +200,7 @@ class _DisposeReaderState extends State<_DisposeReader> {
   @override
   void dispose() {
     try {
-      Scope.of<_Model>(context);
+      context.scope<_Model>();
       widget.log.add('read');
     } on StateError catch (error) {
       widget.log.add('error:${error.message}');
@@ -277,7 +278,7 @@ class _Build extends StatelessWidget {
 
 void main() {
   group('Scope lookup', () {
-    test('of reads the nearest value; maybeOf is null when absent', () {
+    test('reads the nearest value; an optional read is null when absent', () {
       final owner = BuildOwner();
       _Config? found;
       _Model? missing;
@@ -285,8 +286,8 @@ void main() {
         Scope<_Config>(
           const _Config(7),
           child: _Build((context) {
-            found = Scope.of<_Config>(context);
-            missing = Scope.maybeOf<_Model>(context);
+            found = context.scope<_Config>();
+            missing = context.scope<_Model?>();
             return const EmptyBox();
           }),
         ),
@@ -295,13 +296,13 @@ void main() {
       expect(missing, isNull);
     });
 
-    test('of throws a StateError naming the missing scope', () {
+    test('a required read throws a StateError naming the missing scope', () {
       final owner = BuildOwner();
       Object? error;
       owner.mountRoot(
         _Build((context) {
           try {
-            Scope.of<_Model>(context);
+            context.scope<_Model>();
           } catch (e) {
             error = e;
           }
@@ -309,7 +310,7 @@ void main() {
         }),
       );
       expect(error, isA<StateError>());
-      expect('$error', contains('no Scope<_Model> above this context'));
+      expect('$error', contains('No Scope<_Model> found above'));
     });
 
     test('a missing type argument is an assertion, not a silent miss', () {
@@ -320,7 +321,9 @@ void main() {
           const _Config(1),
           child: _Build((context) {
             try {
-              Scope.maybeOf(context);
+              // The uninferred call a reader forgets its type argument on.
+              // ignore: inference_failure_on_function_invocation
+              context.scope();
             } catch (e) {
               error = e;
             }
@@ -342,14 +345,14 @@ void main() {
             child: Column(
               children: [
                 _Build((context) {
-                  seen.add('a:${Scope.of<_Base>(context).name}');
+                  seen.add('a:${context.scope<_Base>().name}');
                   return const EmptyBox();
                 }),
                 Scope<_Base>(
                   const _Base('inner'),
                   child: _Build((context) {
-                    seen.add('b:${Scope.of<_Base>(context).name}');
-                    seen.add('c:${Scope.of<_Config>(context).n}');
+                    seen.add('b:${context.scope<_Base>().name}');
+                    seen.add('c:${context.scope<_Config>().n}');
                     return const EmptyBox();
                   }),
                 ),
@@ -371,8 +374,8 @@ void main() {
           child: Scope<_Derived>(
             const _Derived('derived'),
             child: _Build((context) {
-              base = Scope.of<_Base>(context);
-              derived = Scope.of<_Derived>(context);
+              base = context.scope<_Base>();
+              derived = context.scope<_Derived>();
               return const EmptyBox();
             }),
           ),
@@ -616,7 +619,7 @@ void main() {
           const _Config(40),
           child: Scope<_Model>.createWithContext((context) {
             creates++;
-            return _Model(Scope.of<_Config>(context).n + 2);
+            return _Model(context.scope<_Config>().n + 2);
           }, child: _Reader(log: log)),
         ),
       );
@@ -676,7 +679,7 @@ void main() {
           () => plain,
           dispose: (value) => value.disposeCalls++,
           child: _Build((context) {
-            Scope.of<_Plain>(context);
+            context.scope<_Plain>();
             return const EmptyBox();
           }),
         ),
@@ -798,7 +801,7 @@ class _OrderProbeState extends State<_OrderProbe> {
 
   @override
   Widget build(BuildContext context) {
-    Scope.of<_Plain>(context);
+    context.scope<_Plain>();
     return const EmptyBox();
   }
 }

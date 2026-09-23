@@ -36,7 +36,7 @@ class TickerMode extends Scope<_TickerModeData> {
   /// Returns the [enabled] value of the nearest ancestor
   /// [TickerMode], or `true` if no ancestor exists.
   static bool of(BuildContext context) =>
-      Scope.maybeOf<_TickerModeData>(context)?.enabled ?? true;
+      dependOnScope<_TickerModeData>(context)?.enabled ?? true;
 }
 
 /// The scope value behind [TickerMode]: its own type rather than a bare

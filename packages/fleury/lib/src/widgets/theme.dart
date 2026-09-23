@@ -288,10 +288,10 @@ class Theme extends StatelessWidget {
   final Widget child;
 
   static ThemeData of(BuildContext context) =>
-      Scope.maybeOf<ThemeData>(context) ?? ThemeData.fallback;
+      dependOnScope<ThemeData>(context) ?? ThemeData.fallback;
 
   static ThemeData? maybeOf(BuildContext context) =>
-      Scope.maybeOf<ThemeData>(context);
+      dependOnScope<ThemeData>(context);
 
   @override
   Widget build(BuildContext context) => Scope<ThemeData>(
@@ -311,7 +311,7 @@ class DefaultTextStyle extends StatelessWidget {
 
   /// The cascaded style in scope, or [CellStyle.none] when none.
   static CellStyle of(BuildContext context) =>
-      Scope.maybeOf<_DefaultTextStyleData>(context)?.style ?? CellStyle.none;
+      dependOnScope<_DefaultTextStyleData>(context)?.style ?? CellStyle.none;
 
   /// Layers [style] *on top of* the ambient default for [child], rather
   /// than replacing it — so an inner scope can add a color without

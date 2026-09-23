@@ -81,7 +81,7 @@ class TuiBinding implements TickerProvider {
 
   /// Variant of [of] that returns null instead of throwing.
   static TuiBinding? maybeOf(BuildContext context) =>
-      Scope.maybeOf<TuiBinding>(context);
+      dependOnScope<TuiBinding>(context);
 
   /// Creates a [Ticker] registered against this binding's
   /// scheduler. Implements [TickerProvider] for non-widget contexts

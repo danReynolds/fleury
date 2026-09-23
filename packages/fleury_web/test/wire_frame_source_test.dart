@@ -697,8 +697,8 @@ void main() {
       );
 
       // Existing retained DOM handles and browser input are inert after the
-      // mismatch; in particular, v7 must not satisfy the old >=v6 check and
-      // enable a positional action.
+      // mismatch; in particular, a newer app version must not pass for the
+      // current one and enable a positional action.
       staleButton.dispatchEvent(
         web.Event('click', web.EventInit(bubbles: true, cancelable: true)),
       );
@@ -938,7 +938,7 @@ void main() {
     expect(harness.source.isClosedForTest, isFalse);
   });
 
-  test('stable-id actions keep the legacy payload on the current wire', () {
+  test('a stable-id action carries no target token', () {
     final encoder = SemanticsWireEncoder();
     final bytes = encoder.encodeTree(
       const SemanticTree(
@@ -983,7 +983,8 @@ void main() {
       ...'save'.codeUnits,
       8,
       ...'activate'.codeUnits,
-      0,
+      0, // no setValue payload
+      0, // no target token
     ]);
   });
 

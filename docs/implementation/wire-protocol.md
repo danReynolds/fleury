@@ -55,7 +55,7 @@ individual diff-bearing frame.
 
 ## Protocol version
 
-The structured protocol version is **6** (`remoteProtocolVersion`). It is
+The structured protocol version is **7** (`remoteProtocolVersion`). It is
 carried in the INIT handshake as `v=<n>`; `fleury shell` negotiates
 `remoteAnsiProtocolVersion` (**1**) because it is the ANSI terminal host, which
 receives raw OUTPUT bytes instead of structured frames.
@@ -68,6 +68,7 @@ receives raw OUTPUT bytes instead of structured frames.
 | v4 | OSC 8 links in the PLAN cell-style entry: set-mask bit 6 flags a link, and a varint-prefixed UTF-8 URI follows the two mask bytes, before the colors. |
 | v5 | Original-box geometry for inline-image placements: PLAN flag bit 2 declares four varints after each placement (`boxCols`, `boxRows`, `boxOffsetCol`, `boxOffsetRow`). |
 | v6 | The app-issued target token on SEMANTIC_ACTION for positional ids. |
+| v7 | Fixed-shape frames: no optional trailing extensions. INPUT_EVENT keys always carry the position/synthesized pair, a paste always carries its phase byte (a segment then its id), SEMANTIC_ACTION always carries the token-presence byte, and every PLAN placement carries its window (flag bit 2 is gone). INIT requires `v`, `color`, `glyph`, `image`, and `tmux`; the optional params are validated rather than defaulted. |
 
 The table is history, not a support matrix: an app and a structured peer speak
 exactly the current version.
@@ -108,8 +109,10 @@ frame, so test harnesses can inject either side. "Peer" is `serve` / `shell`;
    or a changed cell/enum encoding is a new version. There are no emission
    gates, no down-shifted shapes for an older peer, and no tolerance for a
    newer one.
-3. **Decoders are strict.** An unknown frame type, an unknown enum value, or a
-   field the current encoding requires is a protocol error. Optional trailing
-   extensions are part of the current encoding, and absent means default: the
-   key-event position/synthesized pair, paste segment metadata, and the
-   positional target token on SEMANTIC_ACTION.
+3. **Decoders are strict.** An unknown frame type, an unknown enum value, an
+   unknown flag bit, a missing required field, or trailing bytes are a
+   protocol error. Every binary frame is fixed-shape: an optional field is a
+   presence byte (or, for a paste, its phase) followed by its value, never an
+   absent trailing extension. INIT's optional params (`images`, `hyperlinks`,
+   `keyboard`, `provisional`, `debug`) mean "not declared" when absent and are
+   validated when present.

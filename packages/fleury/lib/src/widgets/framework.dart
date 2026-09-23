@@ -316,12 +316,13 @@ abstract class State<T extends StatefulWidget> {
   /// Called before [build] when one of three things is true:
   ///
   ///   - This is the first build after [initState].
-  ///   - A [Scope] this state depends on (via [Scope.of]) just notified
+  ///   - A [Scope] this state reads (via [BuildContext.scope]) just notified
   ///     its readers: the value notified, or the scope was rebuilt with a
   ///     value that is not equal to the previous one.
   ///
   /// State subclasses override this to re-read scope values and
-  /// update derived state. Notable example:
+  /// update derived state. A scope read here stays subscribed across plain
+  /// `setState` rebuilds. Notable example:
   /// `SingleTickerProviderStateMixin` overrides this to sync its
   /// `Ticker.muted` against the enclosing `TickerMode`.
   ///
@@ -407,9 +408,8 @@ abstract class State<T extends StatefulWidget> {
 /// A handle to the location of a widget in the element tree.
 ///
 /// A value an ancestor shares through a [Scope] is read with
-/// `Scope.of<T>(context)`, which subscribes this location to it. The
-/// lookups below find ancestors by state or render object without
-/// subscribing.
+/// [scope], which subscribes this location to it. The lookups below find
+/// ancestors by state or render object without subscribing.
 abstract interface class BuildContext {
   /// The widget currently mounted at this location.
   Widget get widget;
@@ -425,12 +425,20 @@ abstract interface class BuildContext {
   /// captured during build instead of calling this method.
   T listen<T extends Listenable>(T source);
 
-  /// Reads the nearest [Scope] declared with type [T] during this widget's build.
+  /// Reads the nearest [Scope] declared with type [T] and subscribes this
+  /// widget to it.
   ///
-  /// This widget rebuilds when that scope changes. The dependency is removed
-  /// when a later build no longer reads it. Use [Scope.of] for lifecycle reads
-  /// outside build; its dependencies remain until the element leaves the tree.
-  T scope<T extends Object>();
+  /// This widget rebuilds when that scope's value changes or notifies. The
+  /// subscription lasts until the widget leaves the tree, and follows it when
+  /// a [GlobalKey] moves it. Read scopes in `build`, `initState`,
+  /// `didChangeDependencies`, `createRenderObject` / `updateRenderObject`, or
+  /// a [Scope.createWithContext] factory; event handlers and callbacks use a
+  /// value read there. `ScopeBuilder` is the widget form of the same read.
+  ///
+  /// A nullable type argument makes the scope optional:
+  /// `context.scope<Model?>()` returns null when no `Scope<Model>` is above
+  /// this widget, where `context.scope<Model>()` throws.
+  T scope<T>();
 
   /// Walks ancestors looking for an [Element] whose state is of type
   /// [T]. Does not establish a dependency.
@@ -486,12 +494,11 @@ final class _ContextSubscription {
   }
 }
 
-// Allocated only for widgets that use the new build-time readers. Structural
-// elements keep their existing allocation-free dependency storage fast path.
+// Allocated only for widgets that call context.listen. Structural elements keep
+// their allocation-free dependency storage fast path.
 final class _ContextDependencies {
   int generation = 0;
   Map<Listenable, _ContextSubscription>? sources;
-  Map<ScopeElement, int>? scopes;
 }
 
 int _nextElementActionTargetIdentity = 1;
@@ -666,8 +673,9 @@ abstract class Element implements BuildContext {
     errors.throwIfAny();
   }
 
-  /// Drops every dependency edge this element holds — both scope
-  /// ([Scope.of]) and external (e.g. `Animation`). Shared by [unmount]
+  /// Drops every dependency edge this element holds — scope
+  /// ([BuildContext.scope]), listened sources, and external (e.g.
+  /// `Animation`). Shared by [unmount]
   /// (permanent) and [deactivate] (temporary; the next rebuild
   /// re-establishes whatever the new tree position warrants).
   void _detachDependencies() {
@@ -690,12 +698,6 @@ abstract class Element implements BuildContext {
     if (dependencies != null) {
       for (final dep in dependencies) {
         errors.capture(() => dep.removeDependent(this));
-      }
-    }
-    final buildScopes = contextDependencies?.scopes;
-    if (buildScopes != null) {
-      for (final scope in buildScopes.keys) {
-        scope._dependents.remove(this);
       }
     }
     final subscriptions = contextDependencies?.sources;
@@ -768,6 +770,13 @@ abstract class Element implements BuildContext {
         (_scopeDependencies?.isNotEmpty ?? false) ||
         (_externalDependencies?.isNotEmpty ?? false) ||
         _contextDependencies != null;
+    // A scope subscription belongs to the element, not to one tree position:
+    // remember what it read by key so activation can re-resolve it wherever
+    // the element lands (a read made once, in initState, is never repeated).
+    final scopes = _scopeDependencies;
+    _scopeKeysWhenDeactivated = scopes == null || scopes.isEmpty
+        ? null
+        : [for (final scope in scopes) scope._key];
     _detachDependencies();
     _owner?._dirtyElements.remove(this);
     _lifecycle = _ElementLifecycle.inactive;
@@ -800,6 +809,14 @@ abstract class Element implements BuildContext {
   void _activate() {
     assert(_lifecycle == _ElementLifecycle.inactive);
     _lifecycle = _ElementLifecycle.active;
+    final scopeKeys = _scopeKeysWhenDeactivated;
+    if (scopeKeys != null) {
+      _scopeKeysWhenDeactivated = null;
+      for (final key in scopeKeys) {
+        final scope = _findScopeElementByKey(key);
+        if (scope != null) _addScopeEdge(scope);
+      }
+    }
     // A rebuild that was pending when the subtree was deactivated still
     // needs to run; re-enqueue it. The element's own `update` (driven by
     // the reclaiming parent) handles the move-induced rebuild.
@@ -849,9 +866,9 @@ abstract class Element implements BuildContext {
   @protected
   void forgetChild(Element child) {}
 
-  // Scopes this element has registered with via [Scope.of]. Most structural
-  // elements never read one; allocate storage only when the first edge is
-  // registered.
+  // Scopes this element reads through [scope] or a framework accessor. Most
+  // structural elements never read one; allocate storage only when the first
+  // edge is registered.
   Set<ScopeElement>? _scopeDependencies;
 
   // Non-widget dependencies (e.g. Animation) read during build. Detached
@@ -861,8 +878,29 @@ abstract class Element implements BuildContext {
   _ContextDependencies? _contextDependencies;
   int _contextBuildDepth = 0;
 
+  // Framework hooks other than build that may read scopes: initState,
+  // createRenderObject / updateRenderObject, and Scope.createWithContext
+  // factories. See [scope].
+  int _scopeReadHookDepth = 0;
+
+  // True while State.didChangeDependencies runs, inside the build target.
+  bool _inDependencyCallback = false;
+
+  // The keys of the scopes this element read when it was deactivated,
+  // re-resolved at its new position on activation.
+  List<Type>? _scopeKeysWhenDeactivated;
+
+  R _runScopeReadHook<R>(R Function() fn) {
+    _scopeReadHookDepth++;
+    try {
+      return fn();
+    } finally {
+      _scopeReadHookDepth--;
+    }
+  }
+
   void _checkBuildReader(String reader) {
-    if (!mounted || !identical(_current, this)) {
+    if (!mounted || !identical(_current, this) || _inDependencyCallback) {
       throw StateError(
         '$reader must be called during this context\'s own build. '
         'Read the value in build and keep it for event handlers.',
@@ -919,47 +957,57 @@ abstract class Element implements BuildContext {
   }
 
   @override
-  T scope<T extends Object>() {
-    _checkBuildReader('context.scope<$T>()');
-    final ancestor = _findScopeElement<T>();
-    if (ancestor == null) {
+  T scope<T>() {
+    assert(
+      !_isKeylessScopeType(T),
+      'context.scope needs a type argument — the type is the key: '
+      'context.scope<MyModel>().',
+    );
+    if (!mounted) {
       throw StateError(
-        'No Scope<$T> found above ${widget.runtimeType}. '
-        'Wrap this subtree in Scope<$T> and read from a descendant context.',
+        'context.scope<$T>() was called on a context that is no longer in the '
+        'tree (for example from dispose). Read the value earlier and keep it '
+        'in a field.',
       );
     }
-    final dependencies = _contextDependencies ??= _ContextDependencies();
-    (dependencies.scopes ??= Map.identity())[ancestor] =
-        dependencies.generation;
+    if (!identical(_current, this) && _scopeReadHookDepth == 0) {
+      throw StateError(
+        'context.scope<$T>() reads a scope in build, initState, '
+        'didChangeDependencies, createRenderObject, updateRenderObject, or a '
+        'Scope.createWithContext factory. Read the value there and keep it '
+        'for event handlers and callbacks.',
+      );
+    }
+    final optional = null is T;
+    final ancestor = optional
+        ? _findScopeElementByOptionalKey(T)
+        : _findScopeElementByKey(T);
+    if (ancestor == null) {
+      if (optional) return null as T;
+      throw StateError(
+        'No Scope<$T> found above ${widget.runtimeType}. Wrap this subtree in '
+        'Scope<$T>, or read context.scope<$T?>() when the scope is optional.',
+      );
+    }
+    _addScopeEdge(ancestor);
+    return ancestor.value as T;
+  }
+
+  /// Subscribes this element to [ancestor] for as long as it stays in the
+  /// tree. The scope notifies on its value's behalf, so an implicit
+  /// dependency on that same value (an Animation's getter) is redundant.
+  void _addScopeEdge(ScopeElement ancestor) {
     ancestor._dependents.add(this);
+    (_scopeDependencies ??= <ScopeElement>{}).add(ancestor);
     final value = ancestor.value;
     if (value is Listenable && value is ElementDependency) {
       _retireImplicitDependency(value as ElementDependency);
     }
-    return value as T;
   }
 
   void _pruneContextDependencies() {
     final dependencies = _contextDependencies;
     if (dependencies == null) return;
-    final scopes = dependencies.scopes;
-    if (scopes != null) {
-      List<ScopeElement>? stale;
-      for (final entry in scopes.entries) {
-        if (entry.value != dependencies.generation) {
-          (stale ??= []).add(entry.key);
-        }
-      }
-      if (stale != null) {
-        for (final scope in stale) {
-          scopes.remove(scope);
-          if (!(_scopeDependencies?.contains(scope) ?? false)) {
-            scope._dependents.remove(this);
-          }
-        }
-      }
-      if (scopes.isEmpty) dependencies.scopes = null;
-    }
     final sources = dependencies.sources;
     List<Listenable>? stale;
     if (sources != null) {
@@ -978,9 +1026,7 @@ abstract class Element implements BuildContext {
       }
     }
     if (sources?.isEmpty ?? false) dependencies.sources = null;
-    if (dependencies.scopes == null && dependencies.sources == null) {
-      _contextDependencies = null;
-    }
+    if (dependencies.sources == null) _contextDependencies = null;
     errors?.throwIfAny();
   }
 
@@ -988,17 +1034,18 @@ abstract class Element implements BuildContext {
   /// so it rebuilds when the dependency changes and detaches on
   /// unmount. Idempotent. Called by [ElementDependency] sources.
   void dependOnExternal(ElementDependency dependency) {
-    final reads = _contextDependencies;
-    if (dependency is Listenable && reads != null) {
+    if (dependency is Listenable) {
       final source = dependency as Listenable;
-      if (reads.sources?[source]?.generation == reads.generation) return;
-      final scopes = reads.scopes;
+      final reads = _contextDependencies;
+      if (reads != null &&
+          reads.sources?[source]?.generation == reads.generation) {
+        return;
+      }
+      // A scope this element reads already notifies for its value.
+      final scopes = _scopeDependencies;
       if (scopes != null) {
-        for (final entry in scopes.entries) {
-          if (entry.value == reads.generation &&
-              identical(entry.key.value, source)) {
-            return;
-          }
+        for (final scope in scopes) {
+          if (identical(scope.value, source)) return;
         }
       }
     }
@@ -1008,13 +1055,16 @@ abstract class Element implements BuildContext {
   }
 
   /// The nearest `Scope<T>` value above this element, registering this
-  /// element as a reader of that scope. Null when there is none. Backs
-  /// [Scope.of].
+  /// element as a reader of that scope wherever it is called. Null when there
+  /// is none. Backs the framework's own accessors ([dependOnScope]).
   T? _dependOnScope<T extends Object>() {
-    final ancestor = _findScopeElement<T>();
+    assert(
+      !_isKeylessScopeType(T),
+      'A scope lookup needs a type argument — the type is the key.',
+    );
+    final ancestor = _findScopeElementByKey(T);
     if (ancestor == null) return null;
-    ancestor._dependents.add(this);
-    (_scopeDependencies ??= <ScopeElement>{}).add(ancestor);
+    _addScopeEdge(ancestor);
     return ancestor.value as T;
   }
 
@@ -1043,10 +1093,24 @@ abstract class Element implements BuildContext {
   /// exactly: a `Scope<Derived>` is not found for a `Scope<Base>` lookup,
   /// nor the reverse. The walk tests the element class first (a cheap class
   /// check on every ancestor) and compares the key only at scope elements.
-  ScopeElement? _findScopeElement<T extends Object>() {
+  ScopeElement? _findScopeElementByKey(Type key) {
     var element = _parent;
     while (element != null) {
-      if (element is ScopeElement && element._key == T) return element;
+      if (element is ScopeElement && element._key == key) return element;
+      element = element._parent;
+    }
+    return null;
+  }
+
+  /// [_findScopeElementByKey] for a nullable key: `Model?` finds the nearest
+  /// `Scope<Model>`. Kept apart so the common required read pays no second
+  /// comparison.
+  ScopeElement? _findScopeElementByOptionalKey(Type key) {
+    var element = _parent;
+    while (element != null) {
+      if (element is ScopeElement && element._optionalKey == key) {
+        return element;
+      }
       element = element._parent;
     }
     return null;
@@ -1369,7 +1433,7 @@ class StatefulElement extends ComponentElement {
 
   @override
   void _firstBuild() {
-    _state.initState();
+    _runScopeReadHook(_state.initState);
     super._firstBuild();
   }
 
@@ -1391,7 +1455,12 @@ class StatefulElement extends ComponentElement {
     // lets State subclasses do expensive dependency-change work
     // without paying for every setState.
     if (_state._dependenciesChanged) {
-      _state.didChangeDependencies();
+      _inDependencyCallback = true;
+      try {
+        _state.didChangeDependencies();
+      } finally {
+        _inDependencyCallback = false;
+      }
       _state._dependenciesChanged = false;
     }
     return _state.build(this);
@@ -1989,7 +2058,7 @@ abstract class RenderObjectElement extends Element {
   @override
   void mount(Element? parent) {
     super.mount(parent);
-    _renderObject = widget.createRenderObject(this);
+    _renderObject = _runScopeReadHook(() => widget.createRenderObject(this));
     _attachRenderObjectToAncestor();
     // Route the first build through rebuild() so the dirty bit is cleared
     // and so subclasses with widget children (Single/MultiChild) actually
@@ -2001,7 +2070,7 @@ abstract class RenderObjectElement extends Element {
   void update(covariant RenderObjectWidget newWidget) {
     super.update(newWidget);
     _dependenciesChanged = false;
-    newWidget.updateRenderObject(this, _renderObject!);
+    _runScopeReadHook(() => newWidget.updateRenderObject(this, _renderObject!));
     // Render-object setters own their invalidation. Keeping that decision at
     // the setter is what lets paint-only updates (markNeedsPaintOnly) avoid
     // relayout while layout-affecting setters call markNeedsLayout.
@@ -2024,7 +2093,9 @@ abstract class RenderObjectElement extends Element {
     if (_dependenciesChanged && _lifecycle == _ElementLifecycle.active) {
       _dependenciesChanged = false;
       final r = _renderObject;
-      if (r != null) widget.updateRenderObject(this, r);
+      if (r != null) {
+        _runScopeReadHook(() => widget.updateRenderObject(this, r));
+      }
     }
     super.rebuild(force: force);
   }
@@ -2516,8 +2587,9 @@ abstract class ProxyWidget extends Widget {
 /// Shares a value with the widgets below it.
 ///
 /// Provide a value once with `Scope(model, child: ...)`, then read the nearest
-/// scope with `context.scope<Model>()` during build or a `ScopeBuilder<Model>`.
-/// Widgets between the provider and its readers need not pass the value along.
+/// scope with `context.scope<Model>()` or a `ScopeBuilder<Model>` — the same
+/// read, as a call or as a widget. Widgets between the provider and its
+/// readers need not pass the value along.
 /// The declared type is the lookup key; an inner scope of that type overrides
 /// an outer one.
 ///
@@ -2536,11 +2608,9 @@ abstract class ProxyWidget extends Widget {
 ///
 /// [Scope.create] creates and owns a value. [Scope.createWithContext] also
 /// supplies the scope's own context to a factory that needs ancestor scopes.
-/// [Scope.of] is available in `build`, `initState`, and event handlers and
-/// retains a dependency for the element's lifetime. In contrast,
-/// [BuildContext.scope] reconciles dependencies after each build. A value
-/// needed in `dispose` should be saved earlier, before the element leaves
-/// the tree.
+/// A reader stays subscribed until it leaves the tree; see
+/// [BuildContext.scope] for where a scope can be read. A value needed in
+/// `dispose` should be saved earlier, before the element leaves the tree.
 class Scope<T extends Object> extends ProxyWidget {
   /// Shares [value] without taking ownership or disposing it.
   const Scope(
@@ -2578,8 +2648,9 @@ class Scope<T extends Object> extends ProxyWidget {
 
   /// Creates an owned value with access to ancestor scopes.
   ///
-  /// [create] receives this scope's own context and may use [Scope.of] to read
-  /// ancestors. Its lifetime and disposal follow [Scope.create].
+  /// [create] receives this scope's own context and may use
+  /// `context.scope` to read ancestors. Its lifetime and disposal follow
+  /// [Scope.create].
   const Scope.createWithContext(
     /// Creates the value with this scope's context for ancestor lookups.
     T Function(BuildContext context) create, {
@@ -2616,43 +2687,6 @@ class Scope<T extends Object> extends ProxyWidget {
       ? !identical(_value, oldWidget._value)
       : _value != oldWidget._value;
 
-  /// The nearest `Scope<T>` value above [context], subscribing [context] to
-  /// it. Throws when no `Scope<T>` is above [context]; use [maybeOf] when the
-  /// scope is optional.
-  static T of<T extends Object>(BuildContext context) {
-    final value = maybeOf<T>(context);
-    if (value != null) return value;
-    if (!context.mounted) {
-      throw StateError(
-        'Scope.of<$T> was called on a context that is no longer in the tree '
-        '(for example from dispose). Read the value earlier and keep it in a '
-        'field.',
-      );
-    }
-    throw StateError(
-      'Scope.of<$T>: no Scope<$T> above this context. Wrap an ancestor in '
-      'Scope<$T>(..., child: ...) or Scope<$T>.create(...).',
-    );
-  }
-
-  /// Like [of], but null when no `Scope<T>` is above [context].
-  static T? maybeOf<T extends Object>(BuildContext context) {
-    assert(
-      T != Object,
-      'Scope.of and Scope.maybeOf need a type argument — the type is the '
-      'key: Scope.of<MyModel>(context).',
-    );
-    return (context as Element)._dependOnScope<T>();
-  }
-
-  /// Framework-internal: the nearest `Scope<T>` value without subscribing
-  /// [context]. For plumbing that only needs a reference — a render object
-  /// registering with a service, an action fired from an event handler —
-  /// where a rebuild dependency would be wrong. Application code uses [of].
-  @internal
-  static T? maybeOfWithoutDependency<T extends Object>(BuildContext context) =>
-      (context as Element)._findScopeElement<T>()?.value as T?;
-
   @override
   ScopeElement<T> createElement() => ScopeElement<T>(this);
 }
@@ -2660,9 +2694,9 @@ class Scope<T extends Object> extends ProxyWidget {
 /// Element for a [Scope].
 ///
 /// Holds the value the scope shares — the widget's own, or the object a
-/// [Scope.create] built — and the set of elements reading it through
-/// [Scope.of]. When the value is a [Listenable] the element listens and turns
-/// each notification into [notifyDependents]. Framework scopes with extra
+/// [Scope.create] built — and the set of elements reading it. When the value
+/// is a [Listenable] the element listens and turns each notification into
+/// [notifyDependents]. Framework scopes with extra
 /// lifecycle (a pointer router learning where its tree is) subclass this.
 class ScopeElement<T extends Object> extends ComponentElement {
   ScopeElement(Scope<T> super.widget);
@@ -2681,8 +2715,11 @@ class ScopeElement<T extends Object> extends ComponentElement {
   /// The value this scope currently shares.
   T get value => _value;
 
-  /// The lookup key: the type argument. [Scope.of] compares it exactly.
+  /// The lookup key: the type argument, compared exactly.
   Type get _key => T;
+
+  /// The key an optional read (`context.scope<T?>()`) looks up.
+  late final Type _optionalKey = _typeOf<T?>();
 
   @override
   Widget buildChild() => widget.child;
@@ -2695,7 +2732,9 @@ class ScopeElement<T extends Object> extends ComponentElement {
     // The parent link is already set, so an owning scope can read the
     // scopes above it.
     final owned = widget._ownsValue;
-    _value = owned ? widget._createValue(this) : widget._value!;
+    _value = owned
+        ? _runScopeReadHook(() => widget._createValue(this))
+        : widget._value!;
     _owned = owned;
     _ownedDispose = _owned ? widget._dispose : null;
     _listening = _subscribe(_value);
@@ -2711,7 +2750,9 @@ class ScopeElement<T extends Object> extends ComponentElement {
     final previousDispose = _ownedDispose;
     final nextOwned = newWidget._ownsValue;
     final next = nextOwned
-        ? (wasOwned ? previous : newWidget._createValue(this))
+        ? (wasOwned
+              ? previous
+              : _runScopeReadHook(() => newWidget._createValue(this)))
         : newWidget._value!;
     final swapped = !identical(next, previous);
     _ScopeSubscription? nextSubscription;
@@ -2836,3 +2877,21 @@ final class _ScopeSubscription {
     source?.removeListener(changed);
   }
 }
+
+Type _typeOf<T>() => T;
+
+bool _isKeylessScopeType(Type type) =>
+    type == Object || type == _typeOf<Object?>() || type == dynamic;
+
+/// Framework plumbing behind widget accessors such as `Theme.of`: the nearest
+/// `Scope<T>` value, subscribing [context] to it, or null. Unlike
+/// [BuildContext.scope] it may run anywhere the element is mounted, because
+/// accessors are also called from handlers and element hooks.
+T? dependOnScope<T extends Object>(BuildContext context) =>
+    (context as Element)._dependOnScope<T>();
+
+/// Framework plumbing: the nearest `Scope<T>` value without subscribing
+/// [context] — for a render object registering with a service, or an action
+/// fired from a handler, where a rebuild dependency would be wrong.
+T? readScope<T extends Object>(BuildContext context) =>
+    (context as Element)._findScopeElementByKey(T)?.value as T?;

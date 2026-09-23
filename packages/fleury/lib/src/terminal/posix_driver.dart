@@ -519,9 +519,10 @@ class PosixTerminalDriver
         _schedulePasteIdleFlush();
       },
       onError: (Object error, StackTrace stack) {
-        // A terminal read fails once the terminal is gone (EIO after a
-        // hangup): that is the hangup itself, not an application error.
-        if (_rawTerminalInput) {
+        // A terminal read fails once the terminal is gone: that is the
+        // hangup itself, not an application error. Any other read failure is
+        // a real fault and reaches the app.
+        if (_rawTerminalInput && isTerminalGoneError(error)) {
           _deliverHangup();
           return;
         }
@@ -1560,6 +1561,22 @@ KeyboardProtocolMode resolveKeyboardTier({
     return KeyboardProtocolMode.disambiguated;
   }
   return requested;
+}
+
+/// Whether [error], from reading the terminal, says the terminal itself is
+/// gone: EIO (Linux, a pty whose master closed) or ENXIO ("device not
+/// configured", macOS after the tty is revoked). Both numbers are the same on
+/// every POSIX platform Fleury runs on.
+@visibleForTesting
+bool isTerminalGoneError(Object error) {
+  final osError = switch (error) {
+    OSError e => e,
+    SocketException(:final osError) => osError,
+    FileSystemException(:final osError) => osError,
+    StdinException(:final osError) => osError,
+    _ => null,
+  };
+  return osError != null && (osError.errorCode == 5 || osError.errorCode == 6);
 }
 
 /// What each segment of the batched capability exchange answers.

@@ -5,7 +5,7 @@ import 'package:fleury/fleury.dart';
 import 'package:fleury/src/terminal/capabilities.dart'
     show widthProbeIsPermittedByEnvironment;
 import 'package:fleury/src/terminal/posix_driver.dart'
-    show PosixTerminalModeController;
+    show PosixTerminalModeController, isTerminalGoneError;
 import 'package:test/test.dart';
 
 class _FakeStdin implements Stdin {
@@ -29,6 +29,8 @@ class _FakeStdin implements Stdin {
     closed = true;
     return _controller.close();
   }
+
+  void pushError(Object error) => _controller.addError(error);
 
   @override
   bool get hasTerminal => terminal;
@@ -828,6 +830,75 @@ void main() {
       }
     },
   );
+
+  test(
+    'a raw terminal read error is a hangup only when the tty is gone',
+    () async {
+      final trace = <String>[];
+      final input = _FakeStdin(terminal: true);
+      final driver = PosixTerminalDriver(
+        stdinOverride: input,
+        stdoutOverride: _RecordingStdout(terminal: true, trace: trace),
+        terminalModeController: _FakeModeController(trace),
+        selfStopOverride: () => true,
+        signalGrace: const Duration(seconds: 30),
+        forceExitOverride: (_) {},
+        signalWatcherOverride: (signal, onSignal) =>
+            _TraceSignalSubscription(signal, trace),
+      );
+      final events = <TuiEvent>[];
+      final errors = <Object>[];
+      final sub = driver.events.listen(events.add, onError: errors.add);
+      try {
+        await driver.enter(
+          const TerminalMode(rawInput: true, alternateScreen: false),
+        );
+        const invalidArgument = OSError('Invalid argument', 22);
+        input.pushError(
+          const SocketException('read', osError: invalidArgument),
+        );
+        await _pump();
+        expect(errors, [
+          isA<SocketException>(),
+        ], reason: 'a real fault surfaces');
+        expect(events.whereType<SignalEvent>(), isEmpty);
+
+        input.pushError(
+          const SocketException('read', osError: OSError('I/O error', 5)),
+        );
+        await _pump();
+        expect(errors, hasLength(1), reason: 'EIO is not an app error');
+        expect(events.whereType<SignalEvent>(), [
+          const SignalEvent(AppSignal.hangup),
+        ]);
+      } finally {
+        await driver.restore();
+        await sub.cancel();
+        await input.close();
+      }
+    },
+  );
+
+  test('terminal-gone errors are EIO and ENXIO, however they are wrapped', () {
+    const eio = OSError('Input/output error', 5);
+    const enxio = OSError('Device not configured', 6);
+    expect(isTerminalGoneError(eio), isTrue);
+    expect(
+      isTerminalGoneError(const SocketException('r', osError: enxio)),
+      isTrue,
+    );
+    expect(
+      isTerminalGoneError(const FileSystemException('r', 'tty', eio)),
+      isTrue,
+    );
+    expect(isTerminalGoneError(const StdinException('r', enxio)), isTrue);
+    expect(
+      isTerminalGoneError(const OSError('Bad file descriptor', 9)),
+      isFalse,
+    );
+    expect(isTerminalGoneError(const SocketException('r')), isFalse);
+    expect(isTerminalGoneError(StateError('x')), isFalse);
+  });
 
   test('cooked-mode terminal EOF ends the session, not a hangup', () async {
     // Without raw input, Ctrl+D at the start of a line is an EOF the user

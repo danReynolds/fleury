@@ -38,7 +38,7 @@ class _Reader extends StatelessWidget {
   final _Source? second;
   @override
   Widget build(BuildContext context) {
-    final source = Scope.of<_Source>(context);
+    final source = context.scope<_Source>();
     final element = context as Element;
     element.dependOnExternal(source);
     element.dependOnExternal(source);
