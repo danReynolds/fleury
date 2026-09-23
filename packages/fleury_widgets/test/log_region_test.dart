@@ -548,4 +548,31 @@ void main() {
       );
     },
   );
+
+  testWidgets('Ctrl+C in a tailing log copies the newest entry', (
+    tester,
+  ) async {
+    tester.pumpWidget(
+      LogRegion(
+        autofocus: true,
+        entries: [
+          for (var i = 0; i < 100; i++)
+            LogEntry(source: 'app', message: 'line $i'),
+        ],
+        copyOptions: const LogRegionCopyOptions(
+          clipboardPolicy: ClipboardWritePolicy.inProcessOnly,
+        ),
+      ),
+    );
+    tester.render(size: const CellSize(40, 5));
+    tester.sendKey(
+      const KeyEvent(KeyCode.char('c'), modifiers: {KeyModifier.ctrl}),
+    );
+    await Future<void>.delayed(Duration.zero);
+    expect(
+      tester.clipboard.readInProcess(),
+      endsWith('line 99'),
+      reason: 'the cursor rides the tail the viewport is showing',
+    );
+  });
 }

@@ -1,5 +1,13 @@
 # Changelog
 
+- A list that follows its tail keeps its cursor on the newest item:
+  `ListController(followTail: true)` starts on the last item and carries the
+  cursor along as items arrive, until an arrow key, click, or `currentIndex`
+  places it; End puts it back on the tail. Previously the cursor stayed on the
+  first item, off-screen, so Ctrl+C in a tailing log copied the oldest line and
+  the first arrow key jumped the view back to the start. The default
+  `initialIndex` is now `ListController.natural` (the first item, or the last
+  for a following list); an explicit index or null behaves as before.
 - **Breaking:** a scope is read one way, as a call or as a widget:
   `context.scope<T>()` or `ScopeBuilder<T>`, which behave the same.
   `Scope.of` and `Scope.maybeOf` are removed; an optional scope is read with a

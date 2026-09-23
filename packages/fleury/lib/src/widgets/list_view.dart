@@ -46,15 +46,26 @@ enum EdgeBehavior {
 /// metrics after the frame, when [visibleRange] describes the rendered content.
 class ListController extends Notifier {
   /// Starts with [initialIndex] as the current row and reveals it on mount.
-  /// The index is clamped to the available items. This does not select the row
-  /// or take keyboard focus; use [ListView.autofocus] to request focus.
-  /// An explicit viewport request or [followTail] takes precedence over reveal.
-  ListController({int? initialIndex = 0, bool followTail = false})
-    : _currentIndex = initialIndex,
+  /// The index is clamped to the available items. [natural], the default,
+  /// starts on the first item, or on the last item when [followTail] is set;
+  /// a following list's cursor then stays on the last item as items arrive,
+  /// until something moves it. Null starts without a cursor. This does not
+  /// select the row or take keyboard focus; use [ListView.autofocus] to request
+  /// focus. An explicit viewport request or [followTail] takes precedence over
+  /// reveal.
+  ListController({int? initialIndex = natural, bool followTail = false})
+    : _currentIndex = initialIndex == natural
+          ? (followTail ? null : 0)
+          : initialIndex,
       _restoreCurrentWhenNonEmpty = initialIndex != null,
+      _cursorTracksTail = followTail && initialIndex == natural,
       _followTail = followTail,
       _isFollowing = followTail,
       _pendingBottom = followTail;
+
+  /// The default [ListController.new] `initialIndex`: the first item, or the
+  /// last item for a list that follows its tail.
+  static const int natural = -1;
 
   int? _currentIndex;
   int _itemCount = 0;
@@ -74,6 +85,10 @@ class ListController extends Notifier {
   bool _pendingBottom;
   bool _followTail;
   bool _isFollowing;
+
+  // The cursor rides the last item: set for a following list that starts at
+  // its natural index, and by End; cleared by any explicit placement.
+  bool _cursorTracksTail;
   int _unseenCount = 0;
   bool _disposed = false;
   Object? _owner;
@@ -106,13 +121,19 @@ class ListController extends Notifier {
 
   /// Whether new output should be followed while the viewport is at its end.
   /// Scrolling away pauses following without disabling this policy. Setting it
-  /// false keeps it disabled even after returning to the end; true catches up.
+  /// false keeps it disabled even after returning to the end and leaves the
+  /// cursor where it is; true catches up and puts the cursor back on the last
+  /// item.
   bool get followTail => _followTail;
   set followTail(bool value) {
     _checkNotDisposed();
     if (_followTail == value) return;
     _followTail = value;
     _isFollowing = value;
+    _cursorTracksTail = value && _selectable;
+    if (_cursorTracksTail && _attached && _itemCount > 0) {
+      _currentIndex = _itemCount - 1;
+    }
     if (!value) _pendingBottom = false;
     if (value) {
       _clearRequests();
@@ -150,12 +171,16 @@ class ListController extends Notifier {
   double get visibleFraction => _visibleFraction;
 
   /// Remembered cursor index, independent of keyboard focus and scrolling.
-  /// Defaults to zero; an explicit null starts without a cursor. A non-selectable list
-  /// keeps this null. Values clamp once attached to a list.
+  /// Starts on the first item, or on the last item of a following list, which
+  /// keeps it there as items arrive until the cursor is moved; an explicit null
+  /// starts without a cursor. A non-selectable list keeps this null. Values
+  /// clamp once attached to a list.
   int? get currentIndex => _currentIndex;
   set currentIndex(int? value) {
     _checkNotDisposed();
     if (!_selectable) return;
+    // An explicit placement anchors the cursor; following no longer moves it.
+    _cursorTracksTail = false;
     _restoreCurrentWhenNonEmpty = value != null;
     final next = _clampCurrentIndex(value);
     if (next == _currentIndex) return;
@@ -266,6 +291,9 @@ class ListController extends Notifier {
         _restoreCurrentWhenNonEmpty) {
       _currentIndex = 0;
       if (!_isFollowing) _pendingRevealIndex = 0;
+    }
+    if (_cursorTracksTail && _selectable && newCount > 0) {
+      _currentIndex = newCount - 1;
     }
     final arrived =
         appendedCount ?? (newCount > oldCount ? newCount - oldCount : 0);
@@ -685,8 +713,12 @@ class _ListViewState extends State<ListView> {
       _pressedItem = null;
       _controller._selectable = widget.selectable;
       _controller._restoreCurrentWhenNonEmpty = widget.selectable;
-      _controller._currentIndex =
-          widget.selectable && widget.effectiveItemCount > 0 ? 0 : null;
+      final count = widget.effectiveItemCount;
+      _controller._currentIndex = !widget.selectable || count == 0
+          ? null
+          : _controller._cursorTracksTail
+          ? count - 1
+          : 0;
       _controller._pendingRevealIndex = _controller._currentIndex;
     }
     final newCount = widget.effectiveItemCount;
@@ -733,6 +765,9 @@ class _ListViewState extends State<ListView> {
     _controller._currentIndex = _controller._clampCurrentIndex(
       _controller._currentIndex,
     );
+    if (_controller._cursorTracksTail && widget.selectable && count > 0) {
+      _controller._currentIndex = count - 1;
+    }
     if (!widget.selectable) _controller._restoreCurrentWhenNonEmpty = false;
     if (!_controller._pendingBottom &&
         _controller._pendingJumpIndex == null &&
@@ -904,6 +939,8 @@ class _ListViewState extends State<ListView> {
         return KeyEventResult.handled;
       case KeyCode.end:
         _moveCurrentItem(count - 1);
+        // End in a following list goes live: the cursor rides the tail again.
+        if (_controller._followTail) _controller._cursorTracksTail = true;
         return KeyEventResult.handled;
       case KeyCode.enter:
         widget.onSelect?.call(current);

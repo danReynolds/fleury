@@ -1,5 +1,9 @@
 ## 0.1.0
 
+- `LogRegion` and `MessageList` start with the cursor on the newest entry and
+  keep it there while following, so Ctrl+C copies what the view is showing
+  instead of the first entry. `LogRegionController` and
+  `MessageListController` default `initialIndex` to `ListController.natural`.
 - **Breaking:** the deprecated `Command` alias is removed; use
   `CommandPaletteItem`.
 - `FormController.submit()` returns false when the submit callback leaves a

@@ -141,11 +141,15 @@ final class LogRegionCopyResult {
 
 /// Controller for [LogRegion] browsing and tail-follow behavior.
 class LogRegionController extends Notifier {
-  LogRegionController({int? initialIndex = 0, bool followTail = true})
-    : _list = ListController(
-        initialIndex: initialIndex,
-        followTail: followTail,
-      ) {
+  /// Follows the tail by default, with the cursor on the newest entry; see
+  /// [ListController.new] for [initialIndex] and [followTail].
+  LogRegionController({
+    int? initialIndex = ListController.natural,
+    bool followTail = true,
+  }) : _list = ListController(
+         initialIndex: initialIndex,
+         followTail: followTail,
+       ) {
     _list.addListener(notify);
   }
 
