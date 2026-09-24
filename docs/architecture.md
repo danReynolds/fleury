@@ -218,8 +218,9 @@ backstop storm (a hard crash every frame) or an error before mount tears
 the session down — and then the terminal is restored. Assistive tech and
 agents see an errored subtree as a single announced `errorBoundary` node;
 its invisible descendants are dropped and actions against them fail
-closed. Under the test harness, containment inverts: a layout bug fails
-the test loudly instead of rendering a panel.
+closed. Under the test harness, containment inverts: a bug in build, a
+lifecycle hook, layout, or paint fails the test loudly instead of rendering
+a panel.
 
 **Run it anywhere a binary runs — and beyond the terminal.** One static
 AOT executable, ~20 ms to first frame, no runtime to install. The same

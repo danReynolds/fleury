@@ -1,5 +1,41 @@
 # Changelog
 
+- **Breaking:** `BuildOwner.rethrowContainedRenderErrors` is now
+  `rethrowContainedErrors`, and it covers build errors as well as layout and
+  paint. Under `FleuryTester`, a widget whose `build`, `initState`, or
+  `didUpdateWidget` throws now fails the test instead of rendering an error
+  panel. A test of the panel itself sets
+  `tester.owner.rethrowContainedErrors = false`.
+- A child that throws while it mounts or updates (in `initState`,
+  `didUpdateWidget`, a render object's create or update, or on a duplicate
+  key) is contained like a thrown `build`. The nearest building ancestor
+  shows the error panel in its place and the session keeps running. Before,
+  the whole screen became an error, siblings could be lost, and a parent
+  that rebuilt every frame tore the session down. A resize whose root rebuild
+  throws is one failed frame; before, the error escaped the frame driver and
+  recurred on every later frame.
+- Frames, animation ticks, and the error banner's dismiss timer run in
+  `runApp`'s guarded zone, whoever requested them. A frame requested from a
+  listener created in `main()` used to run outside the guard, so a failing
+  post-frame callback killed the process and left the terminal raw.
+- A frame that a frame causes, such as a post-frame callback or a `setState`
+  from a microtask the frame queued, renders when the event-loop turn ends.
+  Input, timers, and signals now run between the frames of such a chain;
+  before, the chain starved the event loop until it ended.
+- Inserting or swapping an unkeyed child above a stateful sibling keeps the
+  sibling's State, so a `TextInput` draft below a newly shown error line is
+  no longer wiped.
+- A `GlobalKey`'d subtree that moves into a `LayoutBuilder`, such as a panel
+  maximized into one, keeps its State.
+- `LayoutBuilder` builds what its builder dirtied, such as the readers of a
+  `Scope` fed from constraints, before its child lays out. Those readers show
+  the current size instead of the previous one.
+- `Animation.loop` keeps running through hot reload. Pulse, shimmer, and
+  other repeating effects no longer freeze after the first reload.
+- On exit, Ctrl+Z, and terminal handoff, the POSIX driver disables input
+  reporting while it still reads the terminal, and reads the reports still in
+  flight. Mouse reports no longer reach the shell prompt, or a handed-off
+  editor, as garbage.
 - Debugger mode changes preserve application state and layout. Opening the
   shell starts a bounded 60-frame recording that continues while hidden;
   Rebuilds shows the worst frame's phase costs. Inspector reports scroll with
