@@ -75,6 +75,12 @@ jobs:
           python -m pip install -r tool/inline-pty-requirements.txt
       - name: Exercise inline rendering and lifecycle over a PTY
         run: python tool/check_inline_tui.py
+      - name: Exercise sequential native sessions
+        run: |
+          python tool/check_native_input.py
+          python tool/check_sequential_sessions.py
+          dart compile exe packages/fleury/test/fixtures/sequential_native_sessions_fixture.dart --packages=packages/fleury/.dart_tool/package_config.json -o "${{ runner.temp }}/fleury-sequential"
+          python tool/check_sequential_sessions.py --executable "${{ runner.temp }}/fleury-sequential"
 
   create-smoke:
     name: create smoke (${{ matrix.os }}, Dart ${{ matrix.sdk }})

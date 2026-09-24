@@ -60,6 +60,7 @@ import 'dart:io';
 import 'package:vm_service/vm_service.dart' hide Isolate;
 
 import '../terminal/terminal_driver.dart' show TerminalMode;
+import '../terminal/posix_input_lease.dart' show PosixInputFlags;
 import '../foundation/geometry.dart';
 import 'inline_terminal_lease.dart';
 import '../terminal/terminal_sequences.dart';
@@ -230,6 +231,7 @@ final class DevBootstrap {
 
   VmService? _vm;
   Process? _child;
+  PosixInputFlags? _childInputFlags;
   Directory? _terminalStateDirectory;
   String? _inlineRecovery;
   String? get _inlineLeasePath => _terminalStateDirectory == null
@@ -435,6 +437,7 @@ final class DevBootstrap {
             child.kill(ProcessSignal.sigkill);
             await child.exitCode;
           }
+          await supervisor._restoreChildInputFlags();
           await supervisor._emergencyTtyRestore();
           endWith(70);
         }
@@ -529,6 +532,7 @@ final class DevBootstrap {
             child.kill(ProcessSignal.sigkill);
             await child.exitCode;
           }
+          await supervisor._restoreChildInputFlags();
           await supervisor._emergencyTtyRestore();
           exit(70);
         }
@@ -665,6 +669,7 @@ final class DevBootstrap {
     while (true) {
       final child = _child!;
       final code = await child.exitCode;
+      await _restoreChildInputFlags();
       _debugLog('child exited code=$code restart=$_restartInFlight');
       await _disconnectVm();
       if (!_restartInFlight) {
@@ -737,6 +742,7 @@ final class DevBootstrap {
         if (child != null) {
           child.kill(ProcessSignal.sigkill);
           _lastChildExit = await child.exitCode;
+          await _restoreChildInputFlags();
           // It may have died owning raw mode / the alt screen; restore from
           // out here before whoever runs next (the classic fallback or a
           // respawn) touches the terminal.
@@ -758,6 +764,12 @@ final class DevBootstrap {
   Future<bool> _spawnChildInto(File infoFile) async {
     final Process child;
     try {
+      // An inherited terminal shares its file-status flags with the child.
+      // Save before spawn, so even SIGKILL before child metadata publication
+      // cannot leave the supervisor/shell's descriptor nonblocking.
+      if ((Platform.isMacOS || Platform.isLinux) && stdin.hasTerminal) {
+        _childInputFlags = PosixInputFlags.capture(0);
+      }
       child = await Process.start(
         _dartExecutable,
         devRespawnArguments(
@@ -781,6 +793,7 @@ final class DevBootstrap {
         },
       );
     } catch (error) {
+      await _restoreChildInputFlags();
       _debugLog('spawn failed: $error');
       return false;
     }
@@ -1062,6 +1075,21 @@ final class DevBootstrap {
 
   // ── Emergency restore (POSIX) ────────────────────────────────────────────
 
+  Future<void> _restoreChildInputFlags() async {
+    final saved = _childInputFlags;
+    if (saved == null) return;
+    try {
+      saved.restore(0);
+      _childInputFlags = null;
+    } catch (error) {
+      // Still attempt independent screen/termios restoration. Do not respawn
+      // or report a clean exit when shared input ownership cannot be restored.
+      await _emergencyTtyRestore();
+      stderr.writeln('Fleury could not restore terminal input flags: $error');
+      exit(70);
+    }
+  }
+
   Future<void> _emergencyTtyRestore() async {
     try {
       final inline =
@@ -1102,6 +1130,7 @@ final class DevBootstrap {
     if (child != null) {
       child.kill(ProcessSignal.sigkill);
       await child.exitCode;
+      await _restoreChildInputFlags();
     }
     _inlineRecovery ??= inlineTerminalRecovery(_inlineLeasePath, _terminalSize);
     try {

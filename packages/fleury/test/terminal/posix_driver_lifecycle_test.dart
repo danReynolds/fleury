@@ -154,27 +154,40 @@ class _ControlledFlushStdout extends _RecordingStdout {
 }
 
 class _FakeModeController implements PosixTerminalModeController {
-  _FakeModeController(this.trace, {this.throwOnRawCount});
+  _FakeModeController(
+    this.trace, {
+    this.throwOnRawCount,
+    this.failOnRawCount,
+    this.restoreError,
+  });
 
   final List<String> trace;
   final int? throwOnRawCount;
+  final int? failOnRawCount;
+  final Object? restoreError;
   int rawCount = 0;
   int restoreCount = 0;
+  bool raw = false;
 
   @override
   bool enableRawMode() {
     rawCount++;
     trace.add('mode:raw');
+    raw = true;
     if (rawCount == throwOnRawCount) {
       throw StateError('injected raw-mode re-entry failure');
     }
-    return true;
+    return rawCount != failOnRawCount;
   }
 
   @override
   bool restoreMode() {
     restoreCount++;
     trace.add('mode:restore');
+    final error = restoreError;
+    if (error != null) throw error;
+    if (!raw) return false;
+    raw = false;
     return true;
   }
 }
@@ -216,6 +229,34 @@ class _HangingFlushStdout extends _RecordingStdout {
 Future<void> _pump() => Future<void>.delayed(const Duration(milliseconds: 10));
 
 void main() {
+  test(
+    'force exit is bounded while a terminal handoff remains borrowed',
+    () async {
+      final input = _FakeStdin();
+      final forced = Completer<int>();
+      final driver = PosixTerminalDriver(
+        stdinOverride: input,
+        stdoutOverride: _RecordingStdout(),
+        signalGrace: const Duration(milliseconds: 10),
+        forceExitOverride: forced.complete,
+      );
+      await driver.enter(TerminalMode.interactive);
+      final started = Completer<void>();
+      final child = Completer<void>();
+      final handoff = driver.runWithTerminalHandoff(() async {
+        started.complete();
+        await child.future;
+      });
+      await started.future;
+      driver.deliverSignal(AppSignal.interrupt);
+      expect(await forced.future.timeout(const Duration(seconds: 1)), 130);
+      child.complete();
+      await handoff;
+      await driver.restore();
+      await input.close();
+    },
+  );
+
   test(
     'a restored native driver rejects reentry before touching input',
     () async {
@@ -280,7 +321,7 @@ void main() {
         out.written.clear();
 
         await driver.debugSuspend();
-        driver.debugResume();
+        await driver.debugResume();
 
         expect(out.written.toString(), isNot(contains('\x1B[>4;2m')));
         expect(out.written.toString(), isNot(contains('\x1B[>31u')));
@@ -369,7 +410,7 @@ void main() {
         out.written.clear();
 
         await driver.debugSuspend();
-        driver.debugResume();
+        await driver.debugResume();
 
         expect(out.written.toString(), contains('\x1B[>3u'));
         expect(
@@ -443,6 +484,7 @@ void main() {
 
         input.push(const <int>[0x1A]);
         await _pump();
+        await driver.debugSuspend();
 
         expect(selfStops, 1);
         expect(driver.debugSuspended, isTrue);
@@ -467,7 +509,7 @@ void main() {
         driver.write('FRAME-WHILE-STOPPED');
         expect(out.written.toString(), isEmpty);
 
-        driver.debugResume();
+        await driver.debugResume();
         await _pump();
         expect(driver.debugSuspended, isFalse);
         expect(modes.rawCount, 2, reason: 'raw mode is re-applied after fg');
@@ -501,8 +543,11 @@ void main() {
     await out.waitForFlushCount(1);
 
     final restoring = driver.restore();
-    await out.waitForFlushCount(2);
+    // Restoration drains the pending suspend flush before its own flush.
+    await _pump();
+    expect(out.flushes, hasLength(1));
     out.flushes[0].complete();
+    await out.waitForFlushCount(2);
     out.flushes[1].complete();
     await restoring;
     await _pump();
@@ -562,7 +607,7 @@ void main() {
 
       // These paths normally emit resize/signal events. Once EOF has closed the
       // stream, they must be no-ops rather than add-to-closed-stream races.
-      driver.debugResume();
+      await driver.debugResume();
       await driver.runWithTerminalHandoff(() {});
       driver.deliverSignal(AppSignal.terminate);
       await _pump();
@@ -643,68 +688,149 @@ void main() {
   );
 
   test(
-    'failed re-entry rejects one handoff without wedging the queue',
+    'restore drains the active handoff and rejects queued handoffs',
     () async {
       final input = _FakeStdin(terminal: true);
       final out = _RecordingStdout();
-      final modes = _FakeModeController(<String>[], throwOnRawCount: 2);
+      final modes = _FakeModeController(<String>[]);
       final driver = PosixTerminalDriver(
         stdinOverride: input,
         stdoutOverride: out,
         terminalModeController: modes,
       );
-      final releaseFirst = Completer<void>();
-      final releaseSecond = Completer<void>();
-      final firstStarted = Completer<void>();
-      final secondStarted = Completer<void>();
+      final started = Completer<void>();
+      final childFinished = Completer<void>();
+      await driver.enter(TerminalMode.interactive);
+      final first = driver.runWithTerminalHandoff(() async {
+        started.complete();
+        await childFinished.future;
+      });
+      await started.future;
+      var queuedRan = false;
+      final queued = driver.runWithTerminalHandoff(() => queuedRan = true);
+      final queuedRejected = expectLater(queued, throwsStateError);
+      var restored = false;
+      final restoring = driver.restore().then((_) => restored = true);
+      await _pump();
+      expect(restored, isFalse);
+      await expectLater(driver.runWithTerminalHandoff(() {}), throwsStateError);
+      childFinished.complete();
+      await first;
+      await queuedRejected;
+      await restoring;
+      expect(queuedRan, isFalse);
+      expect(modes.restoreCount, 1, reason: 'handoff already restored input');
+      await input.close();
+    },
+  );
 
-      try {
-        await driver.enter(TerminalMode.interactive);
-        final first = driver.runWithTerminalHandoff(() async {
-          firstStarted.complete();
-          await releaseFirst.future;
-        });
-        await firstStarted.future;
-
-        final second = driver.runWithTerminalHandoff(() async {
-          secondStarted.complete();
-          await releaseSecond.future;
-        });
-        await _pump();
-        expect(
-          secondStarted.isCompleted,
-          isFalse,
-          reason: 'the queued child must not overlap the failing handoff',
+  test(
+    'a stale handoff callback cannot borrow the reclaimed terminal',
+    () async {
+      final input = _FakeStdin();
+      final driver = PosixTerminalDriver(
+        stdinOverride: input,
+        stdoutOverride: _RecordingStdout(),
+      );
+      await driver.enter(TerminalMode.interactive);
+      late Future<void> Function() stale;
+      var ran = false;
+      await driver.runWithTerminalHandoff(() {
+        stale = Zone.current.bindCallback(
+          () => driver.runWithTerminalHandoff<void>(() {
+            ran = true;
+          }),
         );
-        final firstFailure = expectLater(
-          first,
-          throwsA(
-            isA<StateError>().having(
-              (error) => error.message,
-              'message',
-              'injected raw-mode re-entry failure',
+      });
+      await expectLater(stale(), throwsStateError);
+      expect(ran, isFalse);
+      await driver.restore();
+      await input.close();
+    },
+  );
+
+  for (final throws in [true, false]) {
+    test(
+      'failed terminal re-entry closes admission (throws=$throws)',
+      () async {
+        final input = _FakeStdin(terminal: true);
+        final out = _RecordingStdout();
+        final modes = _FakeModeController(
+          <String>[],
+          throwOnRawCount: throws ? 2 : null,
+          failOnRawCount: throws ? null : 2,
+        );
+        final driver = PosixTerminalDriver(
+          stdinOverride: input,
+          stdoutOverride: out,
+          terminalModeController: modes,
+        );
+        final errors = <Object>[];
+        final events = <TuiEvent>[];
+        final subscription = driver.events.listen(
+          events.add,
+          onError: errors.add,
+        );
+        final started = Completer<void>();
+        final release = Completer<void>();
+        try {
+          await driver.enter(TerminalMode.interactive);
+          final first = driver.runWithTerminalHandoff(() async {
+            started.complete();
+            await release.future;
+          });
+          await started.future;
+          var queuedRan = false;
+          final queued = driver.runWithTerminalHandoff(() => queuedRan = true);
+          final firstFailure = expectLater(first, throwsStateError);
+          final queuedFailure = expectLater(queued, throwsStateError);
+          release.complete();
+          await firstFailure;
+          await queuedFailure;
+          await _pump();
+          expect(queuedRan, isFalse);
+          expect(errors, hasLength(1));
+          expect(
+            events.whereType<TerminalFocusEvent>().where(
+              (event) => event.focused,
             ),
-          ),
-        );
+            isEmpty,
+          );
+          driver.write('FRAME-AFTER-FAILURE');
+          expect(
+            out.written.toString(),
+            isNot(contains('FRAME-AFTER-FAILURE')),
+          );
+        } finally {
+          await driver.restore();
+          await subscription.cancel();
+          await input.close();
+        }
+      },
+    );
+  }
 
-        releaseFirst.complete();
-        await firstFailure;
-        await secondStarted.future.timeout(const Duration(seconds: 1));
-
-        driver.write('FRAME-DURING-SECOND');
-        expect(out.written.toString(), isNot(contains('FRAME-DURING-SECOND')));
-
-        releaseSecond.complete();
-        await second.timeout(const Duration(seconds: 1));
-        expect(modes.rawCount, 3);
-        expect(modes.restoreCount, 2);
-
-        driver.write('FRAME-AFTER-FAILURE');
-        expect(out.written.toString(), contains('FRAME-AFTER-FAILURE'));
-      } finally {
-        await driver.restore();
-        await input.close();
-      }
+  test(
+    'a child operation error can return to a successfully restored UI',
+    () async {
+      final input = _FakeStdin(terminal: true);
+      final out = _RecordingStdout();
+      final modes = _FakeModeController(<String>[]);
+      final driver = PosixTerminalDriver(
+        stdinOverride: input,
+        stdoutOverride: out,
+        terminalModeController: modes,
+      );
+      await driver.enter(TerminalMode.interactive);
+      await expectLater(
+        driver.runWithTerminalHandoff(() => throw StateError('child failed')),
+        throwsStateError,
+      );
+      expect(modes.raw, isTrue);
+      driver.write('FRAME-AFTER-CHILD');
+      expect(out.written.toString(), contains('FRAME-AFTER-CHILD'));
+      await driver.restore();
+      await input.close();
     },
   );
 
@@ -855,6 +981,78 @@ void main() {
       }
     },
   );
+
+  for (final trigger in ['SIGHUP', 'EOF']) {
+    for (final resource in ['input mode', 'output']) {
+      test('$trigger does not excuse $resource restoration EIO without '
+          'descriptor hangup evidence', () async {
+        final trace = <String>[];
+        final input = _FakeStdin(terminal: true);
+        const eio = OSError('injected restoration failure', 5);
+        final Object failure = resource == 'input mode'
+            ? eio
+            : const StdoutException('injected terminal write failure', eio);
+        var failOutput = false;
+        final output = _RecordingStdout(
+          terminal: true,
+          trace: trace,
+          onWrite: (_) {
+            if (failOutput) throw failure;
+          },
+        );
+        final watchers = <ProcessSignal, void Function(ProcessSignal)>{};
+        final modes = _FakeModeController(
+          trace,
+          restoreError: resource == 'input mode' ? failure : null,
+        );
+        final driver = PosixTerminalDriver(
+          stdinOverride: input,
+          stdoutOverride: output,
+          terminalModeController: modes,
+          signalGrace: const Duration(seconds: 30),
+          forceExitOverride: (_) {},
+          signalWatcherOverride: (signal, onSignal) {
+            watchers[signal] = onSignal;
+            return _TraceSignalSubscription(signal, trace);
+          },
+        );
+        final events = <TuiEvent>[];
+        final sub = driver.events.listen(events.add);
+        try {
+          await driver.enter(TerminalMode.interactive);
+          if (trigger == 'SIGHUP') {
+            watchers[ProcessSignal.sighup]!(ProcessSignal.sighup);
+          } else {
+            await input.close();
+          }
+          await _pump();
+          expect(events.whereType<SignalEvent>(), [
+            const SignalEvent(AppSignal.hangup),
+          ]);
+
+          // These streams own no native descriptor. Neither their EOF nor a
+          // delivered signal authorizes suppressing restoration errors, even
+          // when the errno also occurs on a physically revoked terminal.
+          trace.clear();
+          failOutput = resource == 'output';
+          await expectLater(driver.restore(), throwsA(same(failure)));
+          expect(modes.restoreCount, 1);
+          expect(trace, contains('flush'));
+          expect(
+            trace.where(
+              (entry) => entry == 'unwatch:${ProcessSignal.sighup.name}',
+            ),
+            hasLength(2),
+            reason: 'the original watcher and shield are both released',
+          );
+        } finally {
+          await driver.restore().then<void>((_) {}, onError: (Object _) {});
+          await sub.cancel();
+          if (!input.closed) await input.close();
+        }
+      });
+    }
+  }
 
   test(
     'a raw terminal read error is a hangup only when the tty is gone',
@@ -1119,7 +1317,7 @@ void main() {
             input.push([0x1a]);
             await Future<void>.delayed(const Duration(milliseconds: 20));
             expect(count(pop), supported ? 2 : 0);
-            driver.debugResume();
+            await driver.debugResume();
             expect(count(push), supported ? 3 : 0);
             expect(events.whereType<KeyEvent>(), isEmpty);
             expect(events.whereType<TextInputEvent>(), isEmpty);
@@ -1442,7 +1640,7 @@ void main() {
         await _pump();
         expect(focus(), [false], reason: 'suspend surrenders authority');
 
-        driver.debugResume();
+        await driver.debugResume();
         await _pump();
         expect(focus(), [false, true]);
         final regained = events.indexWhere(

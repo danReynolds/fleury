@@ -34,6 +34,7 @@ import 'package:stdio/stdio.dart' as fd;
 
 import '../terminal/native_driver.dart';
 import '../terminal/posix_driver.dart';
+import '../terminal/posix_input_lease.dart';
 import '../terminal/terminal_driver.dart';
 import '../terminal/pointer_shapes.dart';
 import '../widgets/focus.dart';
@@ -479,6 +480,13 @@ Future<AppExit> _runAppImpl(
   void Function(fd.Stdio capture)? onFdCaptureStarted,
 }) async {
   final runtimeMarkers = _RuntimeMarkerRecorder.fromEnvironment();
+  // Explicit drivers own their output surface, which need not be process
+  // stdio (or even support terminal queries on its IOOverrides).
+  final stdoutWasTerminal = driver == null && stdout.hasTerminal;
+  final stderrWasTerminal = driver == null && stderr.hasTerminal;
+  bool outputHungUp(int descriptor) =>
+      (descriptor == 1 ? stdoutWasTerminal : stderrWasTerminal) &&
+      posixDescriptorHungUp(descriptor);
   runtimeMarkers?.mark('runApp.entry');
   // The stray-output guard. When the session resolves to the local native
   // driver on POSIX with a real-TTY stdout, redirect fd 1/2 (dup2, via
@@ -936,11 +944,27 @@ Future<AppExit> _runAppImpl(
       FutureOr<void> Function() action, {
       Duration timeout = _cleanupResourceTimeout,
       bool terminalCritical = false,
+      int? outputDescriptor,
     }) async {
       try {
+        Future<void> completeAction() async {
+          try {
+            await action();
+          } catch (error) {
+            // A completed write to a vanished terminal cannot outlive this
+            // invocation. Pending writes and other cleanup failures still
+            // retain admission; a timeout is never treated as completion.
+            if (outputDescriptor == null ||
+                !isTerminalGoneError(error) ||
+                !outputHungUp(outputDescriptor)) {
+              rethrow;
+            }
+          }
+        }
+
         final operation = terminalCritical
-            ? invocation.restoreCritical(resource, action)
-            : Future<void>.sync(action);
+            ? invocation.restoreCritical(resource, completeAction)
+            : completeAction();
         await operation.timeout(
           timeout,
           onTimeout: () => throw TimeoutException(
@@ -1041,31 +1065,42 @@ Future<AppExit> _runAppImpl(
           onStrayOutput == null &&
           !remoteFdMirror &&
           !logBuffer.isEmpty) {
+        // Do not enqueue new output to a detached terminal. Existing/pending
+        // writes still have to settle; a hangup never waives their deadline.
+        final stdoutGone = outputHungUp(1);
+        final stderrGone = outputHungUp(2);
         await captureAsync('captured output replay', () {
           for (final line in logBuffer.lines) {
             switch (line.source) {
               case LogSource.stdout:
-                stdout.writeln(line.text);
+                if (!stdoutGone) stdout.writeln(line.text);
               case LogSource.stderr:
-                stderr.writeln(line.text);
+                if (!stderrGone) stderr.writeln(line.text);
             }
           }
         }, terminalCritical: true);
-        await captureAsync(
-          'stdout flush',
-          stdout.flush,
-          terminalCritical: true,
-        );
-        await captureAsync(
-          'stderr flush',
-          stderr.flush,
-          terminalCritical: true,
-        );
+        if (!stdoutGone) {
+          await captureAsync(
+            'stdout flush',
+            stdout.flush,
+            terminalCritical: true,
+            outputDescriptor: 1,
+          );
+        }
+        if (!stderrGone) {
+          await captureAsync(
+            'stderr flush',
+            stderr.flush,
+            terminalCritical: true,
+            outputDescriptor: 2,
+          );
+        }
       }
     }
 
     // Byte telemetry summary, after the terminal is restored.
-    if (byteTelemetry != null) {
+    final diagnosticsGone = outputHungUp(2);
+    if (byteTelemetry != null && !diagnosticsGone) {
       captureSync(
         'byte telemetry',
         () => stderr.write(_formatByteTelemetry(byteTelemetry)),
@@ -1083,6 +1118,7 @@ Future<AppExit> _runAppImpl(
     // fail the invocation; its admission is retained until every underlying
     // critical operation succeeds, even if this reporting deadline elapsed.
     for (final failure in teardownErrors) {
+      if (diagnosticsGone) break;
       try {
         stderr.writeln(
           'fleury: error during teardown (${failure.resource}): '
@@ -1093,11 +1129,13 @@ Future<AppExit> _runAppImpl(
         // There is no safer reporting channel left; teardown is still done.
       }
     }
-    if (teardownErrors.isNotEmpty || byteTelemetry != null) {
+    if (!diagnosticsGone &&
+        (teardownErrors.isNotEmpty || byteTelemetry != null)) {
       await captureAsync(
         'teardown diagnostics flush',
         stderr.flush,
         terminalCritical: true,
+        outputDescriptor: 2,
       );
     }
     final unresolved = invocation._criticalResources.values;

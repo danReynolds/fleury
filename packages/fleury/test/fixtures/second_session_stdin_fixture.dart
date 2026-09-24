@@ -1,10 +1,5 @@
-// Fixture for the "second same-process session" regression test. dart:io hands
-// out the process-global stdin exactly once, so a second interactive session in
-// one process cannot re-listen to it. This runs two sequential
-// PosixTerminalDriver sessions against the REAL stdin and asserts the second is
-// rejected with a CLEAR, legible error (not the opaque 'Stream has already been
-// listened to') — and that the process then EXITS (a leaked/paused stdin
-// subscription would keep the event loop alive and hang here).
+// The redirected stdin fallback rejects a second subscription clearly and
+// exits naturally. Native TTY reuse has a separate integrated PTY fixture.
 import 'dart:io';
 
 import 'package:fleury/fleury.dart' show TerminalMode;
@@ -23,7 +18,7 @@ Future<void> main() async {
     await second.restore();
   } on StateError catch (e) {
     stdout.writeln(
-      e.message.contains('one interactive session per process')
+      e.message.contains('redirected stdin stream was already consumed')
           ? 'SESSION-1-REJECTED-CLEANLY'
           : 'SESSION-1-WRONG-ERROR: ${e.message}',
     );

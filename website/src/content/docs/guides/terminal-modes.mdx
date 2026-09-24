@@ -91,10 +91,14 @@ Native inline currently requires macOS/Linux, terminal input/output, and cursor
 position reporting. It does not support Windows or redirected input/output.
 [Current inline support](#current-inline-support) describes the remaining limits.
 
-Choose the mode at startup. Keep multiple interactive steps inside **one
-`runApp` session**; a native process cannot start another interactive session
-after it exits. Move between widgets or pages within that session, as the setup
-form does. Use handoff for another program that needs the terminal.
+Choose the mode for each `runApp` invocation. On native macOS/Linux terminals,
+you can await one UI, run ordinary CLI code, and open another UI in the same
+process. Each invocation gets a fresh driver and can choose its own mode.
+
+Keep steps inside one session when they belong to a continuous UI, as the setup
+form does. End the session when the CLI should regain control. Use handoff when
+another program temporarily needs the terminal and you want to return to the
+current UI with its state intact.
 
 Setting `TerminalMode(alternateScreen: false)` alone does not create an inline
 region: it provides neither the allocation nor the rendering bounds.
@@ -112,6 +116,34 @@ form: preserve its exit status and skip the ordinary result message. An unhandle
 Ctrl+C returns `AppExit.signal(AppSignal.interrupt)`, conventionally exit code 130.
 The sample disables hot reload so its startup and final
 output run once; both terminal modes support development sessions.
+
+### Open another UI in the same command
+
+Run the setup demo with an ordinary CLI prompt between sessions:
+
+```sh
+dart run packages/samples/bin/samples.dart inline --repeat
+```
+
+Finish setup, then answer `y` at **Open setup again?**. The command reads that
+answer with `stdin.readLineSync()` and starts a new `runApp`. Earlier summaries
+remain in the terminal. Add `--full-screen` to try the same flow in that mode.
+
+Await each invocation before starting the next. Overlapping or nested
+`runApp` calls are rejected, and an explicitly supplied native driver is used
+only once. Let each call create its default driver. After ordinary completion,
+Fleury has released input and restored the terminal. Handle signal outcomes
+before opening another UI: a hangup means the terminal disconnected. If cleanup
+fails, Fleury reports an error and blocks new sessions until ownership is safely
+returned.
+
+This reuse support is for native macOS/Linux TTY input. Windows and redirected
+Dart stdin streams still permit one session per process. This does not make
+Dart's own stdin stream reusable: another library must not read concurrently,
+and cancelling its subscription can close fd 0. Fleury cannot recover a closed
+input descriptor or silently reopen a different terminal.
+Disable hot reload for a CLI with work between sessions: hot restart reruns the
+entrypoint, including earlier prompts and side effects.
 
 ### Give inline steps enough room
 

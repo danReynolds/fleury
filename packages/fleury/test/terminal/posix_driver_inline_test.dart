@@ -222,7 +222,7 @@ void main() {
     await driver.debugSuspend();
     expect(modes.raw, isFalse);
     cursor = const CellOffset(0, 12);
-    driver.debugResume();
+    await driver.debugResume();
     await _settle();
     expect(driver.debugSuspended, isFalse);
     expect(driver.renderTarget.top, 12);

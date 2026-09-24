@@ -51,6 +51,7 @@ final class TerminalQueryRunner
   _QueryExchange? _active;
   _QueryQuarantine? _quarantine;
   bool _disposed = false;
+  bool _suspended = false;
 
   @override
   Future<List<int>> request(String bytes, {required Duration timeout}) async {
@@ -93,6 +94,11 @@ final class TerminalQueryRunner
     required Duration timeout,
     required int sentinels,
   }) {
+    if (_disposed || _suspended) {
+      return Future.error(
+        StateError('TerminalQueryRunner is not accepting queries.'),
+      );
+    }
     final elapsed = Stopwatch()..start();
     final previous = _tail;
     final released = Completer<void>();
@@ -127,8 +133,8 @@ final class TerminalQueryRunner
             ),
           );
         }
-        if (_disposed) {
-          throw StateError('TerminalQueryRunner is disposed.');
+        if (_disposed || _suspended) {
+          throw StateError('TerminalQueryRunner is not accepting queries.');
         }
         final remaining = timeout - elapsed.elapsed;
         if (remaining <= Duration.zero) {
@@ -281,6 +287,20 @@ final class TerminalQueryRunner
         _parser.flush(_inputSink);
       }
     });
+  }
+
+  /// Stops admitting queries and drains the current exchange and its bounded
+  /// late-response quarantine before another terminal owner starts reading.
+  Future<void> suspend() async {
+    _suspended = true;
+    await _tail;
+    final quarantine = _quarantine;
+    if (quarantine != null) await quarantine.done.future;
+  }
+
+  void resume() {
+    if (_disposed) throw StateError('TerminalQueryRunner is disposed.');
+    _suspended = false;
   }
 
   /// Cancels active timers and prevents future queries.

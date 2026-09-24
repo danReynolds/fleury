@@ -12,15 +12,33 @@ Future<void> runInlineSetup(List<String> args) async {
   if (args.contains('--help') || args.contains('-h')) {
     print(
       'Inline project setup demo\n'
-      'Usage: dart run packages/samples/bin/inline.dart [--full-screen] [--handoff]\n'
+      'Usage: dart run packages/samples/bin/inline.dart [--full-screen] [--handoff] [--repeat]\n'
+      '--repeat opens another UI after a CLI prompt (macOS/Linux terminals).\n'
       'Generates a configuration in memory. No project files are written.',
     );
     return;
   }
-  final fullScreen = args.contains('--full-screen');
-  InlineSetupResult? result;
+  if (args.contains('--repeat') &&
+      (!(Platform.isMacOS || Platform.isLinux) ||
+          !stdin.hasTerminal || !stdout.hasTerminal)) {
+    stderr.writeln('--repeat requires macOS/Linux terminal input and output.');
+    exitCode = 64;
+    return;
+  }
   stdout.writeln('Project setup demo · Configuration is generated in memory.');
   await stdout.flush();
+  do {
+    if (!await _showSetup(args) || !args.contains('--repeat')) return;
+    stdout.write('\nOpen setup again? [y/N] ');
+    await stdout.flush();
+    // Fleury has returned stdin: an ordinary CLI prompt can read it before
+    // the next runApp starts. No shared driver or global initialization.
+  } while (stdin.readLineSync()?.trim().toLowerCase() == 'y');
+}
+
+Future<bool> _showSetup(List<String> args) async {
+  final fullScreen = args.contains('--full-screen');
+  InlineSetupResult? result;
   final exit = await runApp(
     FleuryApp(
       title: 'Project setup',
@@ -55,10 +73,11 @@ Future<void> runInlineSetup(List<String> args) async {
       AppSignal.terminate => 143,
       AppSignal.hangup => 129,
     };
-    return;
+    return false;
   }
   stdout.writeln(result?.summary ?? 'Setup cancelled.');
   await stdout.flush();
+  return result != null;
 }
 
 Future<void> _openPager(

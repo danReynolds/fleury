@@ -264,6 +264,24 @@ class InputParser {
     flush(sink);
   }
 
+  /// Ends a deliberate input borrow, without pretending the source reached EOF.
+  ///
+  /// Complete already-consumed paste data as one transaction. Discard partial
+  /// key/UTF-8/protocol prefixes so input after a child or suspend cannot finish
+  /// an earlier key. This does not flush bytes still queued in the OS.
+  void endInputOwnership(TuiEventSink sink) {
+    if (_state == _State.paste) _finishPaste(sink);
+    _legacyCandidate.clear();
+    _pendingUtf8.clear();
+    _pendingUtf8Alt = false;
+    _swallowNextLf = false;
+    _resetCsi();
+    _clearEscapeSequence();
+    _responseSink = null;
+    responseExpectation = TerminalResponseExpectation.none;
+    _state = _State.ground;
+  }
+
   /// Resolves any pending parser state when the byte stream reaches EOF.
   ///
   /// Unlike [flush], this is a hard boundary: an incomplete UTF-8 scalar is

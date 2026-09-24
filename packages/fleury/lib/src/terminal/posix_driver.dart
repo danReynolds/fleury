@@ -17,6 +17,7 @@ import 'dart:io';
 
 import 'package:ffi/ffi.dart';
 import 'package:meta/meta.dart';
+import 'package:stdio/stdio.dart' as fd;
 
 import '../foundation/geometry.dart';
 import '../rendering/ansi_render_target.dart';
@@ -32,6 +33,7 @@ import 'terminal_probe.dart';
 import 'terminal_query_runner.dart';
 import 'terminal_sequences.dart';
 import 'pointer_shapes.dart';
+import 'posix_input_lease.dart';
 
 /// Native POSIX terminal lifecycle and byte-input driver.
 ///
@@ -82,13 +84,13 @@ class PosixTerminalDriver
 
   final Stdin _stdin;
 
-  // dart:io hands out the process-global stdin exactly once: after a session
-  // listens to it and cancels (in [restore]), it can never be listened to
-  // again. This static latches once the global stdin has been spent so a
-  // second same-process [enter] fails with a clear message instead of the
-  // opaque 'Stream has already been listened to'. Injected test streams are
-  // exempt (each driver owns its own), so this never trips in unit tests.
+  // Redirected/custom streams retain dart:io's source-specific contract.
+  // Native macOS/Linux TTY input is a cancellable descriptor borrow instead.
   static bool _globalStdinConsumed = false;
+  bool get _usesNativeInput =>
+      identical(_stdin, stdin) &&
+      _stdinIsTerminal &&
+      (Platform.isMacOS || Platform.isLinux);
   final Stdout _stdout;
 
   /// How long a delivered [SignalEvent] may remain unresolved before the
@@ -134,7 +136,9 @@ class PosixTerminalDriver
   final _ParserSink _sink = _ParserSink();
   late final TerminalQueryRunner _queryRunner;
 
+  PosixInputLease? _nativeInput;
   StreamSubscription<List<int>>? _stdinSubscription;
+  Future<void>? _restoreFuture;
   StreamSubscription<ProcessSignal>? _resizeSubscription;
   StreamSubscription<ProcessSignal>? _intSubscription;
   StreamSubscription<ProcessSignal>? _termSubscription;
@@ -151,6 +155,7 @@ class PosixTerminalDriver
   Timer? _flushTimer;
   Timer? _pasteIdleTimer;
   Timer? _graceTimer;
+  bool _forceExitStarted = false;
   AppSignal? _pendingSignal;
   bool _pendingSignalDelivered = false;
 
@@ -163,6 +168,9 @@ class PosixTerminalDriver
   int _lifecycleGeneration = 0;
   bool _handoffActive = false;
   Future<void> _handoffTail = Future<void>.value();
+  Future<void> _suspendTail = Future<void>.value();
+  Future<void> _resumeTail = Future<void>.value();
+  bool _resuming = false;
   // True from the moment Ctrl+Z restoration begins until foregrounding
   // continues after SIGSTOP and re-enters our mode. Like [_handoffActive], it
   // gates frame [write]s while the shell owns the terminal and single-flights
@@ -344,16 +352,31 @@ class PosixTerminalDriver
   /// conventional code. Used when the app ignores a signal past
   /// [signalGrace] or the user sends the same signal twice.
   void _forceExit(AppSignal signal) {
+    if (_forceExitStarted) return;
+    _forceExitStarted = true;
     final code = _signalExitCode(signal);
     final force = _forceExitOverride;
+    var finished = false;
+    Timer? deadline;
+    void finish() {
+      if (finished) return;
+      finished = true;
+      deadline?.cancel();
+      if (force != null) {
+        force(code);
+      } else {
+        exit(code);
+      }
+    }
+
+    // Forced escalation must not await an arbitrary handoff callback forever.
+    // Ordinary restoration still drains it and never claims ownership early.
+    deadline = Timer(const Duration(milliseconds: 250), finish);
     unawaited(
-      restore().whenComplete(() {
-        if (force != null) {
-          force(code);
-        } else {
-          exit(code);
-        }
-      }),
+      restore().then(
+        (_) => finish(),
+        onError: (Object _, StackTrace _) => finish(),
+      ),
     );
   }
 
@@ -659,11 +682,11 @@ class PosixTerminalDriver
     // Reject a second same-process interactive session up front, before any
     // terminal mutation, so the terminal is left untouched and the failure is
     // legible (see [_globalStdinConsumed]).
-    if (identical(_stdin, stdin) && _globalStdinConsumed) {
+    if (!_usesNativeInput && identical(_stdin, stdin) && _globalStdinConsumed) {
       throw StateError(
-        'Fleury supports one interactive session per process: the terminal '
-        'stdin was already consumed by an earlier runApp() and dart:io cannot '
-        'hand it out again. Run each interactive session in its own process.',
+        'This redirected stdin stream was already consumed by an earlier '
+        'runApp(). Dart stdin streams can only be subscribed to once. '
+        'Sequential native sessions require terminal input on macOS or Linux.',
       );
     }
     _restoring = false;
@@ -736,43 +759,8 @@ class PosixTerminalDriver
       _terminalState!.outputModesOwned = true;
     }
 
-    _stdinSubscription = _stdin.listen(
-      (bytes) {
-        _parser.feed(bytes, _sink, responseSink: _queryRunner);
-        _scheduleFlush();
-        _schedulePasteIdleFlush();
-      },
-      onError: (Object error, StackTrace stack) {
-        // A terminal read fails once the terminal is gone: that is the
-        // hangup itself, not an application error. Any other read failure is
-        // a real fault and reaches the app.
-        if (_rawTerminalInput && isTerminalGoneError(error)) {
-          _deliverHangup();
-          return;
-        }
-        if (!_events.isClosed) _events.addError(error, stack);
-      },
-      onDone: () {
-        _flushTimer?.cancel();
-        _flushTimer = null;
-        _pasteIdleTimer?.cancel();
-        _pasteIdleTimer = null;
-        _parser.finish(_sink); // finalizes any in-progress paste at EOF
-        if (_rawTerminalInput) {
-          // A raw-mode terminal never ends its input on its own — Ctrl+D is
-          // just a byte — so EOF means it hung up (window closed, SSH
-          // dropped). Report the hangup SIGHUP also reports; the app exits
-          // through its normal path with its cleanup intact.
-          _deliverHangup();
-          return;
-        }
-        // Piped (or cooked-mode) input ended: the session is over. Closing
-        // the driver event stream lets runApp's onDone path exit and restore
-        // instead of waiting forever on an input source that vanished.
-        if (!_events.isClosed) unawaited(_events.close());
-      },
-      cancelOnError: false,
-    );
+    await _startInput();
+    _checkStillEntering(enterGeneration);
 
     // Actively confirm a native image protocol the environment didn't name
     // (e.g. Kitty graphics under Warp, which masquerades as xterm-256color).
@@ -831,6 +819,91 @@ class PosixTerminalDriver
       synchronizedOutput: _synchronizedOutput,
       pointerShapes: _pointerShapes,
     );
+  }
+
+  Future<void> _startInput() async {
+    if (_usesNativeInput) {
+      if (_nativeInput != null) {
+        throw StateError('Terminal input is already owned.');
+      }
+      final input = _nativeInput = PosixInputLease(
+        onBytes: _receiveInput,
+        onDone: _inputEnded,
+        onError: _inputFailed,
+      );
+      await input.start();
+    } else {
+      final subscription = _stdinSubscription;
+      if (subscription != null) {
+        subscription.resume();
+      } else {
+        _stdinSubscription = _stdin.listen(
+          _receiveInput,
+          onError: _inputFailed,
+          onDone: _inputEnded,
+          cancelOnError: false,
+        );
+      }
+    }
+  }
+
+  void _receiveInput(List<int> bytes) {
+    _parser.feed(bytes, _sink, responseSink: _queryRunner);
+    _scheduleFlush();
+    _schedulePasteIdleFlush();
+  }
+
+  void _inputFailed(Object error, StackTrace stack) {
+    if (_rawTerminalInput && isTerminalGoneError(error)) {
+      _deliverHangup();
+    } else if (!_events.isClosed) {
+      _events.addError(error, stack);
+    }
+  }
+
+  void _inputEnded() {
+    _cancelInputTimers();
+    _parser.finish(_sink);
+    if (_rawTerminalInput) {
+      _deliverHangup();
+    } else if (!_events.isClosed) {
+      unawaited(_events.close());
+    }
+  }
+
+  void _cancelInputTimers() {
+    _flushTimer?.cancel();
+    _flushTimer = null;
+    _pasteIdleTimer?.cancel();
+    _pasteIdleTimer = null;
+  }
+
+  Future<void> _releaseInput({bool finalRelease = false}) async {
+    // Keep consuming replies until the last bounded query/quarantine has
+    // settled, then stop reading. A later owner must not inherit our parser.
+    await _queryRunner.suspend();
+    final input = _nativeInput;
+    if (input != null) {
+      await input.stop();
+      if (identical(_nativeInput, input)) _nativeInput = null;
+    }
+    final subscription = _stdinSubscription;
+    if (finalRelease) {
+      await subscription?.cancel();
+      _stdinSubscription = null;
+      if (subscription != null && identical(_stdin, stdin)) {
+        _globalStdinConsumed = true;
+      }
+    } else {
+      subscription?.pause();
+    }
+    _cancelInputTimers();
+    _parser.endInputOwnership(_sink);
+  }
+
+  Future<void> _reacquireInput() async {
+    _queryRunner.resume();
+    await _startInput();
   }
 
   /// Asserts that the `enter` identified by [enterGeneration] still owns the
@@ -1205,9 +1278,22 @@ class PosixTerminalDriver
     return true;
   }
 
-  bool _setRawMode() {
-    if (_nativeRawMode) return _terminalModeController.enableRawMode();
-    return _setDartRawMode();
+  void _setRawMode() {
+    // Configuration survives a handoff; rawInputOwned describes only the
+    // current borrow. Retain ownership on partial failure so cleanup retries.
+    _terminalState?.rawInputOwned = true;
+    final ok = _nativeRawMode
+        ? _terminalModeController.enableRawMode()
+        : _setDartRawMode();
+    if (!ok) throw StateError('Cannot re-enter terminal input mode.');
+  }
+
+  void _enterOutputMode(TerminalMode mode) {
+    if (!_stdoutIsTerminal) return;
+    final enter = _enterSequences(mode);
+    if (enter.isEmpty) return;
+    _terminalState?.outputModesOwned = true;
+    _stdout.write(enter);
   }
 
   bool _setDartRawMode() {
@@ -1223,7 +1309,12 @@ class PosixTerminalDriver
   }
 
   bool _restoreCookedMode() {
-    if (_nativeRawMode) return _terminalModeController.restoreMode();
+    if (!_changedStdin) return true;
+    if (_nativeRawMode) {
+      final ok = _terminalModeController.restoreMode();
+      if (ok) _terminalState?.rawInputOwned = false;
+      return ok;
+    }
     var ok = true;
     try {
       if (_originalLineMode != null) _stdin.lineMode = _originalLineMode!;
@@ -1237,6 +1328,7 @@ class PosixTerminalDriver
       // ignore
       ok = false;
     }
+    if (ok) _terminalState?.rawInputOwned = false;
     return ok;
   }
 
@@ -1248,7 +1340,12 @@ class PosixTerminalDriver
   /// our cfmakeraw mode) and self-stops with uncatchable SIGSTOP. An external
   /// `kill -TSTP` cannot be observed safely by pure Dart and may bypass this
   /// orderly path; callers should use the terminal's Ctrl+Z job-control chord.
-  Future<void> _suspend() async {
+  Future<void> _suspend() {
+    if (_suspended) return _suspendTail;
+    return _suspendTail = _suspendImpl();
+  }
+
+  Future<void> _suspendImpl() async {
     final mode = _mode;
     if (mode == null) return;
     final lifecycleGeneration = _lifecycleGeneration;
@@ -1278,6 +1375,10 @@ class PosixTerminalDriver
     if (!_events.isClosed) {
       _events.add(const TerminalFocusEvent(focused: false));
     }
+    await _releaseInput();
+    if (!_active || _restoring || lifecycleGeneration != _lifecycleGeneration) {
+      return;
+    }
     // Restore the terminal for the shell. Guarded so a failing write/flush
     // still reaches the stop below: a half-suspend that never stops (and so
     // is never resumed) would otherwise wedge the gate forever.
@@ -1287,6 +1388,7 @@ class PosixTerminalDriver
         _releaseInline();
         if (_wroteEnterSequences) _stdout.write(_exitSequences(mode));
         await _stdout.flush();
+        _terminalState?.outputModesOwned = false;
         _recordInlineLease(active: false, region: false);
       } catch (_) {}
       // restore() can run while the flush yields (SIGTERM, stdin EOF, or an
@@ -1306,7 +1408,7 @@ class PosixTerminalDriver
       if (!inputRestored) {
         // Never stop while the shell would inherit a terminal we failed to
         // restore. Re-enter best-effort and leave the process running.
-        _resume();
+        await _resume();
         return;
       }
     }
@@ -1323,9 +1425,9 @@ class PosixTerminalDriver
     if (!stopped) {
       // The stop didn't take (e.g. killPid failed) — re-enter immediately
       // rather than freeze or let frames target the restored shell.
-      _resume();
+      await _resume();
     } else if (selfStop == null) {
-      _resume();
+      await _resume();
     }
   }
 
@@ -1335,166 +1437,144 @@ class PosixTerminalDriver
 
   /// Test seam: drive [_resume] (`fg`) without a real SIGCONT.
   @visibleForTesting
-  void debugResume() => _resume();
+  Future<void> debugResume() => _resume();
 
   /// Test seam: whether frame writes are currently gated by a Ctrl+Z suspend.
   @visibleForTesting
   bool get debugSuspended => _suspended;
 
-  /// Invoked inside [runWithTerminalHandoff] after the terminal is restored
-  /// and before the operation runs (start) / after it completes and before
-  /// the driver re-enters its mode (end). `runApp` wires these to pause and
-  /// resume the fd-level stray-output capture, so a child the operation
-  /// spawns with `ProcessStartMode.inheritStdio` (an `$EDITOR`, a pager)
-  /// inherits the *real* descriptors instead of the capture pipe. Failures
-  /// are swallowed — a handoff must proceed even if the capture is already
-  /// shutting down.
+  /// Hooks for runApp's fd capture: the operation may start only after pause
+  /// succeeds, and capture must be resumed before the driver releases its borrow.
   Future<void> Function()? onHandoffStart;
   Future<void> Function()? onHandoffEnd;
 
   @override
   Future<T> runWithTerminalHandoff<T>(FutureOr<T> Function() operation) async {
-    // A helper invoked from inside an existing handoff is already in the safe
-    // restored-terminal zone; nesting must not restore/re-enter a second time.
-    if (Zone.current[this] == true) return await operation();
-
-    // Distinct concurrent handoffs (two processes launched together) must
-    // not overlap. With a single boolean, the first completion re-entered and
-    // ungated Fleury frames while the second child still owned the terminal.
+    final inherited = Zone.current[this];
+    if (inherited is _TerminalBorrow) {
+      if (!inherited.active) throw StateError('Terminal handoff has ended.');
+      return await operation();
+    }
+    if (!_active || _restoring || _suspended) {
+      throw StateError('No active terminal session for handoff.');
+    }
     final previous = _handoffTail;
     final release = Completer<void>();
     _handoffTail = release.future;
-
     var didHandoff = false;
-    var stdinPaused = false;
+    var captureReleased = false;
+    var inputReleased = false;
+    var reentryFailed = false;
+    final borrow = _TerminalBorrow();
     TerminalMode? handoffMode;
     try {
       await previous;
+      if (!_active || _restoring || _suspended) {
+        throw StateError('Terminal session closed before handoff could start.');
+      }
+      final mode = handoffMode = _mode!;
+      _handoffActive = didHandoff = true;
+      await _inlineTail;
+      if (!_active || _restoring) {
+        throw StateError('Terminal session closed before handoff could start.');
+      }
+      if (!_events.isClosed) {
+        _events.add(const TerminalFocusEvent(focused: false));
+      }
+      await _releaseInput();
+      inputReleased = true;
+      // Restoration can start at any await. It drains this borrow, so do not
+      // launch a new operation once closing has begun.
+      if (!_active || _restoring) {
+        throw StateError('Terminal session closed before handoff could start.');
+      }
+      if (_changedStdin && !_restoreCookedMode()) {
+        throw StateError('Cannot restore terminal input for handoff.');
+      }
+      _releaseInline();
+      if (_wroteEnterSequences) _stdout.write(_exitSequences(mode));
+      await _stdout.flush();
+      _terminalState?.outputModesOwned = false;
+      _recordInlineLease(active: false, region: false);
+      if (!_active || _restoring) {
+        throw StateError('Terminal session closed before handoff could start.');
+      }
+      captureReleased = true;
+      await onHandoffStart?.call();
+      if (!_active || _restoring) {
+        throw StateError('Terminal session closed before handoff could start.');
+      }
+      return await runZoned(
+        () => Future<T>.sync(operation),
+        zoneValues: <Object?, Object?>{this: borrow},
+      );
+    } finally {
+      borrow.active = false;
       try {
-        final mode = _mode;
-        if (!_active || mode == null) return await operation();
-        handoffMode = mode;
-        didHandoff = true;
-        _handoffActive = true;
-        await _inlineTail;
-        if (!_active || !identical(_mode, mode)) return await operation();
-        // Same contract as suspend: the child owns the terminal now, so held
-        // keys are released into it, never reported here.
-        if (!_events.isClosed) {
-          _events.add(const TerminalFocusEvent(focused: false));
-        }
-
-        // Stop the parent subscription before terminal modes change so it
-        // never races an inherited-stdio editor/pager for tty input.
-        final input = _stdinSubscription;
-        if (input != null) {
-          input.pause();
-          stdinPaused = true;
-        }
-        try {
-          _releaseInline();
-          if (_wroteEnterSequences) _stdout.write(_exitSequences(mode));
-        } catch (_) {}
-        if (_changedStdin) _restoreCookedMode();
-        try {
-          await _stdout.flush();
-          _recordInlineLease(active: false, region: false);
-        } catch (_) {}
-
-        final hs = onHandoffStart;
-        if (hs != null) {
-          try {
-            await hs();
-          } catch (_) {}
-        }
-
-        return await runZoned(
-          () => Future<T>.sync(operation),
-          zoneValues: <Object?, Object?>{this: true},
-        );
-      } finally {
         if (didHandoff) {
-          var shouldReenter = false;
           try {
-            final he = onHandoffEnd;
-            if (he != null) {
-              try {
-                await he();
-              } catch (_) {}
-            }
+            if (captureReleased) await onHandoffEnd?.call();
             final mode = handoffMode!;
-            shouldReenter = _active && identical(_mode, mode);
-            if (shouldReenter) {
-              if (_changedStdin) _setRawMode();
-              try {
-                if (_wroteEnterSequences) _stdout.write(_enterSequences(mode));
-                await _stdout.flush();
-              } catch (_) {}
-              if (isInline) {
-                // Queries share stdin with normal input, so resume the parent
-                // only after the child exits, but before acquiring its anchor.
-                if (stdinPaused) {
-                  _stdinSubscription?.resume();
-                  stdinPaused = false;
-                }
-                await _changeInline(reacquire: true);
+            if (_active && !_restoring && identical(_mode, mode)) {
+              if (_rawTerminalInput) _setRawMode();
+              _enterOutputMode(mode);
+              await _stdout.flush();
+              if (_active && !_restoring) {
+                if (inputReleased) await _reacquireInput();
+                if (isInline) await _changeInline(reacquire: true);
               }
             }
+          } catch (error, stack) {
+            // A failed operation may return to a healthy UI; failed terminal
+            // reacquisition cannot. Keep frames gated and publish the failure
+            // to runApp even if the caller catches its handoff Future.
+            reentryFailed = true;
+            _active = false;
+            if (!_events.isClosed) _events.addError(error, stack);
+            rethrow;
           } finally {
-            try {
-              if (stdinPaused) _stdinSubscription?.resume();
-            } finally {
-              _handoffActive = false;
-              if (shouldReenter && !_events.isClosed) {
-                _events.add(const TerminalFocusEvent(focused: true));
-                _events.add(ResizeEvent(size));
-              }
+            _handoffActive = reentryFailed;
+            if (_active && !_restoring && !_events.isClosed) {
+              _events.add(const TerminalFocusEvent(focused: true));
+              _events.add(ResizeEvent(size));
             }
           }
         }
+      } finally {
+        release.complete();
       }
-    } finally {
-      if (!release.isCompleted) release.complete();
     }
   }
 
   /// Foreground continuation: re-enter the configured mode and force a full
   /// repaint (the window may have resized while stopped).
-  void _resume() {
+  Future<void> _resume() {
+    if (_resuming) return _resumeTail;
+    _resuming = true;
+    return _resumeTail = _resumeImpl().whenComplete(() => _resuming = false);
+  }
+
+  Future<void> _resumeImpl() async {
     final mode = _mode;
-    if (mode == null || !_active) return;
-    // A nested suspend seam during an editor handoff must not re-enter our mode
-    // while the child owns the screen. The handoff's own finally re-enters.
-    if (_handoffActive) return;
-    if (_changedStdin) _setRawMode();
-    if (_wroteEnterSequences) _stdout.write(_enterSequences(mode));
-    if (isInline) {
-      unawaited(
-        _changeInline(reacquire: true)
-            .then((_) {
-              if (!_active || _restoring) return;
-              _suspended = false;
-              if (!_events.isClosed) {
-                _events.add(const TerminalFocusEvent(focused: true));
-                _events.add(ResizeEvent(size));
-              }
-            })
-            // _changeInline already reports failures through driver.events.
-            .catchError((Object _) {}),
-      );
-      return;
-    }
+    if (mode == null || !_active || _restoring || _handoffActive) return;
+    final generation = _lifecycleGeneration;
+    if (_rawTerminalInput) _setRawMode();
+    _enterOutputMode(mode);
+    await _reacquireInput();
+    if (!_active || _restoring || generation != _lifecycleGeneration) return;
+    if (isInline) await _changeInline(reacquire: true);
+    if (!_active || _restoring || generation != _lifecycleGeneration) return;
     _suspended = false;
     if (!_events.isClosed) {
-      // Authority is back (nothing is held: the shell saw the releases), then
-      // the same-size resize that forces the full repaint.
       _events.add(const TerminalFocusEvent(focused: true));
       _events.add(ResizeEvent(size));
     }
   }
 
   @override
-  Future<void> restore() async {
+  Future<void> restore() => _restoreFuture ??= _restore();
+
+  Future<void> _restore() async {
     _entryUsed = true;
     _restoring = true;
     _lifecycleGeneration++;
@@ -1508,24 +1588,22 @@ class PosixTerminalDriver
     _pendingSignal = null;
     _pendingSignalDelivered = false;
     _entering = false;
-    // Before the early-return: query deadlines and late-reply quarantine must
-    // never outlive terminal ownership.
-    _queryRunner.dispose();
     if (!_active &&
         !_wroteEnterSequences &&
         !_changedStdin &&
+        _nativeInput == null &&
         _stdinSubscription == null &&
         _resizeSubscription == null &&
         _intSubscription == null &&
         _termSubscription == null &&
         _hupSubscription == null) {
+      _queryRunner.dispose();
       _terminalState = null;
       _sink.target = null;
       _restoring = false;
       return;
     }
 
-    _handoffActive = false;
     _flushTimer?.cancel();
     _flushTimer = null;
     _pasteIdleTimer?.cancel();
@@ -1568,79 +1646,87 @@ class PosixTerminalDriver
       if (shield != null) shields.add(shield);
     }
 
-    // Termination watchers go first. This closes the only path that can re-arm
-    // signal grace while the remaining asynchronous cleanup yields.
-    try {
-      await _intSubscription?.cancel();
-    } catch (_) {}
-    _intSubscription = null;
-    try {
-      await _termSubscription?.cancel();
-    } catch (_) {}
-    _termSubscription = null;
-    try {
-      await _hupSubscription?.cancel();
-    } catch (_) {}
-    _hupSubscription = null;
+    (Object, StackTrace)? failure;
+    Future<void> attempt(
+      FutureOr<void> Function() operation, {
+      bool terminalOutput = false,
+    }) async {
+      try {
+        await operation();
+      } catch (error, stack) {
+        // A revoked terminal has no modes left to restore. This exception is
+        // only for completed terminal I/O, never reader/capture/child cleanup.
+        // SIGHUP alone is not proof: callers can send it to a live terminal.
+        if (terminalOutput && _savedOutputIsGone(error)) {
+          return;
+        }
+        failure ??= (error, stack);
+      }
+    }
 
-    try {
-      await _stdinSubscription?.cancel();
-    } catch (_) {}
-    _stdinSubscription = null;
-    // Cancelling the process-global stdin spends it for the process lifetime;
-    // latch that so a second enter() rejects cleanly rather than crashing.
-    if (identical(_stdin, stdin)) _globalStdinConsumed = true;
-    try {
-      await _resizeSubscription?.cancel();
-    } catch (_) {}
+    // Keep the signal shields active while an existing child/operation still
+    // owns the terminal. Queued handoffs observe closing and reject. Reaching
+    // this method does not cancel an arbitrary operation Future.
+    await attempt(() => _intSubscription?.cancel());
+    _intSubscription = null;
+    await attempt(() => _termSubscription?.cancel());
+    _termSubscription = null;
+    await attempt(() => _hupSubscription?.cancel());
+    _hupSubscription = null;
+    await attempt(() => _handoffTail);
+    await attempt(() => _suspendTail);
+    await attempt(() => _resumeTail);
+    await attempt(() => _releaseInput(finalRelease: true));
+    _queryRunner.dispose();
+    await attempt(() => _inlineTail);
+    await attempt(() => _resizeSubscription?.cancel());
     _resizeSubscription = null;
     if (_changedStdin) {
-      // Best-effort restoration of stdin modes. If stdin has been
-      // closed or detached (e.g. the parent disconnected the TTY
-      // between enter() and restore()), the setters can throw — handled
-      // inside _restoreCookedMode. The important cleanup is the ANSI
-      // cursor / alt-screen sequences below.
-      _restoreCookedMode();
-      _terminalState?.rawInputOwned = false;
+      await attempt(() {
+        if (!_restoreCookedMode()) {
+          throw StateError('Cannot restore terminal input mode.');
+        }
+        _terminalState?.rawInputOwned = false;
+      });
     }
-
     if (_wroteEnterSequences) {
-      // Disable input modes first so no stray sequences leak as the
-      // terminal returns to the shell.
-      try {
+      await attempt(() {
         _releaseInline();
         _stdout.write(_exitSequences(_mode ?? TerminalMode.interactive));
-      } catch (_) {}
-      _terminalState?.outputModesOwned = false;
+        _terminalState?.outputModesOwned = false;
+      }, terminalOutput: true);
     }
-
-    // Critical: flush stdout. Without this the cleanup sequences sit in
-    // dart:io's buffer and never reach the terminal, leaving the user
-    // in alt-screen / cursor-hidden state when the process exits.
-    try {
+    await attempt(() async {
       await _stdout.flush();
+      _terminalState?.outputModesOwned = false;
       _recordInlineLease(active: false, region: false);
-    } catch (_) {
-      // Flush can throw if the stream is already closed; nothing we
-      // can do at that point.
-    }
-
+    }, terminalOutput: true);
     _terminalState = null;
     _sink.target = null;
-    // Belt-and-suspenders against a callback already queued before watcher
-    // cancellation. Successful teardown must leave no force-exit timer behind.
     _graceTimer?.cancel();
     _graceTimer = null;
     _pendingSignal = null;
     _pendingSignalDelivered = false;
-    // Last: the terminal is back in the user's hands; a signal now has its
-    // normal meaning again.
     for (final shield in shields) {
-      try {
-        await shield.cancel();
-      } catch (_) {}
+      await attempt(shield.cancel);
     }
     _restoring = false;
+    final failed = failure;
+    if (failed != null) Error.throwWithStackTrace(failed.$1, failed.$2);
+  }
+
+  bool _savedOutputIsGone(Object error) {
+    // stdio 0.4 does not expose errno on its synchronous write exception.
+    // Verify the saved output descriptor itself; do not parse error messages
+    // or infer that output disappeared just because input hung up.
+    final output = _stdout;
+    if (!_stdoutIsTerminal) return false;
+    if (error is fd.StdioException && output is fd.StdoutTerminalSink) {
+      return posixDescriptorHungUp(output.fd);
+    }
+    return identical(output, stdout) &&
+        error is StdoutException &&
+        posixDescriptorHungUp(1);
   }
 
   @override
@@ -1778,9 +1864,14 @@ final class NativePosixTerminalModeController
     final storage = calloc<Uint8>(_termiosStorageBytes);
     try {
       storage.asTypedList(_termiosStorageBytes).setAll(0, original);
-      return bindings.tcsetattr(fd, _tcsanow, storage.cast<Void>()) == 0;
-    } on Object {
-      return false;
+      if (bindings.tcsetattr(fd, _tcsanow, storage.cast<Void>()) != 0) {
+        final error = OSError(
+          'Cannot restore terminal input mode',
+          bindings.errno().value,
+        );
+        if (!posixDescriptorHungUp(fd)) throw error;
+      }
+      return true;
     } finally {
       calloc.free(storage);
       bindings.close(fd);
@@ -1805,6 +1896,7 @@ final class _PosixTermiosBindings {
     required this.cfmakeraw,
     required this.duplicate,
     required this.close,
+    required this.errno,
   });
 
   static _PosixTermiosBindings? load() {
@@ -1829,6 +1921,11 @@ final class _PosixTermiosBindings {
         close: libc.lookupFunction<Int32 Function(Int32), int Function(int)>(
           'close',
         ),
+        errno: libc
+            .lookupFunction<
+              Pointer<Int32> Function(),
+              Pointer<Int32> Function()
+            >(Platform.isMacOS ? '__error' : '__errno_location'),
       );
     } on Object {
       // Non-glibc/non-Darwin POSIX target: retain the old ICANON/ECHO fallback.
@@ -1843,6 +1940,7 @@ final class _PosixTermiosBindings {
   final _CfmakerawDart cfmakeraw;
   final int Function(int, int, int) duplicate;
   final int Function(int) close;
+  final Pointer<Int32> Function() errno;
 }
 
 /// The keyboard tier this session actually pushes, from what the app asked for
@@ -1880,17 +1978,18 @@ KeyboardProtocolMode resolveKeyboardTier({
   return requested;
 }
 
-/// Whether [error], from reading the terminal, says the terminal itself is
+/// Whether [error], from terminal I/O, says the terminal itself is
 /// gone: EIO (Linux, a pty whose master closed) or ENXIO ("device not
 /// configured", macOS after the tty is revoked). Both numbers are the same on
 /// every POSIX platform Fleury runs on.
-@visibleForTesting
+@internal
 bool isTerminalGoneError(Object error) {
   final osError = switch (error) {
     OSError e => e,
     SocketException(:final osError) => osError,
     FileSystemException(:final osError) => osError,
     StdinException(:final osError) => osError,
+    StdoutException(:final osError) => osError,
     _ => null,
   };
   return osError != null && (osError.errorCode == 5 || osError.errorCode == 6);
@@ -1898,3 +1997,9 @@ bool isTerminalGoneError(Object error) {
 
 /// What each segment of the batched capability exchange answers.
 enum _CapabilityProbe { synchronizedOutput, image, glyphWidths, pointerShapes }
+
+// A delayed callback created by a finished handoff must not inherit permission
+// to operate on the terminal after the driver has reclaimed it.
+final class _TerminalBorrow {
+  bool active = true;
+}

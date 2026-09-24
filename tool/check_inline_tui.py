@@ -29,7 +29,9 @@ PACKAGE = ROOT / "packages/fleury"
 
 
 class Session:
-    def __init__(self, dart, *, cols=80, rows=18, supervised=False):
+    def __init__(self, dart, *, cols=80, rows=18, supervised=False,
+                 fixture="test/fixtures/inline_terminal_fixture.dart", executable=None, arguments=(),
+                 guard=True):
         self.master, self.slave = os.openpty()
         self.original_modes = termios.tcgetattr(self.slave)
         self.raw = bytearray()
@@ -49,12 +51,14 @@ class Session:
             os.setsid()
             fcntl.ioctl(0, termios.TIOCSCTTY, 0)
 
-        command = [dart, "--packages=.dart_tool/package_config.json",
-                   "test/fixtures/inline_terminal_fixture.dart"]
+        command = ([executable] if executable else
+                   [dart, "--packages=.dart_tool/package_config.json", fixture])
+        command.extend(arguments)
         if supervised:
             command.append("--supervised")
         self.child = subprocess.Popen(
-            [sys.executable, str(Path(__file__).resolve()), '--guard', *command],
+            ([sys.executable, str(Path(__file__).resolve()), '--guard', *command]
+             if guard else command),
             cwd=PACKAGE, stdin=self.slave, stdout=self.slave,
             stderr=self.slave, preexec_fn=child_terminal,
             env={**os.environ, "TERM": "xterm-256color", "FLEURY_SYNC_OUTPUT": "0"},
@@ -126,6 +130,7 @@ class Session:
         assert b"\x1b[?1006l" in self.raw, "mouse capture was not released"
         assert b"\x1b[?25h" in self.raw, "cursor was not restored"
         assert b"PTY-MODES-RESTORED" in self.raw, "left the terminal raw"
+        assert b"PTY-BLOCKING-RESTORED" in self.raw, "left shared input nonblocking"
         if summary:
             assert "INLINE-DONE" in self.text(), self.text()
             assert "INLINE-READY" not in self.text(), "live region survived cleanup"
@@ -137,7 +142,8 @@ class Session:
             pass
         self.child.wait(timeout=5)
         os.close(self.slave)
-        os.close(self.master)
+        if self.master >= 0:
+            os.close(self.master)
 
 
 def interactions(dart, cols, rows):
@@ -233,8 +239,15 @@ if __name__ == "__main__":
         # Keep the controlling session alive long enough to inspect real
         # termios after Dart exits (macOS revokes the slave when its session
         # leader dies). The guardian performs no terminal-mode restoration.
+        original = termios.tcgetattr(0)
+        original_flags = fcntl.fcntl(0, fcntl.F_GETFL)
         code = subprocess.call(sys.argv[2:])
-        flags = termios.tcgetattr(0)[3]
+        final = termios.tcgetattr(0)
+        if final == original:
+            os.write(1, b'\r\nPTY-TERMIOS-EXACT\r\n')
+        if fcntl.fcntl(0, fcntl.F_GETFL) & os.O_NONBLOCK == original_flags & os.O_NONBLOCK:
+            os.write(1, b'\r\nPTY-BLOCKING-RESTORED\r\n')
+        flags = final[3]
         restored = flags & termios.ICANON and flags & termios.ECHO
         os.write(1, b'\r\nPTY-MODES-RESTORED\r\n' if restored else b'\r\nPTY-MODES-RAW\r\n')
         sys.exit(code if code >= 0 else 128 - code)

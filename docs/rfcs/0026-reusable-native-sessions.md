@@ -1,9 +1,10 @@
 # RFC 0026: Reusable native terminal sessions
 
-Status: in implementation. Invocation isolation and cleanup accounting are
-implemented; native input replacement and end-to-end qualification remain.
+Status: implemented and locally qualified for native macOS/Linux TTY sessions.
+Windows and redirected input reuse remain explicitly unsupported.
 
-Date: 2026-09-24. Implementation baseline: `35d60473`.
+Date: 2026-09-24. Historical investigation baseline: `35d60473`. Production
+evidence below records the current implementation, including uncommitted work.
 
 ## Decision
 
@@ -11,11 +12,11 @@ Support sequential `await runApp(...)` calls without new application lifecycle
 APIs. Each invocation owns a fresh runtime and driver. It borrows the terminal
 for that invocation and returns only after successful terminal-critical cleanup.
 
-Replace the native drivers' subscriptions to process-global Dart `stdin` with
-an internal, cancellable native input lease. Use an OS wake-up primitive to stop
-the reader, await actual reader completion, and close only Fleury-owned handles.
-Use the same stop/reacquire operation for handoff and suspension. Keep all
-keyboard/protocol decoding in the existing Dart input parser.
+Replace the default macOS/Linux TTY driver's subscription to process-global Dart
+`stdin` with an internal, cancellable native input lease. Use an OS wake-up
+primitive to stop the reader, await actual reader completion, and close only
+Fleury-owned handles. Use the same stop/reacquire operation for handoff and
+suspension. Keep all keyboard/protocol decoding in the existing Dart input parser.
 
 This is an input and lifecycle change. Inline placement, widget APIs, and
 rendering remain separate concerns. Sequential sessions can choose different
@@ -24,11 +25,21 @@ terminal modes. Switching the mode of an active session is not part of this RFC.
 ## Application contract
 
 ```dart
-await runApp(
+final outcome = await runApp(
   picker,
   mode: const TerminalMode.inline(rows: 10),
   enableHotReload: false,
 );
+
+if (outcome.signal case final signal?) {
+  exitCode = switch (signal) {
+    AppSignal.interrupt => 130,
+    AppSignal.terminate => 143,
+    AppSignal.hangup => 129,
+  };
+  return;
+}
+if (selected == null) return; // Cancellation reported by the picker's callback.
 
 print('Installing dependencies…');
 await installDependencies();
@@ -40,8 +51,10 @@ await runApp(
 );
 ```
 
-- A successful return means the terminal can be used by the caller: ordinary
+- An ordinary completion means the terminal can be used by the caller: ordinary
   output, a synchronous stdin prompt, an inherited-stdio child, or another UI.
+- Handle signal outcomes before starting another interaction. A hangup releases
+  Fleury's resources but cannot make a disconnected terminal usable again.
 - Explicit cancellation and signal outcomes retain the current `AppExit` API.
 - Startup failure permits retry with a new `runApp` if cleanup succeeded.
 - Overlapping or nested `runApp` calls fail before terminal or capture mutation.
@@ -64,27 +77,31 @@ Hot restart reruns the whole entrypoint, including earlier prompts and side
 effects. Short production CLI flows should disable the development supervisor;
 the framework should not pretend a restart resumes only the current step.
 
-## Findings at the implementation baseline
+## Historical findings
 
-1. `PosixTerminalDriver` and `WindowsTerminalDriver` subscribe to Dart stdin
-   and cancel that subscription on restore. The single-subscription stream is
-   spent, and on POSIX cancellation closes fd 0 asynchronously. The existing
-   `_globalStdinConsumed` guard makes this failure legible but cannot solve it.
-2. Keeping that subscription paused still occupies the Dart stream and keeps
+These findings motivated the change. They describe the investigation baseline,
+not the current macOS/Linux TTY implementation:
+
+1. `PosixTerminalDriver` and `WindowsTerminalDriver` subscribed to Dart stdin
+   and cancelled that subscription on restore. The single-subscription stream
+   was spent, and on POSIX cancellation closed fd 0 asynchronously. The
+   `_globalStdinConsumed` guard made this failure legible but could not solve it.
+2. Keeping that subscription paused still occupied the Dart stream and kept
    the process alive. A real PTY probe remained alive two seconds after main
    finished. Replacing it with `File('/dev/fd/0').openRead()` also failed: cancel
    waited on an outstanding idle read for the two-second probe deadline.
-3. `requestExit()` targets one mutable global completer. A timer created by
+3. `requestExit()` targeted one mutable global completer. A timer created by
    session A successfully exited session B after 87 ms, although B was intended
-   to run for 700 ms. Fresh fake drivers reproduce this without the stdin limit.
-4. The active completer is installed late and cleared before terminal/capture
-   cleanup. It cannot serve as the acquisition lock.
-5. Terminal restore and stdio-capture timeouts are currently diagnostic and can
-   still yield an orderly result. A delayed restore could mutate a later UI.
-6. An active inherited-stdio handoff is not drained by driver restoration.
-   Its child could still own stdin after `runApp` returns.
-7. Native drivers are not reusable objects: restoration disposes the query
-   runner, and parser, hangup, and geometry state are session-specific.
+   to run for 700 ms. Fresh fake drivers reproduced this without the stdin limit.
+4. The active completer was installed late and cleared before terminal/capture
+   cleanup. It could not serve as the acquisition lock.
+5. Terminal restore and stdio-capture timeouts were diagnostic and could still
+   yield an orderly result. A delayed restore could mutate a later UI.
+6. An active inherited-stdio handoff was not drained by driver restoration.
+   Its child could still own stdin after `runApp` returned.
+7. Restoration disposed the native driver's query runner, while parser, hangup,
+   and geometry state belonged to that session. The solution preserves fresh
+   one-shot drivers rather than trying to reset and reuse these objects.
 
 Source anchors: [run_app.dart](../../packages/fleury/lib/src/runtime/run_app.dart),
 [POSIX driver](../../packages/fleury/lib/src/terminal/posix_driver.dart),
@@ -122,51 +139,58 @@ choose application exit statuses, or manipulate screen buffers.
 
 ### 3. Input lease
 
-The intended private shape is deliberately small:
+The private production `PosixInputLease` exposes asynchronous `start()` and
+`stop()` operations. Applications continue to use `runApp`.
 
-```dart
-abstract interface class NativeInputLease {
-  Future<void> stop();
-}
-```
-
-Acquisition supplies byte, source-EOF, and error callbacks and starts only when
-the driver is ready to accept input. Exact constructor naming is private.
+Its constructor receives byte, source-EOF, and error callbacks. The driver stores
+the lease before awaiting `start()`, so restoration also owns a partial startup.
+The owning isolate allocates and releases the descriptors and native memory;
+the worker borrows them until its actual exit.
 
 `stop()` is an idempotent barrier, not merely a cancellation request:
 
-1. Wake the OS wait; give stop priority over a simultaneous input-ready event.
-2. Finish or fence outstanding deliveries belonging to this acquisition.
-3. Stop native reads and restore any input file-status flags owned by the lease.
-4. Wait for worker completion; close owned handles, ports, and subscriptions.
+1. Fence outstanding deliveries belonging to this acquisition.
+2. Wake the OS wait; give stop priority over a simultaneous input-ready event.
+3. Wait for the worker's `onExit` notification, proving native reads have ended.
+4. Restore owned input file-status flags, then release handles, allocations,
+   and the message port in the owning isolate.
 5. Resolve only after no callback/read from the lease can affect another owner.
 
-Intentional stop does not emit EOF or synthesize SIGHUP. Actual terminal loss
-retains the driver's current hangup semantics. Bound queued bytes; the prototype
-permits one 4 KiB batch until acknowledged instead of unbounded SendPort traffic.
-Production needs a measured throughput/fairness gate, not an arbitrary batch
-size treated as a performance guarantee.
+Intentional stop does not emit EOF or synthesize SIGHUP. Source EOF/errors remain
+distinct from stop. Production permits one 4 KiB batch until acknowledged,
+bounding queued SendPort traffic. A 1 MiB arbitrary-byte regression checks exact
+delivery and that the owning isolate's timer continues to run; this is integrity
+and basic fairness evidence, not a throughput or rendering-latency guarantee.
 
 ## POSIX transport choice
 
-The leading implementation is a worker isolate using non-leaf FFI calls to
-`poll` on the input handle and a private wake-up pipe. A regular Dart message
-cannot wake an isolate blocked in `poll`. All reads must be nonblocking, even
-after readiness, so a stop cannot be stranded behind a subsequent `read`.
+The production implementation uses a worker isolate with non-leaf FFI calls to
+`poll` on two descriptors: the duplicated input and a private wake-up pipe. A
+regular Dart message cannot wake an isolate blocked in `poll`. Reads remain
+nonblocking after readiness, so stop cannot be stranded behind a subsequent
+`read`. The pipe carries ACK/STOP commands, with stop taking priority over input.
 This uses one worker thread while the lease is active; it is not a multiplexed
 event loop. That is an explicit tradeoff for a single native UI owner.
 
-Two handle strategies were implemented in the experiment:
+The native wait has a 250 ms timeout. Ordinary stop wakes it immediately through
+the pipe; the finite timeout also lets VM shutdown or worker cancellation make
+progress if the owning isolate fails. An infinite non-leaf `poll` stranded
+process shutdown in both JIT and AOT testing. An error message, timeout, or kill
+request is not a join: the owner waits for actual `onExit` before freeing the
+worker's borrowed memory or descriptors.
+
+Two handle strategies were compared in the experiment:
 
 | Strategy | Benefit | Obligation / limitation |
 |---|---|---|
 | Close-on-exec duplicate of the supplied stdin | Exact input source; no device path lookup or new access checks | File-status flags are shared. Own and restore only the `O_NONBLOCK` bit at every release; include it in supervisor crash recovery. |
 | Reopen `ttyname_r(stdin)` with nonblocking, close-on-exec, no-follow, no-controlling-terminal flags | Independent file-status flags; caller's blocking mode stays unchanged while active | Adds pathname, permissions, namespace, revocation, and identity validation requirements. A valid inherited TTY need not be reopenable. |
 
-Prefer source fidelity over an automatic pathname fallback. The final duplicate
-backend is gated on exact shared-flag restoration and supervisor recovery tests.
-Do not silently switch input sources when acquisition fails. A blocking-read
-variant based only on readiness is not an adequate cancellation guarantee.
+Production uses the duplicate backend, preserving the exact input source. It
+does not fall back to pathname reopening when acquisition fails. Shared-flag
+restoration, supervisor recovery, and ancestor-held descriptor tests are part
+of the production evidence below. A blocking-read variant based only on
+readiness is not an adequate cancellation guarantee.
 
 `dup` shares file status and offsets; close-on-exec is a separate descriptor
 flag. Capture the original blocking bit before mutation and restore that bit
@@ -184,10 +208,11 @@ This proposal does not claim a universal in-process cleanup deadline under
 undrained output. If qualification requires that guarantee, the output sink
 needs interruptible/off-isolate I/O as a separate prerequisite.
 
-The initial production guarantee is native TTY sessions on macOS/Linux. Injected
-test/custom streams and redirected pipes/files retain an explicit source-specific
-contract; neither silently becomes a reopened terminal. File I/O cancellation
-and piped input should not inherit unproven TTY promises.
+Sequential native sessions are supported for macOS/Linux TTY input. Windows and
+redirected process stdin retain the one-session restriction. Injected test/custom
+streams retain their source-specific contract; neither they nor redirected
+pipes/files silently become a reopened terminal. Pipe-based private transport
+tests do not establish repeatable `runApp` support for redirected input.
 
 ## Windows path
 
@@ -204,9 +229,9 @@ handle the cancel-before-read race. Microsoft Edit demonstrates the NOWAIT
 record approach; that is supporting implementation evidence, not Fleury Windows
 qualification. Verify VT arrow/mouse/probe bytes rather than assuming parity.
 
-Windows full-screen reuse needs this backend and real Windows tests before the
-same support claim. Windows inline remains a separate feature. The POSIX work
-can land first with the support matrix stated explicitly.
+This is a future backend, not part of the production change. Windows full-screen
+reuse needs implementation and real Windows tests before the same support claim.
+Windows inline remains a separate feature.
 
 ## Release, handoff, and failure semantics
 
@@ -221,10 +246,9 @@ available → starting → running → closing → available
 Handoff retains the UI invocation's admission lease but releases its input
 reader and terminal modes. Await reader stop before handing control to the
 callback or suspending the process. Reacquire input before new cursor/protocol
-queries and repaint only if the same invocation is still running. The prototype
-also tests a paused worker, but the measured acquire/release cost gives no reason
-to keep that extra lifetime in the first implementation. An acknowledged pause
-is viable; fresh acquisition is preferred here for its smaller lifecycle surface.
+queries and repaint only if the same invocation is still running. Production
+creates a fresh lease on reacquisition. The prototype also tested a paused
+worker, but its measured acquire/release cost did not justify that extra lifetime.
 
 Entering closing rejects queued handoffs. An existing callback is an outstanding
 terminal borrow: normal close waits for it, then restores directly to the caller
@@ -252,15 +276,33 @@ the terminal. Conversely, successful widget disposal does not prove stdin or
 stdout has been restored. Independently attempt necessary restoration even if
 an earlier cleanup step fails.
 
+### Physical hangup
+
+Physical terminal loss is distinct from a delivered SIGHUP.
+A signal, EOF, `EIO`, or `POLLERR` alone does not prove that a particular output
+or input descriptor has disappeared. A zero-timeout `poll` checks `POLLHUP` on
+the same saved, previously-terminal descriptor, with `POLLNVAL` excluded, before
+accepting a completed terminal-I/O restoration failure as terminal loss. Invalid
+descriptors remain errors. Input hangup cannot excuse a failure on a different
+output descriptor.
+
+That exception must not waive an unfinished cleanup barrier. Even when the
+terminal is gone, input-worker exit, capture shutdown, outstanding handoffs, and
+queued asynchronous writes still need to settle or keep admission quarantined.
+The real-PTY runner closes the master in both inline and full-screen modes and
+checks for `AppExit.hangup` and natural process exit. Completed platform runs are
+recorded below; a passing hangup result does not relax the pending-operation rule.
+
 ## Input and protocol boundaries
 
 - Cancel pending queries and fence their timers/callbacks before releasing input.
   Retain the existing bounded late-response drain/quarantine discipline.
-- A handoff boundary must resolve or discard unfinished UTF-8, Escape, and paste
-  parser state deliberately. Do not call EOF finalization as if the terminal
-  disconnected. Add a non-EOF parser reset/boundary operation if needed.
-- Deliveries carry the acquisition/session identity. Already consumed input
-  belongs to the old acquisition; never replay it into the next UI.
+- A handoff boundary uses `endInputOwnership` to resolve or discard unfinished
+  UTF-8, Escape, and paste parser state deliberately. It does not use EOF
+  finalization as if the terminal disconnected.
+- Each lease receives deliveries through its own message port and fences them
+  when stop begins. Already consumed input belongs to that acquisition; it is
+  never replayed into the next UI.
 - Do not use blanket `tcflush` to make tests pass: that discards real type-ahead.
 - Bytes still in the OS queue are not equivalent to queued Dart callbacks.
   Terminal protocols do not tag replies with session identities. A terminal
@@ -270,7 +312,76 @@ an earlier cleanup step fails.
 
 ## Evidence
 
-Retained experiment: [source and runner](../../tool/experiments/reusable_terminal_input/README.md).
+### Production implementation and local qualification
+
+The production driver no longer consumes Dart stdin on macOS/Linux TTYs.
+Invocation admission spans bootstrap through critical cleanup; stale exit/reload
+callbacks are fenced. Handoff/suspend stop and reacquire the native reader, and
+restoration drains outstanding terminal borrows. The supervisor restores the
+original shared blocking bit after child restart or failure.
+
+The integrated sequence is inline → synchronous prompt → inherited-stdio child
+→ full-screen → inline → Dart async stdin → natural exit. The runner
+also checks teardown during an active child handoff and actual PTY master
+closure in inline and full-screen modes:
+
+| Environment | JIT | AOT executable |
+|---|---|---|
+| macOS arm64, Dart 3.12.2 | Passed | Passed |
+| macOS arm64, minimum SDK Dart 3.10.4 | Passed | Passed |
+| Linux arm64 Docker, Dart 3.13.3 | Passed | Passed |
+
+These are local runs. The fixture verifies Unicode bracketed paste, prompt/child
+input, natural exit, exact termios, and the original blocking bit observed from
+an ancestor-held descriptor. During active handoff, `runApp` must wait for the
+child. Physical hangup must return `AppExit.hangup` without stranding the process.
+
+Additional production evidence:
+
+- Native PTY output backpressure on macOS and Linux: all 2 MiB were delivered
+  after the consumer resumed draining, and the ancestor's original blocking bit
+  was restored. This does not establish an undrained-output cleanup deadline.
+- Supervised restart, child SIGKILL, and abrupt child exit restored terminal and
+  shared blocking state on macOS and Linux. These results require the surviving
+  supervisor; they do not promise unsupervised SIGKILL recovery.
+- Native lease regressions cover stop/start races, partial acquisition,
+  callback/worker failures, source EOF versus stop, initial blocking and
+  nonblocking modes, and exact 1 MiB delivery with timer progress. Descriptor
+  accounting runs in an isolated process: 100 successful cycles interleaved with
+  failed acquisitions leave descriptor counts and input flags unchanged.
+- The final runtime/terminal sweep passed: 768 tests passed and two were skipped.
+  Real VM-service tests were also run separately with the service enabled.
+- Invocation regressions cover stale callbacks, overlapping/nested startup,
+  failed-start retry, pending-enter fatal errors, closing admission, cleanup
+  timeout and eventual release, and permanent failure quarantine. Real
+  VM-service tests cover controller generations and throwing callbacks. The
+  retained stale-exit probe now returns `false` for the old callback while the
+  second UI runs for its intended 700 ms.
+
+Retained production checks:
+
+- [Sequential PTY runner](../../tool/check_sequential_sessions.py) and
+  [fixture](../../packages/fleury/test/fixtures/sequential_native_sessions_fixture.dart).
+- [Native backpressure runner](../../tool/check_native_input.py),
+  [resource fixture](../../packages/fleury/test/fixtures/posix_input_resources_fixture.dart),
+  and [lease tests](../../packages/fleury/test/terminal/posix_input_lease_test.dart).
+- [Inline lifecycle runner](../../tool/check_inline_tui.py), including supervised
+  restart and crash recovery.
+- [Invocation tests](../../packages/fleury/test/runtime/run_app_invocation_test.dart)
+  and [VM extension tests](../../packages/fleury/test/runtime/hot_reload_controller_test.dart).
+  The latter run with
+  `dart --enable-vm-service=0 test test/runtime/hot_reload_controller_test.dart`
+  from `packages/fleury`.
+
+The CI workflow now includes the sequential JIT/AOT and backpressure runners for
+macOS and Linux; its updated run is not yet part of this evidence. Windows,
+redirected-input reuse, and real terminal application visuals are not qualified
+by these checks.
+
+### Historical transport experiment
+
+Retained experiment:
+[source and runner](../../tool/experiments/reusable_terminal_input/README.md).
 
 - macOS arm64, Dart 3.12.2: duplicate and reopened-handle variants pass 100 idle
   acquire/resume/stop cycles, failed acquisition cleanup, two raw input leases,
@@ -284,65 +395,29 @@ Retained experiment: [source and runner](../../tool/experiments/reusable_termina
 - Warm median duplicate acquisition was roughly 0.05–0.40 ms and release
   0.02–0.19 ms across these runs. This excludes UI startup and terminal probes;
   it just supports choosing fresh readers over a persistent pump.
-- Stale `requestExit` repro independently confirmed with the current runtime.
+- The stale `requestExit` bug was independently reproduced against the original
+  runtime before invocation isolation was implemented.
 
 These are transport experiments, not integrated `runApp` acceptance, Windows
 proof, minimum-SDK qualification, throughput benchmarks, or terminal-app visual
 qualification. The prototype deliberately lacks production-grade failure
 plumbing; it must not be moved into the shipping library unchanged.
 
-### Lifecycle implementation checkpoint
+## Merge checks and support boundary
 
-The runtime now acquires admission before bootstrap/capture, binds exit requests
-to the invocation zone, and holds admission through terminal-critical cleanup.
-It tracks underlying operations beyond timeout reporting, distinguishes failed
-restoration from ordinary overlap, and fences late startup results. Successful
-late cleanup can release admission; a failed restore keeps it quarantined.
+Run the updated CI workflow before treating local qualification as a merge check.
+Keep the production runners as regressions for termios, shared flags, worker
+exit, output backpressure, and ownership between sessions. Physical-hangup
+handling must continue to distinguish completed terminal I/O from unfinished
+reader, capture, child, and write operations that retain admission.
 
-Persistent VM extensions dispatch callbacks and callback errors into the current
-session's zone. Reload disposal unpublishes callbacks before awaiting resources;
-in-flight self-reloads cannot report or requeue after disposal. Native driver
-instances explicitly reject a second entry, including after restoration.
-
-Regression coverage includes stale callbacks, overlapping/nested startup, failed
-startup retry, pending-enter fatal errors, closing admission, cleanup timeout
-and eventual release, permanent failure quarantine, and real VM-service calls
-across controller generations (including throwing callbacks). The retained stale
-exit probe now reports `false` and the second UI lasts its intended 700 ms.
-The runtime/terminal sweep passes with subprocess checks retried outside the
-local cache-permission sandbox; the VM-specific test is run with
-`dart --enable-vm-service=0 test test/runtime/hot_reload_controller_test.dart`.
-
-This establishes invocation accounting, not native input reuse. Native drivers
-still consume Dart stdin; replacing that transport, draining active handoffs,
-and auditing native restoration's swallowed errors are outstanding. Keep the
-one-session guide warning until those paths are implemented and qualified.
-
-## Implementation slices and acceptance gates
-
-1. **Invocation isolation:** early admission guard, zone-bound exit identity,
-   spent-driver checks, expired dev callbacks. Add regressions for old timer →
-   new app, overlapping startup, closing admission, and failed-start retry.
-2. **POSIX input lease:** owned descriptor + wakeable worker, bounded messages,
-   error/EOF distinction, idempotent stop, complete worker failure handling,
-   file-status restoration, minimum-SDK and compiled-binary tests. Replace
-   `_globalStdinConsumed` only after actual sequential input works.
-3. **Critical cleanup and handoff:** stop/reacquire, pending-query boundaries,
-   drain active borrows, fail/quarantine uncertain teardown, restore blocking
-   state in supervisor crash recovery. Test stop/start races and worker faults.
-4. **Integrated qualification:** repeated inline → prompt → child → full-screen
-   → inline; explicit cancel, Ctrl+C, SIGTERM, EOF/hangup, tiny terminals,
-   resize, suspend/resume, hot restart, worker failure, and supervised child
-   SIGKILL recovery. Verify bytes,
-   termios, blocking flags, fd/worker counts, and natural exit on macOS/Linux.
-   Include aliased stdin/stdout/stderr, both initial blocking modes, slow output
-   consumers, and ancestor-held descriptors during supervised crash recovery.
-   Include paste/Unicode and high-rate input so acknowledgment backpressure
-   cannot starve rendering or drop events.
-5. **Windows and guide:** implement/qualify the platform reader, keep inline's
-   platform scope explicit, add a genuine two-session CLI showcase, then remove
-   the one-session warning for qualified backends. Never show the browser demo
-   as proof of native input ownership.
+The guide and `inline --repeat` showcase now demonstrate successive UIs with an
+ordinary prompt between them. No new public lifecycle API is needed. Windows and
+redirected input remain one-session paths; Windows reuse needs its own reader and
+native qualification. Concurrent UI ownership across isolates, active-session
+mode switching, and a universal deadline under undrained synchronous output are
+outside this change. Browser demos illustrate interaction and screen placement;
+they do not qualify native terminal ownership.
 
 ## Primary references
 

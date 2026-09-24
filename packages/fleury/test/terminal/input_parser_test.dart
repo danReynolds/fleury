@@ -34,6 +34,40 @@ List<TuiEvent> _parse(List<int> bytes) {
 }
 
 void main() {
+  test(
+    'ownership boundary discards incomplete keys without synthesizing EOF',
+    () {
+      for (final prefix in [
+        [0x1b],
+        [0xe4, 0xb8],
+        '\x1b[12;'.codeUnits,
+      ]) {
+        final parser = InputParser();
+        final sink = _ListSink();
+        parser.feed(prefix, sink);
+        parser.endInputOwnership(sink);
+        expect(sink.events, isEmpty);
+        parser.feed('x'.codeUnits, sink);
+        expect(sink.events, [const TextInputEvent('x')]);
+      }
+    },
+  );
+
+  test(
+    'ownership boundary completes consumed paste before the next reader',
+    () {
+      final parser = InputParser();
+      final sink = _ListSink();
+      parser.feed('\x1b[200~pasted'.codeUnits, sink);
+      parser.endInputOwnership(sink);
+      parser.feed('x'.codeUnits, sink);
+      expect(sink.events, [
+        const PasteEvent('pasted'),
+        const TextInputEvent('x'),
+      ]);
+    },
+  );
+
   group('Plain text input', () {
     test('printable ASCII bytes become TextInputEvents', () {
       expect(_parse([0x68, 0x69]), [
