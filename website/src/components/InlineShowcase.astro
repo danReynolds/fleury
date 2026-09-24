@@ -1,10 +1,14 @@
 ---
 import FleuryExample from './FleuryExample.astro';
+interface Props { fullScreen?: boolean; }
+const { fullScreen = false } = Astro.props;
 ---
 
 <div class="inline-showcase">
-  <FleuryExample id="showcase.inline" cols={84} rows={29} interactive expandable={false} />
-  <p class="inline-caption">Name your project, review it, then finish back at the prompt. The shell is a browser preview; the form is real Fleury. Configuration stays in memory.</p>
+  <FleuryExample id={fullScreen ? 'terminal-modes.fullscreen' : 'showcase.inline'} cols={84} rows={29} interactive expandable={false} />
+  <p class="inline-caption">{fullScreen
+    ? 'Finish or cancel to restore the illustrated shell. The form is real Fleury; this browser preview simulates the terminal buffer switch. Configuration stays in memory.'
+    : 'Name your project, review it, then finish back at the prompt. The shell is a browser preview; the form is real Fleury. Configuration stays in memory.'}</p>
 </div>
 
 <style>

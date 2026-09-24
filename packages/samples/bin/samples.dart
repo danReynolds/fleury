@@ -123,4 +123,5 @@ void _printUsage() {
   stdout.writeln('');
   stdout.writeln('Press q or Ctrl-C to quit a running app.');
   stdout.writeln('Inline setup: Esc goes back or cancels; Ctrl-C exits.');
+  stdout.writeln('Compare modes with: inline --full-screen');
 }

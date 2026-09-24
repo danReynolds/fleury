@@ -7,6 +7,27 @@ String render(FleuryTester tester) =>
     tester.renderToString(size: tester.viewportSize, emptyMark: ' ');
 
 void main() {
+  testWidgets('full-screen preview restores shell context after completion', (
+    tester,
+  ) async {
+    tester.viewportSize = const CellSize(84, 29);
+    tester.pumpWidget(const InlineSetupPreview(fullScreen: true));
+    expect(render(tester), isNot(contains(r'~/projects $ ls')));
+    await tester.field('Project name').fill('full_screen_project');
+    await tester.button('Review →').press();
+    await tester.button('Generate config').press();
+    expect(render(tester), contains(r'~/projects $ ls'));
+    expect(
+      render(tester),
+      contains('Configuration ready for full_screen_project'),
+    );
+    await tester.button('Run again').press();
+    expect(render(tester), isNot(contains(r'~/projects $ ls')));
+    await tester.button('Cancel').press();
+    expect(render(tester), contains('Setup cancelled.'));
+    expect(render(tester), contains(r'~/projects $ ls'));
+  });
+
   testWidgets('validates, reviews, goes back, and returns the chosen config', (
     tester,
   ) async {

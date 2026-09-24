@@ -1811,6 +1811,19 @@ form.clearErrors();''',
     ),
   ),
 
+  ExampleInfo(
+    id: 'terminal-modes.fullscreen',
+    widget: 'TerminalMode',
+    category: 'Guide examples',
+    blurb:
+        'The setup form fills a simulated alternate screen, then restores the '
+        'shell context on completion. Browser illustration of native behavior.',
+    cols: 84,
+    rows: 29,
+    interactive: true,
+    builder: () => const InlineSetupPreview(fullScreen: true),
+  ),
+
   // ── Showcases (full apps; rendered on the Showcases page, not as widgets) ──
   ExampleInfo(
     id: 'showcase.inline',

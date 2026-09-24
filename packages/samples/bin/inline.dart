@@ -12,11 +12,12 @@ Future<void> runInlineSetup(List<String> args) async {
   if (args.contains('--help') || args.contains('-h')) {
     print(
       'Inline project setup demo\n'
-      'Usage: dart run packages/samples/bin/inline.dart\n'
+      'Usage: dart run packages/samples/bin/inline.dart [--full-screen]\n'
       'Generates a configuration in memory. No files are written.',
     );
     return;
   }
+  final fullScreen = args.contains('--full-screen');
   InlineSetupResult? result;
   stdout.writeln('Project setup demo · Configuration is generated in memory.');
   await stdout.flush();
@@ -25,7 +26,9 @@ Future<void> runInlineSetup(List<String> args) async {
       title: 'Project setup',
       home: ScopeBuilder<TerminalSession>(
         builder: (_, session) => InlineSetup(
-          onStepChanged: (step) => unawaited(session.resizeInline(step.rows)),
+          onStepChanged: fullScreen
+              ? null
+              : (step) => unawaited(session.resizeInline(step.rows)),
           onComplete: (value) {
             result = value;
             requestExit();
@@ -33,11 +36,13 @@ Future<void> runInlineSetup(List<String> args) async {
         ),
       ),
     ),
-    mode: TerminalMode.inline(
-      rows: InlineSetupStep.configure.rows,
-      mouse: true,
-      mouseMotion: true,
-    ),
+    mode: fullScreen
+        ? const TerminalMode(mouse: true, mouseMotion: true)
+        : TerminalMode.inline(
+            rows: InlineSetupStep.configure.rows,
+            mouse: true,
+            mouseMotion: true,
+          ),
     enableHotReload: false,
     debug: const DebugConfig(enabled: false),
   );

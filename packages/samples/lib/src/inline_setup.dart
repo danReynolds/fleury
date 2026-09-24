@@ -303,7 +303,11 @@ Widget _action(
 /// Browser presentation of the command lifecycle. The shell lines are a scene;
 /// [InlineSetup] is the same interactive form used by the native command.
 class InlineSetupPreview extends StatefulWidget {
-  const InlineSetupPreview({super.key});
+  const InlineSetupPreview({super.key, this.fullScreen = false});
+
+  /// Illustrates an alternate-screen session using the same form. The web
+  /// host still owns a DOM element; it does not switch a terminal buffer.
+  final bool fullScreen;
 
   @override
   State<InlineSetupPreview> createState() => _InlineSetupPreviewState();
@@ -328,14 +332,21 @@ class _InlineSetupPreviewState extends State<InlineSetupPreview> {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            const Text(r'~/projects $ ls', style: _muted),
-            const Text('notes/    sandbox/', style: _muted),
-            const SizedBox(height: 1),
-            const Text(r'~/projects $ project-setup'),
+            if (!widget.fullScreen || _finished) ...[
+              const Text(r'~/projects $ ls', style: _muted),
+              const Text('notes/    sandbox/', style: _muted),
+              const SizedBox(height: 1),
+              Text(
+                widget.fullScreen
+                    ? r'~/projects $ project-setup --full-screen'
+                    : r'~/projects $ project-setup',
+              ),
+            ],
             if (!_finished)
               Flexible(
+                fit: widget.fullScreen ? FlexFit.tight : FlexFit.loose,
                 child: SizedBox(
-                  height: _step.rows,
+                  height: widget.fullScreen ? null : _step.rows,
                   child: InlineSetup(
                     onStepChanged: (step) => setState(() => _step = step),
                     onComplete: (result) => setState(() {

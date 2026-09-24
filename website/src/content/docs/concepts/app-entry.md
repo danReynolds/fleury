@@ -27,11 +27,11 @@ void main() => runApp(
 `runApp` takes a **widget instance** and returns a `Future<AppExit>` that completes
 after the app exits and the terminal has been restored. `AppExit` distinguishes
 an orderly request from an unclaimed process signal so the caller can choose its
-own exit code. On startup `runApp` acquires the terminal and switches it into
-interactive mode (raw input, the alternate screen, hidden cursor), mounts your
+own exit code. On startup `runApp` acquires the terminal and, by default, switches
+to raw input and the alternate screen with a hidden cursor. It mounts your
 tree, paints the first frame, and then renders again after every input event and
 every `setState`. On exit — `Ctrl-C`, or your handler asking to stop — it restores
-the terminal to exactly how it found it.
+terminal modes and returns control to the caller.
 
 The options you'll actually reach for:
 
@@ -55,9 +55,12 @@ For a small one-screen program, passing the screen directly is still valid:
 `runApp(const StatusScreen())`. Use `FleuryApp` as soon as the program has an
 app-wide theme, commands/status, extensions, or more than one screen.
 
-## Inline terminal commands
+## Full-screen or inline?
 
-For a picker or setup command, reserve a smaller region below the shell prompt:
+Full-screen is the default: the UI fills the terminal viewport and earlier
+shell output reappears when it exits. It suits editors, dashboards, and other
+workspaces. For a picker or setup step within a command, inline reserves rows in
+the main buffer so earlier output remains available:
 
 ```dart
 await runApp(
@@ -65,20 +68,14 @@ await runApp(
   mode: const TerminalMode.inline(rows: 14, mouse: true),
   enableHotReload: false,
 );
-print('Source selected.');
+// Print the result here, after the live region has been cleared.
 ```
 
-Earlier output stays in the main buffer and scrollback. Widgets receive the
-requested height, clamped to the terminal, and keep their usual layout, focus,
-and scrolling behavior. On exit Fleury clears the live region, ready for your
-command's result. From a callback, use
-`await TerminalSession.of(context).resizeInline(20)` to change the height.
-
-This mode supports native macOS and Linux terminals with cursor reporting.
-Height is explicit; inserting logs above the UI and retaining the final frame
-are not implemented. Browser embeds still use their host element's size.
-See the [inline terminal guide](https://github.com/danReynolds/fleury/blob/main/packages/fleury/doc/inline_terminal.md)
-for subprocess handoff, development sessions, and resize limitations.
+Both modes use the same widgets and input model. Inline currently supports
+native macOS/Linux terminals with cursor reporting; its height is explicit.
+[Full-screen and inline UIs](/fleury/guides/terminal-modes/) compares the live
+experience, explains the terminal buffers, and covers sizing, results, and
+subprocess handoff.
 
 ## Host services and the app shell
 
