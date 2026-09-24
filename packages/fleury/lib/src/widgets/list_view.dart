@@ -241,12 +241,18 @@ class ListController extends Notifier {
   }
 
   /// Shows the end of the final item. Resumes following only if [followTail] is
-  /// enabled; a normal list does not become a live feed by jumping to its end.
+  /// enabled — and then, as End does, puts the cursor back on the last item,
+  /// so going live never leaves it on a row that scrolled away. A normal list
+  /// does not become a live feed by jumping to its end.
   void jumpToEnd() {
     _checkNotDisposed();
     _clearRequests();
     _pendingBottom = true;
     _isFollowing = _followTail;
+    if (_followTail && _selectable) {
+      _cursorTracksTail = true;
+      if (_attached && _itemCount > 0) _currentIndex = _itemCount - 1;
+    }
     _unseenCount = 0;
     notify();
   }

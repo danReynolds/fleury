@@ -6,7 +6,8 @@
 - A list that follows its tail keeps its cursor on the newest item:
   `ListController(followTail: true)` starts on the last item and carries the
   cursor along as items arrive, until an arrow key, click, or `currentIndex`
-  places it; End puts it back on the tail. Previously the cursor stayed on the
+  places it; End, or `jumpToEnd` on a following list (as `LogRegion` and
+  `MessageList`'s `scrollToBottom` do), puts it back on the tail. Previously the cursor stayed on the
   first item, off-screen, so Ctrl+C in a tailing log copied the oldest line and
   the first arrow key jumped the view back to the start. The default
   `initialIndex` is now `ListController.natural` (the first item, or the last

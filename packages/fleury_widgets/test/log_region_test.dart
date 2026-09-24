@@ -575,4 +575,41 @@ void main() {
       reason: 'the cursor rides the tail the viewport is showing',
     );
   });
+
+  testWidgets('scrollToBottom brings an anchored cursor back to the tail', (
+    tester,
+  ) async {
+    final controller = LogRegionController();
+    var entries = [
+      for (var i = 0; i < 100; i++) LogEntry(source: 'a', message: 'line $i'),
+    ];
+    Widget app() => LogRegion(
+      controller: controller,
+      autofocus: true,
+      entries: entries,
+      copyOptions: const LogRegionCopyOptions(
+        clipboardPolicy: ClipboardWritePolicy.inProcessOnly,
+      ),
+    );
+    tester.pumpWidget(app());
+    tester.render(size: const CellSize(40, 5));
+    tester.sendKey(const KeyEvent(KeyCode.arrowUp));
+    tester.render(size: const CellSize(40, 5));
+    entries = [
+      ...entries,
+      for (var i = 100; i < 120; i++) LogEntry(source: 'a', message: 'line $i'),
+    ];
+    tester.pumpWidget(app());
+    tester.render(size: const CellSize(40, 5));
+    expect(controller.currentIndex, 98, reason: 'the user anchored it');
+
+    controller.scrollToBottom();
+    tester.pump();
+    tester.sendKey(
+      const KeyEvent(KeyCode.char('c'), modifiers: {KeyModifier.ctrl}),
+    );
+    await Future<void>.delayed(Duration.zero);
+    expect(controller.currentIndex, 119);
+    expect(tester.clipboard.readInProcess(), endsWith('line 119'));
+  });
 }
