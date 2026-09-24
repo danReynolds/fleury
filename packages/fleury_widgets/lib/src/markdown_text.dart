@@ -50,7 +50,7 @@ const Color _kMarkdownLinkColor = RgbColor(126, 217, 149);
 ///
 /// Use [baseStyle] to set the default cell style for the block
 /// (e.g. dim for help text). Inline overrides cascade on top.
-class MarkdownText extends StatelessWidget {
+class MarkdownText extends StatefulWidget {
   const MarkdownText(
     this.data, {
     super.key,
@@ -76,15 +76,17 @@ class MarkdownText extends StatelessWidget {
   final bool inlineLinkUrls;
 
   @override
+  State<MarkdownText> createState() => _MarkdownTextState();
+}
+
+class _MarkdownTextState extends State<MarkdownText> {
+  _MarkdownRenderer? _renderer;
+  String _data = '';
+  int _completeLines = 0;
+
+  @override
   Widget build(BuildContext context) {
     final cs = Theme.of(context).colorScheme;
-    // Mirrors FleuryWidgetTheme.resolveMarkdownHeading: primary for H1,
-    // info for H2, no tint deeper — emphasis recedes with depth.
-    Color? headingColor(int level) => switch (level) {
-      1 => cs.primary,
-      2 => cs.info,
-      _ => null,
-    };
     // PRODUCER-SIDE GATE (RFC 0017 §2): only emit a real OSC 8 / anchor link
     // when the presenting surface reports it can render one. A non-supporting
     // terminal reports false, so `linkUri` stays null — the renderer emits
@@ -92,23 +94,42 @@ class MarkdownText extends StatelessWidget {
     // so served/embedded peers get anchors. Scheme allow-listing (`_inline`,
     // §6) is the second half of the gate.
     final hyperlinks = MediaQuery.capabilitiesOf(context).hyperlinks;
-    final result = _renderBlocks(
-      data,
-      baseStyle ?? CellStyle.none,
-      headingColor: headingColor,
-      hyperlinks: hyperlinks,
-      inlineLinkUrls: inlineLinkUrls,
-    );
-    if (result.lines.isEmpty && result.links.isEmpty) return const EmptyBox();
-    final children = <Widget>[
-      ...result.lines,
-      for (var i = 0; i < result.links.length; i++)
-        _linkSemantics(
-          result.links[i],
-          i,
-          osc8Policy: _osc8PolicyFor(result.links[i], hyperlinks: hyperlinks),
-        ),
-    ];
+    final data = widget.data;
+    final base = widget.baseStyle ?? CellStyle.none;
+    var renderer = _renderer;
+    if (renderer == null ||
+        !renderer.matches(
+          base: base,
+          // Mirrors FleuryWidgetTheme.resolveMarkdownHeading: primary for
+          // H1, info for H2, no tint deeper — emphasis recedes with depth.
+          h1: cs.primary,
+          h2: cs.info,
+          hyperlinks: hyperlinks,
+          inlineLinkUrls: widget.inlineLinkUrls,
+        )) {
+      renderer = _renderer = _MarkdownRenderer(
+        base: base,
+        h1: cs.primary,
+        h2: cs.info,
+        hyperlinks: hyperlinks,
+        inlineLinkUrls: widget.inlineLinkUrls,
+      )..addLines(data.split('\n'));
+      _data = data;
+      _completeLines = _newlineCount(data);
+    } else if (!identical(data, _data) && data != _data) {
+      // An append re-renders from the last line it could have changed; any
+      // other edit re-renders everything.
+      final resume = _appendResumePoint(_data, _completeLines, data);
+      final from = resume?.lines ?? 0;
+      final tail = resume == null ? data : data.substring(resume.chars);
+      renderer
+        ..rewindTo(from)
+        ..addLines(tail.split('\n'));
+      _data = data;
+      _completeLines = from + _newlineCount(tail);
+    }
+    final children = renderer.children;
+    if (children.isEmpty) return const EmptyBox();
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: children,
@@ -364,20 +385,95 @@ MarkdownDocument parseMarkdownDocument(
   int tabSize = 2,
 }) {
   assert(tabSize > 0);
-  final rawLines = source.split('\n');
-  if (rawLines.isNotEmpty && rawLines.last.isEmpty) rawLines.removeLast();
-  final sanitizedSourceLines = <String>[
-    for (final line in rawLines) _sanitizeMarkdownText(_stripTrailingCr(line)),
-  ];
-  final blocks = <MarkdownBlock>[];
-  final links = <MarkdownLink>[];
-  var headingCount = 0;
-  var listItemCount = 0;
-  var codeBlockCount = 0;
-  var codeLineCount = 0;
-  var i = 0;
+  final parser = _MarkdownParser(maxLineLength: maxLineLength, tabSize: tabSize)
+    ..addLines(_markdownLines(source));
+  return parser.document();
+}
 
-  void addBlock({
+/// [source] split into lines, without the empty line a trailing newline
+/// leaves.
+List<String> _markdownLines(String source) {
+  final lines = source.split('\n');
+  if (lines.isNotEmpty && lines.last.isEmpty) lines.removeLast();
+  return lines;
+}
+
+final RegExp _horizontalRulePattern = RegExp(r'^\s*(-{3,}|\*{3,}|_{3,})\s*$');
+final RegExp _headingPattern = RegExp(r'^(#{1,3})\s+(.*)$');
+final RegExp _bulletPattern = RegExp(r'^(\s*)[-*]\s+(.*)$');
+final RegExp _orderedPattern = RegExp(r'^(\s*)(\d+)\.\s+(.*)$');
+
+/// A line-at-a-time parse that can rewind to any line and continue.
+///
+/// A row depends only on its own line and on whether a fenced code block is
+/// open, so the state recorded before each line is enough to re-parse from
+/// there — which is how an append re-parses only the lines it touched.
+final class _MarkdownParser {
+  _MarkdownParser({required this.maxLineLength, required this.tabSize});
+
+  final int? maxLineLength;
+  final int tabSize;
+
+  final List<MarkdownBlock> _blocks = [];
+  final List<MarkdownLink> _links = [];
+  final List<String> _sourceLines = [];
+  int _headingCount = 0;
+  int _listItemCount = 0;
+  int _codeBlockCount = 0;
+  int _codeLineCount = 0;
+  bool _inFence = false;
+
+  // The state before each parsed line: [_stateWidth] ints per line, and
+  // whether a fence was open.
+  static const int _stateWidth = 6;
+  final List<int> _lineStates = [];
+  final List<bool> _lineFences = [];
+
+  int get lineCount => _sourceLines.length;
+
+  void addLines(Iterable<String> lines) {
+    for (final line in lines) {
+      _lineStates
+        ..add(_blocks.length)
+        ..add(_links.length)
+        ..add(_headingCount)
+        ..add(_listItemCount)
+        ..add(_codeBlockCount)
+        ..add(_codeLineCount);
+      _lineFences.add(_inFence);
+      _parseLine(line);
+    }
+  }
+
+  /// Drops every line from [line] on, restoring the state before it.
+  void rewindTo(int line) {
+    if (line >= lineCount) return;
+    final base = line * _stateWidth;
+    _blocks.length = _lineStates[base];
+    _links.length = _lineStates[base + 1];
+    _headingCount = _lineStates[base + 2];
+    _listItemCount = _lineStates[base + 3];
+    _codeBlockCount = _lineStates[base + 4];
+    _codeLineCount = _lineStates[base + 5];
+    _inFence = _lineFences[line];
+    _sourceLines.length = line;
+    _lineStates.length = base;
+    _lineFences.length = line;
+  }
+
+  MarkdownDocument document() => MarkdownDocument(
+    blocks: List<MarkdownBlock>.unmodifiable(_blocks),
+    links: List<MarkdownLink>.unmodifiable(_links),
+    source: _sourceLines.join('\n'),
+    blockCount: _blocks.length,
+    headingCount: _headingCount,
+    listItemCount: _listItemCount,
+    linkCount: _links.length,
+    codeBlockCount: _codeBlockCount,
+    codeLineCount: _codeLineCount,
+  );
+
+  void _addBlock({
     required MarkdownBlockKind kind,
     required String rawSource,
     required String sourceText,
@@ -390,14 +486,14 @@ MarkdownDocument parseMarkdownDocument(
     bool sanitized = false,
     bool collectLinks = true,
   }) {
-    final blockIndex = blocks.length;
-    final beforeLinks = links.length;
+    final blockIndex = _blocks.length;
+    final beforeLinks = _links.length;
     if (collectLinks) {
-      _collectMarkdownLinks(displayText, links: links, blockIndex: blockIndex);
+      _collectMarkdownLinks(displayText, links: _links, blockIndex: blockIndex);
     }
     final rawDisplay = _sanitizeMarkdownText(displayText, tabSize: tabSize);
     final display = _truncateGraphemes(rawDisplay, maxLineLength);
-    blocks.add(
+    _blocks.add(
       MarkdownBlock(
         index: blockIndex,
         kind: kind,
@@ -407,7 +503,7 @@ MarkdownDocument parseMarkdownDocument(
         headingLevel: headingLevel,
         listDepth: listDepth,
         listNumber: listNumber,
-        linkCount: links.length - beforeLinks,
+        linkCount: _links.length - beforeLinks,
         outputSanitized: sanitized || sourceText != rawSource,
         outputTruncated: display != rawDisplay,
         outputOriginalLength: originalLength,
@@ -415,12 +511,32 @@ MarkdownDocument parseMarkdownDocument(
     );
   }
 
-  while (i < rawLines.length) {
-    final raw = _stripTrailingCr(rawLines[i]);
-    final sourceText = sanitizedSourceLines[i];
+  void _parseLine(String line) {
+    final raw = _stripTrailingCr(line);
+    final sourceText = _sanitizeMarkdownText(raw);
+    _sourceLines.add(sourceText);
+    if (_inFence) {
+      final codeSource = _sanitizeMarkdownText(raw, tabSize: tabSize);
+      if (codeSource.trimLeft().startsWith('```')) {
+        _inFence = false;
+        return;
+      }
+      _codeLineCount += 1;
+      _addBlock(
+        kind: MarkdownBlockKind.codeFence,
+        rawSource: raw,
+        sourceText: codeSource,
+        plainText: codeSource,
+        displayText: codeSource,
+        originalLength: raw.length,
+        sanitized: codeSource != raw,
+        collectLinks: false,
+      );
+      return;
+    }
     final trimmedLeft = sourceText.trimLeft();
     if (sourceText.trim().isEmpty) {
-      addBlock(
+      _addBlock(
         kind: MarkdownBlockKind.blank,
         rawSource: raw,
         sourceText: sourceText,
@@ -430,37 +546,15 @@ MarkdownDocument parseMarkdownDocument(
         sanitized: sourceText != raw,
         collectLinks: false,
       );
-      i++;
-      continue;
+      return;
     }
     if (trimmedLeft.startsWith('```')) {
-      codeBlockCount += 1;
-      i++;
-      while (i < rawLines.length &&
-          !_sanitizeMarkdownText(
-            _stripTrailingCr(rawLines[i]),
-            tabSize: tabSize,
-          ).trimLeft().startsWith('```')) {
-        final codeRaw = _stripTrailingCr(rawLines[i]);
-        final codeSource = _sanitizeMarkdownText(codeRaw, tabSize: tabSize);
-        codeLineCount += 1;
-        addBlock(
-          kind: MarkdownBlockKind.codeFence,
-          rawSource: codeRaw,
-          sourceText: codeSource,
-          plainText: codeSource,
-          displayText: codeSource,
-          originalLength: codeRaw.length,
-          sanitized: codeSource != codeRaw,
-          collectLinks: false,
-        );
-        i++;
-      }
-      if (i < rawLines.length) i++;
-      continue;
+      _codeBlockCount += 1;
+      _inFence = true;
+      return;
     }
-    if (RegExp(r'^\s*(-{3,}|\*{3,}|_{3,})\s*$').hasMatch(sourceText)) {
-      addBlock(
+    if (_horizontalRulePattern.hasMatch(sourceText)) {
+      _addBlock(
         kind: MarkdownBlockKind.horizontalRule,
         rawSource: raw,
         sourceText: sourceText,
@@ -470,15 +564,14 @@ MarkdownDocument parseMarkdownDocument(
         sanitized: sourceText != raw,
         collectLinks: false,
       );
-      i++;
-      continue;
+      return;
     }
-    final heading = RegExp(r'^(#{1,3})\s+(.*)$').firstMatch(sourceText);
+    final heading = _headingPattern.firstMatch(sourceText);
     if (heading != null) {
       final level = heading.group(1)!.length;
       final body = heading.group(2)!;
-      headingCount += 1;
-      addBlock(
+      _headingCount += 1;
+      _addBlock(
         kind: MarkdownBlockKind.heading,
         rawSource: raw,
         sourceText: sourceText,
@@ -488,12 +581,11 @@ MarkdownDocument parseMarkdownDocument(
         originalLength: raw.length,
         sanitized: sourceText != raw,
       );
-      i++;
-      continue;
+      return;
     }
     if (trimmedLeft.startsWith('> ')) {
       final body = trimmedLeft.substring(2);
-      addBlock(
+      _addBlock(
         kind: MarkdownBlockKind.blockquote,
         rawSource: raw,
         sourceText: sourceText,
@@ -502,15 +594,14 @@ MarkdownDocument parseMarkdownDocument(
         originalLength: raw.length,
         sanitized: sourceText != raw,
       );
-      i++;
-      continue;
+      return;
     }
-    final bullet = RegExp(r'^(\s*)[-*]\s+(.*)$').firstMatch(sourceText);
+    final bullet = _bulletPattern.firstMatch(sourceText);
     if (bullet != null) {
       final indent = bullet.group(1)!.length;
       final body = bullet.group(2)!;
-      listItemCount += 1;
-      addBlock(
+      _listItemCount += 1;
+      _addBlock(
         kind: MarkdownBlockKind.bullet,
         rawSource: raw,
         sourceText: sourceText,
@@ -520,16 +611,15 @@ MarkdownDocument parseMarkdownDocument(
         originalLength: raw.length,
         sanitized: sourceText != raw,
       );
-      i++;
-      continue;
+      return;
     }
-    final ordered = RegExp(r'^(\s*)(\d+)\.\s+(.*)$').firstMatch(sourceText);
+    final ordered = _orderedPattern.firstMatch(sourceText);
     if (ordered != null) {
       final indent = ordered.group(1)!.length;
       final number = int.parse(ordered.group(2)!);
       final body = ordered.group(3)!;
-      listItemCount += 1;
-      addBlock(
+      _listItemCount += 1;
+      _addBlock(
         kind: MarkdownBlockKind.ordered,
         rawSource: raw,
         sourceText: sourceText,
@@ -540,10 +630,9 @@ MarkdownDocument parseMarkdownDocument(
         originalLength: raw.length,
         sanitized: sourceText != raw,
       );
-      i++;
-      continue;
+      return;
     }
-    addBlock(
+    _addBlock(
       kind: MarkdownBlockKind.paragraph,
       rawSource: raw,
       sourceText: sourceText,
@@ -552,20 +641,97 @@ MarkdownDocument parseMarkdownDocument(
       originalLength: raw.length,
       sanitized: sourceText != raw,
     );
-    i++;
+  }
+}
+
+/// Where a parse of [previous] can resume for [next]: the characters and the
+/// count of the complete (newline-terminated) lines [previous] starts with,
+/// which an append cannot have changed. Null unless [next] extends
+/// [previous].
+({int chars, int lines})? _appendResumePoint(
+  String previous,
+  int previousCompleteLines,
+  String next,
+) {
+  if (next.length <= previous.length || !next.startsWith(previous)) {
+    return null;
+  }
+  return (chars: previous.lastIndexOf('\n') + 1, lines: previousCompleteLines);
+}
+
+int _newlineCount(String text) {
+  var count = 0;
+  for (var i = 0; i < text.length; i++) {
+    if (text.codeUnitAt(i) == 0x0A) count++;
+  }
+  return count;
+}
+
+/// Keeps the last parse of a growing source so an append re-parses only its
+/// tail, and an unchanged source re-parses nothing.
+final class _MarkdownDocumentCache {
+  _MarkdownParser? _parser;
+  String _source = '';
+  int _completeLines = 0;
+  MarkdownDocument? _document;
+  List<Widget> _linkWidgets = const [];
+
+  MarkdownDocument documentFor(
+    String source, {
+    required int? maxLineLength,
+    required int tabSize,
+  }) {
+    var parser = _parser;
+    final document = _document;
+    final sameOptions =
+        parser != null &&
+        parser.maxLineLength == maxLineLength &&
+        parser.tabSize == tabSize;
+    if (sameOptions && document != null) {
+      if (identical(source, _source) || source == _source) return document;
+      final resume = _appendResumePoint(_source, _completeLines, source);
+      if (resume != null) {
+        final tail = source.substring(resume.chars);
+        parser
+          ..rewindTo(resume.lines)
+          ..addLines(_markdownLines(tail));
+        return _store(source, parser, resume.lines + _newlineCount(tail));
+      }
+    }
+    parser = _MarkdownParser(maxLineLength: maxLineLength, tabSize: tabSize)
+      ..addLines(_markdownLines(source));
+    return _store(source, parser, _newlineCount(source));
   }
 
-  return MarkdownDocument(
-    blocks: List<MarkdownBlock>.unmodifiable(blocks),
-    links: List<MarkdownLink>.unmodifiable(links),
-    source: sanitizedSourceLines.join('\n'),
-    blockCount: blocks.length,
-    headingCount: headingCount,
-    listItemCount: listItemCount,
-    linkCount: links.length,
-    codeBlockCount: codeBlockCount,
-    codeLineCount: codeLineCount,
-  );
+  MarkdownDocument _store(
+    String source,
+    _MarkdownParser parser,
+    int completeLines,
+  ) {
+    _parser = parser;
+    _source = source;
+    _completeLines = completeLines;
+    return _document = parser.document();
+  }
+
+  /// Link semantics for [document]'s links, rebuilding only the links that
+  /// changed since the last call.
+  List<Widget> linkWidgets(MarkdownDocument document) {
+    final links = document.links;
+    final previous = _linkWidgets;
+    var reuse = 0;
+    while (reuse < previous.length &&
+        reuse < links.length &&
+        identical((previous[reuse] as _LinkSemantics).link, links[reuse])) {
+      reuse++;
+    }
+    if (reuse == previous.length && reuse == links.length) return previous;
+    return _linkWidgets = List<Widget>.unmodifiable([
+      ...previous.take(reuse),
+      for (var i = reuse; i < links.length; i++)
+        _LinkSemantics(links[i], links[i].index),
+    ]);
+  }
 }
 
 /// Exports the selected block or whole document as sanitized Markdown source.
@@ -587,11 +753,9 @@ String exportMarkdownSelection(
 /// arrow keys move a selection block by block. Ctrl+C copies the selected
 /// block's Markdown source — or the whole document.
 class MarkdownView extends StatefulWidget {
-  MarkdownView({
+  const MarkdownView({
     super.key,
-
-    /// Markdown source parsed into [document] before rendering.
-    required String markdown,
+    required String this.markdown,
     this.controller,
     this.focusNode,
     this.autofocus = false,
@@ -602,11 +766,7 @@ class MarkdownView extends StatefulWidget {
     this.copySelection = true,
     this.copyOptions = const MarkdownViewCopyOptions(),
     this.onCopy,
-  }) : document = parseMarkdownDocument(
-         markdown,
-         maxLineLength: maxLineLength,
-         tabSize: tabSize,
-       ),
+  }) : document = null,
        assert(maxLineLength == null || maxLineLength >= 0),
        assert(tabSize > 0);
 
@@ -616,7 +776,7 @@ class MarkdownView extends StatefulWidget {
   /// without parsing Markdown source again.
   const MarkdownView.document({
     super.key,
-    required this.document,
+    required MarkdownDocument this.document,
     this.controller,
     this.focusNode,
     this.autofocus = false,
@@ -627,11 +787,18 @@ class MarkdownView extends StatefulWidget {
     this.copySelection = true,
     this.copyOptions = const MarkdownViewCopyOptions(),
     this.onCopy,
-  }) : assert(maxLineLength == null || maxLineLength >= 0),
+  }) : markdown = null,
+       assert(maxLineLength == null || maxLineLength >= 0),
        assert(tabSize > 0);
 
-  /// Parsed Markdown document to render.
-  final MarkdownDocument document;
+  /// Markdown source to render, parsed by the view. The parse is kept while
+  /// the source is unchanged, and an appended source re-parses only its last
+  /// line onward, so streaming into a long document stays cheap. Null for
+  /// [MarkdownView.document].
+  final String? markdown;
+
+  /// An already parsed document to render; null for [MarkdownView.new].
+  final MarkdownDocument? document;
 
   /// External selection and visible-range controller.
   final MarkdownViewController? controller;
@@ -668,6 +835,7 @@ class MarkdownView extends StatefulWidget {
 }
 
 class _MarkdownViewState extends State<MarkdownView> {
+  final _MarkdownDocumentCache _cache = _MarkdownDocumentCache();
   late MarkdownViewController _controller;
   late FocusNode _focusNode;
   bool _ownsController = false;
@@ -703,6 +871,14 @@ class _MarkdownViewState extends State<MarkdownView> {
 
   void _onControllerChange() => setState(() {});
 
+  MarkdownDocument get _document =>
+      widget.document ??
+      _cache.documentFor(
+        widget.markdown!,
+        maxLineLength: widget.maxLineLength,
+        tabSize: widget.tabSize,
+      );
+
   void _onFocusDetectorChange(bool focused) {
     if (_focusedWithin == focused) return;
     setState(() {
@@ -719,7 +895,7 @@ class _MarkdownViewState extends State<MarkdownView> {
   }
 
   MarkdownBlock? _selectedBlock() {
-    final blocks = widget.document.blocks;
+    final blocks = _document.blocks;
     if (blocks.isEmpty) return null;
     final selected = (_controller.currentIndex ?? 0).clamp(
       0,
@@ -729,14 +905,14 @@ class _MarkdownViewState extends State<MarkdownView> {
   }
 
   Future<void> _copySelection() async {
-    final blocks = widget.document.blocks;
+    final blocks = _document.blocks;
     if (!widget.copySelection || blocks.isEmpty) return;
     final currentIndex = (_controller.currentIndex ?? 0).clamp(
       0,
       blocks.length - 1,
     );
     final text = exportMarkdownSelection(
-      widget.document,
+      _document,
       blockIndex: currentIndex,
       options: widget.copyOptions,
     );
@@ -755,7 +931,7 @@ class _MarkdownViewState extends State<MarkdownView> {
   }
 
   Future<void> _copyBlockAt(int index) async {
-    final blocks = widget.document.blocks;
+    final blocks = _document.blocks;
     if (index < 0 || index >= blocks.length) return;
     _focusNode.requestFocus();
     _controller.currentIndex = index;
@@ -763,7 +939,7 @@ class _MarkdownViewState extends State<MarkdownView> {
   }
 
   void _selectBlockAt(int index) {
-    final blocks = widget.document.blocks;
+    final blocks = _document.blocks;
     if (index < 0 || index >= blocks.length) return;
     _focusNode.requestFocus();
     _controller.currentIndex = index;
@@ -786,7 +962,8 @@ class _MarkdownViewState extends State<MarkdownView> {
 
   @override
   Widget build(BuildContext context) {
-    final blocks = widget.document.blocks;
+    final document = _document;
+    final blocks = document.blocks;
     final selected = _selectedBlock();
     final visibleRange = _controller.visibleRange;
     final copyEnabled = widget.copySelection && blocks.isNotEmpty;
@@ -839,12 +1016,12 @@ class _MarkdownViewState extends State<MarkdownView> {
         onAction: _handleMarkdownAction,
         state: SemanticState({
           'collectionRowCount': blocks.length,
-          'blockCount': widget.document.blockCount,
-          'headingCount': widget.document.headingCount,
-          'listItemCount': widget.document.listItemCount,
-          'linkCount': widget.document.linkCount,
-          'codeBlockCount': widget.document.codeBlockCount,
-          'codeLineCount': widget.document.codeLineCount,
+          'blockCount': document.blockCount,
+          'headingCount': document.headingCount,
+          'listItemCount': document.listItemCount,
+          'linkCount': document.linkCount,
+          'codeBlockCount': document.codeBlockCount,
+          'codeLineCount': document.codeLineCount,
           'copyEnabled': copyEnabled,
           'copyMode': widget.copyOptions.mode.name,
           'clipboardPolicy': widget.copyOptions.clipboardPolicy.name,
@@ -865,8 +1042,7 @@ class _MarkdownViewState extends State<MarkdownView> {
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Expanded(child: list),
-            for (final link in widget.document.links)
-              _linkSemantics(link, link.index),
+            ..._cache.linkWidgets(document),
           ],
         ),
       ),
@@ -990,55 +1166,63 @@ String _osc8PolicyFor(MarkdownLink link, {required bool hyperlinks}) {
   return 'supported';
 }
 
-/// Builds the (invisible) semantics node for a markdown [link]. The URL stays
+// The capability contract every Markdown link node reports (terminalCapability
+// / capabilityRequirement / activeFallback): MarkdownText always keeps a
+// visible-URL fallback available, so this documents the prohibited-by-default
+// OSC 8 stance and the fallback label. Constant, so resolved once; the live
+// per-surface outcome rides on each node's `osc8Policy`, which the producer
+// derived from the actual capability.
+final SemanticState _linkCapabilityState = resolveCapabilityRequirement(
+  const CapabilityRequirement(
+    feature: TerminalFeature.osc8Hyperlinks,
+    level: CapabilityLevel.prohibited,
+    reason: 'Markdown links render as visible text by default.',
+    fallback: CapabilityFallback(label: 'visible URL'),
+  ),
+  const CapabilityTruth(
+    feature: TerminalFeature.osc8Hyperlinks,
+    support: CapabilitySupport.unknown,
+    enablement: CapabilityEnablement.disabled,
+    delivery: CapabilityDelivery.notApplicable,
+    policyBlocked: true,
+    evidence: <CapabilityEvidence>[
+      CapabilityEvidence(
+        source: CapabilityEvidenceSource.policy,
+        detail: 'Markdown links use visible URLs by default.',
+      ),
+    ],
+  ),
+).toSemanticState();
+
+/// The (invisible) semantics node for a markdown [link]. The URL stays
 /// agent/AT-legible via [Semantics.value] regardless of whether a live link was
 /// emitted. [osc8Policy] records what actually happened at the producer (see
 /// [_osc8PolicyFor]); it defaults to `disabledByDefault` for callers that render
 /// links as visible text only (e.g. [MarkdownView]).
-Widget _linkSemantics(
-  MarkdownLink link,
-  int index, {
-  String osc8Policy = 'disabledByDefault',
-}) {
-  // The generic capability-resolution contract (terminalCapability /
-  // capabilityRequirement / activeFallback): MarkdownText always keeps a
-  // visible-URL fallback available, so this documents the prohibited-by-default
-  // OSC 8 stance and the fallback label. The live per-surface outcome rides on
-  // `osc8Policy` below, which the producer derived from the actual capability.
-  final resolution = resolveCapabilityRequirement(
-    const CapabilityRequirement(
-      feature: TerminalFeature.osc8Hyperlinks,
-      level: CapabilityLevel.prohibited,
-      reason: 'Markdown links render as visible text by default.',
-      fallback: CapabilityFallback(label: 'visible URL'),
-    ),
-    const CapabilityTruth(
-      feature: TerminalFeature.osc8Hyperlinks,
-      support: CapabilitySupport.unknown,
-      enablement: CapabilityEnablement.disabled,
-      delivery: CapabilityDelivery.notApplicable,
-      policyBlocked: true,
-      evidence: <CapabilityEvidence>[
-        CapabilityEvidence(
-          source: CapabilityEvidenceSource.policy,
-          detail: 'Markdown links use visible URLs by default.',
-        ),
-      ],
-    ),
-  );
-  final state = resolution.toSemanticState().merge(<String, Object?>{
-    'markdownLinkIndex': index,
-    'markdownBlockIndex': link.blockIndex,
-    'linkUrl': link.url,
-    'linkScheme': link.scheme,
-    'safeLinkScheme': link.safeScheme,
-    'osc8Policy': osc8Policy,
+class _LinkSemantics extends StatelessWidget {
+  const _LinkSemantics(
+    this.link,
+    this.index, {
+    this.osc8Policy = 'disabledByDefault',
   });
-  return Semantics(
+
+  final MarkdownLink link;
+  final int index;
+  final String osc8Policy;
+
+  @override
+  Widget build(BuildContext context) => Semantics(
     role: SemanticRole.link,
     label: link.text,
     value: link.url,
-    state: state,
+    state: _linkCapabilityState.merge(<String, Object?>{
+      'markdownLinkIndex': index,
+      'markdownBlockIndex': link.blockIndex,
+      'linkUrl': link.url,
+      'linkScheme': link.scheme,
+      'safeLinkScheme': link.safeScheme,
+      'osc8Policy': osc8Policy,
+    }),
     child: const EmptyBox(),
   );
 }
@@ -1054,53 +1238,121 @@ String? _urlScheme(String url) {
 
 // ---- Block-level pass -----------------------------------------------------
 
-({List<Widget> lines, List<MarkdownLink> links}) _renderBlocks(
-  String data,
-  CellStyle base, {
-  Color? Function(int level)? headingColor,
-  bool hyperlinks = false,
-  bool inlineLinkUrls = true,
-}) {
-  final out = <Widget>[];
-  final links = <MarkdownLink>[];
-  final lines = data.split('\n');
-  var i = 0;
-  while (i < lines.length) {
-    final line = lines[i];
-    if (line.trim().isEmpty) {
-      out.add(const Text(''));
-      i++;
-      continue;
-    }
-    // Fenced code block — consume until matching ```.
-    if (line.trimLeft().startsWith('```')) {
-      i++;
-      final codeLines = <String>[];
-      while (i < lines.length && !lines[i].trimLeft().startsWith('```')) {
-        codeLines.add(lines[i]);
-        i++;
-      }
-      if (i < lines.length) i++; // skip closing fence
-      for (final c in codeLines) {
-        out.add(
-          Text(
-            c,
-            style: base.merge(
-              const CellStyle(background: RgbColor(40, 40, 50)),
-            ),
+/// The rows [MarkdownText] renders for its source, built a line at a time
+/// and resumable like [_MarkdownParser], so an append re-renders only the
+/// lines it touched and unchanged rows keep their widget instances.
+final class _MarkdownRenderer {
+  _MarkdownRenderer({
+    required this.base,
+    required this.h1,
+    required this.h2,
+    required this.hyperlinks,
+    required this.inlineLinkUrls,
+  });
+
+  final CellStyle base;
+  final Color? h1;
+  final Color? h2;
+  final bool hyperlinks;
+  final bool inlineLinkUrls;
+
+  final List<Widget> _rows = [];
+  final List<MarkdownLink> _links = [];
+  final List<Widget> _linkRows = [];
+  bool _inFence = false;
+
+  // The state before each rendered line.
+  final List<int> _lineRows = [];
+  final List<int> _lineLinks = [];
+  final List<bool> _lineFences = [];
+
+  List<Widget>? _children;
+
+  bool matches({
+    required CellStyle base,
+    required Color? h1,
+    required Color? h2,
+    required bool hyperlinks,
+    required bool inlineLinkUrls,
+  }) =>
+      base == this.base &&
+      h1 == this.h1 &&
+      h2 == this.h2 &&
+      hyperlinks == this.hyperlinks &&
+      inlineLinkUrls == this.inlineLinkUrls;
+
+  /// The line rows followed by one semantics node per link.
+  List<Widget> get children =>
+      _children ??= List<Widget>.unmodifiable([..._rows, ..._linkRows]);
+
+  void addLines(Iterable<String> lines) {
+    _children = null;
+    for (final line in lines) {
+      _lineRows.add(_rows.length);
+      _lineLinks.add(_links.length);
+      _lineFences.add(_inFence);
+      final before = _links.length;
+      _renderLine(line);
+      for (var i = before; i < _links.length; i++) {
+        _linkRows.add(
+          _LinkSemantics(
+            _links[i],
+            i,
+            osc8Policy: _osc8PolicyFor(_links[i], hyperlinks: hyperlinks),
           ),
         );
       }
-      continue;
     }
-    // Horizontal rule.
-    if (RegExp(r'^\s*(-{3,}|\*{3,}|_{3,})\s*$').hasMatch(line)) {
-      out.add(Text('─' * 40, style: base.merge(const CellStyle(dim: true))));
-      i++;
-      continue;
+  }
+
+  /// Drops every line from [line] on, restoring the state before it.
+  void rewindTo(int line) {
+    if (line >= _lineRows.length) return;
+    _children = null;
+    _rows.length = _lineRows[line];
+    _links.length = _lineLinks[line];
+    _linkRows.length = _lineLinks[line];
+    _inFence = _lineFences[line];
+    _lineRows.length = line;
+    _lineLinks.length = line;
+    _lineFences.length = line;
+  }
+
+  TextSpan _inlineSpan(String text, CellStyle style) => _inline(
+    text,
+    style,
+    links: _links,
+    hyperlinks: hyperlinks,
+    inlineLinkUrls: inlineLinkUrls,
+  );
+
+  void _renderLine(String line) {
+    if (_inFence) {
+      if (line.trimLeft().startsWith('```')) {
+        _inFence = false;
+        return;
+      }
+      _rows.add(
+        Text(
+          line,
+          style: base.merge(const CellStyle(background: RgbColor(40, 40, 50))),
+        ),
+      );
+      return;
     }
-    // Heading.
-    final heading = RegExp(r'^(#{1,3})\s+(.*)$').firstMatch(line);
+    if (line.trim().isEmpty) {
+      _rows.add(const Text(''));
+      return;
+    }
+    if (line.trimLeft().startsWith('```')) {
+      _inFence = true;
+      return;
+    }
+    if (_horizontalRulePattern.hasMatch(line)) {
+      _rows.add(Text('─' * 40, style: base.merge(const CellStyle(dim: true))));
+      return;
+    }
+    final heading = _headingPattern.firstMatch(line);
     if (heading != null) {
       final level = heading.group(1)!.length;
       final body = heading.group(2)!;
@@ -1108,116 +1360,72 @@ String? _urlScheme(String url) {
         CellStyle(
           bold: true,
           // H1 inverts for emphasis; H2/H3 just bold + underline. A color
-          // tint (when provided) reinforces the depth hierarchy.
+          // tint reinforces the depth hierarchy.
           underline: level > 1,
           inverse: level == 1,
-          foreground: headingColor?.call(level),
+          foreground: switch (level) {
+            1 => h1,
+            2 => h2,
+            _ => null,
+          },
         ),
       );
-      out.add(
-        RichText(
-          text: _inline(
-            body,
-            hStyle,
-            links: links,
-            hyperlinks: hyperlinks,
-            inlineLinkUrls: inlineLinkUrls,
-          ),
-        ),
-      );
-      i++;
-      continue;
+      _rows.add(RichText(text: _inlineSpan(body, hStyle)));
+      return;
     }
-    // Blockquote.
     if (line.trimLeft().startsWith('> ')) {
       final body = line.trimLeft().substring(2);
       final qStyle = base.merge(const CellStyle(dim: true));
-      out.add(
+      _rows.add(
         RichText(
           text: TextSpan(
             style: qStyle,
             children: [
               const TextSpan(text: '│ '),
-              _inline(
-                body,
-                qStyle,
-                links: links,
-                hyperlinks: hyperlinks,
-                inlineLinkUrls: inlineLinkUrls,
-              ),
+              _inlineSpan(body, qStyle),
             ],
           ),
         ),
       );
-      i++;
-      continue;
+      return;
     }
-    // Bullet list.
-    final bullet = RegExp(r'^(\s*)[-*]\s+(.*)$').firstMatch(line);
+    final bullet = _bulletPattern.firstMatch(line);
     if (bullet != null) {
       final indent = ' ' * bullet.group(1)!.length;
       final body = bullet.group(2)!;
-      out.add(
+      _rows.add(
         RichText(
           text: TextSpan(
             style: base,
             children: [
               TextSpan(text: '$indent• '),
-              _inline(
-                body,
-                base,
-                links: links,
-                hyperlinks: hyperlinks,
-                inlineLinkUrls: inlineLinkUrls,
-              ),
+              _inlineSpan(body, base),
             ],
           ),
         ),
       );
-      i++;
-      continue;
+      return;
     }
-    // Ordered list.
-    final ordered = RegExp(r'^(\s*)(\d+)\.\s+(.*)$').firstMatch(line);
+    final ordered = _orderedPattern.firstMatch(line);
     if (ordered != null) {
       final indent = ' ' * ordered.group(1)!.length;
       final num = ordered.group(2)!;
       final body = ordered.group(3)!;
-      out.add(
+      _rows.add(
         RichText(
           text: TextSpan(
             style: base,
             children: [
               TextSpan(text: '$indent$num. '),
-              _inline(
-                body,
-                base,
-                links: links,
-                hyperlinks: hyperlinks,
-                inlineLinkUrls: inlineLinkUrls,
-              ),
+              _inlineSpan(body, base),
             ],
           ),
         ),
       );
-      i++;
-      continue;
+      return;
     }
-    // Plain paragraph line.
-    out.add(
-      RichText(
-        text: _inline(
-          line,
-          base,
-          links: links,
-          hyperlinks: hyperlinks,
-          inlineLinkUrls: inlineLinkUrls,
-        ),
-      ),
-    );
-    i++;
+    _rows.add(RichText(text: _inlineSpan(line, base)));
   }
-  return (lines: out, links: links);
 }
 
 // ---- Inline pass ----------------------------------------------------------

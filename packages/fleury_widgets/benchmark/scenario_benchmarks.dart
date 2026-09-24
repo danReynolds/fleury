@@ -294,7 +294,7 @@ Future<_DataTableJourneySample> _runDataTableJourney(
     final controller = DataTableController();
 
     final mount = Stopwatch()..start();
-    tester.pumpWidget(
+    tester.mountWidget(
       DataTable(
         rowCount: config.rowCount,
         columns: _columns,
@@ -662,7 +662,7 @@ Future<_LogRegionJourneySample> _runLogRegionJourney(
 
     final controller = LogRegionController();
     final mount = Stopwatch()..start();
-    tester.pumpWidget(
+    tester.mountWidget(
       _LogRegionHarness(
         entries: entries,
         controller: controller,
@@ -684,7 +684,7 @@ Future<_LogRegionJourneySample> _runLogRegionJourney(
       );
     }
     searchIndex.refresh();
-    tester.pumpWidget(
+    tester.mountWidget(
       _LogRegionHarness(
         entries: entries,
         controller: controller,
@@ -718,7 +718,7 @@ Future<_LogRegionJourneySample> _runLogRegionJourney(
     final filterController = LogRegionController();
     final filterQuery = fixture.filterQueryFor(appendStart);
     final filter = Stopwatch()..start();
-    tester.pumpWidget(
+    tester.mountWidget(
       _LogRegionHarness(
         entries: entries,
         controller: filterController,
@@ -1106,7 +1106,7 @@ Future<_StreamingMarkdownJourneySample> _runStreamingMarkdownJourney(
   final total = Stopwatch()..start();
   try {
     final mount = Stopwatch()..start();
-    tester.pumpWidget(
+    tester.mountWidget(
       _MarkdownViewHarness(document: document, controller: controller),
     );
     mount.stop();
@@ -1123,7 +1123,7 @@ Future<_StreamingMarkdownJourneySample> _runStreamingMarkdownJourney(
       parse.stop();
 
       final frameWatch = Stopwatch()..start();
-      tester.pumpWidget(
+      tester.mountWidget(
         _MarkdownViewHarness(document: document, controller: controller),
       );
       final frame = tester.render(size: config.terminalSize);
@@ -1513,7 +1513,8 @@ Future<_DashboardUpdateJourneySample> _runDashboardUpdateJourney(
   var unsafeFrameCount = 0;
   try {
     final mount = Stopwatch()..start();
-    tester.pumpWidget(_DashboardHarness(fixture: fixture, tick: 0));
+    // Build only: the measured first frame below is the layout and paint.
+    tester.mountWidget(_DashboardHarness(fixture: fixture, tick: 0));
     mount.stop();
     memory.mark('afterMount');
 
@@ -1527,7 +1528,7 @@ Future<_DashboardUpdateJourneySample> _runDashboardUpdateJourney(
     for (var tick = 1; tick <= tickCount; tick++) {
       final update = Stopwatch()..start();
       final pump = Stopwatch()..start();
-      tester.pumpWidget(_DashboardHarness(fixture: fixture, tick: tick));
+      tester.mountWidget(_DashboardHarness(fixture: fixture, tick: tick));
       pump.stop();
 
       final frame = Stopwatch()..start();
@@ -1966,7 +1967,7 @@ Future<_OverlayCommandPaletteJourneySample> _runOverlayCommandPaletteJourney(
   final total = Stopwatch()..start();
   try {
     final mount = Stopwatch()..start();
-    tester.pumpWidget(
+    tester.mountWidget(
       FleuryApp(
         title: 'Overlay Benchmark',
         commands: fixture.appCommands(invokedIds.add),
@@ -2672,7 +2673,7 @@ Future<_ResizeStormJourneySample> _runResizeStormJourney(
     final inputController = TextEditingController(text: 'status:failed');
 
     final mount = Stopwatch()..start();
-    tester.pumpWidget(
+    tester.mountWidget(
       _ResizeStormHarness(
         rowCount: config.rowCount,
         runFixture: fixture,
@@ -3065,7 +3066,7 @@ Future<_TreeTableJourneySample> _runTreeTableJourney(
 
     final controller = TreeTableController(expandedKeys: {fixture.groupKey(0)});
     final mount = Stopwatch()..start();
-    tester.pumpWidget(
+    tester.mountWidget(
       _TreeTableHarness(
         roots: roots,
         controller: controller,
@@ -3113,7 +3114,7 @@ Future<_TreeTableJourneySample> _runTreeTableJourney(
     final targetQuery = fixture.targetQuery;
     final filterController = TreeTableController(initialIndex: 1);
     final filter = Stopwatch()..start();
-    tester.pumpWidget(
+    tester.mountWidget(
       _TreeTableHarness(
         roots: roots,
         controller: filterController,

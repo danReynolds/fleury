@@ -1,5 +1,21 @@
 ## 0.1.0
 
+- `LogRegion` no longer does work proportional to the whole log on every
+  build: the unfiltered view order allocates nothing, and row-id validation
+  re-checks the rows it already validated by equality and hashes only new
+  ones. An append to a 100k-entry log with ids costs about 5 ms instead of
+  29-36 ms.
+- **Breaking:** `MarkdownView(markdown:)` no longer parses in its constructor;
+  the view parses its `markdown` source and keeps the result while the source
+  is unchanged. An appended source (streaming) re-parses only from its last
+  line, so a token appended to a 200 KB document costs about 2 ms instead of
+  38 ms, and a rebuild with unchanged text re-parses nothing. `document` is
+  null for `MarkdownView.new`; `MarkdownView.document` is unchanged.
+  `MarkdownText` renders incrementally the same way and reuses unchanged rows.
+- `LogRegion` and `MessageList` start with the cursor on the newest entry and
+  keep it there while following, so Ctrl+C copies what the view is showing
+  instead of the first entry. `LogRegionController` and
+  `MessageListController` default `initialIndex` to `ListController.natural`.
 - **Breaking:** the deprecated `Command` alias is removed; use
   `CommandPaletteItem`.
 - `FormController.submit()` returns false when the submit callback leaves a

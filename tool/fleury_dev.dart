@@ -1296,6 +1296,9 @@ Uint8List remoteClientJs() => base64.decode(_remoteClientJsBase64);
       case 'gates':
         await benchmarkGates(rest);
         return;
+      case 'scenario-gate':
+        await benchmarkScenarioGate(rest);
+        return;
       case 'scoreboard':
         await benchmarkScoreboard(rest);
         return;
@@ -1769,6 +1772,51 @@ Uint8List remoteClientJs() => base64.decode(_remoteClientJsBase64);
       'bin/runtime_gate.dart',
       ...args,
     ], workingDirectory: profiling);
+  }
+
+  /// Runs every local scenario benchmark (SB.*) once at a size CI can afford
+  /// and fails if any scenario's own correctness oracle fails. The scenarios
+  /// run nowhere else in CI; before this gate three of them rotted unnoticed
+  /// (a harness timing no-op frames, a list that stopped selecting its tail).
+  /// Timings are printed but not gated. Every runner is run, even after a
+  /// failure, so one command reports the whole board.
+  Future<void> benchmarkScenarioGate(List<String> args) async {
+    final runs = <({String package, List<String> args})>[
+      (package: fleury, args: const ['--warmup=1', '--iterations=1']),
+      (
+        package: widgets,
+        args: const ['--warmup=1', '--iterations=1', '--rows=2000'],
+      ),
+      (package: demo, args: const ['--warmup=1', '--iterations=1']),
+    ];
+    final failed = <String>[];
+    for (final run in runs) {
+      final command = [
+        'run',
+        'benchmark/scenario_benchmarks.dart',
+        ...run.args,
+        ...args,
+      ];
+      stdout.writeln('\n─── ${_relative(run.package)} ───');
+      if (dryRun) {
+        stdout.writeln('(${_relative(run.package)}) dart ${command.join(' ')}');
+        continue;
+      }
+      final process = await Process.start(
+        'dart',
+        command,
+        workingDirectory: run.package,
+        mode: ProcessStartMode.inheritStdio,
+      );
+      if (await process.exitCode != 0) failed.add(_relative(run.package));
+    }
+    if (failed.isNotEmpty) {
+      stderr.writeln(
+        '\nscenario gate: a scenario oracle FAILED in ${failed.join(', ')}.',
+      );
+      exit(1);
+    }
+    stdout.writeln('\nscenario gate: every scenario oracle passes.');
   }
 
   /// Runs the fast, self-contained regression gates in sequence and prints a
@@ -2925,7 +2973,6 @@ const _widgetBenchmarkTarget = _LocalBenchmarkTarget(
     'SB.6',
     'SB.7',
     'SB.8',
-    'SB.9',
     'SB.11',
   ],
 );
@@ -6818,6 +6865,9 @@ void _printBenchmarkUsage() {
   );
   stdout.writeln(
     '  runtime-gate [--gate]   runApp -> FrameDriver -> present, end to end',
+  );
+  stdout.writeln(
+    '  scenario-gate           Every SB.* scenario once; fails on a bad oracle',
   );
   stdout.writeln('');
   stdout.writeln(
