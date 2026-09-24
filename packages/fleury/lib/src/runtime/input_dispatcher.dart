@@ -1156,12 +1156,14 @@ class InputDispatcher {
     String? textOrigin,
   ) {
     for (final binding in bindings) {
-      if (!binding.enabled) continue;
       if (binding.isHold) continue; // holds ride the observation lane
       if (!_phaseEligible(binding, event)) continue;
       for (final sequence in binding.sequences) {
         if (sequence.isSequence) continue;
         if (_matchesStepInLane(sequence, 0, event, lane, textOrigin)) {
+          // Asked only of a binding the key matches: a live binding's
+          // predicate runs per match, not per key per binding.
+          if (!binding.enabled) break;
           return (binding: binding, sequence: sequence);
         }
       }
@@ -1179,7 +1181,6 @@ class InputDispatcher {
     String? textOrigin,
   ) {
     for (final binding in bindings) {
-      if (!binding.enabled) continue;
       if (binding.isHold) continue;
       // A repeat never ADVANCES or starts a sequence (§14.4): holding `g`
       // must not arm `gg`.
@@ -1187,7 +1188,7 @@ class InputDispatcher {
       for (final sequence in binding.sequences) {
         if (!sequence.isSequence) continue;
         if (_matchesStepInLane(sequence, 0, event, lane, textOrigin)) {
-          out.add(binding);
+          if (binding.enabled) out.add(binding);
           break;
         }
       }

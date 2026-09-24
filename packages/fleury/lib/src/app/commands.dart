@@ -412,13 +412,15 @@ class _CommandScopeState extends State<CommandScope> {
         commands: registry,
         buildContext: this.context,
       );
-      if (!command.visible(context)) continue;
       bindings.add(
-        KeyBinding(
+        // The predicates read state this scope does not rebuild for, so the
+        // shortcut asks them when its key is pressed — as the palette,
+        // semantics and invoke do — and a disabled one lets the key bubble.
+        KeyBinding.live(
           command.shortcuts.first,
           aliases: command.shortcuts.skip(1).toList(),
           label: command.title,
-          enabled: command.enabled(context),
+          isEnabled: () => command.visible(context) && command.enabled(context),
           onTrigger: (_) {
             unawaited(registry.invoke(command.id, buildContext: this.context));
           },

@@ -249,9 +249,11 @@ final class KeyBinding {
     List<KeySequence> aliases = const <KeySequence>[],
     this.includeRepeats = false,
     this.label,
-    this.enabled = true,
+    bool enabled = true,
     this.hideFromHintBar = false,
-  }) : assert(
+  }) : _enabled = enabled,
+       _isEnabled = null,
+       assert(
          !includeRepeats ||
              (sequence.stepCount == 1 &&
                  !aliases.any((alias) => alias.stepCount > 1)),
@@ -281,15 +283,36 @@ final class KeyBinding {
     required KeyBindingHandler this.onHoldStart,
     required KeyBindingHandler this.onHoldEnd,
     this.label,
-    this.enabled = true,
+    bool enabled = true,
     this.hideFromHintBar = false,
-  }) : assert(
+  }) : _enabled = enabled,
+       _isEnabled = null,
+       assert(
          key.stepCount == 1,
          'a hold brackets one key press, not a multi-step sequence',
        ),
        sequences = [key],
        onTrigger = null,
        includeRepeats = false;
+
+  /// Framework-internal: a binding whose [enabled] is [isEnabled], asked
+  /// each time a key matches it rather than fixed when it was built — for a
+  /// command's shortcut, whose `visible`/`enabled` predicates read app
+  /// state that no rebuild of the binding's scope tracks.
+  @internal
+  KeyBinding.live(
+    KeySequence sequence, {
+    required KeyBindingHandler this.onTrigger,
+    required bool Function() isEnabled,
+    List<KeySequence> aliases = const <KeySequence>[],
+    this.label,
+  }) : _enabled = true,
+       _isEnabled = isEnabled,
+       sequences = [sequence, ...aliases],
+       includeRepeats = false,
+       hideFromHintBar = false,
+       onHoldStart = null,
+       onHoldEnd = null;
 
   /// The sequence(s) this binding matches. Any firing triggers [onTrigger].
   /// The first is always canonical for hint-bar display.
@@ -316,7 +339,9 @@ final class KeyBinding {
 
   /// When false, the binding doesn't match and doesn't appear in the hint
   /// bar. Useful for context-sensitive shortcuts.
-  final bool enabled;
+  bool get enabled => _isEnabled?.call() ?? _enabled;
+  final bool _enabled;
+  final bool Function()? _isEnabled;
 
   /// When true, the binding still fires but is hidden from `KeyHintBar`.
   /// Useful for ubiquitous bindings like Ctrl+C.

@@ -340,14 +340,19 @@ class _FleuryAppState extends State<FleuryApp> {
     final bindings = <KeyBinding>[];
     for (final command in _commands.localCommands) {
       if (command.shortcuts.isEmpty) continue;
-      final sourceContext = _commandSourceContext(context);
-      if (!_commandVisible(command, sourceContext)) continue;
       bindings.add(
-        KeyBinding(
+        // The predicates read app state, and this root rarely rebuilds, so
+        // the shortcut asks them when its key is pressed — against the
+        // source that invoke uses — and a disabled one lets the key bubble.
+        KeyBinding.live(
           command.shortcuts.first,
           aliases: command.shortcuts.skip(1).toList(),
           label: command.title,
-          enabled: _commandEnabled(command, sourceContext),
+          isEnabled: () {
+            final source = _commandSourceContext(context);
+            return _commandVisible(command, source) &&
+                _commandEnabled(command, source);
+          },
           onTrigger: (_) {
             unawaited(
               _commands.invoke(
