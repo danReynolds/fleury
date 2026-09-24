@@ -2144,26 +2144,21 @@ class LeafRenderObjectElement extends RenderObjectElement {
 /// Element for a [MultiChildRenderObjectWidget].
 ///
 /// Owns an ordered list of child elements and reconciles them on every
-/// rebuild. Reconciliation strategy:
+/// rebuild, in Flutter's shape:
 ///
-/// 1. Build a map of `Key -> old element` for keyed olds.
-/// 2. Maintain a queue of unkeyed olds in their original order.
-/// 3. For each new widget at position `i`:
-///    - If the widget has a key, look it up in the map. If found and
-///      compatible (`Widget.canUpdate`), reuse and update in place. The
-///      keyed old's state survives a reorder.
-///    - Otherwise, take the next unkeyed old from the queue. If
-///      compatible, reuse and update. If not, unmount it and try the
-///      next. If the queue empties, inflate a fresh element.
-/// 4. Unmount any remaining keyed olds (in the map) and any leftover
-///    unkeyed olds in the queue.
-/// 5. Sync the render-object children list to match the new element
-///    order.
+/// 1. Update the unchanged top in place, while old and new match
+///    (`Widget.canUpdate`) position by position.
+/// 2. Find the unchanged bottom the same way, from the end.
+/// 3. Reconcile only the changed middle: a keyed old moves to the new
+///    position with its key; an unkeyed old has no identity to follow and
+///    is released; anything unmatched is inflated fresh.
+/// 4. Update the unchanged bottom, so children still update top to bottom.
+/// 5. Release the middle's unmatched keyed olds, then sync the render-object
+///    children to the new element order.
 ///
-/// This is the simpler form of the Flutter reconciliation algorithm —
-/// it's O(n) and correct. The forward/backward stable-prefix walks that
-/// optimize Flutter's algorithm for "only the middle changed" patterns
-/// can be added later if profiling demands it.
+/// The bottom scan is not an optimization: it is what keeps the State of a
+/// sibling below a conditional child. `if (error != null) Text(error)` above
+/// a `TextInput` must not remount the input when the error appears.
 class MultiChildRenderObjectElement extends RenderObjectElement {
   MultiChildRenderObjectElement(MultiChildRenderObjectWidget super.widget);
 
@@ -2212,8 +2207,6 @@ class MultiChildRenderObjectElement extends RenderObjectElement {
 
     final result = List<Element?>.filled(newWidgets.length, null);
     final keyedOlds = <Key, Element>{};
-    final unkeyedOlds = <Element>[];
-    var unkeyedIndex = 0;
 
     void deactivateOld(Element child) {
       // A GlobalKey inflate elsewhere in this loop can steal an old child
@@ -2234,35 +2227,69 @@ class MultiChildRenderObjectElement extends RenderObjectElement {
       );
       if (stableUnkeyed != null) return stableUnkeyed;
 
-      // Partition the old children into keyed (by-key) and unkeyed (queue).
-      for (final old in oldChildren) {
-        final k = old.widget.key;
-        if (k != null) {
-          final shadowed = keyedOlds[k];
-          if (shadowed != null) {
-            // Duplicate local keys among siblings: the map overwrite would
-            // silently orphan the first element ACTIVE (its State never
-            // disposed, its dependency edges still live — a monotonic leak on
-            // every rebuild). Fail loudly in debug, like Flutter; in release,
-            // deactivate the shadowed element so nothing leaks.
-            assert(
-              false,
-              'Duplicate key $k among the children of $widget. Each child of '
-              'a multi-child widget must have a unique key.',
-            );
-            deactivateOld(shadowed);
-          }
-          keyedOlds[k] = old;
-        } else {
-          unkeyedOlds.add(old);
-        }
+      var newTop = 0;
+      var oldTop = 0;
+      var newBottom = newWidgets.length - 1;
+      var oldBottom = oldChildren.length - 1;
+
+      // An old child a GlobalKey inflate has already moved under another
+      // parent is not ours to update or release.
+      bool matches(Element old, Widget newWidget) =>
+          identical(old._parent, this) &&
+          Widget.canUpdate(old.widget, newWidget);
+
+      void updateInto(int slot, Element old, Widget newWidget) {
+        if (!canSkipWidgetUpdate(old.widget, newWidget)) old.update(newWidget);
+        result[slot] = old;
       }
 
-      for (var i = 0; i < newWidgets.length; i++) {
-        final newWidget = newWidgets[i];
+      // 1. The unchanged top, updated in place.
+      while (oldTop <= oldBottom && newTop <= newBottom) {
+        final old = oldChildren[oldTop];
+        final newWidget = newWidgets[newTop];
+        if (!matches(old, newWidget)) break;
+        updateInto(newTop, old, newWidget);
+        newTop += 1;
+        oldTop += 1;
+      }
+
+      // 2. The unchanged bottom, found now and updated last.
+      while (oldTop <= oldBottom && newTop <= newBottom) {
+        if (!matches(oldChildren[oldBottom], newWidgets[newBottom])) break;
+        oldBottom -= 1;
+        newBottom -= 1;
+      }
+
+      // 3. The changed middle. Keyed olds are indexed so they can move; an
+      // unkeyed old cannot be told apart from its neighbours, so it is
+      // released rather than matched to some other position.
+      for (var index = oldTop; index <= oldBottom; index++) {
+        final old = oldChildren[index];
+        final k = old.widget.key;
+        if (k == null) {
+          deactivateOld(old);
+          continue;
+        }
+        final shadowed = keyedOlds[k];
+        if (shadowed != null) {
+          // Duplicate local keys among siblings: the map overwrite would
+          // silently orphan the first element ACTIVE (its State never
+          // disposed, its dependency edges still live — a monotonic leak on
+          // every rebuild). Fail loudly in debug, like Flutter; in release,
+          // deactivate the shadowed element so nothing leaks.
+          assert(
+            false,
+            'Duplicate key $k among the children of $widget. Each child of '
+            'a multi-child widget must have a unique key.',
+          );
+          deactivateOld(shadowed);
+        }
+        keyedOlds[k] = old;
+      }
+      for (var index = newTop; index <= newBottom; index++) {
+        final newWidget = newWidgets[index];
         final newKey = newWidget.key;
         Element? matched;
-
         if (newKey != null) {
           final candidate = keyedOlds.remove(newKey);
           // A candidate stolen mid-loop by an earlier slot's GlobalKey
@@ -2278,44 +2305,39 @@ class MultiChildRenderObjectElement extends RenderObjectElement {
               deactivateOld(candidate);
             }
           }
-        } else {
-          // Walk the unkeyed queue until we find a compatible old.
-          while (unkeyedIndex < unkeyedOlds.length) {
-            final candidate = unkeyedOlds[unkeyedIndex];
-            unkeyedIndex += 1;
-            if (Widget.canUpdate(candidate.widget, newWidget)) {
-              matched = candidate;
-              break;
-            } else {
-              deactivateOld(candidate);
-            }
-          }
         }
-
+        // Same identical-instance skip updateChild and the stable-unkeyed
+        // fast path apply: without it, a keyed child whose widget instance
+        // didn't change deep-rebuilds anyway — and its State receives a
+        // didUpdateWidget where oldWidget is IDENTICAL to widget (a contract
+        // violation).
         if (matched != null) {
-          // Same identical-instance skip updateChild and the stable-unkeyed
-          // fast path apply: without it, a keyed child whose widget instance
-          // didn't change deep-rebuilds anyway — and its State receives a
-          // didUpdateWidget where oldWidget is IDENTICAL to widget (a contract
-          // violation) — on every pass that reaches this path (e.g. the
-          // re-reconcile scheduled by insertChildRenderObject after a mount).
-          if (!canSkipWidgetUpdate(matched.widget, newWidget)) {
-            matched.update(newWidget);
-          }
-          result[i] = matched;
+          updateInto(index, matched, newWidget);
         } else {
-          result[i] = inflateWidget(newWidget);
+          result[index] = inflateWidget(newWidget);
         }
       }
 
-      // Deactivate leftover olds (finalized at the end of the build pass
-      // unless a global-keyed one is reclaimed elsewhere first).
+      // 4. The unchanged bottom, in order.
+      for (
+        var newIndex = newBottom + 1, oldIndex = oldBottom + 1;
+        newIndex < newWidgets.length;
+        newIndex++, oldIndex++
+      ) {
+        final old = oldChildren[oldIndex];
+        final newWidget = newWidgets[newIndex];
+        if (identical(old._parent, this)) {
+          updateInto(newIndex, old, newWidget);
+        } else {
+          result[newIndex] = inflateWidget(newWidget);
+        }
+      }
+
+      // 5. Release the middle's unmatched keyed olds (finalized at the end
+      // of the build pass unless a global-keyed one is reclaimed elsewhere
+      // first).
       for (final el in keyedOlds.values) {
         deactivateOld(el);
-      }
-      while (unkeyedIndex < unkeyedOlds.length) {
-        deactivateOld(unkeyedOlds[unkeyedIndex]);
-        unkeyedIndex += 1;
       }
 
       // A later slot's GlobalKey inflate can steal an element that an

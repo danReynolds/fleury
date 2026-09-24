@@ -306,6 +306,104 @@ void main() {
     });
   });
 
+  group('A change above a stateful sibling keeps its State', () {
+    // `if (error != null) Text(error)` above an input, or `loading ?
+    // Text(..) : SizedBox()` — a changed unkeyed child ahead of a stateful
+    // one must not remount it. The unchanged suffix carries it.
+    List<Widget> children(Widget? above, List<String> lifecycle) => [
+      const Text('Name:'),
+      ?above,
+      _Trackable(label: 'field', lifecycle: lifecycle),
+      const Text('footer'),
+    ];
+
+    for (final (name, before, after) in [
+      ('inserted', null, const Text('bad') as Widget),
+      ('removed', const Text('bad') as Widget, null),
+      (
+        'swapped for another type',
+        const SizedBox(height: 1) as Widget,
+        const Text('loading…') as Widget,
+      ),
+    ]) {
+      test('a child $name', () {
+        final lifecycle = <String>[];
+        final owner = BuildOwner();
+        final root = owner.mountRoot(
+          Column(children: children(before, lifecycle)),
+        );
+        final state = _statesOf(root).single..value = 7;
+
+        owner.updateRoot(root, Column(children: children(after, lifecycle)));
+
+        final kept = _statesOf(root).single;
+        expect(kept, same(state));
+        expect(kept.value, 7);
+        expect(lifecycle, ['init:field']);
+      });
+    }
+
+    test('a change in the middle keeps both ends', () {
+      final lifecycle = <String>[];
+      final owner = BuildOwner();
+      Widget column(List<Widget> middle) => Column(
+        children: [
+          _Trackable(label: 'top', lifecycle: lifecycle),
+          ...middle,
+          _Trackable(label: 'bottom', lifecycle: lifecycle),
+        ],
+      );
+      final root = owner.mountRoot(column(const [Text('a'), SizedBox()]));
+      final before = _statesOf(root);
+
+      owner.updateRoot(root, column(const [SizedBox(), Text('b'), Text('c')]));
+
+      final after = _statesOf(root);
+      expect(after[0], same(before[0]));
+      expect(after[1], same(before[1]));
+      expect(lifecycle, ['init:top', 'init:bottom']);
+    });
+
+    test('a text field keeps its draft when a message appears above it', () {
+      final controller = TextEditingController(text: 'hello');
+      final owner = BuildOwner();
+      Widget form(String? error) => Column(
+        children: [
+          const Text('Name:'),
+          if (error != null) Text(error),
+          TextInput(controller: controller),
+        ],
+      );
+      final root = owner.mountRoot(form(null));
+      TextInput inputOf(Element root) {
+        TextInput? found;
+        void visit(Element e) {
+          if (e.widget case final TextInput input) found = input;
+          e.visitChildren(visit);
+        }
+
+        visit(root);
+        return found!;
+      }
+
+      Element? inputElement(Element root) {
+        Element? found;
+        void visit(Element e) {
+          if (e.widget is TextInput) found = e;
+          e.visitChildren(visit);
+        }
+
+        visit(root);
+        return found;
+      }
+
+      final element = inputElement(root);
+      owner.updateRoot(root, form('min 5 chars'));
+      expect(inputElement(root), same(element));
+      expect(inputOf(root).controller!.text, 'hello');
+    });
+  });
+
   group('Keyed reconciliation', () {
     test('keyed children that reorder keep their State', () {
       final lifecycle = <String>[];
