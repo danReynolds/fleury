@@ -898,36 +898,78 @@ void main() {
   });
 
   group('followTail', () {
-    testWidgets('following appends preserves the current item', (tester) {
-      final controller = ListController(followTail: true);
-      tester.pumpWidget(
-        ListView.builder(
-          controller: controller,
-          itemCount: 3,
-          itemBuilder: _itemBuilder,
-        ),
-      );
-      tester.render();
-      expect(
-        controller.currentIndex,
-        0,
-        reason: 'following scrolls without selecting a different item',
-      );
-      expect(controller.atEnd, isTrue);
+    Widget following(ListController controller, int count) => ListView.builder(
+      controller: controller,
+      autofocus: true,
+      itemCount: count,
+      itemBuilder: _itemBuilder,
+    );
 
-      // Simulate a new message arriving.
-      tester.pumpWidget(
-        ListView.builder(
-          controller: controller,
-          itemCount: 5,
-          itemBuilder: _itemBuilder,
-        ),
-      );
+    testWidgets('a following list keeps its cursor on the last item', (tester) {
+      final controller = ListController(followTail: true);
+      tester.pumpWidget(following(controller, 30));
+      tester.render(size: const CellSize(20, 5));
+      expect(controller.currentIndex, 29, reason: 'starts on the newest item');
+      expect(controller.visibleRange, (first: 25, last: 29));
+
+      tester.pumpWidget(following(controller, 32));
+      tester.render(size: const CellSize(20, 5));
+      expect(controller.currentIndex, 31, reason: 'rides the tail');
+      expect(controller.visibleRange, (first: 27, last: 31));
+    });
+
+    testWidgets('arrows in a following list start from the last item', (
+      tester,
+    ) {
+      final controller = ListController(followTail: true);
+      tester.pumpWidget(following(controller, 30));
+      tester.render(size: const CellSize(20, 5));
+
+      tester.sendKey(const KeyEvent(KeyCode.arrowDown));
+      expect(controller.currentIndex, 29, reason: 'already at the end');
+      tester.sendKey(const KeyEvent(KeyCode.arrowUp));
+      tester.render(size: const CellSize(20, 5));
+      expect(controller.currentIndex, 28);
       expect(
-        controller.currentIndex,
-        0,
-        reason: 'following does not advance the cursor',
+        controller.visibleRange,
+        (first: 25, last: 29),
+        reason: 'the viewport stays at the tail instead of jumping to 0',
       );
+    });
+
+    testWidgets('following never moves an explicitly placed cursor', (tester) {
+      final controller = ListController(followTail: true);
+      tester.pumpWidget(following(controller, 30));
+      tester.render(size: const CellSize(20, 5));
+      tester.sendKey(const KeyEvent(KeyCode.arrowUp));
+      tester.render(size: const CellSize(20, 5));
+      expect(controller.currentIndex, 28);
+
+      tester.pumpWidget(following(controller, 33));
+      tester.render(size: const CellSize(20, 5));
+      expect(controller.currentIndex, 28, reason: 'the user moved it');
+
+      final explicit = ListController(initialIndex: 2, followTail: true);
+      tester.pumpWidget(following(explicit, 3));
+      tester.render(size: const CellSize(20, 5));
+      expect(explicit.currentIndex, 2);
+      tester.pumpWidget(following(explicit, 5));
+      expect(explicit.currentIndex, 2, reason: 'an explicit index anchors');
+    });
+
+    testWidgets('End puts the cursor back on the tail', (tester) {
+      final controller = ListController(followTail: true);
+      tester.pumpWidget(following(controller, 30));
+      tester.render(size: const CellSize(20, 5));
+      tester.sendKey(const KeyEvent(KeyCode.arrowUp));
+      tester.render(size: const CellSize(20, 5));
+
+      tester.sendKey(const KeyEvent(KeyCode.end));
+      tester.render(size: const CellSize(20, 5));
+      expect(controller.currentIndex, 29);
+      tester.pumpWidget(following(controller, 31));
+      tester.render(size: const CellSize(20, 5));
+      expect(controller.currentIndex, 30, reason: 'End rejoined the tail');
     });
 
     testWidgets('default off: appending items does not move the '
@@ -1131,7 +1173,7 @@ void main() {
       );
       tester.render(size: const CellSize(10, 10));
 
-      expect(controller.currentIndex, 0);
+      expect(controller.currentIndex, 999);
       expect(controller.visibleRange, (first: 990, last: 999));
 
       // Net-mounted = mounted but not (yet) unmounted. Only the visible tail

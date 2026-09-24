@@ -825,4 +825,27 @@ void main() {
       expect(seen, isNot(contains(false)));
     });
   });
+
+  testWidgets('Ctrl+C in a following chat copies the newest message', (
+    tester,
+  ) async {
+    tester.pumpWidget(
+      MessageList(
+        autofocus: true,
+        messages: [
+          for (var i = 0; i < 50; i++)
+            MessageEntry(role: MessageRole.assistant, text: 'message $i'),
+        ],
+        copyOptions: const MessageListCopyOptions(
+          clipboardPolicy: ClipboardWritePolicy.inProcessOnly,
+        ),
+      ),
+    );
+    tester.render(size: const CellSize(40, 4));
+    tester.sendKey(
+      const KeyEvent(KeyCode.char('c'), modifiers: {KeyModifier.ctrl}),
+    );
+    await Future<void>.delayed(Duration.zero);
+    expect(tester.clipboard.readInProcess(), endsWith('message 49'));
+  });
 }

@@ -48,6 +48,8 @@ jobs:
         run: dart test -x integration
       - name: Perf gates (fast suite)
         run: dart tool/fleury_dev.dart benchmark gates
+      - name: Scenario benchmark oracles
+        run: dart tool/fleury_dev.dart benchmark scenario-gate
 
   create-smoke:
     name: create smoke (${{ matrix.os }}, Dart ${{ matrix.sdk }})
