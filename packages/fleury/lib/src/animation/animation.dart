@@ -651,9 +651,12 @@ class Animation<T> extends Notifier {
 
   void _onReassemble() {
     if (_disposed) return;
-    // After hot reload, settle at the current target with no in-flight
+    // A loop keeps running. It has no target to settle at, and hot reload
+    // never re-runs the initState that started it, so stopping it here froze
+    // every pulse, shimmer, and spinner until its widget remounted.
+    if (_looping) return;
+    // After hot reload, settle a finite run at its target with no in-flight
     // animation so freshly-loaded code starts from a defined state.
-    _looping = false;
     _queue = null;
     _stop(canceled: true);
     _snapToTarget();
