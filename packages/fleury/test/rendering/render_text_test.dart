@@ -429,6 +429,100 @@ void main() {
       expect(a.text, arabic);
     });
   });
+
+  group('RenderText paragraph indentation', () {
+    // A paragraph's leading spaces are its indentation, not whitespace at a
+    // wrap break: multi-line help text, JsonView rows and nested Markdown
+    // bullets all indent this way.
+    List<String> linesAt(String source, int cols) {
+      final text = RenderText(text: source)
+        ..layout(CellConstraints(maxCols: cols, maxRows: 8));
+      final buffer = CellBuffer(CellSize(cols, 8));
+      text.paint(buffer, CellOffset.zero);
+      return [
+        for (var row = 0; row < text.size.rows; row++)
+          _rowContent(buffer, row).replaceAll('·', ' ').trimRight(),
+      ];
+    }
+
+    test('each paragraph keeps its indent', () {
+      expect(linesAt('Usage:\n  app --flag\n    nested', 40), [
+        'Usage:',
+        '  app --flag',
+        '    nested',
+      ]);
+    });
+
+    test('an indented paragraph that wraps keeps its first-line indent', () {
+      expect(linesAt('   indented words here', 12), [
+        '   indented',
+        'words here',
+      ]);
+    });
+
+    test('whitespace at a wrap break is still dropped', () {
+      expect(linesAt('hello  world', 5), ['hello', 'world']);
+    });
+
+    test('an indent with no room left for the first word gives way', () {
+      // Breaking after the indentation would leave a row of nothing but
+      // spaces; the word takes the row instead.
+      expect(linesAt('   indented words here', 10), ['indented', 'words here']);
+      expect(linesAt('top\n    word', 6), ['top', 'word']);
+    });
+
+    test('a one-line indented log line shows its path, not its indent', () {
+      // A captured output line: indentation, then a path wider than the
+      // rest of the row.
+      const path = '/usr/local/share/fleury/lib/src/rendering/cell_buffer.dart';
+      final text = RenderText(text: '        $path:523', maxLines: 1)
+        ..layout(const CellConstraints(maxCols: 40, maxRows: 1));
+      final buffer = CellBuffer(const CellSize(40, 1));
+      text.paint(buffer, CellOffset.zero);
+      expect(_rowContent(buffer, 0), path.substring(0, 40));
+    });
+  });
+
+  group('RenderText relayout across widths', () {
+    // Laid out at another width and back, a text wraps for the width it
+    // has now. A cache of the earlier wrap once restored its 2-row size
+    // around the single line laid out in between, and every line after the
+    // first vanished (a terminal widened and restored, or a sibling toggling
+    // an Expanded text's width).
+    List<String> paintAt(RenderText text, int cols) {
+      text.layout(CellConstraints(maxCols: cols, maxRows: 3));
+      final buffer = CellBuffer(const CellSize(12, 3));
+      text.paint(buffer, CellOffset.zero);
+      return [
+        for (var row = 0; row < text.size.rows; row++)
+          _rowContent(buffer, row).replaceAll('·', ''),
+      ];
+    }
+
+    test('returning to a wrapping width restores the wrapped lines', () {
+      final text = RenderText(text: 'hello world');
+      expect(paintAt(text, 5), ['hello', 'world']);
+      expect(paintAt(text, 20), ['hello world']);
+      expect(paintAt(text, 5), ['hello', 'world']);
+    });
+
+    test('text changed while it fits wraps fresh at the old width', () {
+      final text = RenderText(text: 'hello world');
+      expect(paintAt(text, 5), ['hello', 'world']);
+      expect(paintAt(text, 20), ['hello world']);
+      text.text = 'jolly roger';
+      expect(paintAt(text, 5), ['jolly', 'roger']);
+    });
+
+    test('unwrapped paragraphs keep their lines through a resize', () {
+      final text = RenderText(text: 'ab\ncdef', softWrap: false);
+      expect(paintAt(text, 10), ['ab', 'cdef']);
+      expect(paintAt(text, 3), ['ab', 'cde']);
+      expect(text.size, const CellSize(3, 2));
+      expect(paintAt(text, 10), ['ab', 'cdef']);
+      expect(text.size, const CellSize(4, 2));
+    });
+  });
 }
 
 final class _StyleToggleModel extends Notifier {

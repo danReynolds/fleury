@@ -575,7 +575,21 @@ class RenderRichText extends RenderObject
     var line = <_Glyph>[];
     var lineWidth = 0;
     var wordEnd = start;
-    const emptySpace = _Glyph(' ', 1, CellStyle.none);
+    // Whether [line] was opened by a wrap break rather than the paragraph
+    // start. Nothing placed on it yet means the next separator falls at the
+    // break and is dropped; a paragraph's own leading spaces are its
+    // indentation and are kept.
+    var wrapped = false;
+    // Whether a word is placed yet. Until one is, [line] holds at most the
+    // paragraph's indentation.
+    var placedWord = false;
+    void breakLine() {
+      out.add(line);
+      line = <_Glyph>[];
+      lineWidth = 0;
+      wrapped = true;
+    }
+
     for (var wordStart = start; wordStart <= end; wordStart = wordEnd + 1) {
       wordEnd = wordStart;
       var ww = 0;
@@ -583,34 +597,40 @@ class RenderRichText extends RenderObject
         ww += _glyphs[wordEnd].width;
         wordEnd++;
       }
-      // A separator belongs to its source span, including ordinary spaces.
-      // Only whitespace at an actual wrap boundary is dropped below.
-      final separator = wordStart > start ? _glyphs[wordStart - 1] : emptySpace;
-      final isFirst = lineWidth == 0;
+      // Every word after the paragraph's first is preceded by its separator
+      // space, which belongs to its source span. An empty word is a space in
+      // a run of spaces.
+      final separated = wordStart > start && !(wrapped && lineWidth == 0);
       if (wordStart == wordEnd) {
-        if (!isFirst &&
+        if (separated &&
             (!_softWrap || maxCols == null || lineWidth + 1 <= maxCols)) {
-          line.add(separator);
+          line.add(_glyphs[wordStart - 1]);
           lineWidth += 1;
         }
         continue;
       }
-      final needed = isFirst ? ww : 1 + ww;
+      final needed = separated ? 1 + ww : ww;
       if (!_softWrap || maxCols == null || lineWidth + needed <= maxCols) {
-        if (!isFirst) {
-          line.add(separator);
+        if (separated) {
+          line.add(_glyphs[wordStart - 1]);
           lineWidth += 1;
         }
         for (var i = wordStart; i < wordEnd; i++) {
           line.add(_glyphs[i]);
         }
         lineWidth += ww;
+        placedWord = true;
       } else {
-        if (!isFirst) {
-          out.add(line);
-          line = <_Glyph>[];
+        if (!placedWord) {
+          // Only the indentation is here. Breaking would leave a row of
+          // nothing but spaces — all a one-line box would show — so the
+          // indentation gives way to the word instead.
+          line.clear();
           lineWidth = 0;
+        } else if (lineWidth > 0) {
+          breakLine();
         }
+        placedWord = true;
         if (ww > maxCols) {
           // Hard-break at unit boundaries. A unit is one glyph, or one whole
           // lowered cluster group (shared groupId): atoms of one source
@@ -641,9 +661,7 @@ class RenderRichText extends RenderObject
                 for (var j = i; j < unitEnd; j++) {
                   final atom = _glyphs[j];
                   if (lineWidth > 0 && lineWidth + atom.width > maxCols) {
-                    out.add(line);
-                    line = <_Glyph>[];
-                    lineWidth = 0;
+                    breakLine();
                   }
                   line.add(atom);
                   lineWidth += atom.width;
@@ -653,9 +671,7 @@ class RenderRichText extends RenderObject
               }
             }
             if (lineWidth > 0 && lineWidth + unitWidth > maxCols) {
-              out.add(line);
-              line = <_Glyph>[];
-              lineWidth = 0;
+              breakLine();
             }
             for (var j = i; j < unitEnd; j++) {
               line.add(_glyphs[j]);

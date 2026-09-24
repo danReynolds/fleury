@@ -125,9 +125,9 @@ final class RepaintBoundaryCacheVerification {
 ///
 /// On the first frame (and any frame after something inside it changed), the
 /// boundary repaints its subtree into the cache and clears [_needsPaint]. On
-/// subsequent frames it skips the subtree walk entirely and blits the cache
-/// into the destination — a single bulk copy instead of a recursive paint
-/// chain.
+/// subsequent frames it skips the subtree walk entirely and composites the
+/// cache into the destination ([CellBuffer.compositeRectFrom]) — one pass
+/// over the cached cells instead of a recursive paint chain.
 ///
 /// This is a CPU paint-memoization, NOT Flutter's GPU compositing layer —
 /// there is no layer tree here, and it does not isolate the subtree from
@@ -281,10 +281,8 @@ class RenderRepaintBoundary extends RenderObject
       }
       // Tighten the blit to just the non-empty cells, using the damage rect
       // as the scan window. Damage is a conservative superset (grapheme
-      // writes pad the wide-cell guard columns), and tightness matters: the
-      // blit is a raw rect copy painted OVER whatever sits beneath this
-      // boundary (a floating entry above the app), so a padded rect would
-      // stamp its empty halo columns onto that content.
+      // writes pad the wide-cell guard columns); the composite skips empty
+      // cells anyway, so a tight rect only saves visiting them.
       final damage = cache.takeDamageBounds();
       _cacheBounds = damage == null
           ? null
@@ -318,7 +316,9 @@ class RenderRepaintBoundary extends RenderObject
     // armed it is a PARENT boundary's cache, and that parent measures what was
     // painted into it from this damage: suppressing hid a nested cache-hit
     // child from its parent's bounds and blanked the row.
-    buffer.copyRectFrom(cacheForCopy, bounds, destOffset);
+    // A composite, not a mirror: cells the child left empty keep what the
+    // parent painted there, exactly as painting the child directly would.
+    buffer.compositeRectFrom(cacheForCopy, bounds, destOffset);
   }
 
   static String _describeCell(Cell cell) =>

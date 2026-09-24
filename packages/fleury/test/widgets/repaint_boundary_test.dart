@@ -293,38 +293,48 @@ void main() {
       tester.pumpWidget(
         SizedBox(
           width: 6,
-          height: 1,
+          height: 2,
           child: ScrollView(
             controller: controller,
             child: const Column(
               children: [
                 Text('top'),
                 RepaintBoundary(child: Text('target')),
+                Text('end'),
+                Text('x'),
+                Text('y'),
               ],
             ),
           ),
         ),
       );
-
-      tester.render(size: const CellSize(6, 1));
-      var target = _selectables(
+      Selectable target() => _selectables(
         tester,
       ).singleWhere((selectable) => selectable.cellBounds?.size.cols == 6);
-      expect(target.cellBounds, CellRect.fromLTWH(0, 1, 6, 1));
-      expect(target.visibleBounds, isNull);
+      int scrollTo(int offset) {
+        controller.jumpTo(offset);
+        tester.owner.flushBuild();
+        RepaintBoundaryDebugStats.beginFrame(enabled: true);
+        tester.render(size: const CellSize(6, 2));
+        return RepaintBoundaryDebugStats.takeFrameStats().cachedCount;
+      }
 
-      controller.jumpTo(1);
-      tester.owner.flushBuild();
-      RepaintBoundaryDebugStats.beginFrame(enabled: true);
-      tester.render(size: const CellSize(6, 1));
-      final stats = RepaintBoundaryDebugStats.takeFrameStats();
+      // The target is on screen, so its boundary paints and caches it.
+      tester.render(size: const CellSize(6, 2));
+      expect(target().cellBounds, CellRect.fromLTWH(0, 1, 6, 1));
 
-      target = _selectables(
-        tester,
-      ).singleWhere((selectable) => selectable.cellBounds?.size.cols == 6);
-      expect(stats.cachedCount, 1, reason: 'the target paint was skipped');
-      expect(target.cellBounds, CellRect.fromLTWH(0, 0, 6, 1));
-      expect(target.visibleBounds, CellRect.fromLTWH(0, 0, 6, 1));
+      expect(scrollTo(1), 1, reason: 'the target paint was skipped');
+      expect(target().cellBounds, CellRect.fromLTWH(0, 0, 6, 1));
+      expect(target().visibleBounds, CellRect.fromLTWH(0, 0, 6, 1));
+
+      // Scrolled wholly out of the viewport, it is clipped away entirely.
+      scrollTo(3);
+      expect(target().cellBounds, CellRect.fromLTWH(0, -2, 6, 1));
+      expect(target().visibleBounds, isNull);
+
+      // And back in, from the same cache.
+      expect(scrollTo(1), 1, reason: 'the cache survived the cull');
+      expect(target().visibleBounds, CellRect.fromLTWH(0, 0, 6, 1));
     });
 
     testWidgets('cached anchor geometry keeps its follower attached on move', (

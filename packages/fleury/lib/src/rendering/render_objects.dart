@@ -123,22 +123,6 @@ class RenderText extends RenderObject
   // line uses _intrinsicWidth directly, so short labels allocate no list.
   List<int> _lineWidths = const <int>[];
 
-  /// Memoized layout result, keyed on the constraints that produced
-  /// it. The wrap algorithm is the hottest path in the renderer
-  /// (see `benchmark/widgets_benchmarks.dart`); reusing a cached
-  /// result across frames when neither the text nor the constraints
-  /// changed eliminates ~80% of the steady-state layout cost. Any
-  /// text / softWrap / width-resolver / policy setter that would
-  /// change the wrap output also calls [_invalidateLayoutCache].
-  CellConstraints? _cachedConstraints;
-  CellSize? _cachedSize;
-
-  void _invalidateLayoutCache() {
-    _cachedConstraints = null;
-    _cachedSize = null;
-    markNeedsLayout();
-  }
-
   /// The canonical logical text (RFC 0019 decision 3): what was set, not what
   /// is painted. The display form lives in [_text] via [_projection].
   String get text => _logicalText;
@@ -164,7 +148,7 @@ class RenderText extends RenderObject
     }
     _text = display;
     _intrinsicWidth = nextIntrinsicWidth;
-    _invalidateLayoutCache();
+    markNeedsLayout();
   }
 
   CellStyle get style => _style;
@@ -179,18 +163,18 @@ class RenderText extends RenderObject
   set softWrap(bool value) {
     if (_softWrap == value) return;
     _softWrap = value;
-    _invalidateLayoutCache();
+    markNeedsLayout();
   }
 
   int? get maxLines => _maxLines;
   set maxLines(int? value) {
     if (_maxLines == value) return;
     _maxLines = value;
-    _invalidateLayoutCache();
+    markNeedsLayout();
   }
 
   // Overflow only affects paint (which graphemes/ellipsis show), not the
-  // line breaking, so changing it leaves the layout cache valid.
+  // line breaking, so changing it needs no layout.
   // ignore: unnecessary_getters_setters
   TextOverflow get overflow => _overflow;
   set overflow(TextOverflow value) {
@@ -201,7 +185,7 @@ class RenderText extends RenderObject
 
   // textAlign also only affects paint — it shifts each line's start
   // column inside the box but doesn't change which graphemes wrap
-  // where. Layout cache stays valid across changes.
+  // where, so changing it needs no layout.
   // ignore: unnecessary_getters_setters
   TextAlign get textAlign => _textAlign;
   set textAlign(TextAlign value) {
@@ -215,7 +199,7 @@ class RenderText extends RenderObject
     if (identical(_widthResolver, value)) return;
     _widthResolver = value;
     _recomputeIntrinsicWidth();
-    _invalidateLayoutCache();
+    markNeedsLayout();
   }
 
   TextPresentationPolicy get textPolicy => _textPolicy;
@@ -230,7 +214,7 @@ class RenderText extends RenderObject
     _projection = projectText(_logicalText, policy: value);
     _text = _projection.displayText;
     _recomputeIntrinsicWidth();
-    _invalidateLayoutCache();
+    markNeedsLayout();
   }
 
   /// Display width the text would occupy if given unbounded horizontal
@@ -285,9 +269,7 @@ class RenderText extends RenderObject
 
     // Single-line fast path: no newlines AND either wrapping is off,
     // no width bound, or the text already fits. This is the dominant
-    // case for short labels (ListView items, button text). Skip the
-    // layout cache here — it's already cheap, and the cache-check
-    // overhead would be a net loss.
+    // case for short labels (ListView items, button text).
     if (!hasNewlines &&
         (!_softWrap || maxCols == null || _intrinsicWidth <= maxCols)) {
       // Honor maxLines on the fast path too (0 → empty), matching the
@@ -307,26 +289,18 @@ class RenderText extends RenderObject
       return constraints.constrain(CellSize(cols, 1));
     }
 
-    // Slow paths (real wrap, multi-paragraph): consult the cache.
-    // These are the cases where re-running the algorithm every frame
-    // dominated the wrap-Text benchmarks.
-    final cached = _cachedSize;
-    if (cached != null && constraints == _cachedConstraints) {
-      return cached;
-    }
-    if (cached != null && !_softWrap) {
-      // Unwrapped paragraphs are independent of the viewport width. Reuse
-      // their measured widths, while refreshing the line-list identity so
-      // point-based selection observes the new geometry on the next paint.
+    // Unchanged constraints on a clean object never reach here (layout
+    // skips it). So a clean object means only the constraints changed, and
+    // unwrapped paragraphs do not depend on them: keep the lines and their
+    // measured widths, refreshing the line-list identity so point-based
+    // selection observes the new geometry on the next paint.
+    if (!_softWrap && !needsLayout) {
       _lines = List<String>.of(_lines);
       var widest = 0;
       for (final width in _lineWidths) {
         if (width > widest) widest = width;
       }
-      final result = constraints.constrain(CellSize(widest, _lines.length));
-      _cachedConstraints = constraints;
-      _cachedSize = result;
-      return result;
+      return constraints.constrain(CellSize(widest, _lines.length));
     }
 
     if (!_softWrap || maxCols == null) {
@@ -356,11 +330,7 @@ class RenderText extends RenderObject
     final cols = maxCols == null
         ? maxLineWidth
         : (maxLineWidth < maxCols ? maxLineWidth : maxCols);
-    final result = constraints.constrain(CellSize(cols, _lines.length));
-
-    _cachedConstraints = constraints;
-    _cachedSize = result;
-    return result;
+    return constraints.constrain(CellSize(cols, _lines.length));
   }
 
   // Intrinsic sizing: the unwrapped natural width, and the line count under
@@ -553,7 +523,8 @@ class RenderText extends RenderObject
   /// paragraph splits on single spaces and greedily packs tokens onto
   /// the current line. Tokens wider than [maxWidth] are broken at
   /// grapheme boundaries. Whitespace that falls at a line break is
-  /// dropped rather than carried onto the next line.
+  /// dropped rather than carried onto the next line; a paragraph's own
+  /// leading whitespace is its indentation and is kept.
   List<String> _wrap(String text, int maxWidth) {
     if (maxWidth <= 0) return <String>[''];
     final lines = <String>[];
@@ -576,20 +547,36 @@ class RenderText extends RenderObject
       out.add('');
       return;
     }
+    // Every token after the first is preceded by one space, its separator:
+    // `'  x'.split(' ')` is `['', '', 'x']`. An empty token is a space in a
+    // run of spaces.
     final tokens = text.split(' ');
     final current = StringBuffer();
     var currentWidth = 0;
     var tokenStart = paragraphStart;
+    // Whether the current line was opened by a wrap break rather than the
+    // paragraph start. Nothing placed on it yet means its separator falls at
+    // the break and is dropped.
+    var wrapped = false;
+    // Whether a word is placed yet. Until one is, the line holds at most the
+    // paragraph's indentation.
+    var placedWord = false;
 
-    for (final token in tokens) {
+    void breakLine() {
+      out.add(current.toString());
+      current.clear();
+      currentWidth = 0;
+      wrapped = true;
+    }
+
+    for (var index = 0; index < tokens.length; index++) {
+      final token = tokens[index];
       final tokenGlobalStart = tokenStart;
       tokenStart += token.length + 1;
-      final isFirstOnLine = currentWidth == 0;
+      final separated = index > 0 && !(wrapped && currentWidth == 0);
       if (token.isEmpty) {
-        // Empty token comes from consecutive spaces. Honor it as a
-        // single space when there's room; otherwise drop it (don't
-        // start a new line with leading whitespace).
-        if (!isFirstOnLine && currentWidth + 1 <= maxWidth) {
+        // A space in a run: kept while there's room, dropped at a break.
+        if (separated && currentWidth + 1 <= maxWidth) {
           current.write(' ');
           currentWidth += 1;
         }
@@ -597,24 +584,30 @@ class RenderText extends RenderObject
       }
 
       final tokenWidth = _widthResolver.widthOfText(token, _policy);
-      final needed = isFirstOnLine ? tokenWidth : 1 + tokenWidth;
+      final needed = separated ? 1 + tokenWidth : tokenWidth;
 
       if (currentWidth + needed <= maxWidth) {
-        if (!isFirstOnLine) {
+        if (separated) {
           current.write(' ');
           currentWidth += 1;
         }
         current.write(token);
         currentWidth += tokenWidth;
+        placedWord = true;
         continue;
       }
 
       // Token doesn't fit on the current line.
-      if (!isFirstOnLine) {
-        out.add(current.toString());
+      if (!placedWord) {
+        // Only the indentation is here. Breaking would leave a row of
+        // nothing but spaces — all a one-line box would show — so the
+        // indentation gives way to the word instead.
         current.clear();
         currentWidth = 0;
+      } else if (currentWidth > 0) {
+        breakLine();
       }
+      placedWord = true;
       if (tokenWidth <= maxWidth) {
         current.write(token);
         currentWidth = tokenWidth;
@@ -632,9 +625,7 @@ class RenderText extends RenderObject
           continue;
         }
         if (currentWidth + w > maxWidth) {
-          out.add(current.toString());
-          current.clear();
-          currentWidth = 0;
+          breakLine();
           // A single unit wider than maxWidth gets its own row; paint
           // clipping will trim what doesn't fit.
           if (w > maxWidth) {

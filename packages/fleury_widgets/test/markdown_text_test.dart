@@ -53,6 +53,20 @@ Widget _surface(Widget child, {required bool hyperlinks}) => MediaQuery(
 );
 
 void main() {
+  testWidgets('nested bullets keep their indentation', (tester) {
+    // A nested bullet is a RichText row whose first span is its indent.
+    tester.pumpWidget(
+      const MarkdownText('- parent\n  - child\n    - grandchild'),
+    );
+    final rows = tester
+        .renderToString(size: const CellSize(40, 4), emptyMark: ' ')
+        .split('\n')
+        .map((row) => row.trimRight())
+        .where((row) => row.isNotEmpty)
+        .toList();
+    expect(rows, ['• parent', '  • child', '    • grandchild']);
+  });
+
   group('MarkdownText — inline', () {
     testWidgets('**bold** renders the inner text with bold style', (tester) {
       tester.pumpWidget(const MarkdownText('hello **world** !'));

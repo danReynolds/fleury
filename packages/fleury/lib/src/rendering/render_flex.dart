@@ -3,7 +3,6 @@
 // flex children.
 
 import '../foundation/geometry.dart';
-import '../widgets/selection/selectable.dart';
 import 'cell.dart';
 import 'cell_buffer.dart';
 import 'layout.dart';
@@ -348,8 +347,23 @@ class RenderFlex extends RenderObject implements RenderObjectWithChildren {
         ? (crossMax ?? maxCross)
         : maxCross;
 
+    // Align against the box the constraints give this Flex, not its content:
+    // an Expanded pane, a SizedBox, or a tight minimum can make it larger.
+    final size = constraints.constrain(
+      _direction == Axis.horizontal
+          ? CellSize(ownMain, ownCross)
+          : CellSize(ownCross, ownMain),
+    );
+    final boxMain = _mainExtent(size);
+    final boxCross = _crossExtent(size);
+    _overflow = usedMain > boxMain ? usedMain - boxMain : 0;
+
     // Position children. Compute slack along main axis for alignment.
-    final mainSlack = ownMain - usedMain;
+    // start/end/center keep their overflow direction; the space modes have
+    // no space to hand out when the children overflow, so their gaps stay
+    // at zero instead of going negative and overlapping siblings.
+    final mainSlack = boxMain - usedMain;
+    final spaceSlack = mainSlack < 0 ? 0 : mainSlack;
     var pos = 0;
     var gap = 0;
     switch (_mainAxisAlignment) {
@@ -364,12 +378,12 @@ class RenderFlex extends RenderObject implements RenderObjectWithChildren {
         gap = 0;
       case MainAxisAlignment.spaceBetween:
         pos = 0;
-        gap = _children.length > 1 ? mainSlack ~/ (_children.length - 1) : 0;
+        gap = _children.length > 1 ? spaceSlack ~/ (_children.length - 1) : 0;
       case MainAxisAlignment.spaceAround:
-        gap = _children.isNotEmpty ? mainSlack ~/ _children.length : 0;
+        gap = _children.isNotEmpty ? spaceSlack ~/ _children.length : 0;
         pos = gap ~/ 2;
       case MainAxisAlignment.spaceEvenly:
-        gap = _children.isNotEmpty ? mainSlack ~/ (_children.length + 1) : 0;
+        gap = _children.isNotEmpty ? spaceSlack ~/ (_children.length + 1) : 0;
         pos = gap;
     }
 
@@ -377,8 +391,8 @@ class RenderFlex extends RenderObject implements RenderObjectWithChildren {
       final crossExtent = _crossExtent(c.size);
       final crossOffset = switch (_crossAxisAlignment) {
         CrossAxisAlignment.start => 0,
-        CrossAxisAlignment.end => ownCross - crossExtent,
-        CrossAxisAlignment.center => (ownCross - crossExtent) ~/ 2,
+        CrossAxisAlignment.end => boxCross - crossExtent,
+        CrossAxisAlignment.center => (boxCross - crossExtent) ~/ 2,
         CrossAxisAlignment.stretch => 0,
       };
       _childOffsets[c] = _direction == Axis.horizontal
@@ -386,14 +400,6 @@ class RenderFlex extends RenderObject implements RenderObjectWithChildren {
           : CellOffset(crossOffset, pos);
       pos += _mainExtent(c.size) + gap;
     }
-
-    final size = constraints.constrain(
-      _direction == Axis.horizontal
-          ? CellSize(ownMain, ownCross)
-          : CellSize(ownCross, ownMain),
-    );
-    final boxMain = _mainExtent(size);
-    _overflow = usedMain > boxMain ? usedMain - boxMain : 0;
     return size;
   }
 
@@ -446,13 +452,15 @@ class RenderFlex extends RenderObject implements RenderObjectWithChildren {
       _paintClipped(buffer, offset);
       return;
     }
+    // A child outside the buffer paints nothing, so it is skipped: a
+    // scrolled Column paints only the rows in view. Selection, focus and
+    // semantics geometry derive from layout, so a skipped child loses only
+    // its paint. A child is judged by its layout box: paint it spills
+    // outside that box (a Stack's overflowing Positioned) goes with it.
     for (final c in _children) {
       final childOffset = _childOffsets[c] ?? CellOffset.zero;
       final paintOffset = offset + childOffset;
-      if (_isOutsidePaintBuffer(paintOffset, c.size, buffer.size) &&
-          !_subtreeNeedsOffscreenPaint(c)) {
-        continue;
-      }
+      if (_isOutsidePaintBuffer(paintOffset, c.size, buffer.size)) continue;
       c.paint(buffer, paintOffset);
     }
   }
@@ -471,22 +479,6 @@ class RenderFlex extends RenderObject implements RenderObjectWithChildren {
         bottom <= 0 ||
         left >= bufferSize.cols ||
         top >= bufferSize.rows;
-  }
-
-  bool _subtreeNeedsOffscreenPaint(RenderObject object) {
-    if (object is Selectable) return true;
-    if (object is RenderObjectWithSingleChild) {
-      final child = object.child;
-      return child != null && _subtreeNeedsOffscreenPaint(child);
-    }
-    if (object is RenderObjectWithChildren) {
-      var found = false;
-      object.visitRenderChildren((child) {
-        if (!found && _subtreeNeedsOffscreenPaint(child)) found = true;
-      });
-      return found;
-    }
-    return false;
   }
 
   void _paintClipped(CellBuffer buffer, CellOffset offset) {
