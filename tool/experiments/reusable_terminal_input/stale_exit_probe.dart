@@ -1,4 +1,4 @@
-// Architecture regression probe: expected to demonstrate the current bug.
+// Architecture regression probe: the expired callback must now be rejected.
 import 'dart:async';
 import 'package:fleury/fleury.dart';
 

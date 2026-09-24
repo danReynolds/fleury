@@ -157,6 +157,7 @@ class PosixTerminalDriver
   bool _pointerShapes = false;
   bool _pointerStackOwned = false;
   bool _active = false;
+  bool _entryUsed = false;
   bool _entering = false;
   bool _restoring = false;
   int _lifecycleGeneration = 0;
@@ -640,6 +641,13 @@ class PosixTerminalDriver
     if (_active) {
       throw StateError('PosixTerminalDriver.enter called on an active driver.');
     }
+    if (_entryUsed) {
+      throw StateError(
+        'PosixTerminalDriver has already been entered or restored. '
+        'Create a new driver for each runApp invocation.',
+      );
+    }
+    _entryUsed = true;
     if (mode.inlineRows != null) {
       if (!_stdinIsTerminal || !_stdoutIsTerminal) {
         throw StateError(
@@ -1487,6 +1495,7 @@ class PosixTerminalDriver
 
   @override
   Future<void> restore() async {
+    _entryUsed = true;
     _restoring = true;
     _lifecycleGeneration++;
     _active = false;

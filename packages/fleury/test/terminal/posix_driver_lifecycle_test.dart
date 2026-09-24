@@ -217,6 +217,31 @@ Future<void> _pump() => Future<void>.delayed(const Duration(milliseconds: 10));
 
 void main() {
   test(
+    'a restored native driver rejects reentry before touching input',
+    () async {
+      final input = _FakeStdin();
+      final out = _RecordingStdout();
+      final driver = PosixTerminalDriver(
+        stdinOverride: input,
+        stdoutOverride: out,
+      );
+      await driver.enter(TerminalMode.interactive);
+      await driver.restore();
+      await expectLater(
+        driver.enter(TerminalMode.interactive),
+        throwsA(
+          isA<StateError>().having(
+            (e) => e.message,
+            'message',
+            contains('Create a new driver'),
+          ),
+        ),
+      );
+      await input.close();
+    },
+  );
+
+  test(
     'unsupported Kitty input falls back to legacy parsing across resume',
     () async {
       final trace = <String>[];

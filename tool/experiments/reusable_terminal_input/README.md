@@ -34,10 +34,11 @@ python3 tool/experiments/reusable_terminal_input/check_probe.py \
   --executable /tmp/fleury-input-probe
 ```
 
-`stale_exit_probe.dart` demonstrates a separate current-runtime issue: a timer
-registered inside the first UI can call global `requestExit()` after a second
-UI starts and end the second UI. The source prints the observed result; it is
-not a test declaring that result correct.
+`stale_exit_probe.dart` records a separate lifecycle regression: a timer from
+the first UI used to exit the second UI. With invocation isolation it reports
+`stale exit accepted=false`, and the second UI lasts approximately 700 ms.
+The source prints the observed result; deterministic regression coverage lives
+in `test/runtime/run_app_invocation_test.dart` inside `packages/fleury`.
 
 ```sh
 dart --packages=packages/fleury/.dart_tool/package_config.json \

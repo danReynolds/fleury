@@ -305,6 +305,10 @@ final class ActiveTerminalState {
 ///   - [restore] is called once at shutdown. It MUST be safe to call
 ///     in a `finally` block after an exception; the driver tracks what
 ///     it actually changed and only undoes those changes.
+///     Successful restoration is an ownership barrier: pending startup or
+///     handoff work must not subsequently reacquire modes, input, or output.
+///     Fence or finish those operations before reporting success. Throw if
+///     terminal ownership cannot be safely released.
 ///   - [write] is the single output path. Implementations buffer at
 ///     their own discretion; the framework calls it from the renderer
 ///     and expects bytes to land before the next frame is asked for.

@@ -55,6 +55,7 @@ class WindowsTerminalDriver
   Timer? _resizePollTimer;
 
   bool _active = false;
+  bool _entryUsed = false;
   bool _handoffActive = false;
   Future<void> _handoffTail = Future<void>.value();
   ActiveTerminalState? _terminalState;
@@ -101,6 +102,13 @@ class WindowsTerminalDriver
 
   @override
   Future<TerminalSessionProfile> enter(TerminalMode mode) async {
+    if (_entryUsed) {
+      throw StateError(
+        'WindowsTerminalDriver has already been entered or restored. '
+        'Create a new driver for each runApp invocation.',
+      );
+    }
+    _entryUsed = true;
     if (mode.inlineRows != null) {
       throw UnsupportedError(
         'Inline terminal mode currently supports macOS and Linux.',
@@ -311,6 +319,7 @@ class WindowsTerminalDriver
 
   @override
   Future<void> restore() async {
+    _entryUsed = true;
     if (!_active &&
         !_wroteEnterSequences &&
         !_changedStdin &&

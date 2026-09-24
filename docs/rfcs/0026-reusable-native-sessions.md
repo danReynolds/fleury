@@ -1,6 +1,7 @@
 # RFC 0026: Reusable native terminal sessions
 
-Status: proposed; input transport prototyped, production runtime unchanged.
+Status: in implementation. Invocation isolation and cleanup accounting are
+implemented; native input replacement and end-to-end qualification remain.
 
 Date: 2026-09-24. Implementation baseline: `35d60473`.
 
@@ -63,7 +64,7 @@ Hot restart reruns the whole entrypoint, including earlier prompts and side
 effects. Short production CLI flows should disable the development supervisor;
 the framework should not pretend a restart resumes only the current step.
 
-## Findings from the current implementation
+## Findings at the implementation baseline
 
 1. `PosixTerminalDriver` and `WindowsTerminalDriver` subscribe to Dart stdin
    and cancel that subscription on restore. The single-subscription stream is
@@ -289,6 +290,33 @@ These are transport experiments, not integrated `runApp` acceptance, Windows
 proof, minimum-SDK qualification, throughput benchmarks, or terminal-app visual
 qualification. The prototype deliberately lacks production-grade failure
 plumbing; it must not be moved into the shipping library unchanged.
+
+### Lifecycle implementation checkpoint
+
+The runtime now acquires admission before bootstrap/capture, binds exit requests
+to the invocation zone, and holds admission through terminal-critical cleanup.
+It tracks underlying operations beyond timeout reporting, distinguishes failed
+restoration from ordinary overlap, and fences late startup results. Successful
+late cleanup can release admission; a failed restore keeps it quarantined.
+
+Persistent VM extensions dispatch callbacks and callback errors into the current
+session's zone. Reload disposal unpublishes callbacks before awaiting resources;
+in-flight self-reloads cannot report or requeue after disposal. Native driver
+instances explicitly reject a second entry, including after restoration.
+
+Regression coverage includes stale callbacks, overlapping/nested startup, failed
+startup retry, pending-enter fatal errors, closing admission, cleanup timeout
+and eventual release, permanent failure quarantine, and real VM-service calls
+across controller generations (including throwing callbacks). The retained stale
+exit probe now reports `false` and the second UI lasts its intended 700 ms.
+The runtime/terminal sweep passes with subprocess checks retried outside the
+local cache-permission sandbox; the VM-specific test is run with
+`dart --enable-vm-service=0 test test/runtime/hot_reload_controller_test.dart`.
+
+This establishes invocation accounting, not native input reuse. Native drivers
+still consume Dart stdin; replacing that transport, draining active handoffs,
+and auditing native restoration's swallowed errors are outstanding. Keep the
+one-session guide warning until those paths are implemented and qualified.
 
 ## Implementation slices and acceptance gates
 

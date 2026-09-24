@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'dart:io';
+import 'dart:isolate';
 
 import 'package:fleury/fleury.dart';
 import '../support/harness.dart';
@@ -300,6 +301,55 @@ class _LifecycleFaultDriver implements TerminalDriver {
       } catch (_) {}
     }
   }
+}
+
+// A permanently failed terminal restore intentionally quarantines its isolate.
+// Exercise that contract in a fresh isolate, not with a test-only reset escape
+// hatch that applications could accidentally use to reclaim an unsafe terminal.
+Future<({bool ownershipError, bool nextBlocked, int disposed, int restored})>
+_failedRestoreProbe({bool multipleFailures = false}) async {
+  final driver = _LifecycleFaultDriver(
+    cancelThrows: multipleFailures,
+    restoreThrows: true,
+  );
+  var disposeCount = 0;
+  final future = runApp(
+    _DisposeProbeApp(
+      onDispose: () {
+        disposeCount++;
+        if (multipleFailures) throw StateError('dispose-boom');
+      },
+    ),
+    driver: driver,
+    enableHotReload: false,
+  );
+  final outcome = future.then<bool>(
+    (_) => false,
+    onError: (Object error) => error is FleuryError,
+  );
+  await _settle();
+  requestExit();
+  final ownershipError = await outcome;
+  final nextDriver = FakeTerminalDriver();
+  final next = runApp(
+    const Text('next'),
+    driver: nextDriver,
+    enableHotReload: false,
+  );
+  final nextOutcome = next.then<bool>(
+    (_) => false,
+    onError: (Object error) => error is StateError,
+  );
+  requestExit(); // Allows a regressed, wrongly admitted session to finish.
+  final blocked = await nextOutcome;
+  await nextDriver.dispose();
+  await driver.dispose();
+  return (
+    ownershipError: ownershipError,
+    nextBlocked: blocked,
+    disposed: disposeCount,
+    restored: driver.restoreCallCount,
+  );
 }
 
 /// Lets the run loop's async body reach the point where it's listening for
@@ -743,56 +793,25 @@ void main() {
     });
 
     test('multiple teardown failures still run every resource once', () async {
-      final driver = _LifecycleFaultDriver(
-        cancelThrows: true,
-        restoreThrows: true,
+      final result = await Isolate.run(
+        () => _failedRestoreProbe(multipleFailures: true),
       );
-      var disposeCount = 0;
-      try {
-        final future = runApp(
-          _DisposeProbeApp(
-            onDispose: () {
-              disposeCount += 1;
-              throw StateError('dispose-boom');
-            },
-          ),
-          driver: driver,
-          enableHotReload: false,
-        );
-        await _settle();
-        driver.enqueue(
-          const KeyEvent(KeyCode.char('c'), modifiers: {KeyModifier.ctrl}),
-        );
-
-        await future.timeout(const Duration(seconds: 2));
-        expect(disposeCount, 1);
-        expect(driver.restoreCallCount, 1);
-      } finally {
-        await driver.dispose();
-      }
+      expect(result.ownershipError, isTrue);
+      expect(result.nextBlocked, isTrue);
+      expect(result.disposed, 1);
+      expect(result.restored, 1);
     });
 
-    test('restore failure is reported but runApp still settles', () async {
-      final driver = _LifecycleFaultDriver(restoreThrows: true);
-      var disposeCount = 0;
-      try {
-        final future = runApp(
-          _DisposeProbeApp(onDispose: () => disposeCount += 1),
-          driver: driver,
-          enableHotReload: false,
-        );
-        await _settle();
-        driver.enqueue(
-          const KeyEvent(KeyCode.char('c'), modifiers: {KeyModifier.ctrl}),
-        );
-
-        await future.timeout(const Duration(seconds: 2));
-        expect(disposeCount, 1);
-        expect(driver.restoreCallCount, 1);
-      } finally {
-        await driver.dispose();
-      }
-    });
+    test(
+      'restore failure fails runApp and quarantines later sessions',
+      () async {
+        final result = await Isolate.run(_failedRestoreProbe);
+        expect(result.ownershipError, isTrue);
+        expect(result.nextBlocked, isTrue);
+        expect(result.disposed, 1);
+        expect(result.restored, 1);
+      },
+    );
   });
 
   group('runApp application-shell ownership', () {

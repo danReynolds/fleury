@@ -116,9 +116,91 @@ final class AppExit {
 /// event stream directly).
 typedef TuiEventHandler = EventResponse? Function(TuiEvent event);
 
-/// The exit completer of the currently running [runApp], if any — the
-/// seam behind [requestExit].
-Completer<AppExit>? _activeExitCompleter;
+// Admission and exit identity have different lifetimes: closing an app stops
+// accepting exit requests immediately, but retains admission through cleanup.
+// This is an isolate-local owner, not an OS lock against other terminal users.
+final _invocationZoneKey = Object();
+_RunAppInvocation? _activeInvocation;
+
+final class _RunAppInvocation {
+  _RunAppInvocation() {
+    final owner = _activeInvocation;
+    if (owner != null) {
+      if (owner._finished) {
+        throw StateError(
+          'The previous Fleury session has unfinished or failed terminal '
+          'cleanup (${owner._criticalResources.values.toSet().join(', ')}). '
+          'Resolve that cleanup before starting another session.',
+        );
+      }
+      throw StateError(
+        'A Fleury runApp session is already starting, running, or closing. '
+        'Await its completion before starting another session.',
+      );
+    }
+    _activeInvocation = this;
+  }
+
+  final exit = Completer<AppExit>();
+  bool closing = false;
+  bool _finished = false;
+  final _criticalResources = <Object, String>{};
+
+  // An asynchronous startup can outlive fatal-error cleanup. Keep admission
+  // until it settles; its late-result cleanup must be part of this operation.
+  Future<T> startResource<T>(String resource, Future<T> Function() action) {
+    final token = Object();
+    _criticalResources[token] = resource;
+    return Future<T>.sync(action).whenComplete(() {
+      _criticalResources.remove(token);
+      _releaseIfSafe();
+    });
+  }
+
+  bool requestExit() {
+    if (closing || exit.isCompleted) return false;
+    exit.complete(const AppExit.requested());
+    return true;
+  }
+
+  void release() {
+    closing = true;
+    _finished = true;
+    _releaseIfSafe();
+  }
+
+  // Track the underlying operation, never its timeout wrapper. A deadline can
+  // fail runApp, but cannot cancel native I/O or establish restored ownership.
+  Future<void> restoreCritical(
+    String resource,
+    FutureOr<void> Function() action,
+  ) {
+    final token = Object();
+    _criticalResources[token] = resource;
+    return Future<void>.sync(action).then((_) {
+      _criticalResources.remove(token);
+      _releaseIfSafe();
+    });
+    // On error the entry deliberately remains: restoration was not proven.
+  }
+
+  void _releaseIfSafe() {
+    if (_finished &&
+        _criticalResources.isEmpty &&
+        identical(_activeInvocation, this)) {
+      _activeInvocation = null;
+    }
+  }
+}
+
+FleuryError _terminalCleanupError(Iterable<String> resources) => FleuryError(
+  summary: 'Fleury could not safely release the terminal.',
+  details: 'Cleanup failed or is still pending: ${resources.join(', ')}.',
+  hint:
+      'Do not start another prompt or UI while terminal cleanup is unfinished. '
+      'Resolve outstanding terminal operations, or end this CLI invocation. '
+      'Fleury keeps new sessions blocked until ownership is proven released.',
+);
 
 /// Asks the running app to exit cleanly: the event loop stops, cleanup
 /// runs (terminal restored), and
@@ -128,11 +210,14 @@ Completer<AppExit>? _activeExitCompleter;
 /// and app-owned signal shutdown (claim the [SignalEvent] with
 /// [EventHandled], run your teardown, then call this). Returns false
 /// when no app is running or an exit is already in flight.
+/// Calls from an app callback remain bound to that invocation: a callback that
+/// outlives its app returns false and cannot exit a subsequent session. A host
+/// call outside an app's zone targets the currently running invocation.
 bool requestExit() {
-  final completer = _activeExitCompleter;
-  if (completer == null || completer.isCompleted) return false;
-  completer.complete(const AppExit.requested());
-  return true;
+  final invocation =
+      Zone.current[_invocationZoneKey] as _RunAppInvocation? ??
+      _activeInvocation;
+  return invocation?.requestExit() ?? false;
 }
 
 /// Bounded replay for driver events that arrive while [TerminalDriver.enter]
@@ -216,7 +301,9 @@ const _maxPendingRemoteSemanticActions = 64;
 /// ## Own your shutdown
 ///
 /// Resolves with an [AppExit] saying why the app ended, AFTER the terminal is
-/// restored — so the caller owns process-exit semantics:
+/// restored. The caller owns process-exit semantics.
+/// A terminal-critical cleanup failure throws [FleuryError] instead. Overlapping
+/// invocations are rejected, including while an earlier cleanup is unfinished.
 ///
 /// ```dart
 /// final exit = await runApp(app, onEvent: (event) {
@@ -269,50 +356,66 @@ Future<AppExit> runApp(
   Duration frameInterval = Duration.zero,
   List<String> args = const [],
 }) async {
-  // Plain `dart run` dev sessions hand the process to the dev supervisor:
-  // it re-spawns this same script as a child process with the VM service
-  // enabled (the child re-enters runApp and takes the classic path below),
-  // and drives save-to-reload + hot restart from outside the app. Every
-  // other kind of run — tests (injected driver), AOT, Windows, no TTY,
-  // serve handles, editor/debugger sessions with a live VM service — falls
-  // through untouched, and (shouldConsider being synchronous) with runApp's
-  // original synchronous prefix intact.
-  if (DevBootstrap.shouldConsider(
-    driverInjected: driver != null,
-    enableHotReload: enableHotReload,
-  )) {
-    await DevBootstrap.runOrFallThrough(args: args);
-    // Reaching here means this run was ineligible after async checks or the
-    // bootstrap could not start; run classically.
-  }
-  // The supervised child's half of the handshake: silently self-enable the
-  // VM service and tell the supervisor where it is. Fire-and-forget; a
-  // no-op outside supervised sessions.
-  DevBootstrap.maybeStartSupervisedChildHandshake();
-  fd.Stdio? cap;
+  // Acquire synchronously, before bootstrap awaits or descriptor capture.
+  // Queuing an overlapping call would deadlock a nested, awaited runApp.
+  final invocation = _RunAppInvocation();
   try {
-    return await _runAppImpl(
-      root,
-      driver: driver,
-      mode: mode,
+    // Plain `dart run` dev sessions hand the process to the dev supervisor:
+    // it re-spawns this same script as a child process with the VM service
+    // enabled (the child re-enters runApp and takes the classic path below),
+    // and drives save-to-reload + hot restart from outside the app. Every
+    // other kind of run — tests (injected driver), AOT, Windows, no TTY,
+    // serve handles, editor/debugger sessions with a live VM service — falls
+    // through untouched, and (shouldConsider being synchronous) with runApp's
+    // original synchronous prefix intact.
+    if (DevBootstrap.shouldConsider(
+      driverInjected: driver != null,
       enableHotReload: enableHotReload,
-      requireInteractiveTerminal: requireInteractiveTerminal,
-      onStrayOutput: onStrayOutput,
-      onEvent: onEvent,
-      clipboard: clipboard,
-      sequenceTimeout: sequenceTimeout,
-      debug: debug,
-      frameInterval: frameInterval,
-      onFdCaptureStarted: (c) => cap = c,
-    );
-  } on Object {
-    final c = cap;
-    if (c != null && c.isActive) {
-      try {
-        await c.stop().timeout(_stdioCleanupResourceTimeout);
-      } catch (_) {}
+    )) {
+      await DevBootstrap.runOrFallThrough(args: args);
+      // Reaching here means this run was ineligible after async checks or the
+      // bootstrap could not start; run classically.
     }
-    rethrow;
+    // The supervised child's half of the handshake: silently self-enable the
+    // VM service and tell the supervisor where it is. Fire-and-forget; a
+    // no-op outside supervised sessions.
+    DevBootstrap.maybeStartSupervisedChildHandshake();
+    fd.Stdio? cap;
+    try {
+      return await runZoned(
+        () => _runAppImpl(
+          root,
+          invocation: invocation,
+          driver: driver,
+          mode: mode,
+          enableHotReload: enableHotReload,
+          requireInteractiveTerminal: requireInteractiveTerminal,
+          onStrayOutput: onStrayOutput,
+          onEvent: onEvent,
+          clipboard: clipboard,
+          sequenceTimeout: sequenceTimeout,
+          debug: debug,
+          frameInterval: frameInterval,
+          onFdCaptureStarted: (c) => cap = c,
+        ),
+        zoneValues: {_invocationZoneKey: invocation},
+      );
+    } on Object {
+      invocation.closing = true;
+      final c = cap;
+      if (c != null && c.isActive) {
+        try {
+          await invocation
+              .restoreCritical('stdio capture', c.stop)
+              .timeout(_stdioCleanupResourceTimeout);
+        } catch (_) {
+          throw _terminalCleanupError(['stdio capture']);
+        }
+      }
+      rethrow;
+    }
+  } finally {
+    invocation.release();
   }
 }
 
@@ -362,6 +465,7 @@ Future<AppExit> runApp(
 /// raw input are skipped where there's no terminal).
 Future<AppExit> _runAppImpl(
   Widget root, {
+  required _RunAppInvocation invocation,
   TerminalDriver? driver,
   TerminalMode mode = TerminalMode.interactive,
   bool enableHotReload = true,
@@ -582,10 +686,7 @@ Future<AppExit> _runAppImpl(
   HotReloadController? hotReload;
   InAppDevReload? devSelfReload;
   StreamSubscription<TuiEvent>? eventSub;
-  final exit = Completer<AppExit>();
-  // Expose this run's exit to [requestExit]. Last-started run wins; the
-  // framework assumes one interactive app per isolate.
-  _activeExitCompleter = exit;
+  final exit = invocation.exit;
 
   final done = Completer<AppExit>();
   Future<void>? cleanupFuture;
@@ -812,6 +913,7 @@ Future<AppExit> _runAppImpl(
   // restore must never leave runApp's returned future unresolved.
   Future<void> performCleanup() async {
     disposed = true;
+    invocation.closing = true;
     // frameDriver.dispose() stays the first resource action: synchronously,
     // before
     // the first await, a frame microtask scheduled just before cleanup (e.g. by
@@ -820,6 +922,7 @@ Future<AppExit> _runAppImpl(
     //
     final teardownErrors =
         <({String resource, Object error, StackTrace stack})>[];
+    final criticalFailures = <String>[];
     void captureSync(String resource, void Function() action) {
       try {
         action();
@@ -828,28 +931,34 @@ Future<AppExit> _runAppImpl(
       }
     }
 
-    Future<void> captureAsync(
+    Future<bool> captureAsync(
       String resource,
       FutureOr<void> Function() action, {
       Duration timeout = _cleanupResourceTimeout,
+      bool terminalCritical = false,
     }) async {
       try {
-        await Future<void>.sync(action).timeout(
+        final operation = terminalCritical
+            ? invocation.restoreCritical(resource, action)
+            : Future<void>.sync(action);
+        await operation.timeout(
           timeout,
           onTimeout: () => throw TimeoutException(
             '$resource did not finish during teardown',
             timeout,
           ),
         );
+        return true;
       } catch (error, stack) {
         teardownErrors.add((resource: resource, error: error, stack: stack));
+        if (terminalCritical) criticalFailures.add(resource);
+        return false;
       }
     }
 
     captureSync('frame driver', () => frameDriver?.dispose());
     captureSync('semantics pipeline', () => semanticsPipeline?.dispose());
     captureSync('remote clipboard', () => remoteClipboard?.dispose());
-    if (identical(_activeExitCompleter, exit)) _activeExitCompleter = null;
 
     final activeEventSub = eventSub;
     eventSub = null;
@@ -894,7 +1003,11 @@ Future<AppExit> _runAppImpl(
       'terminal restore marker',
       () => runtimeMarkers?.mark('terminal.restore.start'),
     );
-    await captureAsync('terminal restore', usedDriver.restore);
+    await captureAsync(
+      'terminal restore',
+      usedDriver.restore,
+      terminalCritical: true,
+    );
     captureSync(
       'terminal restored marker',
       () => runtimeMarkers?.mark('terminal.restore.end'),
@@ -908,10 +1021,11 @@ Future<AppExit> _runAppImpl(
       // Drain + restore fd 1/2 (stop() delivers every in-flight line to our
       // listener before closing the streams, and closes the driver's saved
       // terminal handle) — then replay via the real, now-restored streams.
-      await captureAsync(
+      final captureRestored = await captureAsync(
         'stdio capture',
         fdCap.stop,
         timeout: _stdioCleanupResourceTimeout,
+        terminalCritical: true,
       );
       final activeFdCaptureSub = fdCaptureSub;
       fdCaptureSub = null;
@@ -923,8 +1037,11 @@ Future<AppExit> _runAppImpl(
       }
       // The remote mirror already delivered everything to the parent live;
       // replaying here would duplicate it all on the pipe.
-      if (onStrayOutput == null && !remoteFdMirror && !logBuffer.isEmpty) {
-        captureSync('captured output replay', () {
+      if (captureRestored &&
+          onStrayOutput == null &&
+          !remoteFdMirror &&
+          !logBuffer.isEmpty) {
+        await captureAsync('captured output replay', () {
           for (final line in logBuffer.lines) {
             switch (line.source) {
               case LogSource.stdout:
@@ -933,9 +1050,17 @@ Future<AppExit> _runAppImpl(
                 stderr.writeln(line.text);
             }
           }
-        });
-        await captureAsync('stdout flush', stdout.flush);
-        await captureAsync('stderr flush', stderr.flush);
+        }, terminalCritical: true);
+        await captureAsync(
+          'stdout flush',
+          stdout.flush,
+          terminalCritical: true,
+        );
+        await captureAsync(
+          'stderr flush',
+          stderr.flush,
+          terminalCritical: true,
+        );
       }
     }
 
@@ -954,9 +1079,9 @@ Future<AppExit> _runAppImpl(
     captureSync('runtime marker output', () => runtimeMarkers?.write());
 
     // Report only after terminal and stdio restoration attempts. Teardown
-    // errors are diagnostic and do not replace an otherwise orderly AppExit,
-    // but every resource is named accurately (not all failures are
-    // State.dispose faults) and the returned future is guaranteed to settle.
+    // Widget/subscription faults remain diagnostic. Terminal ownership faults
+    // fail the invocation; its admission is retained until every underlying
+    // critical operation succeeds, even if this reporting deadline elapsed.
     for (final failure in teardownErrors) {
       try {
         stderr.writeln(
@@ -967,6 +1092,17 @@ Future<AppExit> _runAppImpl(
       } catch (_) {
         // There is no safer reporting channel left; teardown is still done.
       }
+    }
+    if (teardownErrors.isNotEmpty || byteTelemetry != null) {
+      await captureAsync(
+        'teardown diagnostics flush',
+        stderr.flush,
+        terminalCritical: true,
+      );
+    }
+    final unresolved = invocation._criticalResources.values;
+    if (criticalFailures.isNotEmpty || unresolved.isNotEmpty) {
+      throw _terminalCleanupError({...criticalFailures, ...unresolved});
     }
   }
 
@@ -1034,7 +1170,11 @@ Future<AppExit> _runAppImpl(
           },
         );
         runtimeMarkers?.mark('terminal.enter.start');
-        sessionProfile = await usedDriver.enter(mode);
+        sessionProfile = await invocation.startResource(
+          'terminal startup',
+          () => usedDriver.enter(mode),
+        );
+        if (disposed) return;
         runtimeMarkers?.mark('terminal.enter.end');
         final startupOverflow = startupEvents.overflowError;
         if (startupOverflow != null) throw startupOverflow;
@@ -1431,6 +1571,7 @@ Future<AppExit> _runAppImpl(
             // surface in the debug shell: Logs on success, Errors on
             // failure — never the terminal, which the frame owns.
             void reportReload(HotReloadReport report) {
+              if (disposed) return;
               if (report.success) {
                 final n = report.loadedLibraryCount;
                 capture.addLine(
@@ -1471,25 +1612,37 @@ Future<AppExit> _runAppImpl(
               );
             }
 
-            hotReload = await HotReloadController.attach(
-              onReassemble: () {
-                runtime.reassembleApplication();
-                // Fire scheduler-level reassemble after the element-tree
-                // walk so Animations + FrameTickers reset to a
-                // known state under the freshly-reloaded code. Order
-                // matters: tree reassembly may dispose old controllers
-                // (which unregister themselves), so reset only the
-                // controllers that survive.
-                binding.tickerScheduler.reassemble();
-                scheduleFrame('hot-reload');
+            hotReload = await invocation.startResource(
+              'hot reload startup',
+              () async {
+                final controller = await HotReloadController.attach(
+                  onReassemble: () {
+                    if (disposed) return;
+                    runtime.reassembleApplication();
+                    // Fire scheduler-level reassemble after the element-tree
+                    // walk so Animations + FrameTickers reset to a
+                    // known state under the freshly-reloaded code. Order
+                    // matters: tree reassembly may dispose old controllers
+                    // (which unregister themselves), so reset only the
+                    // controllers that survive.
+                    binding.tickerScheduler.reassemble();
+                    scheduleFrame('hot-reload');
+                  },
+                  onReloadReport: reportReload,
+                  // The dev supervisor's hot restart: tear this session down
+                  // through the normal exit path (terminal restore, capture
+                  // stop, socket close); the supervisor respawns the process
+                  // fresh.
+                  onShutdownRequested: requestExit,
+                );
+                if (disposed) {
+                  await controller.dispose();
+                  return null;
+                }
+                return controller;
               },
-              onReloadReport: reportReload,
-              // The dev supervisor's hot restart: tear this session down
-              // through the normal exit path (terminal restore, capture
-              // stop, socket close); the supervisor respawns the process
-              // fresh.
-              onShutdownRequested: requestExit,
             );
+            if (disposed) return;
             // Save-to-reload for supervised (serve/remote) sessions, where
             // the bootstrap must not run but the developer is still
             // iterating — reloads flow straight to the browser preview.
@@ -1497,9 +1650,20 @@ Future<AppExit> _runAppImpl(
             if (InAppDevReload.shouldConsider(
               enableHotReload: enableHotReload,
             )) {
-              devSelfReload = await InAppDevReload.maybeStart(
-                onReport: reportReload,
+              devSelfReload = await invocation.startResource(
+                'dev reload startup',
+                () async {
+                  final controller = await InAppDevReload.maybeStart(
+                    onReport: reportReload,
+                  );
+                  if (disposed) {
+                    await controller?.dispose();
+                    return null;
+                  }
+                  return controller;
+                },
               );
+              if (disposed) return;
             }
           }
 
@@ -1516,7 +1680,12 @@ Future<AppExit> _runAppImpl(
           startupError = error;
           startupStack = stack;
         } finally {
-          await cleanup();
+          try {
+            await cleanup();
+          } catch (error, stack) {
+            startupError = error;
+            startupStack = stack;
+          }
         }
         if (startupError != null) {
           if (!done.isCompleted) {
@@ -1579,9 +1748,16 @@ Future<AppExit> _runAppImpl(
             (driver?.renderUnrecoverable ?? false) ||
             driver?.rootElement == null ||
             errorReporter.isStorming) {
-          cleanup().whenComplete(() {
-            if (!done.isCompleted) done.completeError(error, stack);
-          });
+          cleanup().then(
+            (_) {
+              if (!done.isCompleted) done.completeError(error, stack);
+            },
+            onError: (Object cleanupError, StackTrace cleanupStack) {
+              if (!done.isCompleted) {
+                done.completeError(cleanupError, cleanupStack);
+              }
+            },
+          );
         }
       },
     );

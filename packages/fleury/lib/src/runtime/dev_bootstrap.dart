@@ -1140,10 +1140,12 @@ final class DevBootstrap {
 /// docs/implementation/vm-reload-bug-report-draft.md). No reload beats a
 /// reload that wedges on first save.
 final class InAppDevReload {
-  InAppDevReload._(this._vm, this._watcher);
+  InAppDevReload._(this._vm);
 
   final VmService _vm;
-  final SourceWatcher _watcher;
+  late final SourceWatcher _watcher;
+  bool _disposed = false;
+  Future<void>? _disposeFuture;
 
   /// Synchronous pre-gate — see [DevBootstrap.shouldConsider] for why this
   /// must not suspend: ineligible runs (every test, every non-supervised
@@ -1195,9 +1197,11 @@ final class InAppDevReload {
       return null;
     }
 
+    final controller = InAppDevReload._(vm);
     var inFlight = false;
     var queued = false;
     Future<void> reload() async {
+      if (controller._disposed) return;
       if (inFlight) {
         queued = true;
         return;
@@ -1232,6 +1236,7 @@ final class InAppDevReload {
         stopwatch.stop();
         inFlight = false;
       }
+      if (controller._disposed) return;
       onReport(
         HotReloadReport(
           success: success,
@@ -1246,9 +1251,11 @@ final class InAppDevReload {
       }
     }
 
-    final watcher = SourceWatcher(roots: roots, onChanged: (_) => reload())
-      ..start();
-    return InAppDevReload._(vm, watcher);
+    controller._watcher = SourceWatcher(
+      roots: roots,
+      onChanged: (_) => reload(),
+    )..start();
+    return controller;
   }
 
   /// The current isolate's service id, via the service's own VM listing
@@ -1262,9 +1269,17 @@ final class InAppDevReload {
     return isolates.isEmpty ? null : isolates.first.id;
   }
 
-  Future<void> dispose() async {
-    await _watcher.dispose();
-    await _vm.dispose();
+  Future<void> dispose() {
+    _disposed = true;
+    return _disposeFuture ??= _disposeResources();
+  }
+
+  Future<void> _disposeResources() async {
+    try {
+      await _watcher.dispose();
+    } finally {
+      await _vm.dispose();
+    }
   }
 }
 
