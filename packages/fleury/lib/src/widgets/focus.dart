@@ -28,6 +28,7 @@ import '../foundation/geometry.dart';
 import '../rendering/cell_buffer.dart';
 import '../rendering/layout.dart';
 import '../rendering/render_object.dart';
+import '../rendering/scroll_reveal.dart';
 import '../input/events.dart';
 import 'framework.dart';
 import 'key_bindings.dart' show KeyBinding;
@@ -208,6 +209,46 @@ class FocusNode {
     final geometry = host.screenGeometry();
     if (geometry == null || geometry.visible == null) return null;
     return geometry.bounds;
+  }
+
+  /// Where Tab finds this node: the top-left of its rectangle, pinned into
+  /// the area it is clipped to. A node scrolled out of its viewport sits at
+  /// the viewport's nearest edge, so Tab reaches it where the viewport is
+  /// rather than after everything on screen. Among nodes pinned to one cell,
+  /// [clip] puts a viewport's own node before what is clipped inside it and
+  /// [bounds] keeps content order. Null when the node cannot take input or
+  /// is not presented.
+  ({int row, int col, CellRect bounds, CellRect? clip})?
+  get _traversalPosition {
+    final host = _boundsHost;
+    if (host == null) return null;
+    final manager = _manager;
+    if (manager != null && !manager._acceptsInput(this)) return null;
+    final geometry = host.screenGeometry();
+    if (geometry == null) return null;
+    final bounds = geometry.bounds;
+    final clip = geometry.clip;
+    if (clip == null) {
+      return (row: bounds.top, col: bounds.left, bounds: bounds, clip: null);
+    }
+    return (
+      row: _pin(bounds.top, clip.top, clip.bottom),
+      col: _pin(bounds.left, clip.left, clip.right),
+      bounds: bounds,
+      clip: clip,
+    );
+  }
+
+  static int _pin(int value, int start, int end) => end <= start
+      ? start
+      : (value < start ? start : (value >= end ? end - 1 : value));
+
+  /// Scrolls the viewports above this node's widget until it shows, as Tab
+  /// and the arrow keys do when they move focus here.
+  @internal
+  void reveal() {
+    final host = _boundsHost;
+    if (host is RenderObject) revealInScrollViews(host);
   }
 
   ScreenGeometrySource? _boundsHost;
@@ -852,13 +893,19 @@ class FocusManager extends Notifier {
     } else {
       next = (i + (forward ? 1 : -1)) % order.length;
     }
-    return requestFocus(order[next]);
+    final node = order[next];
+    if (!requestFocus(node)) return false;
+    // Tab can reach a field scrolled out of view; bring it into view.
+    node.reveal();
+    return true;
   }
 
-  /// Focusable nodes in reading order (row, then column), with
-  /// attachment order as a stable tiebreak and not-yet-painted nodes
-  /// last. Filtered to the active focus trap when one is open — Tab inside a
-  /// trapped dialog cannot escape it.
+  /// Focusable nodes in reading order (row, then column) of their
+  /// [FocusNode._traversalPosition]s, with attachment order as a stable
+  /// tiebreak and unpresented nodes last. A node scrolled out of view keeps
+  /// its place in its viewport's content, so the order does not depend on
+  /// how far the user has scrolled. Filtered to the active focus trap when
+  /// one is open — Tab inside a trapped dialog cannot escape it.
   List<FocusNode> _traversalOrder() {
     final attachIndex = <FocusNode, int>{};
     for (var i = 0; i < _attachedNodes.length; i++) {
@@ -869,23 +916,43 @@ class FocusManager extends Notifier {
         .where(isTraversable)
         .where((n) => trap == null || _isUnderScopeMarker(n, trap))
         .toList();
-    // Geometry is derived on read; resolve each node's rect once, not once
-    // per comparison.
-    final rects = <FocusNode, CellRect?>{for (final n in nodes) n: n.rect};
+    // Geometry is derived on read; resolve each node's position once, not
+    // once per comparison.
+    final positions = {for (final n in nodes) n: n._traversalPosition};
     nodes.sort((a, b) {
-      final ra = rects[a];
-      final rb = rects[b];
-      if (ra != null && rb != null) {
-        if (ra.top != rb.top) return ra.top - rb.top;
-        if (ra.left != rb.left) return ra.left - rb.left;
-      } else if (ra == null && rb != null) {
+      final pa = positions[a];
+      final pb = positions[b];
+      if (pa != null && pb != null) {
+        if (pa.row != pb.row) return pa.row - pb.row;
+        if (pa.col != pb.col) return pa.col - pb.col;
+        final nesting = _compareNesting(pa.clip, pb.clip);
+        if (nesting != 0) return nesting;
+        if (pa.bounds.top != pb.bounds.top) {
+          return pa.bounds.top - pb.bounds.top;
+        }
+        if (pa.bounds.left != pb.bounds.left) {
+          return pa.bounds.left - pb.bounds.left;
+        }
+      } else if (pa == null && pb != null) {
         return 1;
-      } else if (ra != null && rb == null) {
+      } else if (pa != null && pb == null) {
         return -1;
       }
       return attachIndex[a]! - attachIndex[b]!;
     });
     return nodes;
+  }
+
+  /// Orders two clips that share a cell outer first: a node clipped only by
+  /// the area around a viewport (the viewport's own node) comes before the
+  /// nodes clipped inside it. A null clip is the outermost.
+  static int _compareNesting(CellRect? a, CellRect? b) {
+    if (a == b) return 0;
+    if (a == null) return -1;
+    if (b == null) return 1;
+    if (a.intersect(b) == b) return -1;
+    if (b.intersect(a) == a) return 1;
+    return 0;
   }
 
   /// The innermost enclosing focus-trap marker element of [node], or null

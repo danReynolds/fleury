@@ -180,6 +180,8 @@ class FocusTraversalGroup extends StatelessWidget {
     );
     if (target == null) return KeyEventResult.ignored;
     target.requestFocus();
+    // The nearest target in view may still be partly clipped.
+    target.reveal();
     return KeyEventResult.handled;
   }
 }
