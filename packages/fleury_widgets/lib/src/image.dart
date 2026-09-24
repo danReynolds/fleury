@@ -121,6 +121,9 @@ abstract class ImageSource {
   }
 }
 
+// The built-in sources compare by what they decode from, so a parent that
+// rebuilds `Image.bytes(bytes)` with the same buffer does not decode again.
+
 class _BytesSource implements ImageSource {
   _BytesSource(this._bytes);
   final Uint8List _bytes;
@@ -129,6 +132,13 @@ class _BytesSource implements ImageSource {
   img.Image decode() => _cached ??=
       img.decodeImage(_bytes) ??
       (throw ArgumentError('ImageSource.bytes: could not decode'));
+
+  @override
+  bool operator ==(Object other) =>
+      other is _BytesSource && identical(other._bytes, _bytes);
+
+  @override
+  int get hashCode => identityHashCode(_bytes);
 }
 
 class _FileSource implements ImageSource {
@@ -155,6 +165,14 @@ class _FileSource implements ImageSource {
     _cache[key] = decoded;
     return decoded;
   }
+
+  @override
+  bool operator ==(Object other) =>
+      other is _FileSource &&
+      image_file.canonicalPath(other._path) == image_file.canonicalPath(_path);
+
+  @override
+  int get hashCode => image_file.canonicalPath(_path).hashCode;
 }
 
 class _DecodedSource implements ImageSource {
@@ -167,6 +185,15 @@ class _DecodedSource implements ImageSource {
   final Uint8List? encodedPng;
   @override
   img.Image decode() => _image;
+
+  @override
+  bool operator ==(Object other) =>
+      other is _DecodedSource &&
+      identical(other._image, _image) &&
+      identical(other.encodedPng, encodedPng);
+
+  @override
+  int get hashCode => Object.hash(identityHashCode(_image), encodedPng);
 }
 
 /// Renders a raster image, adapting to what the surface can do.
@@ -305,12 +332,22 @@ class _ImageState extends State<Image> with SingleTickerProviderStateMixin {
     super.initState();
     _source = widget.source.decode();
     _frameIndex = 0;
-    _maybeStartAnimation();
+    _syncAnimation();
   }
 
-  void _maybeStartAnimation() {
-    if (!_source.hasAnimation || _source.numFrames <= 1) return;
-    _animationTicker = createTicker(_onTick)..start();
+  /// Runs the ticker while the image animates, from its first frame. The
+  /// state keeps one ticker for its life (the mixin allows exactly one):
+  /// stopping and starting it again restarts its clock.
+  void _syncAnimation() {
+    if (!_source.hasAnimation || _source.numFrames <= 1) {
+      _animationTicker?.stop();
+      return;
+    }
+    final ticker = _animationTicker ??= createTicker(_onTick);
+    _lastTickMs = 0;
+    ticker
+      ..stop()
+      ..start();
   }
 
   void _onTick(Duration elapsed) {
@@ -345,15 +382,15 @@ class _ImageState extends State<Image> with SingleTickerProviderStateMixin {
   @override
   void didUpdateWidget(Image oldWidget) {
     super.didUpdateWidget(oldWidget);
-    if (!identical(widget.source, oldWidget.source)) {
-      _source = widget.source.decode();
-      _frameIndex = 0;
-      _accumulatedMs = 0;
-      _lastTickMs = 0;
-      _animationTicker?.dispose();
-      _animationTicker = null;
-      _maybeStartAnimation();
-    }
+    if (widget.source == oldWidget.source) return;
+    // A new source can still decode to the image already showing (a file
+    // path's cache): only a different image restarts the animation.
+    final decoded = widget.source.decode();
+    if (identical(decoded, _source)) return;
+    _source = decoded;
+    _frameIndex = 0;
+    _accumulatedMs = 0;
+    _syncAnimation();
   }
 
   @override
@@ -411,16 +448,21 @@ class _ImageState extends State<Image> with SingleTickerProviderStateMixin {
       // active glyph palette.
       value: pixels ? 'placements' : widget.glyph.name,
       state: semanticState,
-      child: _RawImage(
-        decoded: _source.frames[_frameIndex],
-        encodedPng: widget.source is _DecodedSource
-            ? (widget.source as _DecodedSource).encodedPng
-            : null,
-        fit: widget.fit,
-        glyph: widget.glyph,
-        colorMode: colorMode,
-        images: images,
-        backgroundColor: widget.backgroundColor,
+      // Glyph art samples the whole source every time it paints, and a node
+      // that is not a boundary paints every frame. A boundary paints the
+      // image again only when a frame, the fit or the palette changes.
+      child: RepaintBoundary(
+        child: _RawImage(
+          decoded: _source.frames[_frameIndex],
+          encodedPng: widget.source is _DecodedSource
+              ? (widget.source as _DecodedSource).encodedPng
+              : null,
+          fit: widget.fit,
+          glyph: widget.glyph,
+          colorMode: colorMode,
+          images: images,
+          backgroundColor: widget.backgroundColor,
+        ),
       ),
     );
   }
