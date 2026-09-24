@@ -211,6 +211,36 @@ void main() {
     });
   });
 
+  group('MarkdownText — emphasis delimiters in prose', () {
+    // Agent prose is full of snake_case, dunder names and arithmetic. Only
+    // CommonMark emphasis is emphasis; everything else is text.
+    String rendered(FleuryTester tester, String markdown) {
+      tester.pumpWidget(MarkdownText(markdown));
+      return tester
+          .renderToString(size: const CellSize(60, 1), emptyMark: ' ')
+          .trimRight();
+    }
+
+    for (final prose in [
+      'Edit __init__.py to export it',
+      'Rename user_id and group_id',
+      'Compute 2 * 3 * 4 now',
+      'See snake_case_name and MAX_RETRY_COUNT',
+      'Raise a ** b to c',
+    ]) {
+      testWidgets('"$prose" renders as written', (tester) {
+        expect(rendered(tester, prose), prose);
+      });
+    }
+
+    testWidgets('real emphasis still renders', (tester) {
+      expect(
+        rendered(tester, 'Use *emphasis*, _this_ and **bold** here'),
+        'Use emphasis, this and bold here',
+      );
+    });
+  });
+
   group('MarkdownText — hyperlinks (OSC 8)', () {
     testWidgets(
       'supporting surface + safe scheme: link run carries linkUri, url suffix '

@@ -1434,6 +1434,11 @@ final class _MarkdownRenderer {
 /// [TextSpan] tree under [base]. Greedy: longest tokens win at each
 /// position. Unbalanced markup is left as literal text (no escape
 /// sequences corrupt the render).
+///
+/// Emphasis follows CommonMark's delimiter rules ([_emphasisEnd]), so the
+/// underscores of snake_case and `__init__.py` and the stars of `2 * 3 * 4`
+/// stay text. Semantic labels come from the same spans ([_plainInlineText]),
+/// so what is read out matches what is drawn.
 TextSpan _inline(
   String src,
   CellStyle base, {
@@ -1474,7 +1479,7 @@ TextSpan _inline(
     }
     // Bold: **…**
     if (ch == '*' && i + 1 < src.length && src[i + 1] == '*') {
-      final end = src.indexOf('**', i + 2);
+      final end = _emphasisEnd(src, i, '**');
       if (end > i) {
         flushText();
         children.add(
@@ -1502,10 +1507,9 @@ TextSpan _inline(
         continue;
       }
     }
-    // Italic: *…* OR _…_ (single delimiter; greedy until matching one).
+    // Italic: *…* OR _…_ (a single delimiter; a longer run is text).
     if (ch == '*' || ch == '_') {
-      // Avoid double-* here (handled above).
-      final end = src.indexOf(ch, i + 1);
+      final end = _emphasisEnd(src, i, ch);
       if (end > i) {
         flushText();
         children.add(
@@ -1596,6 +1600,40 @@ TextSpan _inline(
   return TextSpan(style: base, children: children);
 }
 
+final _wordChar = RegExp(r'[\p{L}\p{N}]', unicode: true);
+
+/// Where the emphasis [delimiter] opening at [start] closes in [src], or -1
+/// when it does not open there — CommonMark's flanking rules, in the subset
+/// this parser renders:
+///
+/// - an opener is followed, and a closer preceded, by non-whitespace, so
+///   `2 * 3 * 4` stays text;
+/// - `_` neither opens after nor closes before a letter or digit, so
+///   snake_case and `user_id` stay text;
+/// - a single delimiter is a run of one: `__init__` stays text;
+/// - the span between is never empty.
+int _emphasisEnd(String src, int start, String delimiter) {
+  final ch = delimiter[0];
+  final width = delimiter.length;
+  bool isRun(int at) => at >= 0 && at < src.length && src[at] == ch;
+  bool isSpace(int at) => at < 0 || at >= src.length || src[at].trim().isEmpty;
+  bool isWordChar(int at) =>
+      at >= 0 && at < src.length && _wordChar.hasMatch(src[at]);
+  final after = start + width;
+  if (isRun(start - 1) || isRun(after) || isSpace(after)) return -1;
+  if (ch == '_' && isWordChar(start - 1)) return -1;
+  for (
+    var end = src.indexOf(delimiter, after + 1);
+    end != -1;
+    end = src.indexOf(delimiter, end + 1)
+  ) {
+    if (isRun(end - 1) || isRun(end + width) || isSpace(end - 1)) continue;
+    if (ch == '_' && isWordChar(end + width)) continue;
+    return end;
+  }
+  return -1;
+}
+
 void _collectMarkdownLinks(
   String src, {
   required List<MarkdownLink> links,
@@ -1604,25 +1642,20 @@ void _collectMarkdownLinks(
   _inline(src, CellStyle.none, links: links, blockIndex: blockIndex);
 }
 
+/// The text [src] renders as, read from the same spans [_inline] draws: a
+/// separate parse of the markup drifted from the render.
 String _plainInlineText(String src) {
-  var text = src;
-  text = text.replaceAllMapped(
-    RegExp(r'\[([^\]]+)\]\(([^)]+)\)'),
-    (match) =>
-        '${match.group(1)!} (${_sanitizeMarkdownText(match.group(2)!)}'
-        ')',
-  );
-  // Strip the emphasis/code delimiters, keeping the inner text. replaceAllMapped
-  // (not replaceAll) is required: Dart uses a replaceAll replacement string
-  // literally, so r'$1' would emit the two characters "$1" instead of group 1 —
-  // matching the link rule above, which already maps the group by hand.
-  text = text
-      .replaceAllMapped(RegExp(r'`([^`]+)`'), (m) => m.group(1)!)
-      .replaceAllMapped(RegExp(r'\*\*([^*]+)\*\*'), (m) => m.group(1)!)
-      .replaceAllMapped(RegExp(r'~~([^~]+)~~'), (m) => m.group(1)!)
-      .replaceAllMapped(RegExp(r'\*([^*]+)\*'), (m) => m.group(1)!)
-      .replaceAllMapped(RegExp(r'_([^_]+)_'), (m) => m.group(1)!);
-  return _sanitizeMarkdownText(text);
+  final text = StringBuffer();
+  void collect(TextSpan span) {
+    final own = span.text;
+    if (own != null) text.write(own);
+    for (final child in span.children ?? const <TextSpan>[]) {
+      collect(child);
+    }
+  }
+
+  collect(_inline(src, CellStyle.none));
+  return _sanitizeMarkdownText(text.toString());
 }
 
 String _sanitizeMarkdownText(String text, {int tabSize = 2}) {
