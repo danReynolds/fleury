@@ -153,10 +153,6 @@ class PosixTerminalDriver
 
   bool _pointerShapes = false;
   bool _pointerStackOwned = false;
-  // Whether the input-mode disables are out since the enter sequences were
-  // last built. The keyboard pop is not idempotent, and a suspend or handoff
-  // can race a restore across a yield, so exit sequences write them once.
-  bool _inputModesReleased = false;
   bool _active = false;
   bool _entering = false;
   bool _restoring = false;
@@ -885,10 +881,8 @@ class PosixTerminalDriver
 
   /// Builds the mode-entry escape sequence (alt screen, hide cursor,
   /// bracketed paste, Kitty keyboard, mouse), shared by [enter] and resume.
-  String _enterSequences(TerminalMode mode) {
-    _inputModesReleased = false;
-    return buildTerminalEnterSequences(mode) + _pushPointerShape();
-  }
+  String _enterSequences(TerminalMode mode) =>
+      buildTerminalEnterSequences(mode) + _pushPointerShape();
 
   /// Applies the fleet override before any sequence is built.
   ///
@@ -914,53 +908,11 @@ class PosixTerminalDriver
   }
 
   /// Restores pointer ownership before leaving the screen that owns it.
-  /// Leaves out the input-mode disables when [_releaseInputModes] already
-  /// wrote them.
   String _exitSequences(TerminalMode mode) {
     final pointer = _pointerStackOwned ? popPointerShape : '';
     _pointerStackOwned = false;
-    final input = _inputModesReleased
-        ? ''
-        : buildTerminalInputExitSequences(mode);
-    _inputModesReleased = true;
     // Pop on the same screen where we pushed, before leaving the alt screen.
-    return pointer + input + buildTerminalScreenExitSequences(mode);
-  }
-
-  /// Stops the terminal's input reports and keeps reading until the terminal
-  /// has acknowledged, before input leaves this driver.
-  ///
-  /// A report the terminal sent before it processed the disable still
-  /// arrives afterwards, a round trip later over SSH. Once input is released,
-  /// that report goes to whatever reads the tty next: the shell after an exit
-  /// or a suspend, the editor after a handoff, as garbage like
-  /// `^[[<35;18;5M`. A Device Attributes query written after the disables is
-  /// answered only once the terminal has processed them, so every such report
-  /// arrives before the reply and is read here. A terminal that never
-  /// answered a query is not waited on.
-  Future<void> _releaseInputModes(TerminalMode mode) async {
-    if (_inputModesReleased ||
-        !_wroteEnterSequences ||
-        !_changedStdin ||
-        _stdinSubscription == null) {
-      return;
-    }
-    try {
-      _stdout.write(buildTerminalInputExitSequences(mode));
-    } catch (_) {
-      return;
-    }
-    _inputModesReleased = true;
-    final roundTrip = _queryRunner.measuredRoundTrip;
-    if (roundTrip == null) return;
-    try {
-      await _queryRunner.request(
-        deviceAttributesQuery,
-        timeout: probeTimeoutFor(roundTrip),
-      );
-    } catch (_) {
-      // Unanswered, or cut short by a restore: input is released regardless.
-    }
+    return pointer + buildTerminalExitSequences(mode);
   }
 
   bool _interceptParsedEvent(TuiEvent event) {
@@ -1054,7 +1006,6 @@ class PosixTerminalDriver
     // still reaches the stop below: a half-suspend that never stops (and so
     // is never resumed) would otherwise wedge the gate forever.
     if (!_handoffActive) {
-      await _releaseInputModes(mode);
       final inputRestored = !_changedStdin || _restoreCookedMode();
       try {
         if (_wroteEnterSequences) _stdout.write(_exitSequences(mode));
@@ -1153,11 +1104,8 @@ class PosixTerminalDriver
           _events.add(const TerminalFocusEvent(focused: false));
         }
 
-        // Drain the terminal's input reports while the child has not
-        // started, then stop the parent subscription before the rest of the
-        // terminal modes change so it never races an inherited-stdio
-        // editor/pager for tty input.
-        await _releaseInputModes(mode);
+        // Stop the parent subscription before terminal modes change so it
+        // never races an inherited-stdio editor/pager for tty input.
         final input = _stdinSubscription;
         if (input != null) {
           input.pause();
@@ -1253,6 +1201,9 @@ class PosixTerminalDriver
     _pendingSignal = null;
     _pendingSignalDelivered = false;
     _entering = false;
+    // Before the early-return: query deadlines and late-reply quarantine must
+    // never outlive terminal ownership.
+    _queryRunner.dispose();
     if (!_active &&
         !_wroteEnterSequences &&
         !_changedStdin &&
@@ -1261,9 +1212,6 @@ class PosixTerminalDriver
         _intSubscription == null &&
         _termSubscription == null &&
         _hupSubscription == null) {
-      // Query deadlines and late-reply quarantine must never outlive terminal
-      // ownership.
-      _queryRunner.dispose();
       _terminalState = null;
       _sink.target = null;
       _restoring = false;
@@ -1328,21 +1276,10 @@ class PosixTerminalDriver
     } catch (_) {}
     _hupSubscription = null;
 
-    // Input modes go first, while stdin is still read, so reports in flight
-    // reach this driver instead of the shell.
-    await _releaseInputModes(_mode ?? TerminalMode.interactive);
-    // Query deadlines and late-reply quarantine must never outlive terminal
-    // ownership.
-    _queryRunner.dispose();
     try {
       await _stdinSubscription?.cancel();
     } catch (_) {}
     _stdinSubscription = null;
-    // The drain may have re-armed the parser's flush timers.
-    _flushTimer?.cancel();
-    _flushTimer = null;
-    _pasteIdleTimer?.cancel();
-    _pasteIdleTimer = null;
     // Cancelling the process-global stdin spends it for the process lifetime;
     // latch that so a second enter() rejects cleanly rather than crashing.
     if (identical(_stdin, stdin)) _globalStdinConsumed = true;
@@ -1361,8 +1298,8 @@ class PosixTerminalDriver
     }
 
     if (_wroteEnterSequences) {
-      // Whatever input modes the drain above could not release go first, so
-      // no stray sequences leak as the terminal returns to the shell.
+      // Disable input modes first so no stray sequences leak as the
+      // terminal returns to the shell.
       try {
         _stdout.write(_exitSequences(_mode ?? TerminalMode.interactive));
       } catch (_) {}
