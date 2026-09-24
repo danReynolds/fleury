@@ -134,6 +134,34 @@
   (KP 4 with NumLock off, and Left) are tracked as two keys.
 - A letter typed after an abandoned key chord reaches `KeyDetector`s, such
   as a list's type-ahead, on kitty-protocol terminals and in the browser.
+- **Breaking:** `Dialog` no longer carries a semantic dismiss action of its
+  own. A presented dialog's route advertises dismiss when the dialog can be
+  dismissed, and honours `barrierDismissible` and `PopScope`; the Dialog's
+  own action bypassed both and could pop a page it was shown inline in.
+- A command's shortcut asks the command's `visible` and `enabled`
+  predicates when its key is pressed, as the palette, semantics, and
+  `invoke` do. A command that becomes enabled after its scope built fires on
+  its shortcut, and one that becomes disabled lets its key through to an
+  outer binding.
+- Esc at a navigator's root, where there is nothing to pop, reaches what
+  binds Esc above the navigator: FleuryApp's own Esc commands, the Toaster's
+  Esc dismiss, and an outer navigator. A blocking `PopScope` at the root
+  still intercepts it.
+- Status a command reports through `context.status` survives the command's
+  completion, and status set with `status.update` survives later commands
+  and rebuilds. FleuryApp keeps what it derives from its `status` builder
+  and extensions apart from what `update` sets.
+- A command that throws is reported. From a shortcut, a button, or a palette
+  row it reaches runApp's error overlay, as a throwing key binding does, and
+  a semantic activation reports it `failed` rather than `completed`.
+  `CommandRegistry.invokeFromGesture` and `invokeCommandFromGesture` do the
+  same for custom command surfaces.
+- `FleuryTester.lastCommandResult` is the latest command visible from the
+  focused context, scoped or app-level. It kept reporting the app's last
+  command after a screen command ran.
+- `FleuryTester.renderToString` trims each row's trailing empty cells rather
+  than trailing copies of the mark. An empty mark no longer hangs the test,
+  a mark of several characters works, and a glyph equal to the mark stays.
 - Debugger mode changes preserve application state and layout. Opening the
   shell starts a bounded 60-frame recording that continues while hidden;
   Rebuilds shows the worst frame's phase costs. Inspector reports scroll with
