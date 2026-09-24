@@ -150,6 +150,16 @@ class InputDispatcher {
   /// Whether a detector, binding or capture consumed [_splitKeyHalf].
   bool _splitKeyHalfConsumed = false;
 
+  /// Whether [_splitKeyHalf] walked the focus chain. A key half a pending
+  /// prefix held for its text did not, so its text walks it instead.
+  bool _splitKeyHalfWalked = false;
+
+  /// Whether the last [_dispatchKeyEvent] held its key for the text half of
+  /// the same step — a pending prefix the key could not advance — without
+  /// walking the focus chain. Detectors must then see the text's view, or
+  /// they never see the press at all.
+  bool _keyHeldForText = false;
+
   /// Abandons an in-flight sequence as if the user pressed Esc: held events
   /// replay (a shorter binding fires, a text-owed char reaches the field) and
   /// the pending state clears, dropping any which-key popup. No-op when
@@ -240,11 +250,13 @@ class InputDispatcher {
         }
       }
       if (text != null) {
-        // The key half already walked the routed lanes above.
+        // The key half walked the routed lanes above, unless a pending
+        // prefix held it for this text.
+        final keyView = key != null && key.type != KeyEventType.up ? key : null;
         return _dispatchText(
           TextInputEvent(text),
-          keyAlreadyWalked: key != null && key.type != KeyEventType.up,
-          keyView: key != null && key.type != KeyEventType.up ? key : null,
+          keyAlreadyWalked: keyView != null && !_keyHeldForText,
+          keyView: keyView,
         );
       }
       return KeyEventResult.ignored;
@@ -252,7 +264,11 @@ class InputDispatcher {
     if (event is TextInputEvent) {
       if (keyHalf != null && _isTextOfKey(event.text, keyHalf.code)) {
         if (_splitKeyHalfConsumed) return KeyEventResult.handled;
-        return _dispatchText(event, keyAlreadyWalked: true, keyView: keyHalf);
+        return _dispatchText(
+          event,
+          keyAlreadyWalked: _splitKeyHalfWalked,
+          keyView: keyHalf,
+        );
       }
       return _dispatchText(event);
     }
@@ -306,6 +322,7 @@ class InputDispatcher {
   void _awaitSplitText(KeyEvent keyHalf, {required bool consumed}) {
     _splitKeyHalf = keyHalf;
     _splitKeyHalfConsumed = consumed;
+    _splitKeyHalfWalked = !_keyHeldForText;
   }
 
   /// Whether [text] is what the printable key [code] typed: its character,
@@ -632,6 +649,7 @@ class InputDispatcher {
     // pending sequence, and means enabling Kitty event-type reporting can't
     // double-fire bindings. (Only reachable when that reporting is on;
     // otherwise every event arrives as `down`.)
+    _keyHeldForText = false;
     if (event.type == KeyEventType.up) return KeyEventResult.ignored;
     // 1. Pending sequence handling.
     if (_matchablePending != null) {
@@ -717,6 +735,7 @@ class InputDispatcher {
       // modifier transition, or a printable key half whose committed text will
       // follow). Observation already saw it; the command lane waits without
       // advancing, cancelling, or extending the original timeout.
+      _keyHeldForText = true;
       return KeyEventResult.ignored;
     }
     // Sequence didn't complete and didn't continue: cancel and

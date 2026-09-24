@@ -1582,6 +1582,38 @@ void main() {
       expect(events, ['text:d']);
     });
 
+    for (final surface in ['browser', 'kitty']) {
+      test('a letter that breaks a pending chord reaches a detector once, '
+          '$surface', () {
+        final seen = <String>[];
+        final h = splitSurface(
+          KeyBindings(
+            bindings: [
+              KeyBinding(KeySequence.ctrl.x.ctrl.s, onTrigger: (_) {}),
+            ],
+            child: KeyDetector(
+              onKey: (event) => seen.add(describe(event)),
+              child: const Focus(autofocus: true, child: EmptyBox()),
+            ),
+          ),
+        );
+        h.dispatcher.dispatch(
+          const KeyEvent(KeyCode.x, modifiers: {KeyModifier.ctrl}),
+        );
+        expect(h.dispatcher.hasPendingSequence, isTrue);
+
+        if (surface == 'browser') {
+          pressDom(h, 'q', 'q');
+        } else {
+          h.dispatcher.dispatch(
+            const InputBatch(key: KeyEvent(KeyCode.q), committedText: 'q'),
+          );
+        }
+
+        expect(seen.where((key) => key == 'q'), hasLength(1));
+      });
+    }
+
     test('a key half a nextKey capture takes drops its text', () async {
       final events = <String>[];
       late BuildContext context;
