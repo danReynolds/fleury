@@ -1220,6 +1220,27 @@ abstract class Element implements BuildContext {
     return updateChild(child, builder(error, stack));
   }
 
+  /// Rebuilds the dirty elements below this one, shallowest first.
+  ///
+  /// For an element that builds its child during layout, like LayoutBuilder:
+  /// what that build dirties, such as the readers of a Scope it updated,
+  /// missed the frame's build flush. Rebuilt here, before the subtree lays
+  /// out, they paint this frame's state instead of the last frame's and
+  /// leave no extra frame behind.
+  @protected
+  void rebuildDirtyDescendants() => _owner?._rebuildDirtyBelow(this);
+
+  bool _isBelow(Element ancestor) {
+    for (
+      var parent = _parent;
+      parent != null && parent._depth >= ancestor._depth;
+      parent = parent._parent
+    ) {
+      if (identical(parent, ancestor)) return true;
+    }
+    return false;
+  }
+
   /// Creates an element for [newWidget] and mounts it under this element.
   ///
   /// If [newWidget] carries a [GlobalKey] whose element is available for
@@ -1805,6 +1826,40 @@ class BuildOwner {
       rebuiltElementCount: rebuiltElementCount,
       maxDirtyElementCount: maxDirtyElementCount,
     );
+  }
+
+  /// Rebuilds the active dirty elements below [ancestor] until none are left,
+  /// shallowest first. See [Element.rebuildDirtyDescendants]. A subtree that
+  /// keeps dirtying itself is left to the next [flushBuild], which names it.
+  void _rebuildDirtyBelow(Element ancestor) {
+    for (var pass = 0; pass < _maxBuildPasses; pass++) {
+      final below = [
+        for (final element in _dirtyElements)
+          if (element._lifecycle == _ElementLifecycle.active &&
+              element._isBelow(ancestor))
+            element,
+      ];
+      if (below.isEmpty) return;
+      below.sort((a, b) => a._depth - b._depth);
+      _dirtyElements.removeAll(below);
+      var processed = 0;
+      try {
+        for (final element in below) {
+          processed += 1;
+          element.rebuild();
+        }
+      } finally {
+        // Same stranding hazard as [_flushBuild]: a throw leaves the rest
+        // dirty but dequeued, so markNeedsBuild would short-circuit on them.
+        for (var i = processed; i < below.length; i++) {
+          final element = below[i];
+          if (element._lifecycle == _ElementLifecycle.active &&
+              element._dirty) {
+            _dirtyElements.add(element);
+          }
+        }
+      }
+    }
   }
 
   /// Host teardown: permanently unmounts any deactivated-but-unfinalized

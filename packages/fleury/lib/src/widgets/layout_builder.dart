@@ -109,6 +109,7 @@ class _LayoutBuilderElement extends RenderObjectElement {
     try {
       final built = runWithBuildTarget(() => widget.builder(this, constraints));
       _child = updateChild(_child, built);
+      rebuildDirtyDescendants();
     } catch (error, stack) {
       _child = activeChildOrNull(_child);
       try {

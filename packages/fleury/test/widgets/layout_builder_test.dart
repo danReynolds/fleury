@@ -381,4 +381,46 @@ void main() {
       reason: 'the re-entrant invalidation forced a second build this pass',
     );
   });
+
+  testWidgets('a scope the builder updates reaches its readers in the same '
+      'frame', (tester) {
+    // The builder runs during layout, after the frame's build flush. A Scope
+    // it updates marks readers behind a const widget dirty; they must build
+    // before they lay out, not paint the previous size and wait a frame.
+    tester.mountWidget(
+      LayoutBuilder(
+        builder: (_, constraints) => Scope<_Cols>(
+          _Cols(constraints.maxCols ?? -1),
+          child: const _Reader(),
+        ),
+      ),
+    );
+
+    expect(tester.renderToString(size: const CellSize(10, 1)).trim(), 'w=10');
+    expect(tester.renderToString(size: const CellSize(20, 1)).trim(), 'w=20');
+    expect(
+      tester.owner.hasScheduledBuilds,
+      isFalse,
+      reason: 'no rebuild was left for the next frame',
+    );
+  });
+}
+
+final class _Cols {
+  const _Cols(this.value);
+  final int value;
+
+  @override
+  bool operator ==(Object other) => other is _Cols && other.value == value;
+
+  @override
+  int get hashCode => value.hashCode;
+}
+
+class _Reader extends StatelessWidget {
+  const _Reader();
+
+  @override
+  Widget build(BuildContext context) =>
+      Text('w=${context.scope<_Cols>().value}');
 }
