@@ -10,6 +10,8 @@
 import 'package:fleury/fleury.dart';
 import 'package:test/test.dart';
 
+import '../support/render_fixtures.dart';
+
 class _ThrowsInInit extends StatefulWidget {
   const _ThrowsInInit();
 
@@ -48,6 +50,26 @@ class _ThrowsOnUpdateState extends State<_ThrowsOnUpdate> {
   Widget build(BuildContext context) => Text(widget.label);
 }
 
+class _DisposeProbe extends StatefulWidget {
+  const _DisposeProbe({required this.log});
+
+  final List<String> log;
+
+  @override
+  State<_DisposeProbe> createState() => _DisposeProbeState();
+}
+
+class _DisposeProbeState extends State<_DisposeProbe> {
+  @override
+  void dispose() {
+    widget.log.add('disposed');
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) => const Text('probe');
+}
+
 class _Host extends StatefulWidget {
   const _Host({super.key});
 
@@ -65,11 +87,7 @@ class _HostState extends State<_Host> {
 
   @override
   Widget build(BuildContext context) => Column(
-    children: [
-      Text('header $_frame'),
-      ?_middle,
-      const Text('footer'),
-    ],
+    children: [Text('header $_frame'), ?_middle, const Text('footer')],
   );
 }
 
@@ -126,7 +144,12 @@ void main() {
     reported = <Object>[];
     runtime.owner.onBuildError = (error, _) => reported.add(error);
     runtime.mountRoot(
-      Column(children: [const Text('outside'), _Host(key: host)]),
+      Column(
+        children: [
+          const Text('outside'),
+          _Host(key: host),
+        ],
+      ),
     );
   });
 
@@ -201,6 +224,19 @@ void main() {
     expect(out, contains('below'));
   });
 
+  test('a frame whose layout throws still disposes what its build removed', () {
+    // Finalizing waits for layout, because layout builds too. A layout that
+    // throws must not leave removed State (and its timers) alive for as long
+    // as frames keep failing.
+    final log = <String>[];
+    host.currentState!.show(_DisposeProbe(log: log));
+    render();
+
+    host.currentState!.show(const Boom());
+    expect(render, throwsA(isA<StateError>()));
+    expect(log, ['disposed']);
+  });
+
   test('a raw BuildOwner still propagates a child initState throw', () {
     final owner = BuildOwner();
     expect(
@@ -212,9 +248,11 @@ void main() {
     );
   });
 
-  test('a resize whose root rebuild throws is one backstopped frame', () {
+  test('a resize whose root rebuild throws fails that frame and is retried '
+      'until the rebuild succeeds', () {
     final resizeRuntime = TuiRuntime();
     var size = const CellSize(30, 4);
+    var broken = true;
     final backstopped = <Object>[];
     final presenter = _Frames();
     final driver = FrameDriver(
@@ -228,7 +266,14 @@ void main() {
     // A render-object root: no building ancestor to contain the child's
     // didUpdateWidget, so the throw reaches the driver.
     driver.mountRoot(
-      () => Column(children: [_ThrowsOnUpdate(label: 'cols ${size.cols}')]),
+      () => Column(
+        children: [
+          if (broken)
+            _ThrowsOnUpdate(label: 'cols ${size.cols}')
+          else
+            Text('cols ${size.cols}'),
+        ],
+      ),
     );
     driver.renderNow('first');
 
@@ -237,11 +282,17 @@ void main() {
     expect(backstopped, [isA<StateError>()]);
     expect(presenter.frames.last, contains('update-boom'));
 
-    expect(
-      () => driver.renderNow('same size'),
-      returnsNormally,
-      reason: 'the new size was recorded, so the resize is not retried',
-    );
-    expect(backstopped, hasLength(1));
+    // Still broken: the next frame retries the rebuild instead of laying
+    // out the old MediaQuery in the new buffer.
+    driver.renderNow('retry');
+    expect(backstopped, hasLength(2));
+
+    broken = false;
+    driver.renderNow('fixed');
+    expect(backstopped, hasLength(2));
+    expect(presenter.frames.last, contains('cols 32'));
+
+    driver.renderNow('idle');
+    expect(backstopped, hasLength(2), reason: 'the resize is settled');
   });
 }

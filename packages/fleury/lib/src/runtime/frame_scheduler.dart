@@ -56,10 +56,12 @@ class FrameScheduler {
   final FrameRenderCallback _onRender;
   late final FrameFlushScheduler _flushScheduler;
 
-  /// The zone this scheduler was built in: the runtime's guarded zone. Every
-  /// flush runs here, whoever requested the frame. A request from a listener
-  /// registered in `main()` would otherwise run the frame — and every timer
-  /// it starts — outside the guard that restores the terminal.
+  /// The zone this scheduler was built in, which a host makes the zone that
+  /// guards its frames (`runApp` builds its frame driver inside its
+  /// `runZonedGuarded`). Every flush runs here, whoever requested the frame.
+  /// A request from a listener registered in `main()` would otherwise run the
+  /// frame — and every timer it starts — outside the guard that restores the
+  /// terminal.
   final Zone _zone;
 
   static final _frameZoneKey = Object();
@@ -130,9 +132,9 @@ class FrameScheduler {
       return null;
     }
     _flushAtTurnEnd = guarded;
-    return () {
-      if (identical(_flushAtTurnEnd, guarded)) _flushAtTurnEnd = null;
-    };
+    // Only dispose cancels a flush, and it drops this one with the turn-end
+    // timer that would run it.
+    return null;
   }
 
   void _endTurn() {
@@ -217,6 +219,7 @@ class FrameScheduler {
     _cancelScheduledFlush = null;
     _turnEnd?.cancel();
     _turnEnd = null;
+    _flushAtTurnEnd = null;
   }
 }
 

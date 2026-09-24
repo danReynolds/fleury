@@ -60,6 +60,52 @@ class _HostState extends State<_Host> {
   }
 }
 
+/// A panel that docks into a LayoutBuilder below 40 columns, as a
+/// responsive layout does when the terminal shrinks.
+class _Responsive extends StatelessWidget {
+  const _Responsive({required this.panelKey});
+  final GlobalKey panelKey;
+
+  @override
+  Widget build(BuildContext context) {
+    final panel = _Probe(key: panelKey);
+    return MediaQuery.sizeOf(context).cols < 40
+        ? LayoutBuilder(builder: (_, _) => panel)
+        : Column(children: [panel, const Text('other')]);
+  }
+}
+
+/// A panel that maximizes into a LayoutBuilder on Enter.
+class _Maximizer extends StatefulWidget {
+  const _Maximizer({required this.panelKey});
+  final GlobalKey panelKey;
+  @override
+  State<_Maximizer> createState() => _MaximizerState();
+}
+
+class _MaximizerState extends State<_Maximizer> {
+  bool maximized = false;
+
+  @override
+  Widget build(BuildContext context) {
+    final panel = _Probe(key: widget.panelKey);
+    return KeyBindings(
+      bindings: [
+        KeyBinding(
+          KeyCode.enter,
+          onTrigger: (_) => setState(() => maximized = true),
+        ),
+      ],
+      child: Focus(
+        autofocus: true,
+        child: maximized
+            ? LayoutBuilder(builder: (_, _) => panel)
+            : Column(children: [panel, const Text('other')]),
+      ),
+    );
+  }
+}
+
 void main() {
   setUp(() {
     _inits = 0;
@@ -86,6 +132,75 @@ void main() {
       expect((_inits, _disposes), (1, 0));
     },
   );
+
+  // Every path that builds before its frame's layout — a resize, the
+  // harness's pump, input — keeps the move a move.
+  test(
+    'a resize that docks the panel into a LayoutBuilder keeps its State',
+    () {
+      final runtime = TuiRuntime();
+      var size = const CellSize(60, 4);
+      final panelKey = GlobalKey<_ProbeState>();
+      final driver = FrameDriver(
+        runtime: runtime,
+        frameLoop: TuiFrameLoop(renderDamage: runtime.renderDamageTracker),
+        readViewport: () => FrameViewportSnapshot(size),
+        presenter: const _NullPresenter(),
+      );
+      addTearDown(driver.dispose);
+      driver.mountRoot(
+        () => MediaQuery(
+          data: MediaQueryData(size: size),
+          child: _Responsive(panelKey: panelKey),
+        ),
+      );
+      driver.renderNow('first');
+      final state = panelKey.currentState;
+
+      size = const CellSize(30, 4);
+      driver.renderNow('resized');
+
+      expect(panelKey.currentState, same(state));
+      expect((_inits, _disposes), (1, 0));
+    },
+  );
+
+  testWidgets('a viewport change that docks the panel keeps its State', (
+    tester,
+  ) {
+    final panelKey = GlobalKey<_ProbeState>();
+    tester.pumpWidget(_Responsive(panelKey: panelKey));
+    final state = panelKey.currentState;
+
+    tester.render(size: const CellSize(30, 4));
+
+    expect(panelKey.currentState, same(state));
+    expect((_inits, _disposes), (1, 0));
+  });
+
+  testWidgets('pumpWidget moving the panel into a LayoutBuilder keeps its '
+      'State', (tester) {
+    final panelKey = GlobalKey<_ProbeState>();
+    tester.pumpWidget(Column(children: [_Probe(key: panelKey)]));
+    final state = panelKey.currentState;
+
+    tester.pumpWidget(LayoutBuilder(builder: (_, _) => _Probe(key: panelKey)));
+
+    expect(panelKey.currentState, same(state));
+    expect((_inits, _disposes), (1, 0));
+  });
+
+  testWidgets('a key press that maximizes the panel keeps its State', (tester) {
+    final panelKey = GlobalKey<_ProbeState>();
+    tester.pumpWidget(_Maximizer(panelKey: panelKey));
+    final state = panelKey.currentState;
+
+    tester.sendKey(const KeyEvent(KeyCode.enter));
+    tester.pump();
+
+    expect(panelKey.currentState, same(state));
+    expect((_inits, _disposes), (1, 0));
+  });
 
   testWidgets('a GlobalKey used in both the build and layout phase is a '
       'duplicate, not a steal-back loop', (tester) {
@@ -123,4 +238,23 @@ void main() {
       ),
     );
   });
+}
+
+final class _NullPresenter implements FramePresenter {
+  const _NullPresenter();
+
+  @override
+  bool get wantsPresentationPlan => false;
+
+  @override
+  void presentFrame(TuiRenderedFrame frame, FramePresentInfo info) {}
+
+  @override
+  void onFrameCommitted(TuiRenderedFrame frame, FramePresentInfo info) {}
+
+  @override
+  FrameDiffStats? frameDiffStats(
+    TuiRenderedFrame frame,
+    FramePresentInfo info,
+  ) => null;
 }

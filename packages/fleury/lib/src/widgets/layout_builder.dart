@@ -111,12 +111,10 @@ class _LayoutBuilderElement extends RenderObjectElement {
       _child = updateChild(_child, built);
       rebuildDirtyDescendants();
     } catch (error, stack) {
-      _child = activeChildOrNull(_child);
       try {
         _child = replaceChildWithError(_child, error, stack);
-      } catch (_) {
+      } finally {
         _child = activeChildOrNull(_child);
-        rethrow;
       }
     }
   }

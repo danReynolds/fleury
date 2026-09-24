@@ -241,8 +241,7 @@ class TickerScheduler {
   }
 
   /// Override point for [FakeTickerScheduler], which never creates
-  /// a real timer. Ticks run in [_zone], whichever zone registered the first
-  /// ticker, so an animation callback's error reaches the runtime's guard.
+  /// a real timer. Ticks run in [_zone].
   void _startTimer() {
     _timer = _zone.createPeriodicTimer(
       _frameInterval,
@@ -250,19 +249,24 @@ class TickerScheduler {
     );
   }
 
+  /// The zone every tick runs in: the zone this scheduler was built in, or
+  /// the one [bindZone] names. A host builds its runtime inside the zone
+  /// that guards it, or binds that zone before any ticker starts; either
+  /// way an animation callback's error reaches the host's guard, whoever
+  /// started the ticker.
   Zone _zone = Zone.current;
 
-  /// Runs every future tick in [zone]: the runtime's guarded zone. A ticker
-  /// registered from `main()` (an animation retargeted by a socket listener)
-  /// would otherwise tick — and report its errors — outside it.
+  /// Runs every tick in [zone], for a host (like `runApp`) that builds the
+  /// scheduler before its guarded zone exists. Call it before any ticker
+  /// starts.
   @internal
   void bindZone(Zone zone) {
-    if (identical(zone, _zone)) return;
+    assert(
+      _timer == null,
+      'TickerScheduler.bindZone after a ticker started: its ticks are already '
+      'scheduled in the old zone.',
+    );
     _zone = zone;
-    if (_timer != null) {
-      _stopTimer();
-      _startTimer();
-    }
   }
 
   void _stopTimer() {

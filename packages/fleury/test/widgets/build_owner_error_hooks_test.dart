@@ -33,13 +33,20 @@ void main() {
     });
 
     test('a raw BuildOwner (no errorBuilder) rethrows build errors', () {
-      final owner = BuildOwner();
+      final reported = <Object>[];
+      final owner = BuildOwner(onBuildError: (e, _) => reported.add(e));
       expect(
         () => owner.mountRoot(const _Boom()),
         throwsA(isA<StateError>()),
         reason:
             'null errorBuilder means "no boundary" — low-level harnesses '
             'keep propagate-on-throw semantics',
+      );
+      expect(
+        reported,
+        isEmpty,
+        reason:
+            'onBuildError reports contained errors; the caller has this one',
       );
     });
 

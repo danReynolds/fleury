@@ -135,8 +135,9 @@ class FleuryTester {
     // Containment inverts for tests: a bug in build, a lifecycle hook,
     // layout, or paint should FAIL the test loudly, not render a red panel
     // behind passing assertions. A containment test opts back in with
-    // `owner.rethrowContainedErrors = false`, or per boundary with
-    // `ErrorBoundary(rethrowContained: false)`.
+    // `owner.rethrowContainedErrors = false`; a test of one boundary's
+    // layout/paint containment can use `ErrorBoundary(rethrowContained:
+    // false)` instead, which does not affect build errors.
     _owner.rethrowContainedErrors = true;
     // Off by default in tests so it doesn't perturb golden output; an
     // overflow-specific test opts back in.
@@ -348,6 +349,7 @@ class FleuryTester {
   void mountWidget(Widget widget) {
     _assertNotDisposed('mountWidget');
     _currentUserWidget = widget;
+    _openFrame();
     if (_root == null) {
       _root = _owner.mountRoot(_wrap());
     } else {
@@ -445,6 +447,7 @@ class FleuryTester {
     required bool hasRendered,
   }) {
     if (step > Duration.zero) _scheduler.advance(step);
+    _openFrame();
     final built = _owner.flushBuild().rebuiltElementCount;
     // Render a real layout+paint like a production frame — but only when it
     // can matter: the FIRST step (so widgets that build during layout, e.g.
@@ -461,6 +464,7 @@ class FleuryTester {
       rendered = true;
     }
     _binding.flushPostFrameCallbacks(_clock.now);
+    _openFrame();
     final afterDrain = _owner.flushBuild().rebuiltElementCount;
     // Paint-only work counts as activity: a Ticker driving markNeedsPaintOnly
     // rebuilds nothing, but its animation is still in flight — treating the
@@ -503,7 +507,10 @@ class FleuryTester {
     while (elapsed < timeout) {
       final (quiescent, rendered) = _settleStep(step, hasRendered: hasRendered);
       hasRendered = hasRendered || rendered;
-      if (quiescent) return;
+      if (quiescent) {
+        _closeFrame();
+        return;
+      }
       elapsed += step;
     }
     throw StateError(
@@ -557,7 +564,10 @@ class FleuryTester {
       final (quiescent, rendered) = _settleStep(step, hasRendered: hasRendered);
       hasRendered = hasRendered || rendered;
       stable = quiescent ? stable + 1 : 0;
-      if (stable >= stableSteps) return;
+      if (stable >= stableSteps) {
+        _closeFrame();
+        return;
+      }
       elapsed += step;
       steps++;
     }
@@ -613,6 +623,7 @@ class FleuryTester {
   /// ctrl-shortcuts).
   void sendKey(KeyEvent event) {
     _assertNotDisposed('sendKey');
+    _openFrame();
     _dispatcher.dispatch(event);
     _owner.flushBuild();
   }
@@ -621,6 +632,7 @@ class FleuryTester {
   /// input dispatcher. Equivalent to a `TextInputEvent(text)`.
   void type(String text) {
     _assertNotDisposed('type');
+    _openFrame();
     _dispatcher.dispatch(TextInputEvent(text));
     _owner.flushBuild();
   }
@@ -633,6 +645,7 @@ class FleuryTester {
   /// completing the sequence in the dispatcher.
   void press(KeySequence sequence) {
     _assertNotDisposed('press');
+    _openFrame();
     for (final event in sequence.asInputEvents()) {
       _dispatcher.dispatch(event);
     }
@@ -643,6 +656,7 @@ class FleuryTester {
   /// real paste arrives (so embedded newlines don't act as Enter).
   void paste(String text) {
     _assertNotDisposed('paste');
+    _openFrame();
     _dispatcher.dispatch(PasteEvent(text));
     _owner.flushBuild();
   }
@@ -666,6 +680,7 @@ class FleuryTester {
   /// the DOM source emits for printables.
   void sendBatch(InputBatch batch) {
     _assertNotDisposed('sendBatch');
+    _openFrame();
     _dispatcher.dispatch(batch);
     _owner.flushBuild();
   }
@@ -675,6 +690,7 @@ class FleuryTester {
   /// the session to track it.
   void holdKey(KeySelector key, {Set<KeyModifier> modifiers = const {}}) {
     _assertNotDisposed('holdKey');
+    _openFrame();
     _dispatcher.dispatch(_lifecycleEvent(key, KeyEventType.down, modifiers));
     _owner.flushBuild();
   }
@@ -682,6 +698,7 @@ class FleuryTester {
   /// Releases a key previously pressed with [holdKey].
   void releaseKey(KeySelector key, {Set<KeyModifier> modifiers = const {}}) {
     _assertNotDisposed('releaseKey');
+    _openFrame();
     _dispatcher.dispatch(_lifecycleEvent(key, KeyEventType.up, modifiers));
     _owner.flushBuild();
   }
@@ -724,6 +741,7 @@ class FleuryTester {
   /// click-to-focus). Render first so focus rects are recorded.
   void sendMouse(MouseEvent event) {
     _assertNotDisposed('sendMouse');
+    _openFrame();
     _dispatcher.dispatch(event);
     _owner.flushBuild();
   }
@@ -754,8 +772,14 @@ class FleuryTester {
     _publishFrameLatch();
     final buffer = CellBuffer(viewportSize);
     _pointerRouter.beginFrame();
-    _owner.renderFrame(_root!, buffer);
+    try {
+      _owner.renderFrame(_root!, buffer);
+    } catch (_) {
+      _closeFrame(completed: false);
+      rethrow;
+    }
     _pointerRouter.endFrame();
+    _closeFrame();
     return buffer;
   }
 
@@ -996,6 +1020,14 @@ class FleuryTester {
   void dispose() {
     if (_disposed) return;
     _disposed = true;
+    try {
+      _closeFrame();
+    } finally {
+      _teardown();
+    }
+  }
+
+  void _teardown() {
     final root = _root;
     if (root != null && root.mounted) {
       root.unmount();
@@ -1023,6 +1055,7 @@ class FleuryTester {
   void _refreshSurface() {
     final root = _root;
     if (root == null || _disposed) return;
+    _openFrame();
     _root = _owner.updateRoot(root, _wrap());
   }
 
@@ -1072,6 +1105,25 @@ class FleuryTester {
         ),
       ),
     );
+  }
+
+  /// Whether build-only work ([mountWidget], [sendKey], a viewport change)
+  /// has opened a frame on the owner that the next [render] closes. In the
+  /// runtime, input and the frame after it build as one frame; so here, a
+  /// GlobalKey'd subtree those builds deactivate stays reclaimable by a
+  /// LayoutBuilder until the render's layout is done.
+  bool _frameOpen = false;
+
+  void _openFrame() {
+    if (_frameOpen) return;
+    _frameOpen = true;
+    _owner.beginFrame();
+  }
+
+  void _closeFrame({bool completed = true}) {
+    if (!_frameOpen) return;
+    _frameOpen = false;
+    _owner.endFrame(completed: completed);
   }
 
   void _assertNotDisposed(String op) {

@@ -73,91 +73,62 @@ class _MicrotaskChainState extends State<_MicrotaskChain> {
   }
 }
 
+/// Runs the app [chain] builds until it has rendered [_chainFrames] frames,
+/// and expects the 1 ms beacon to have ticked while the chain ran: ticks
+/// from frame 1's render to the last frame's. Startup ticks don't count.
+Future<void> _expectChainYields(
+  Widget Function(int target, void Function(int frame) onFrame) chain,
+) async {
+  final driver = FakeTerminalDriver();
+  var ticks = 0;
+  final ticksAtFrame = <int, int>{};
+  final done = Completer<void>();
+  final beacon = Timer.periodic(const Duration(milliseconds: 1), (_) {
+    ticks++;
+  });
+
+  final app = runApp(
+    chain(_chainFrames, (frame) {
+      ticksAtFrame[frame] = ticks;
+      if (frame == _chainFrames && !done.isCompleted) done.complete();
+    }),
+    driver: driver,
+    requireInteractiveTerminal: false,
+  );
+
+  await done.future.timeout(const Duration(seconds: 20));
+  beacon.cancel();
+  requestExit();
+  await app.timeout(const Duration(seconds: 8));
+
+  expect(
+    ticksAtFrame[_chainFrames]! - ticksAtFrame[1]!,
+    greaterThan(0),
+    reason:
+        'the 1 ms beacon never fired across ${_chainFrames - 1} frames: the '
+        'chain ran as one microtask sequence and starved the event loop',
+  );
+}
+
+const _chainFrames = 150;
+
 void main() {
   test(
     'a setState queued as a microtask by build yields to timers between frames',
-    () async {
-      const target = 150;
-      final driver = FakeTerminalDriver();
-      var ticks = 0;
-      final ticksAtFrame = <int, int>{};
-      final done = Completer<void>();
-      final beacon = Timer.periodic(const Duration(milliseconds: 1), (_) {
-        ticks++;
-      });
-
-      final app = runApp(
-        _MicrotaskChain(
-          target: target,
-          onFrame: (frame) {
-            ticksAtFrame[frame] = ticks;
-            if (frame == target && !done.isCompleted) done.complete();
-          },
-        ),
-        driver: driver,
-        requireInteractiveTerminal: false,
-      );
-
-      await done.future.timeout(const Duration(seconds: 20));
-      beacon.cancel();
-      requestExit();
-      await app.timeout(const Duration(seconds: 8));
-
-      final duringChain = ticksAtFrame[target]! - ticksAtFrame[1]!;
-      expect(
-        duringChain,
-        greaterThan(0),
-        reason:
-            'the 1 ms beacon never fired across ${target - 1} frames: frames '
-            'chained as microtasks and starved the event loop',
-      );
-    },
+    () => _expectChainYields(
+      (target, onFrame) => _MicrotaskChain(target: target, onFrame: onFrame),
+    ),
     timeout: const Timeout(Duration(seconds: 40)),
   );
 
   test(
     'a self-re-registering post-frame callback yields to timers between frames',
-    () async {
-      const target = 150;
-      final driver = FakeTerminalDriver();
-      var ticks = 0;
-      final ticksAtFrame = <int, int>{};
-      final done = Completer<void>();
-      final beacon = Timer.periodic(const Duration(milliseconds: 1), (_) {
-        ticks++;
-      });
-
-      final app = runApp(
-        FleuryApp(
-          title: 'chain',
-          home: _Chain(
-            target: target,
-            onFrame: (frame) {
-              ticksAtFrame[frame] = ticks;
-              if (frame == target && !done.isCompleted) done.complete();
-            },
-          ),
-        ),
-        driver: driver,
-        requireInteractiveTerminal: false,
-      );
-
-      await done.future.timeout(const Duration(seconds: 20));
-      beacon.cancel();
-      requestExit();
-      await app.timeout(const Duration(seconds: 8));
-
-      // Ticks that landed while the chain itself was running — from frame 1's
-      // drain to frame [target]'s. Startup ticks (before frame 1) don't count.
-      final duringChain = ticksAtFrame[target]! - ticksAtFrame[1]!;
-      expect(
-        duringChain,
-        greaterThan(0),
-        reason:
-            'the 1 ms beacon never fired across ${target - 1} frames: the '
-            'chain ran as one microtask sequence and starved the event loop',
-      );
-    },
+    () => _expectChainYields(
+      (target, onFrame) => FleuryApp(
+        title: 'chain',
+        home: _Chain(target: target, onFrame: onFrame),
+      ),
+    ),
     timeout: const Timeout(Duration(seconds: 40)),
   );
 
