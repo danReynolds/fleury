@@ -1298,6 +1298,21 @@ void main() {
           );
         });
 
+        test('a keypad key never types its shifted functional alternate', () {
+          // KP_1 reporting KP_END as its shifted key: the text is still 1.
+          expect(
+            _parse(csiu('57400:57424;2')).single,
+            const InputBatch(
+              key: KeyEvent(
+                KeyCode.char('1'),
+                modifiers: {KeyModifier.shift},
+                position: KeyPosition.numpad1,
+              ),
+              committedText: '1',
+            ),
+          );
+        });
+
         test('KP Enter is Enter, on the keypad', () {
           expect(
             _parse(csiu('57414;129')).single,

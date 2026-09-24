@@ -1016,7 +1016,7 @@ class InputParser {
     // A well-formed functional codepoint outside the mapped table (the PUA
     // block 57344–63743) is diagnosable unsupported input — never text
     // (§8.7). Dropping beats emitting private-use garbage as typing.
-    if (codepoint >= 0xE000 && codepoint <= 0xF8FF) return;
+    if (_isPrivateUse(codepoint)) return;
 
     _emitCharacterKey(
       sink,
@@ -1056,10 +1056,12 @@ class InputParser {
     }
     var cp = codepoint;
     // Prefer the shifted codepoint the terminal reports (group 0's second
-    // sub-param) when Shift is held. 0 means absent.
+    // sub-param) when Shift is held. 0 means absent, and a functional code
+    // (a keypad key's shifted alternate, KP_1 to KP_END) is a key, not text.
     if (modifiers.contains(KeyModifier.shift) &&
         _csiGroups[0].length >= 2 &&
-        _csiGroups[0][1] > 0) {
+        _csiGroups[0][1] > 0 &&
+        !_isPrivateUse(_csiGroups[0][1])) {
       cp = _csiGroups[0][1];
     }
     if (!_isUnicodeScalar(cp) || !_kittyAssociatedTextIsValid()) return;
@@ -1082,6 +1084,9 @@ class InputParser {
       ),
     );
   }
+
+  static bool _isPrivateUse(int codepoint) =>
+      codepoint >= 0xE000 && codepoint <= 0xF8FF;
 
   KeyEventType _eventType(int code) => switch (code) {
     2 => KeyEventType.repeat,
