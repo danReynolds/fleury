@@ -1813,6 +1813,18 @@ form.clearErrors();''',
 
   // ── Showcases (full apps; rendered on the Showcases page, not as widgets) ──
   ExampleInfo(
+    id: 'showcase.inline',
+    widget: 'Interactive CLI commands',
+    category: 'Showcases',
+    blurb:
+        'A project setup command: choose a template, review the configuration, '
+        'and finish back at the prompt. The same form runs inline in a native terminal.',
+    cols: 84,
+    rows: 29,
+    interactive: true,
+    builder: () => const InlineSetupPreview(),
+  ),
+  ExampleInfo(
     id: 'showcase.dashboard',
     widget: 'System monitor',
     category: 'Showcases',

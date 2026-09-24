@@ -18,6 +18,8 @@ interface Props {
   rows?: number;
   /** Whether the widget responds to keyboard/mouse input. */
   interactive?: boolean;
+  /** Inline command scenes keep their shell context instead of expanding. */
+  expandable?: boolean;
   /** Visual theme for the embedded widget. `site` follows Starlight light/dark. */
   surfaceTheme?: 'dark' | 'light' | 'site';
 }
@@ -28,6 +30,7 @@ const {
   cols = 60,
   rows = 12,
   interactive = false,
+  expandable = true,
   surfaceTheme = 'dark',
 } = Astro.props;
 // ch ≈ one monospace column; 1 row = line-height (1.25) em at the host font size.
@@ -54,7 +57,7 @@ const examplesBundle = '/fleury/fleury-examples.js';
           href={servingGuide}
           title="The real widget, running live in your browser — compiled to JavaScript with dart2js, no server. Click to learn how."
         >ⓘ how it works</a>
-        <button
+        {expandable && <button
           class="fleury-expand"
           type="button"
           data-id={id}
@@ -64,7 +67,7 @@ const examplesBundle = '/fleury/fleury-examples.js';
           data-test={test}
           style={test ? "display: none" : undefined}
           aria-label="Expand this example to full screen"
-        >⛶ Expand</button>
+        >⛶ Expand</button>}
       </div>
     </div>
     <div class="fleury-host-wrap">

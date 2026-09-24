@@ -2,6 +2,7 @@ import 'dart:io';
 
 import 'package:fleury/fleury.dart';
 import 'package:fleury_samples/samples.dart';
+import 'inline.dart' show runInlineSetup;
 
 /// Runnable showcase apps for Fleury, mirroring the storybook CLI:
 ///
@@ -9,7 +10,7 @@ import 'package:fleury_samples/samples.dart';
 ///   fleury dev samples <app>            (via tool/fleury_dev.dart)
 ///
 /// Apps: dashboard | files | editor | agent | agent-guide | finance | forms |
-/// state | themes | asteroids | sprite | commands | debug.
+/// state | themes | asteroids | sprite | commands | debug | inline.
 const Map<String, (String, Widget Function())>
 _apps = <String, (String, Widget Function())>{
   'dashboard': ('htop-style live system monitor', DashboardApp.new),
@@ -57,6 +58,10 @@ Future<void> main(List<String> args) async {
   }
 
   final name = positional.first;
+  if (name == 'inline') {
+    await runInlineSetup(args);
+    return;
+  }
   final entry = _apps[name];
   if (entry == null) {
     stderr.writeln('Unknown app: $name');
@@ -109,9 +114,13 @@ void _printUsage() {
   stdout.writeln('Usage: dart run bin/samples.dart <app>');
   stdout.writeln('');
   stdout.writeln('Apps:');
+  stdout.writeln(
+    '  inline      project setup in the shell, with review and a final result',
+  );
   for (final entry in _apps.entries) {
     stdout.writeln('  ${entry.key.padRight(11)} ${entry.value.$1}');
   }
   stdout.writeln('');
   stdout.writeln('Press q or Ctrl-C to quit a running app.');
+  stdout.writeln('Inline setup: Esc goes back or cancels; Ctrl-C exits.');
 }

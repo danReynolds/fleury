@@ -1,0 +1,48 @@
+---
+import 'asciinema-player/dist/bundle/asciinema-player.css';
+---
+
+<div class="inline-recording">
+  <button type="button" data-inline-play>▶ Watch it in a native terminal <span>13 seconds</span></button>
+  <div data-inline-recording hidden aria-label="Recorded native Fleury inline terminal session"></div>
+</div>
+
+<script>
+  function wireRecordings() {
+    document.querySelectorAll<HTMLElement>('.inline-recording').forEach(root => {
+      if (root.dataset.wired) return;
+      root.dataset.wired = '1';
+      const button = root.querySelector<HTMLButtonElement>('[data-inline-play]')!;
+      const surface = root.querySelector<HTMLElement>('[data-inline-recording]')!;
+      button.addEventListener('click', async () => {
+        button.disabled = true;
+        try {
+          const { create } = await import('asciinema-player');
+          surface.hidden = false;
+          const player = create('/fleury/recordings/inline-setup.cast', surface, {
+            autoPlay: true, fit: 'width', theme: 'asciinema',
+            terminalFontFamily: 'FleuryMono, monospace',
+            idleTimeLimit: 2,
+          });
+          button.hidden = true;
+          document.addEventListener('astro:before-swap', () => player.dispose(), { once: true });
+        } catch {
+          surface.hidden = true;
+          button.disabled = false;
+          button.textContent = 'Recording could not load. Try again.';
+        }
+      });
+    });
+  }
+  wireRecordings();
+  document.addEventListener('astro:page-load', wireRecordings);
+</script>
+
+<style>
+  .inline-recording { max-width: 60rem; }
+  button { display: flex; flex-wrap: wrap; align-items: center; gap: .5rem 1.2rem; width: 100%; padding: 1rem 1.2rem; border: 1px solid var(--sl-color-gray-5); border-radius: .5rem; background: var(--sl-color-gray-6); color: var(--sl-color-text); text-align: left; font: inherit; cursor: pointer; }
+  button span { color: var(--sl-color-gray-2); font-size: .85rem; }
+  button:hover { border-color: var(--sl-color-accent); }
+  button:focus-visible { outline: 2px solid var(--sl-color-accent); outline-offset: 3px; }
+  button[hidden], [data-inline-recording][hidden] { display: none; }
+</style>

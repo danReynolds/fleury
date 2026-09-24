@@ -24,5 +24,8 @@
     "@fontsource-variable/space-grotesk": "^5.2.10",
     "astro": "^6.4.8",
     "sharp": "^0.35.2"
+  },
+  "devDependencies": {
+    "asciinema-player": "3.6.3"
   }
 }

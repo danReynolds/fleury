@@ -1,0 +1,21 @@
+---
+import FleuryExample from './FleuryExample.astro';
+---
+
+<div class="inline-showcase">
+  <FleuryExample id="showcase.inline" cols={84} rows={29} interactive expandable={false} />
+  <p class="inline-caption">Name your project, review it, then finish back at the prompt. The shell is a browser preview; the form is real Fleury. Configuration stays in memory.</p>
+</div>
+
+<style>
+  .inline-showcase { width: 100%; max-width: 60rem; margin-block: 1.5rem; }
+  .inline-showcase :global(.fleury-example) { margin: 0; }
+  .inline-showcase :global(.fleury-frame) { display: block; }
+  .inline-showcase :global(.fleury-host) { width: 100% !important; }
+  .inline-showcase :global(.fleury-host-wrap) { padding: .5rem; }
+  .inline-caption { margin-top: .65rem; max-width: 75ch; color: var(--sl-color-gray-2); font-size: .85rem; line-height: 1.65; }
+  @media (max-width: 40rem) {
+    .inline-showcase :global(.fleury-host) { font-size: 12px; }
+    .inline-showcase :global(.fleury-hint) { display: none; }
+  }
+</style>
