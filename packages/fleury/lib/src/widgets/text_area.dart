@@ -976,6 +976,7 @@ class RenderTextArea extends RenderObject implements CaretHost {
   set policy(CellWidthPolicy value) {
     if (_policy == value) return;
     _policy = value;
+    _widestOf = null;
     markNeedsLayout();
   }
 
@@ -1095,12 +1096,12 @@ class RenderTextArea extends RenderObject implements CaretHost {
   @override
   CellSize performLayout(CellConstraints constraints) {
     final lines = _showPlaceholder ? _linesOf(_placeholder) : _lines;
-    var widest = 0;
-    for (final line in lines) {
-      final w = _lineDisplayWidth(line);
-      if (w > widest) widest = w;
-    }
-    final cols = constraints.hasBoundedWidth ? constraints.maxCols! : widest;
+    // Only an unbounded width sizes to the content; a bounded one never
+    // needs the widest line, and measuring it walks every grapheme of the
+    // document on each keystroke and caret move.
+    final cols = constraints.hasBoundedWidth
+        ? constraints.maxCols!
+        : _widestLine(lines);
     int rows;
     if (_maxLines != null) {
       // Auto-grow: height tracks the content between minLines and maxLines.
@@ -1134,6 +1135,23 @@ class RenderTextArea extends RenderObject implements CaretHost {
     _syncHorizontalScroll(lines, nextSize.cols);
     return nextSize;
   }
+
+  /// The widest of [lines], measured once per line list: the split is
+  /// memoized per text, so a caret move reuses the last measure.
+  int _widestLine(List<String> lines) {
+    if (identical(lines, _widestOf)) return _widest;
+    var widest = 0;
+    for (final line in lines) {
+      final w = _lineDisplayWidth(line);
+      if (w > widest) widest = w;
+    }
+    _widestOf = lines;
+    _widest = widest;
+    return widest;
+  }
+
+  List<String>? _widestOf;
+  int _widest = 0;
 
   int _lineDisplayWidth(String line) {
     var width = 0;
