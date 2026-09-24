@@ -190,6 +190,36 @@ void main() {
         );
       },
     );
+
+    test(
+      'a frame requested again in the same turn renders before the timers '
+      'that turn created',
+      () async {
+        // Timers fire in deadline order. A fresh zero-delay timer for the
+        // second frame would sort after a timer that fell due while the
+        // request's handler ran, so a handler slower than a test's settle
+        // delay (the first error report, a cold JIT path) let the settle win.
+        // The second frame waits for the end of the turn it was requested in.
+        final order = <String>[];
+        late final FrameScheduler s;
+        s = FrameScheduler(
+          clock: FakeClock(),
+          onRender: (reason) {
+            order.add(reason);
+            if (reason != 'first') return;
+            Timer(const Duration(milliseconds: 1), () => order.add('timer'));
+            final handler = Stopwatch()..start();
+            while (handler.elapsedMilliseconds < 5) {}
+            s.requestFrame('second');
+          },
+        );
+
+        s.requestFrame('first');
+        await Future<void>.delayed(const Duration(milliseconds: 30));
+
+        expect(order, ['first', 'second', 'timer']);
+      },
+    );
   });
 
   test('dispose makes further requests no-ops', () {
