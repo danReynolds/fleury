@@ -134,11 +134,64 @@ final Map<String, KeyPosition> positionByDomCode = Map.unmodifiable({
 /// [SpecialKey] → the position producing it on a US layout, where one
 /// exists. Functional keys are layout-independent, so a parsed special
 /// implies its position without flag-4 data — this is how arrows and
-/// F-keys get positions on every tier that reports them as keys.
-/// Partial: the keypad *navigation* specials (KP_LEFT…KP_BEGIN) have no
-/// DOM position (browsers report `Numpad4` etc. regardless of NumLock) and
-/// hyper/ISO-level modifiers have no standard DOM code.
+/// F-keys get positions on every tier that reports them as keys. The keypad
+/// *navigation* specials (KP_LEFT…KP_BEGIN, what the digit keys send with
+/// NumLock off) sit on the digit keys' positions: the DOM reports `Numpad4`
+/// for that key whatever NumLock says. Partial: hyper/ISO-level modifiers
+/// have no standard DOM code.
 final Map<SpecialKey, KeyPosition> positionBySpecial = Map.unmodifiable({
   for (final position in KeyPosition.values)
     if (position.special != null) position.special!: position,
+  SpecialKey.keypadLeft: KeyPosition.numpad4,
+  SpecialKey.keypadRight: KeyPosition.numpad6,
+  SpecialKey.keypadUp: KeyPosition.numpad8,
+  SpecialKey.keypadDown: KeyPosition.numpad2,
+  SpecialKey.keypadPageUp: KeyPosition.numpad9,
+  SpecialKey.keypadPageDown: KeyPosition.numpad3,
+  SpecialKey.keypadHome: KeyPosition.numpad7,
+  SpecialKey.keypadEnd: KeyPosition.numpad1,
+  SpecialKey.keypadInsert: KeyPosition.numpad0,
+  SpecialKey.keypadDelete: KeyPosition.numpadDecimal,
+  SpecialKey.keypadBegin: KeyPosition.numpad5,
 });
+
+/// A keypad key → what it means: the character a text key types, or the
+/// main-block key a navigation key stands for — what the DOM reports as
+/// `KeyboardEvent.key` for the same press.
+///
+/// The terminal parser folds keypad reports through this, so KP_1 types a
+/// 1, KP Enter is Enter and KP_LEFT is ArrowLeft on every surface, and every
+/// consumer of those keys works from the keypad too. The keypad identity is
+/// not lost: it rides the event's position (`Numpad1`, `NumpadEnter`), as it
+/// does on the DOM. [SpecialKey.keypadBegin] has no main-block key and stays
+/// itself.
+const Map<SpecialKey, KeyCode> keypadMeaning = {
+  SpecialKey.keypad0: KeyCode.char('0'),
+  SpecialKey.keypad1: KeyCode.char('1'),
+  SpecialKey.keypad2: KeyCode.char('2'),
+  SpecialKey.keypad3: KeyCode.char('3'),
+  SpecialKey.keypad4: KeyCode.char('4'),
+  SpecialKey.keypad5: KeyCode.char('5'),
+  SpecialKey.keypad6: KeyCode.char('6'),
+  SpecialKey.keypad7: KeyCode.char('7'),
+  SpecialKey.keypad8: KeyCode.char('8'),
+  SpecialKey.keypad9: KeyCode.char('9'),
+  SpecialKey.keypadDecimal: KeyCode.char('.'),
+  SpecialKey.keypadDivide: KeyCode.char('/'),
+  SpecialKey.keypadMultiply: KeyCode.char('*'),
+  SpecialKey.keypadSubtract: KeyCode.char('-'),
+  SpecialKey.keypadAdd: KeyCode.char('+'),
+  SpecialKey.keypadEqual: KeyCode.char('='),
+  SpecialKey.keypadSeparator: KeyCode.char(','),
+  SpecialKey.keypadEnter: KeyCode.enter,
+  SpecialKey.keypadLeft: KeyCode.arrowLeft,
+  SpecialKey.keypadRight: KeyCode.arrowRight,
+  SpecialKey.keypadUp: KeyCode.arrowUp,
+  SpecialKey.keypadDown: KeyCode.arrowDown,
+  SpecialKey.keypadPageUp: KeyCode.pageUp,
+  SpecialKey.keypadPageDown: KeyCode.pageDown,
+  SpecialKey.keypadHome: KeyCode.home,
+  SpecialKey.keypadEnd: KeyCode.end,
+  SpecialKey.keypadInsert: KeyCode.insert,
+  SpecialKey.keypadDelete: KeyCode.delete,
+};

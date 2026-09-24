@@ -543,10 +543,18 @@ void main() {
       ]);
     });
 
-    test('application-keypad reports retain keypad identity', () {
-      expect(_parse('\x1bOp\x1bOM'.codeUnits), const <TuiEvent>[
-        KeyEvent(KeyCode.keypad0, position: KeyPosition.numpad0),
-        KeyEvent(KeyCode.keypadEnter, position: KeyPosition.numpadEnter),
+    test('application-keypad reports fold as the Kitty keypad does', () {
+      expect(_parse('\x1bOp\x1bOM\x1bOk\x1bOE'.codeUnits), const <TuiEvent>[
+        InputBatch(
+          key: KeyEvent(KeyCode.char('0'), position: KeyPosition.numpad0),
+          committedText: '0',
+        ),
+        KeyEvent(KeyCode.enter, position: KeyPosition.numpadEnter),
+        InputBatch(
+          key: KeyEvent(KeyCode.char('+'), position: KeyPosition.numpadAdd),
+          committedText: '+',
+        ),
+        KeyEvent(KeyCode.keypadBegin, position: KeyPosition.numpad5),
       ]);
     });
   });
@@ -1163,16 +1171,20 @@ void main() {
 
       test('the unmapped-PUA drop holds across the whole block', () {
         // Sweep the functional PUA block: every mapped codepoint yields a
-        // KeyEvent; every unmapped one yields nothing — never text.
+        // key (a keypad text key with the character it types); every
+        // unmapped one yields nothing — never private-use text.
         for (var cp = 0xE000; cp <= 0xF8FF; cp += 7) {
           final events = _parse(csiu('$cp'));
-          if (kittyFunctionalKeys.containsKey(cp) ||
-              cp == 13 ||
-              cp == 9 ||
-              cp == 27 ||
-              cp == 8 ||
-              cp == 127) {
-            expect(events.single, isA<KeyEvent>(), reason: 'cp $cp');
+          final special = kittyFunctionalKeys[cp];
+          if (special != null) {
+            final event = events.single;
+            final typed = keypadMeaning[special]?.character;
+            if (typed == null) {
+              expect(event, isA<KeyEvent>(), reason: 'cp $cp');
+            } else {
+              expect(event, isA<InputBatch>(), reason: 'cp $cp');
+              expect((event as InputBatch).committedText, typed);
+            }
           } else {
             expect(events, isEmpty, reason: 'cp $cp');
           }
@@ -1240,14 +1252,81 @@ void main() {
         );
       });
 
-      test('KP Enter is distinct from Enter — nothing silently folded', () {
-        expect(
-          _parse(csiu('57414')).single,
-          const KeyEvent(
-            KeyCode.keypadEnter,
-            position: KeyPosition.numpadEnter,
-          ),
-        );
+      group('the keypad means what it types, on the keypad position', () {
+        // The DOM reports a numpad press by its meaning (`key`: "1", "Enter",
+        // "ArrowLeft") and its place (`code`: "Numpad1"); the parser emits
+        // the same event, so text fields, buttons and lists take the keypad
+        // as their own keys and a keypad binding still has its position.
+        test('a keypad digit types its associated text', () {
+          // KP_1 with the NumLock bit (128, so mods 129) and text "1".
+          expect(
+            _parse(csiu('57400;129;49')).single,
+            const InputBatch(
+              key: KeyEvent(KeyCode.char('1'), position: KeyPosition.numpad1),
+              committedText: '1',
+            ),
+          );
+        });
+
+        test('a keypad operator types without associated text', () {
+          // The disambiguate-only tier (flag 1 without 16) sends no text.
+          expect(
+            _parse(csiu('57413')).single,
+            const InputBatch(
+              key: KeyEvent(KeyCode.char('+'), position: KeyPosition.numpadAdd),
+              committedText: '+',
+            ),
+          );
+        });
+
+        test('a chorded or released keypad digit is a key without text', () {
+          expect(
+            _parse(csiu('57400;5')).single,
+            const KeyEvent(
+              KeyCode.char('1'),
+              modifiers: {KeyModifier.ctrl},
+              position: KeyPosition.numpad1,
+            ),
+          );
+          expect(
+            _parse(csiu('57400;1:3')).single,
+            const KeyEvent(
+              KeyCode.char('1'),
+              type: KeyEventType.up,
+              position: KeyPosition.numpad1,
+            ),
+          );
+        });
+
+        test('KP Enter is Enter, on the keypad', () {
+          expect(
+            _parse(csiu('57414;129')).single,
+            const KeyEvent(KeyCode.enter, position: KeyPosition.numpadEnter),
+          );
+        });
+
+        test('NumLock-off keys navigate, on their digit keys', () {
+          expect(
+            _parse(csiu('57417')).single,
+            const KeyEvent(KeyCode.arrowLeft, position: KeyPosition.numpad4),
+          );
+          expect(
+            _parse(csiu('57424;2')).single,
+            const KeyEvent(
+              KeyCode.end,
+              modifiers: {KeyModifier.shift},
+              position: KeyPosition.numpad1,
+            ),
+          );
+          expect(
+            _parse(csiu('57426')).single,
+            const KeyEvent(KeyCode.delete, position: KeyPosition.numpadDecimal),
+          );
+          expect(
+            _parse(csiu('57427')).single,
+            const KeyEvent(KeyCode.keypadBegin, position: KeyPosition.numpad5),
+          );
+        });
       });
 
       test('lone modifier keys decode with phases', () {

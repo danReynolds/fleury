@@ -76,9 +76,11 @@ enum SpecialKey {
   pause,
   menu,
 
-  // Keypad. Distinct from the main-cluster keys with the same meanings —
-  // the protocol reports them separately and so does Fleury; nothing is
-  // silently folded.
+  // Keypad: the terminal protocols' identities for the keypad keys. The
+  // parser folds a keypad report to what it means, as the DOM does — KP_1
+  // types a 1, KP Enter is Enter (`keypadMeaning`) — and carries the keypad
+  // itself on the event's [KeyPosition]. Only [keypadBegin], which has no
+  // main-block meaning, reaches an event as a keypad code.
   keypad0,
   keypad1,
   keypad2,
@@ -787,10 +789,11 @@ sealed class KeySequence {
   static const KeyCode f12 = KeyCode.f12;
 
   // RFC 0020 vocabulary forwards, so `.f13` / `.mediaPlay` resolve in a
-  // KeySequence context like every other atom. (Sided modifier *keys* and
-  // keypad keys are bindable via their KeyCode statics; they are omitted
-  // here because bare `.leftShift` in a binding position is more often the
-  // start of a mistyped chord than an intended lone-modifier binding.)
+  // KeySequence context like every other atom. (Sided modifier *keys* are
+  // bindable via their KeyCode statics; they are omitted here because bare
+  // `.leftShift` in a binding position is more often the start of a mistyped
+  // chord than an intended lone-modifier binding. A keypad key binds by its
+  // meaning, or by its [KeyPosition] for the keypad key itself.)
   static const KeyCode f13 = KeyCode.f13;
   static const KeyCode f14 = KeyCode.f14;
   static const KeyCode f15 = KeyCode.f15;
