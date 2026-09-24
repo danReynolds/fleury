@@ -85,8 +85,8 @@ void main() {
   late bool answerCursor;
   late bool holdCursor;
   late int cursorQueries;
-  const mode = TerminalMode(
-    inlineRows: 4,
+  const mode = TerminalMode.inline(
+    rows: 4,
     keyboardProtocol: KeyboardProtocolMode.legacy,
     mouse: true,
   );

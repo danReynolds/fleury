@@ -11,7 +11,7 @@ This activates the adopter-demand trigger in [RFC 0016](../rfcs/0016-inline-mode
 ## Public contract
 
 ```dart
-await runApp(app, mode: const TerminalMode(inlineRows: 14, mouse: true));
+await runApp(app, mode: const TerminalMode.inline(rows: 14, mouse: true));
 print('Done.');
 ```
 
@@ -85,7 +85,7 @@ inline viewport.
   outside mouse release, pending-resize shutdown, handoff height requests,
   invalid/oversized recovery metadata, and owned-only clearing. Rendering tests
   include 300 randomized diffs preserving surrounding simulated shell rows.
-- Temporary RK build with `TerminalMode(inlineRows: 20)`: real `use` selects
+- Temporary RK build with `TerminalMode.inline(rows: 20)`: real `use` selects
   and executes a disposable Local installation; `init` reviews before creating
   configuration. Both restore terminal modes without alternate-screen entry.
   RK's checked-in dependency and the user's installations are unchanged.

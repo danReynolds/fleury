@@ -18,7 +18,7 @@ Future<void> main(List<String> args) async {
     ),
     mode: args.contains('--full-screen')
         ? const TerminalMode(mouse: true)
-        : const TerminalMode(inlineRows: 21, mouse: true),
+        : const TerminalMode.inline(rows: 21, mouse: true),
     enableHotReload: false,
     debug: const DebugConfig(enabled: false),
   );

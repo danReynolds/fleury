@@ -53,7 +53,7 @@
   the current size instead of the previous one.
 - `Animation.loop` keeps running through hot reload. Pulse, shimmer, and
   other repeating effects no longer freeze after the first reload.
-- `TerminalMode(inlineRows: ...)` runs a bounded command UI in the main
+- `TerminalMode.inline(rows: ...)` runs a bounded command UI in the main
   terminal buffer on macOS/Linux. `TerminalSession.resizeInline` changes its
   height; mouse/caret offsets, resize, subprocess handoff, suspend/resume, and
   development restart/crash cleanup share the owned-region lifecycle. Existing

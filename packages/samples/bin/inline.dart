@@ -41,8 +41,8 @@ Future<void> runInlineSetup(List<String> args) async {
     ),
     mode: fullScreen
         ? const TerminalMode(mouse: true, mouseMotion: true)
-        : TerminalMode(
-            inlineRows: InlineSetupStep.configure.rows,
+        : TerminalMode.inline(
+            rows: InlineSetupStep.configure.rows,
             mouse: true,
             mouseMotion: true,
           ),

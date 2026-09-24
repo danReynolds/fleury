@@ -54,7 +54,7 @@ await runApp(
       },
     )),
   ),
-  mode: const TerminalMode(inlineRows: 17, mouse: true),
+  mode: const TerminalMode.inline(rows: 17, mouse: true),
   enableHotReload: false,
 );
 print(result?.summary ?? 'Setup cancelled.');
@@ -87,7 +87,7 @@ prompt. It uses Fleury's browser renderer, not a native terminal session.
 
 ## Start small
 
-`TerminalMode(inlineRows: ...)` opts into a bounded, full-width main-buffer
+`TerminalMode.inline(rows: ...)` opts into a bounded, full-width main-buffer
 region on macOS/Linux. Height is explicit and clamped to the terminal; widgets
 keep their normal layout and input behavior. Fleury restores the terminal when
 `runApp` completes, so the command can print a useful result.

@@ -5,9 +5,9 @@ import 'package:fleury/src/terminal/terminal_sequences.dart';
 import 'package:test/test.dart';
 
 void main() {
-  test('inlineRows selects bounded main-screen rendering', () {
+  test('inline constructor selects bounded main-screen rendering', () {
     const fullScreen = TerminalMode();
-    const inline = TerminalMode(inlineRows: 10, mouse: true);
+    const inline = TerminalMode.inline(rows: 10, mouse: true);
     expect(fullScreen.alternateScreen, isTrue);
     expect(fullScreen.inlineRows, isNull);
     expect(inline.alternateScreen, isFalse);
@@ -25,17 +25,9 @@ void main() {
     expect(fallback.keyboardProtocol, KeyboardProtocolMode.legacy);
   });
 
-  test('invalid inline configurations fail early', () {
-    expect(() => TerminalMode(inlineRows: 0), throwsA(isA<AssertionError>()));
-    expect(() => TerminalMode(inlineRows: -1), throwsA(isA<AssertionError>()));
-    expect(
-      () => TerminalMode(inlineRows: 10, alternateScreen: true),
-      throwsA(isA<AssertionError>()),
-    );
-    expect(
-      () => TerminalMode(inlineRows: 10, rawInput: false),
-      throwsA(isA<AssertionError>()),
-    );
+  test('inline height must be positive', () {
+    expect(() => TerminalMode.inline(rows: 0), throwsA(isA<AssertionError>()));
+    expect(() => TerminalMode.inline(rows: -1), throwsA(isA<AssertionError>()));
     expect(const TerminalMode(alternateScreen: false).inlineRows, isNull);
   });
 }

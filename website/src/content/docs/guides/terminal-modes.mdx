@@ -77,12 +77,12 @@ Use the same widget tree with either configuration:
 const TerminalMode(mouse: true)
 
 // Inline: a region up to 17 rows tall.
-const TerminalMode(inlineRows: 17, mouse: true)
+const TerminalMode.inline(rows: 17, mouse: true)
 ```
 
-Pass that value as `mode:` to `runApp`. Setting `inlineRows` selects inline mode
-and its initial height; leave it unset for full-screen. Select the mode for the session; the
-current API does not switch an active session between full-screen and inline.
+Pass that value as `mode:` to `runApp`. The inline constructor requires a row
+count; the full-screen constructor has no height setting. Choose at startup:
+the current API does not switch an active session between the two modes.
 Setting `TerminalMode(alternateScreen: false)` alone does not create an inline
 region: it provides neither the allocation nor the rendering bounds.
 

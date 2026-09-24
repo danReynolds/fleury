@@ -70,7 +70,7 @@ wires input dispatch and the frame scheduler, and renders your widget
 tree with a diffing ANSI renderer. Unhandled Ctrl+C exits by default.
 
 For a command-sized UI below the shell prompt, pass
-`mode: const TerminalMode(inlineRows: 14)`. Earlier output stays in the main
+`mode: const TerminalMode.inline(rows: 14)`. Earlier output stays in the main
 buffer; Fleury clears its live region on exit so you can print a result.
 See [inline terminal commands](doc/inline_terminal.md) or run
 `dart run example/inline_picker.dart`.
