@@ -138,12 +138,17 @@ class InputDispatcher {
   /// Whether a sequence is currently pending. Useful for tests.
   bool get hasPendingSequence => _pending != null;
 
-  /// The insertion a consumed printable key half owes suppression to
-  /// (§11): on surfaces that report printables as keys AND deliver their
-  /// text separately, consuming the key must drop the matching text — and
-  /// only that one. A non-matching insertion clears it rather than
-  /// swallowing unrelated input.
-  String? _suppressNextText;
+  /// The printable key half a split surface just walked, whose text is still
+  /// to come (§11): the DOM reports a printable as a keydown and delivers its
+  /// text as a separate `input` event. When the very next event is that
+  /// text, the two are one press, handled as a correlated batch is — the
+  /// text is dropped if the key half was consumed, and otherwise visits
+  /// binding scopes only, so each detector sees the press once. Any other
+  /// event ends the pairing, and text that is not this key's is not paired.
+  KeyEvent? _splitKeyHalf;
+
+  /// Whether a detector, binding or capture consumed [_splitKeyHalf].
+  bool _splitKeyHalfConsumed = false;
 
   /// Abandons an in-flight sequence as if the user pressed Esc: held events
   /// replay (a shorter binding fires, a text-owed char reaches the field) and
@@ -196,6 +201,9 @@ class InputDispatcher {
       _reportDeadControls();
       return true;
     }());
+    // A split key half pairs only with the event right after it.
+    final keyHalf = _splitKeyHalf;
+    _splitKeyHalf = null;
     if (event is InputBatch) {
       // A correlated key+text report (RFC 0020 §5). The key half feeds the
       // session/observation lanes and key-driven commands (positions, special
@@ -242,10 +250,9 @@ class InputDispatcher {
       return KeyEventResult.ignored;
     }
     if (event is TextInputEvent) {
-      final suppressed = _suppressNextText;
-      if (suppressed != null) {
-        _suppressNextText = null;
-        if (event.text == suppressed) return KeyEventResult.handled;
+      if (keyHalf != null && _isTextOfKey(event.text, keyHalf.code)) {
+        if (_splitKeyHalfConsumed) return KeyEventResult.handled;
+        return _dispatchText(event, keyAlreadyWalked: true, keyView: keyHalf);
       }
       return _dispatchText(event);
     }
@@ -260,19 +267,22 @@ class InputDispatcher {
     }
     if (event is KeyEvent) {
       _regularizeAndObserve(event);
-      if (_tryCapture(event)) return KeyEventResult.handled;
       // Stage 5 (§6): the key walk runs before text. Where printables
       // arrive as key events (reportsPrintableKeys — the DOM source), the
-      // committed text follows as a SEPARATE event, so a key consumed here
-      // must suppress it (§11's keydown/input pairing) — otherwise one
-      // press fires a character binding twice. The walk has to run first
-      // regardless: a positional gesture matches an identity the text half
-      // cannot carry.
+      // committed text follows as a SEPARATE event, which pairs with this
+      // key half (§11's keydown/input pairing, [_splitKeyHalf]) — otherwise
+      // one press fires a character binding twice. The walk has to run
+      // first regardless: a positional gesture matches an identity the text
+      // half cannot carry.
       final splitText =
           keyboardSession.capabilities.reportsPrintableKeys &&
           event.code.isCharacter &&
           event.type != KeyEventType.up &&
           event.modifiers.every((m) => m == KeyModifier.shift);
+      if (_tryCapture(event)) {
+        if (splitText) _awaitSplitText(event, consumed: true);
+        return KeyEventResult.handled;
+      }
       final result = _dispatchKeyEvent(
         event,
         lane: splitText ? _BindingLane.key : _BindingLane.all,
@@ -283,16 +293,33 @@ class InputDispatcher {
         preservePendingOnMiss: splitText || _isLoneModifierKey(event.code),
       );
       if (splitText) {
-        if (result == KeyEventResult.handled) {
-          // Drop the paired insertion, and only that one.
-          _suppressNextText = event.code.character;
-        }
-        // Unconsumed: the text half still owns it, exactly as before.
+        // Consumed, the paired insertion is dropped; unconsumed, the text
+        // half still owns it.
+        _awaitSplitText(event, consumed: result == KeyEventResult.handled);
         return KeyEventResult.ignored;
       }
       return result;
     }
     return KeyEventResult.ignored;
+  }
+
+  void _awaitSplitText(KeyEvent keyHalf, {required bool consumed}) {
+    _splitKeyHalf = keyHalf;
+    _splitKeyHalfConsumed = consumed;
+  }
+
+  /// Whether [text] is what the printable key [code] typed: its character,
+  /// or an ASCII capital of it. A printable's identity is unshifted (Shift
+  /// and Caps Lock ride the modifiers and the text), so the DOM reports
+  /// Shift+D as `d` and types `D`.
+  static bool _isTextOfKey(String text, KeyCode code) {
+    final character = code.character!;
+    if (text == character) return true;
+    if (text.length != 1 || character.length != 1) return false;
+    final unit = text.codeUnitAt(0);
+    return unit >= 0x41 &&
+        unit <= 0x5A &&
+        unit + 0x20 == character.codeUnitAt(0);
   }
 
   /// Focus and gestures share the visible hit order. Resolve before callbacks

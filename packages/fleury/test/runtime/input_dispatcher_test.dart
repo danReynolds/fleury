@@ -1487,6 +1487,121 @@ void main() {
     });
   });
 
+  group('a split keydown and its input are one press (§11)', () {
+    // The DOM reports a printable as a keydown — its identity lowered, Shift
+    // in the modifiers — and then its text as a separate `input` event. The
+    // two are one press: each detector sees it once, and a consumed key
+    // drops its text whatever case that text is in.
+    _TestHarness splitSurface(Widget app) {
+      final h = _TestHarness();
+      h.dispatcher.updateKeyboardCapabilities(KeyboardCapabilities.full);
+      h.mountRoot(app);
+      return h;
+    }
+
+    void pressDom(
+      _TestHarness h,
+      String key,
+      String text, {
+      bool shift = false,
+    }) {
+      h.dispatcher.dispatch(
+        KeyEvent(KeyCode.char(key), modifiers: {if (shift) KeyModifier.shift}),
+      );
+      h.dispatcher.dispatch(TextInputEvent(text));
+    }
+
+    String describe(KeyEvent event) =>
+        '${event.code.character}${event.hasShift ? '+shift' : ''}';
+
+    test('an unclaimed printable reaches a detector once', () {
+      final seen = <String>[];
+      final h = splitSurface(
+        KeyDetector(
+          onKey: (event) => seen.add(describe(event)),
+          child: const Focus(autofocus: true, child: EmptyBox()),
+        ),
+      );
+
+      pressDom(h, 'x', 'x');
+      pressDom(h, 'x', 'X', shift: true);
+
+      expect(seen, ['x', 'x+shift']);
+    });
+
+    test('a consumed Shift+letter drops the capital it types', () {
+      final seen = <String>[];
+      final events = <String>[];
+      final h = splitSurface(
+        KeyDetector(
+          onKey: (event) {
+            seen.add(describe(event));
+            if (event.code.character!.toLowerCase() == 'd') event.consume();
+          },
+          child: _ClaimLog(events: events),
+        ),
+      );
+
+      pressDom(h, 'd', 'D', shift: true);
+
+      expect(seen, ['d+shift']);
+      expect(events, isEmpty, reason: 'the field never sees the D');
+    });
+
+    test('a consumed key keeps text that is not its own', () {
+      final events = <String>[];
+      final h = splitSurface(
+        KeyDetector(
+          onKey: (event) {
+            if (event.code == KeyCode.a) event.consume();
+          },
+          child: _ClaimLog(events: events),
+        ),
+      );
+
+      pressDom(h, 'a', 'あ');
+
+      expect(events, ['text:あ']);
+    });
+
+    test('the pairing lasts only until the next event', () {
+      final events = <String>[];
+      final h = splitSurface(
+        KeyDetector(
+          onKey: (event) {
+            if (event.code == KeyCode.d) event.consume();
+          },
+          child: _ClaimLog(events: events),
+        ),
+      );
+
+      h.dispatcher.dispatch(const KeyEvent(KeyCode.d));
+      h.dispatcher.dispatch(const KeyEvent(KeyCode.escape));
+      h.dispatcher.dispatch(const TextInputEvent('d'));
+
+      expect(events, ['text:d']);
+    });
+
+    test('a key half a nextKey capture takes drops its text', () async {
+      final events = <String>[];
+      late BuildContext context;
+      final h = splitSurface(
+        Builder(
+          builder: (c) {
+            context = c;
+            return _ClaimLog(events: events);
+          },
+        ),
+      );
+      final captured = h.dispatcher.captureNextKey(context);
+
+      pressDom(h, 'x', 'x');
+
+      expect((await captured)?.code, KeyCode.x);
+      expect(events, isEmpty, reason: 'the captured press types nothing');
+    });
+  });
+
   group('Extended sequence semantics', () {
     test('a 3-step chord (.ctrl.x.ctrl.c) fires after all three events', () {
       final calls = <String>[];
