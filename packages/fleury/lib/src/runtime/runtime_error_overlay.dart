@@ -1,5 +1,7 @@
 import 'dart:async';
 
+import 'package:meta/meta.dart';
+
 import '../foundation/change_notifier.dart';
 import '../rendering/border.dart';
 import '../rendering/cell.dart';
@@ -48,6 +50,14 @@ class RuntimeErrorReporter with Notifier {
   RuntimeErrorRecord? _current;
   int _shownCount = 0;
   Timer? _dismissTimer;
+
+  Zone _zone = Zone.current;
+
+  /// Runs the auto-dismiss timer in [zone]: the runtime's guarded zone. A
+  /// report arrives from the zone handler's parent zone, where the timer —
+  /// and every listener it notifies — would otherwise run unguarded.
+  @internal
+  void bindZone(Zone zone) => _zone = zone;
   bool _disposed = false;
 
   /// The error currently surfaced, or null when nothing is showing.
@@ -86,7 +96,10 @@ class RuntimeErrorReporter with Notifier {
     if (_history.length > _historyCap) _history.removeAt(0);
     _dismissTimer?.cancel();
     if (autoDismiss > Duration.zero) {
-      _dismissTimer = Timer(autoDismiss, dismiss);
+      _dismissTimer = _zone.createTimer(
+        autoDismiss,
+        _zone.bindCallbackGuarded(dismiss),
+      );
     }
     notify();
   }

@@ -47,7 +47,74 @@ class _ChainState extends State<_Chain> {
   }
 }
 
+/// Queues a `setState` from a microtask on every build — the shape of
+/// `Future.value(x).then(...)` or an async loop over completed futures.
+class _MicrotaskChain extends StatefulWidget {
+  const _MicrotaskChain({required this.target, required this.onFrame});
+  final int target;
+  final void Function(int frame) onFrame;
+
+  @override
+  State<_MicrotaskChain> createState() => _MicrotaskChainState();
+}
+
+class _MicrotaskChainState extends State<_MicrotaskChain> {
+  var _frames = 0;
+
+  @override
+  Widget build(BuildContext context) {
+    widget.onFrame(_frames);
+    if (_frames < widget.target) {
+      scheduleMicrotask(() {
+        if (mounted) setState(() => _frames++);
+      });
+    }
+    return Text('frame $_frames');
+  }
+}
+
 void main() {
+  test(
+    'a setState queued as a microtask by build yields to timers between frames',
+    () async {
+      const target = 150;
+      final driver = FakeTerminalDriver();
+      var ticks = 0;
+      final ticksAtFrame = <int, int>{};
+      final done = Completer<void>();
+      final beacon = Timer.periodic(const Duration(milliseconds: 1), (_) {
+        ticks++;
+      });
+
+      final app = runApp(
+        _MicrotaskChain(
+          target: target,
+          onFrame: (frame) {
+            ticksAtFrame[frame] = ticks;
+            if (frame == target && !done.isCompleted) done.complete();
+          },
+        ),
+        driver: driver,
+        requireInteractiveTerminal: false,
+      );
+
+      await done.future.timeout(const Duration(seconds: 20));
+      beacon.cancel();
+      requestExit();
+      await app.timeout(const Duration(seconds: 8));
+
+      final duringChain = ticksAtFrame[target]! - ticksAtFrame[1]!;
+      expect(
+        duringChain,
+        greaterThan(0),
+        reason:
+            'the 1 ms beacon never fired across ${target - 1} frames: frames '
+            'chained as microtasks and starved the event loop',
+      );
+    },
+    timeout: const Timeout(Duration(seconds: 40)),
+  );
+
   test(
     'a self-re-registering post-frame callback yields to timers between frames',
     () async {

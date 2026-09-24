@@ -984,6 +984,12 @@ Future<AppExit> _runAppImpl(
   void runGuarded() {
     runZonedGuarded(
       () async {
+        // The binding and the error reporter were built before this zone
+        // existed. Their timers — animation ticks, the banner's dismiss —
+        // run here from now on, so an error in one reaches this guard even
+        // when the ticker was started from outside it.
+        binding.tickerScheduler.bindZone(Zone.current);
+        errorReporter.bindZone(Zone.current);
         // Why the app ended; overwritten by the exit completer's value on
         // the normal path (the fatal-error path bypasses it entirely and
         // completes `done` with the error instead).

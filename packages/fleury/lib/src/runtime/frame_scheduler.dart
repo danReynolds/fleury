@@ -47,7 +47,8 @@ class FrameScheduler {
     this.minFrameInterval = Duration.zero,
     FrameFlushScheduler? flushScheduler,
   }) : _clock = clock,
-       _onRender = onRender {
+       _onRender = onRender,
+       _zone = Zone.current {
     _flushScheduler = flushScheduler ?? _defaultFlush;
   }
 
@@ -55,30 +56,35 @@ class FrameScheduler {
   final FrameRenderCallback _onRender;
   late final FrameFlushScheduler _flushScheduler;
 
-  /// Depth of [_onRender] calls on the stack (a counter, not a bool: a
-  /// synchronous test scheduler can nest a flush inside a render). Non-zero
-  /// means a request arriving now is re-entrant and must not chain a
-  /// microtask — see [_defaultFlush].
-  int _renderDepth = 0;
+  /// The zone this scheduler was built in: the runtime's guarded zone. Every
+  /// flush runs here, whoever requested the frame. A request from a listener
+  /// registered in `main()` would otherwise run the frame — and every timer
+  /// it starts — outside the guard that restores the terminal.
+  final Zone _zone;
 
-  /// The built-in flush: a microtask when the scheduler is idle (the
-  /// historical "as soon as possible"), a `Timer` when a render is on the
-  /// stack or a cap defers the flush.
+  /// Set when a frame renders, cleared once the event loop turns. While set,
+  /// the next flush waits for that turn — see [_defaultFlush].
+  bool _flushedThisTurn = false;
+
+  /// The built-in flush: a microtask for the first frame of an event-loop
+  /// turn (the historical "as soon as possible"), a `Timer` for any later
+  /// frame in the same turn or when a cap defers the flush.
   ///
   /// `Timer(Duration.zero, …)` is a macrotask: the event loop turns once
   /// before the next frame, so input, signals, and timers get their turn
-  /// between frames instead of after the whole chain. Without this, a
-  /// chunked paste — one post-frame callback per chunk, each scheduling the
-  /// next — ran to completion as one unbroken microtask sequence: a 512 KiB
-  /// paste held the isolate for ~12 s, and a post-frame callback that
-  /// re-registers itself pinned it forever. SIGINT/SIGTERM are event-loop
+  /// between frames instead of after the whole chain. Two microtask frames in
+  /// one turn is how a chain starts — a post-frame callback per paste chunk,
+  /// or a `setState` from a microtask the frame itself queued — and a chain
+  /// never yields: a 512 KiB paste held the isolate for ~12 s, and a
+  /// self-renewing chain pinned it forever. SIGINT/SIGTERM are event-loop
   /// deliveries too, so the only exit was SIGKILL.
   FrameFlushCancellation? _defaultFlush(Duration delay, void Function() flush) {
-    if (delay <= Duration.zero && _renderDepth == 0) {
-      scheduleMicrotask(flush);
+    final guarded = _zone.bindCallbackGuarded(flush);
+    if (delay <= Duration.zero && !_flushedThisTurn) {
+      _zone.scheduleMicrotask(guarded);
       return null;
     }
-    final timer = Timer(delay, flush);
+    final timer = _zone.createTimer(delay, guarded);
     return timer.cancel;
   }
 
@@ -144,12 +150,11 @@ class FrameScheduler {
     _lastRenderAt = _clock.now;
     final reason = _reason;
     _reason = 'scheduled';
-    _renderDepth++;
-    try {
-      _onRender(reason);
-    } finally {
-      _renderDepth--;
+    if (!_flushedThisTurn) {
+      _flushedThisTurn = true;
+      _zone.createTimer(Duration.zero, () => _flushedThisTurn = false);
     }
+    _onRender(reason);
   }
 
   void dispose() {
