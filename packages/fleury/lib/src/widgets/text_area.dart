@@ -677,9 +677,10 @@ class _TextAreaState extends State<TextArea>
     }
     final offset = _offsetForPointer(details);
     if (offset == null) return;
+    final at = _finishPasteAround(offset);
     _controller.selection = _pointerSelection.down(
       _controller.value,
-      offset,
+      at,
       details,
       obscured: widget.obscureText,
     );
@@ -693,12 +694,26 @@ class _TextAreaState extends State<TextArea>
     }
     final offset = _offsetForPointer(details);
     if (offset == null) return;
+    final at = _finishPasteAround(offset);
     final selection = _pointerSelection.drag(
       _controller.value,
-      offset,
+      at,
       obscured: widget.obscureText,
     );
     if (selection != null) _controller.selection = selection;
+  }
+
+  /// Finishes a paste still being applied before a pointer moves the caret,
+  /// as every key does: otherwise its remaining text would land at the
+  /// click, after the part already applied. [offset] was read from the
+  /// layout the user clicked, which predates the rest of the paste, so an
+  /// offset at or past the paste point moves past what it inserted.
+  int _finishPasteAround(int offset) {
+    final pasteAt = _controller.selection.start;
+    final before = _controller.text.length;
+    _paste.finish();
+    final grown = _controller.text.length - before;
+    return grown > 0 && offset >= pasteAt ? offset + grown : offset;
   }
 
   @override
