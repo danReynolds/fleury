@@ -7,34 +7,7 @@ import 'package:fleury/fleury.dart';
 import 'package:test/test.dart';
 
 import '../support/harness.dart';
-
-final class _Sink implements TuiEventSink {
-  final events = <TuiEvent>[];
-
-  @override
-  void add(TuiEvent event) => events.add(event);
-}
-
-/// Parses [bytes] as a terminal would deliver them and dispatches every
-/// event the parser emits.
-void _pressBytes(FleuryTester tester, String bytes) {
-  final sink = _Sink();
-  InputParser()
-    ..feed(bytes.codeUnits, sink)
-    ..flush(sink);
-  for (final event in sink.events) {
-    switch (event) {
-      case InputBatch():
-        tester.sendBatch(event);
-      case KeyEvent():
-        tester.sendKey(event);
-      case TextInputEvent(:final text):
-        tester.type(text);
-      default:
-        fail('unexpected event $event');
-    }
-  }
-}
+import '../support/terminal_input.dart';
 
 // Kitty reports with the NumLock bit (mods 129) and associated text, as a
 // lifecycle-tier session receives them.
@@ -51,7 +24,7 @@ void main() {
     final controller = TextEditingController();
     tester.pumpWidget(TextInput(controller: controller, autofocus: true));
 
-    _pressBytes(tester, '$_kp1$_kpAdd$_kp2');
+    pressTerminalBytes(tester, '$_kp1$_kpAdd$_kp2');
 
     expect(controller.text, '1+2');
   });
@@ -60,7 +33,7 @@ void main() {
     final controller = TextEditingController();
     tester.pumpWidget(TextInput(controller: controller, autofocus: true));
 
-    _pressBytes(tester, '\x1bOq\x1bOk\x1bOr');
+    pressTerminalBytes(tester, '\x1bOq\x1bOk\x1bOr');
 
     expect(controller.text, '1+2');
   });
@@ -76,7 +49,7 @@ void main() {
       ),
     );
 
-    _pressBytes(tester, _kpEnter);
+    pressTerminalBytes(tester, _kpEnter);
 
     expect(submitted, ['42']);
   });
@@ -86,11 +59,11 @@ void main() {
     tester.pumpWidget(TextInput(controller: controller, autofocus: true));
     tester.type('abc');
 
-    _pressBytes(tester, _kpLeft);
+    pressTerminalBytes(tester, _kpLeft);
     tester.type('x');
     expect(controller.text, 'abxc');
 
-    _pressBytes(tester, '$_kpHome$_kpDelete');
+    pressTerminalBytes(tester, '$_kpHome$_kpDelete');
     expect(controller.text, 'bxc');
   });
 
@@ -100,7 +73,7 @@ void main() {
       Button(text: 'OK', autofocus: true, onPressed: () => pressed++),
     );
 
-    _pressBytes(tester, _kpEnter);
+    pressTerminalBytes(tester, _kpEnter);
 
     expect(pressed, 1);
   });
@@ -115,7 +88,8 @@ void main() {
       ),
     );
 
-    _pressBytes(tester, '\x1b[57420u$_kpEnter'); // KP_2 (NumLock off): Down
+    // KP_2 with NumLock off is Down.
+    pressTerminalBytes(tester, '\x1b[57420u$_kpEnter');
 
     expect(selected, [1]);
   });
