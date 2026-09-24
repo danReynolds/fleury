@@ -7,11 +7,35 @@ String render(FleuryTester tester) =>
     tester.renderToString(size: tester.viewportSize, emptyMark: ' ');
 
 void main() {
+  testWidgets('pager callback preserves the reviewed setup on return', (
+    tester,
+  ) async {
+    InlineSetupResult? previewed;
+    tester.viewportSize = const CellSize(84, 21);
+    tester.pumpWidget(
+      InlineSetup(
+        onComplete: (_) {},
+        onOpenPager: (result) async => previewed = result,
+      ),
+    );
+    await tester.field('Project name').fill('review_me');
+    await tester.button('Review →').press();
+    await tester.button('View in pager').press();
+    expect(previewed?.name, 'review_me');
+    expect(render(tester), contains('Back from less.'));
+    expect(render(tester), contains('bin/review_me.dart'));
+    await tester.button('Back').press();
+    expect(render(tester), contains('review_me'));
+  });
+
   testWidgets('full-screen preview restores shell context after completion', (
     tester,
   ) async {
     tester.viewportSize = const CellSize(84, 29);
     tester.pumpWidget(const InlineSetupPreview(fullScreen: true));
+    expect(render(tester), contains(r'~/projects $ ls'));
+    expect(render(tester), isNot(contains('Project name')));
+    await tester.button('Run command').press();
     expect(render(tester), isNot(contains(r'~/projects $ ls')));
     await tester.field('Project name').fill('full_screen_project');
     await tester.button('Review →').press();

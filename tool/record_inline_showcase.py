@@ -7,6 +7,7 @@ The shell context is a fixture; every live UI frame comes from the native app.
 """
 import argparse
 import codecs
+import copy
 import fcntl
 import json
 import os
@@ -24,12 +25,14 @@ import pyte
 ROOT = Path(__file__).resolve().parents[1]
 
 
-def scene(binary):
+def scene(binary, handoff=False, full_screen=False):
     # This process keeps the controlling terminal alive after the demo exits,
     # so we can inspect its modes without silently restoring them ourselves.
     original = termios.tcgetattr(0)
-    print("~/projects $ ls\nnotes/    sandbox/\n\n~/projects $ project-setup", flush=True)
-    result = subprocess.run([binary], check=False)
+    options = [*(['--handoff'] if handoff else []), *(['--full-screen'] if full_screen else [])]
+    print("~/projects $ ls\nnotes/    sandbox/\n\n~/projects $ project-setup"
+          + ''.join(' ' + option for option in options), flush=True)
+    result = subprocess.run([binary, *options], check=False)
     assert result.returncode == 0, result.returncode
     restored = termios.tcgetattr(0)
     # macOS sets PENDIN (pending-input retype status) after returning to cooked
@@ -40,12 +43,30 @@ def scene(binary):
     print("~/projects $ ", end="", flush=True)
 
 
-def record(binary, destination):
+def record(binary, destination, handoff=False, full_screen=False):
     master, slave = os.openpty()
     cols, rows = 84, 30
     fcntl.ioctl(master, termios.TIOCSWINSZ, struct.pack("HHHH", rows, cols, 0, 0))
 
     class Screen(pyte.HistoryScreen):
+        # pyte does not implement the alternate buffer used by the real less
+        # child. Preserve it here so CPR and restoration checks use its state.
+        main_screen = None
+
+        def set_mode(self, *modes, **kwargs):
+            if kwargs.get('private') and 1049 in modes:
+                self.main_screen = copy.deepcopy((self.buffer, self.cursor, self.history))
+                self.buffer.clear()
+                self.cursor_position()
+            super().set_mode(*modes, **kwargs)
+
+        def reset_mode(self, *modes, **kwargs):
+            super().reset_mode(*modes, **kwargs)
+            if kwargs.get('private') and 1049 in modes and self.main_screen is not None:
+                self.buffer, self.cursor, self.history = self.main_screen
+                self.main_screen = None
+                self.dirty.update(range(self.lines))
+
         def write_process_input(self, data):
             os.write(master, data.encode())
 
@@ -61,7 +82,8 @@ def record(binary, destination):
         fcntl.ioctl(0, termios.TIOCSCTTY, 0)
 
     child = subprocess.Popen(
-        [sys.executable, str(Path(__file__).resolve()), "--scene", binary],
+        [sys.executable, str(Path(__file__).resolve()), "--scene", binary,
+         *(['--handoff'] if handoff else []), *(['--full-screen'] if full_screen else [])],
         stdin=slave, stdout=slave, stderr=slave, preexec_fn=attach_terminal,
         env={**os.environ, "TERM": "xterm-256color", "FLEURY_KEYBOARD": "legacy",
              "FLEURY_SYNC_OUTPUT": "0"},
@@ -101,7 +123,8 @@ def record(binary, destination):
 
     try:
         wait_for(lambda: "Include tests" in text(), "initial form")
-        assert "notes/    sandbox/" in text(), "lost the previous shell output"
+        if not full_screen:
+            assert "notes/    sandbox/" in text(), "lost the previous shell output"
         pause(1.2)
         os.write(master, b"\x01")  # Home, then delete the default name.
         os.write(master, b"\x0b")  # Ctrl+K: delete to end of line.
@@ -116,8 +139,21 @@ def record(binary, destination):
         wait_for(lambda: "dev_dependencies:" in text() and "Generate config" in text(), "review page")
         assert "lib/orbit_tools.dart" in text(), text()
         assert "dev_dependencies:" in text(), text()
-        assert "notes/    sandbox/" in text(), "region growth lost shell context"
+        if not full_screen:
+            assert "notes/    sandbox/" in text(), "region growth lost shell context"
         pause(3.2)
+        if handoff:
+            click('View in pager')
+            wait_for(lambda: '(END)' in text(), 'real less pager')
+            assert 'name: orbit_tools' in text(), text()
+            assert 'Generate config' not in text(), 'Fleury painted over the child'
+            pause(3.0)
+            os.write(master, b'q')
+            wait_for(lambda: 'Back from less.' in text(), 'resumed setup state')
+            assert 'lib/orbit_tools.dart' in text(), text()
+            if not full_screen:
+                assert 'notes/    sandbox/' in text(), 'handoff lost earlier output'
+            pause(2.0)
         os.write(master, b"\x1b")  # Escape goes back without losing the form.
         wait_for(lambda: "Include tests" in text() and "Review" in text(), "back to the form")
         assert "orbit_tools" in text(), text()
@@ -132,17 +168,25 @@ def record(binary, destination):
         assert "Configuration ready for orbit_tools" in text(), text()
         assert "Your project, at a glance." not in text(), "live form survived completion"
         assert "notes/    sandbox/" in text(), "completion lost earlier output"
-        assert b"1049" not in raw and b"\x1b[2J" not in raw, "used fullscreen rendering"
+        if handoff or full_screen:
+            expected_entries = (2 if handoff else 1) if full_screen else 0
+            expected_entries += int(handoff)
+            assert raw.count(b'\x1b[?1049h') == expected_entries, 'unexpected alternate-screen entries'
+            assert raw.count(b'\x1b[?1049l') == expected_entries, 'unbalanced alternate-screen exit'
+        else:
+            assert b"1049" not in raw and b"\x1b[2J" not in raw, "used fullscreen rendering"
         # A final no-op output event holds the result long enough to read it.
         pause(1.8)
         events.append([round(time.monotonic() - start, 4), "o", ""])
         header = {"version": 2, "width": cols, "height": rows,
-                  "title": "Fleury inline project setup",
+                  "title": "Fleury setup and less handoff" if handoff else "Fleury inline project setup",
                   "env": {"TERM": "xterm-256color", "SHELL": "fixture"}}
         destination.parent.mkdir(parents=True, exist_ok=True)
         destination.write_text("\n".join(json.dumps(item) for item in [header, *events]) + "\n")
         print(f"Recorded {events[-1][0]:.1f}s of native PTY output → {destination}")
         print("PASS: shared form, offset clicks, review growth, Back, keyboard finish, terminal restoration")
+        if handoff:
+            print('PASS: real less subprocess, exclusive terminal ownership, preserved form and shell')
     finally:
         if child.poll() is None:
             os.killpg(child.pid, signal.SIGKILL)
@@ -154,11 +198,13 @@ def record(binary, destination):
 
 if __name__ == "__main__":
     if len(sys.argv) > 1 and sys.argv[1] == "--scene":
-        scene(sys.argv[2])
+        scene(sys.argv[2], '--handoff' in sys.argv, '--full-screen' in sys.argv)
     else:
         parser = argparse.ArgumentParser(description=__doc__)
         parser.add_argument("binary", help="Compiled inline demo executable")
+        parser.add_argument('--handoff', action='store_true', help='Record the real less subprocess and return')
+        parser.add_argument('--full-screen', action='store_true', help='Exercise the same flow in the alternate screen')
         parser.add_argument("--output", type=Path,
                             default=ROOT / "website/public/recordings/inline-setup.cast")
         args = parser.parse_args()
-        record(str(Path(args.binary).resolve()), args.output)
+        record(str(Path(args.binary).resolve()), args.output, args.handoff, args.full_screen)

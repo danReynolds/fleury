@@ -627,6 +627,11 @@ class PosixTerminalDriver
       throw StateError('PosixTerminalDriver.enter called on an active driver.');
     }
     if (mode.inlineRows != null) {
+      if (!mode.rawInput || mode.alternateScreen) {
+        throw ArgumentError(
+          'inlineRows requires raw input and the main screen.',
+        );
+      }
       if (!_stdinIsTerminal || !_stdoutIsTerminal) {
         throw StateError(
           'Inline mode requires terminal input and output for cursor reporting.',

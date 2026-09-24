@@ -1,10 +1,12 @@
 ---
 import 'asciinema-player/dist/bundle/asciinema-player.css';
+interface Props { recording?: string; label?: string; duration?: string; }
+const { recording = 'inline-setup', label = 'Watch it in a native terminal', duration = '13 seconds' } = Astro.props;
 ---
 
-<div class="inline-recording">
-  <button type="button" data-inline-play>▶ Watch it in a native terminal <span>13 seconds</span></button>
-  <div data-inline-recording hidden aria-label="Recorded native Fleury inline terminal session"></div>
+<div class="inline-recording" data-recording={recording}>
+  <button type="button" data-inline-play>▶ {label} <span>{duration}</span></button>
+  <div data-inline-recording hidden aria-label={label}></div>
 </div>
 
 <script>
@@ -19,7 +21,7 @@ import 'asciinema-player/dist/bundle/asciinema-player.css';
         try {
           const { create } = await import('asciinema-player');
           surface.hidden = false;
-          const player = create('/fleury/recordings/inline-setup.cast', surface, {
+          const player = create(`/fleury/recordings/${root.dataset.recording}.cast`, surface, {
             autoPlay: true, fit: 'width', theme: 'asciinema',
             terminalFontFamily: 'FleuryMono, monospace',
             idleTimeLimit: 2,

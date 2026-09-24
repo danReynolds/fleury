@@ -12,8 +12,8 @@ A terminal UI can become the user's workspace or help them finish one step in a
 command. Fleury supports both: **full-screen** uses the terminal viewport;
 **inline** reserves a smaller region beneath the current cursor.
 
-Try the same setup form in each mode. Finish or cancel to see what happens to
-the shell around it. Each tab has its own run.
+Try the same setup form in each mode. In the full-screen tab, run the command
+to watch the form take over. Finish or cancel to return to the shell.
 
 <Tabs>
 <TabItem label="Inline">
@@ -76,44 +76,27 @@ Use the same widget tree with either configuration:
 // Full-screen: the default. Mouse input is opt-in.
 const TerminalMode(mouse: true)
 
-// Inline: a region up to 10 rows tall.
-const TerminalMode.inline(rows: 10, mouse: true)
+// Inline: a region up to 17 rows tall.
+const TerminalMode(inlineRows: 17, mouse: true)
 ```
 
-Pass that value as `mode:` to `runApp`. Select the mode for the session; the
+Pass that value as `mode:` to `runApp`. Setting `inlineRows` selects inline mode
+and its initial height; leave it unset for full-screen. Select the mode for the session; the
 current API does not switch an active session between full-screen and inline.
 Setting `TerminalMode(alternateScreen: false)` alone does not create an inline
 region: it provides neither the allocation nor the rendering bounds.
 
-### Return a useful result
+### Finish back at the prompt
 
-Let the UI return a value through a callback, request exit, then print after
-`runApp` completes. The terminal has been restored by that point:
+When the setup form finishes, it calls `requestExit()`. Fleury clears the inline
+region or leaves the alternate screen, restores terminal input, and completes
+`runApp`. The command can then print its result. That is why the summary in the
+demo stays at the prompt after the form disappears.
 
-```dart
-String? selected;
-await runApp(
-  FleuryApp(
-    title: 'Choose a source',
-    home: SourcePicker(onSelected: (value) {
-      selected = value;
-      requestExit();
-    }),
-  ),
-  mode: const TerminalMode.inline(rows: 10, mouse: true),
-  enableHotReload: false,
-);
-print(selected == null ? 'Cancelled.' : 'Selected $selected.');
-```
-
-Here, `SourcePicker` is an ordinary widget in the
-[complete runnable example](https://github.com/danReynolds/fleury/blob/main/website/examples/doc_snippets/terminal_modes.dart).
-The example also accepts `--full-screen`. `runApp` returns an `AppExit` if the
-caller needs to distinguish an ordinary exit from a process signal and choose
-an exit code.
-
-Hot reload works with either mode. This example disables it because a short
-command often needs its startup and final side effects to run just once.
+The [native setup host](https://github.com/danReynolds/fleury/blob/main/packages/samples/bin/inline.dart)
+shows this boundary. `runApp` also returns an `AppExit` so the caller can preserve
+signal exit codes. The sample disables hot reload so its startup and final
+output run once; both terminal modes support development sessions.
 
 ### Give inline steps enough room
 
@@ -148,24 +131,47 @@ the retained output after exit. Calling `print` during the UI is not a way to
 append permanent lines above it. Render live messages as widgets; print the
 command's final result after awaiting `runApp`.
 
-For an editor, pager, or another interactive child, use the session's
-`runWithHandoff` method. It restores the terminal and pauses output capture
-before running your operation, then reacquires and repaints the UI:
+### Let another program use the terminal
+
+Suppose the setup form offers **View in pager**. Selecting it opens the generated
+configuration in `less`; pressing **q** closes the pager and brings you back to
+the same form, with your name, template, and review step preserved.
+
+<InlineRecording recording="inline-handoff" label="Watch setup open less and resume" duration="Native terminal recording" />
+
+This is a recording of the real native app launching `less`, not a browser
+simulation. Try it yourself from a Fleury checkout:
+
+```sh
+dart run packages/samples/bin/samples.dart inline --handoff
+```
+
+Choose **Review →**, then **View in pager**. The preview uses a temporary file
+and removes it when the pager closes; no project files are created. Add
+`--full-screen` to try the same handoff from the alternate screen.
+
+`runWithHandoff` makes this work by temporarily giving the child control of the
+terminal. Fleury pauses its painting and output capture, restores normal input,
+and releases its screen. Without the handoff, the two programs would compete
+for input and the child's output could disappear into Fleury's captured logs.
+When the child exits, Fleury reclaims the terminal and redraws the existing UI.
 
 ```dart
 await session.runWithHandoff(() async {
   final pager = await Process.start(
-    'less', ['README.md'],
+    'less', ['--', previewFile.path],
     mode: ProcessStartMode.inheritStdio,
   );
   await pager.exitCode;
 });
 ```
 
-This is native code using `dart:io`; read `session` from the host scope first.
-In inline mode, child output can remain above the newly reserved region.
-Full-screen mode re-enters the alternate screen. On POSIX terminals, Ctrl+Z
-suspends through the same release-and-reacquire lifecycle.
+The native host reads `session` from `ScopeBuilder<TerminalSession>` and creates
+`previewFile` before the handoff. The form itself needs no process or terminal
+code. This also works for an editor or an interactive Git command. In inline
+mode, child output can remain above the resumed UI; full-screen mode re-enters
+the alternate screen. On POSIX terminals, Ctrl+Z uses the same release-and-resume
+lifecycle.
 
 ## Try the native behavior
 
@@ -200,13 +206,8 @@ Browser embeds take their size from the containing element. A served native
 preview also has a host-controlled viewport; neither demonstrates a native
 inline allocation. See [Serving and embedding](/fleury/architecture/serving-and-embedding/).
 
-## Related reading
+## Next steps
 
-[Ratatui's alternate-screen explanation](https://ratatui.rs/concepts/backends/alternate-screen/)
-covers the two buffers.
-[Textual's app guide](https://textual.textualize.io/guide/app/#run-inline)
-introduces inline as a host choice.
-[Rich's live-display guide](https://rich.readthedocs.io/en/stable/live.html)
-separates placement, clearing on exit, and output above a live display.
-Those frameworks have their own defaults and capabilities; the behavior above
-describes Fleury.
+- [App entry points](/fleury/concepts/app-entry/) covers `runApp` and the host services available to your widgets.
+- [Layout](/fleury/guides/layout/) and [Lists & scrolling](/fleury/guides/lists-and-scrolling/) help your UI adapt to the available space.
+- [Deployment & distribution](/fleury/guides/deployment/) covers shipping your command.

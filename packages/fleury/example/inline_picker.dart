@@ -29,7 +29,7 @@ Future<void> main() async {
         ),
       ),
     ),
-    mode: const TerminalMode.inline(rows: 10, mouse: true),
+    mode: const TerminalMode(inlineRows: 10, mouse: true),
     enableHotReload: false,
     debug: const DebugConfig(enabled: false),
   );

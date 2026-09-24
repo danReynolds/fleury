@@ -2,22 +2,23 @@
 import 'dart:io';
 
 import 'package:fleury/fleury.dart';
+import 'package:fleury_samples/samples.dart';
 
 Future<void> main(List<String> args) async {
-  String? selected;
+  InlineSetupResult? result;
   final outcome = await runApp(
     FleuryApp(
-      title: 'Choose a source',
-      home: SourcePicker(
-        onSelected: (value) {
-          selected = value;
+      title: 'Project setup',
+      home: InlineSetup(
+        onComplete: (value) {
+          result = value;
           requestExit();
         },
       ),
     ),
     mode: args.contains('--full-screen')
         ? const TerminalMode(mouse: true)
-        : const TerminalMode.inline(rows: 10, mouse: true),
+        : const TerminalMode(inlineRows: 21, mouse: true),
     enableHotReload: false,
     debug: const DebugConfig(enabled: false),
   );
@@ -31,30 +32,7 @@ Future<void> main(List<String> args) async {
         };
     return;
   }
-  print(selected == null ? 'Cancelled.' : 'Selected $selected.');
-}
-
-class SourcePicker extends StatelessWidget {
-  const SourcePicker({super.key, required this.onSelected});
-
-  final void Function(String) onSelected;
-
-  @override
-  Widget build(BuildContext context) => Padding(
-    padding: const EdgeInsets.all(1),
-    child: Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        const Text('Choose a source'),
-        for (final source in ['Local', 'Homebrew', 'Pub'])
-          Button(
-            text: source,
-            autofocus: source == 'Local',
-            onPressed: () => onSelected(source),
-          ),
-      ],
-    ),
-  );
+  print(result?.summary ?? 'Setup cancelled.');
 }
 
 class MoreRoomButton extends StatelessWidget {
@@ -73,10 +51,11 @@ class MoreRoomButton extends StatelessWidget {
   );
 }
 
-Future<void> openReadme(TerminalSession session) async {
+Future<void> openPreview(TerminalSession session, File previewFile) async {
   await session.runWithHandoff(() async {
     final pager = await Process.start('less', [
-      'README.md',
+      '--',
+      previewFile.path,
     ], mode: ProcessStartMode.inheritStdio);
     await pager.exitCode;
   });

@@ -1,7 +1,7 @@
 ---
 const flows = [
-  { title: 'Full-screen', during: 'Alternate buffer', lines: ['Choose a source', '[ Your interactive UI ]'], after: 'Main buffer restored' },
-  { title: 'Inline', during: 'Main buffer + owned region', lines: ['$ choose-source', '[ Your interactive UI ]'], after: 'Live region cleared' },
+  { title: 'Full-screen', during: 'Alternate buffer', lines: ['Project setup', '[ Your interactive UI ]'], after: 'Main buffer restored' },
+  { title: 'Inline', during: 'Main buffer + owned region', lines: ['$ project-setup', '[ Your interactive UI ]'], after: 'Live region cleared' },
 ];
 ---
 
@@ -9,14 +9,14 @@ const flows = [
   {flows.map(flow => <div class="buffer-flow">
     <strong>{flow.title}</strong>
     <div class="buffer-stages">
-      <div class="buffer-stage"><span>Before · main buffer</span><code>Earlier output<br />$ choose-source</code></div>
+      <div class="buffer-stage"><span>Before · main buffer</span><code>Earlier output<br />$ project-setup</code></div>
       <span class="buffer-arrow" aria-hidden="true">→</span>
       <div class="buffer-stage active"><span>{flow.during}</span><code>{flow.title === 'Inline' && <>Earlier output<br /></>}{flow.lines[0]}<br />{flow.lines[1]}</code></div>
       <span class="buffer-arrow" aria-hidden="true">→</span>
-      <div class="buffer-stage"><span>{flow.after}</span><code>Earlier output<br />$ choose-source<br />Selected Local.<br />$ ▌</code></div>
+      <div class="buffer-stage"><span>{flow.after}</span><code>Earlier output<br />$ project-setup<br />Setup complete.<br />$ ▌</code></div>
     </div>
   </div>)}
-  <figcaption>In both cases, the command prints “Selected Local.” after the UI exits.</figcaption>
+  <figcaption>In both cases, the command prints “Setup complete.” after the UI exits.</figcaption>
 </figure>
 
 <style>

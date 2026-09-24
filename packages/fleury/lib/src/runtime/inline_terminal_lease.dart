@@ -57,8 +57,8 @@ String? inlineTerminalRecovery(String? path, CellSize terminal) {
     if (data['version'] != 1) throw const FormatException('unknown lease');
     if (data['active'] == false) return '';
     if (data['active'] != true) throw const FormatException('invalid lease');
-    final mode = TerminalMode.inline(
-      rows: 1,
+    final mode = TerminalMode(
+      inlineRows: 1,
       keyboardProtocol: KeyboardProtocolMode.values.byName(
         data['keyboard'] as String,
       ),

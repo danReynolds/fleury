@@ -159,14 +159,15 @@ enum KeyboardProtocolMode {
 ///
 /// Defaults to the standard interactive TUI configuration (raw input,
 /// alternate screen, hidden cursor, style reset on exit). Callers can
-/// opt out of individual modes. Use [TerminalMode.inline] for a bounded
+/// opt out of individual modes. Set [inlineRows] for a bounded
 /// main-buffer UI: disabling [alternateScreen] alone does not reserve rows
 /// or constrain rendering.
 @immutable
 final class TerminalMode {
   const TerminalMode({
     this.rawInput = true,
-    this.alternateScreen = true,
+    bool? alternateScreen,
+    this.inlineRows,
     this.hideCursor = true,
     this.resetStyleOnExit = true,
     this.bracketedPaste = true,
@@ -174,30 +175,26 @@ final class TerminalMode {
     this.focusReporting = true,
     this.mouse = false,
     this.mouseMotion = false,
-  }) : inlineRows = null;
+  }) : assert(
+         inlineRows == null || inlineRows > 0,
+         'inlineRows must be positive',
+       ),
+       assert(inlineRows == null || rawInput, 'inlineRows requires raw input'),
+       assert(
+         inlineRows == null || alternateScreen != true,
+         'inlineRows cannot use the alternate screen',
+       ),
+       alternateScreen = alternateScreen ?? inlineRows == null;
 
-  /// A bounded region in the main terminal buffer, beneath the command.
+  /// Reserve this many rows in the main buffer, or null for full-screen.
   ///
-  /// Earlier shell output stays visible. [rows] is clamped to the terminal
-  /// height; content scrolls inside that viewport using ordinary widgets.
-  /// The live region is cleared on exit, ready for the command's final output.
-  /// Requires a POSIX terminal with cursor-position reporting. Remote hosts
-  /// keep their own viewport; native Windows does not yet support this mode.
-  const TerminalMode.inline({
-    required int rows,
-    this.hideCursor = true,
-    this.resetStyleOnExit = true,
-    this.bracketedPaste = true,
-    this.keyboardProtocol = KeyboardProtocolMode.lifecycle,
-    this.focusReporting = true,
-    this.mouse = false,
-    this.mouseMotion = false,
-  }) : assert(rows > 0, 'inline rows must be positive'),
-       inlineRows = rows,
-       rawInput = true,
-       alternateScreen = false;
-
-  /// Requested initial height, or null for an ordinary terminal session.
+  /// Setting this field selects inline mode and defaults [alternateScreen] to
+  /// false. The height must be positive and is clamped to the terminal height;
+  /// ordinary widgets scroll inside that viewport. The live region is cleared
+  /// on exit, ready for the command's final output.
+  ///
+  /// Requires raw input and a POSIX terminal with cursor-position reporting.
+  /// Remote hosts keep their own viewport; native Windows is not yet supported.
   final int? inlineRows;
 
   /// The standard interactive TUI mode.
@@ -246,28 +243,18 @@ final class TerminalMode {
 TerminalMode terminalModeWithKeyboardProtocol(
   TerminalMode mode,
   KeyboardProtocolMode keyboardProtocol,
-) => mode.inlineRows != null
-    ? TerminalMode.inline(
-        rows: mode.inlineRows!,
-        hideCursor: mode.hideCursor,
-        resetStyleOnExit: mode.resetStyleOnExit,
-        bracketedPaste: mode.bracketedPaste,
-        keyboardProtocol: keyboardProtocol,
-        focusReporting: mode.focusReporting,
-        mouse: mode.mouse,
-        mouseMotion: mode.mouseMotion,
-      )
-    : TerminalMode(
-        rawInput: mode.rawInput,
-        alternateScreen: mode.alternateScreen,
-        hideCursor: mode.hideCursor,
-        resetStyleOnExit: mode.resetStyleOnExit,
-        bracketedPaste: mode.bracketedPaste,
-        keyboardProtocol: keyboardProtocol,
-        focusReporting: mode.focusReporting,
-        mouse: mode.mouse,
-        mouseMotion: mode.mouseMotion,
-      );
+) => TerminalMode(
+  rawInput: mode.rawInput,
+  alternateScreen: mode.alternateScreen,
+  inlineRows: mode.inlineRows,
+  hideCursor: mode.hideCursor,
+  resetStyleOnExit: mode.resetStyleOnExit,
+  bracketedPaste: mode.bracketedPaste,
+  keyboardProtocol: keyboardProtocol,
+  focusReporting: mode.focusReporting,
+  mouse: mode.mouse,
+  mouseMotion: mode.mouseMotion,
+);
 
 /// Typed record of the terminal state a native driver actually owns.
 ///

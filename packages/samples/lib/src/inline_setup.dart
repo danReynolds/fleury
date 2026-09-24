@@ -60,10 +60,18 @@ final class InlineSetupResult {
 /// only the form, validation, focus, and review. Escape goes back from review
 /// or cancels from setup; null is the cancelled result.
 class InlineSetup extends StatefulWidget {
-  const InlineSetup({super.key, required this.onComplete, this.onStepChanged});
+  const InlineSetup({
+    super.key,
+    required this.onComplete,
+    this.onStepChanged,
+    this.onOpenPager,
+  });
 
   final void Function(InlineSetupResult? result) onComplete;
   final void Function(InlineSetupStep step)? onStepChanged;
+
+  /// Native hosts can lend the terminal to a pager without replacing this form.
+  final Future<void> Function(InlineSetupResult result)? onOpenPager;
 
   @override
   State<InlineSetup> createState() => _InlineSetupState();
@@ -77,6 +85,28 @@ class _InlineSetupState extends State<InlineSetup> {
   var _step = InlineSetupStep.configure;
   String? _error;
   var _finished = false;
+  var _openingPager = false;
+  String? _pagerMessage;
+
+  Future<void> _openPager() async {
+    if (_openingPager) return;
+    _openingPager = true;
+    try {
+      await widget.onOpenPager!(_result);
+      if (mounted)
+        setState(
+          () => _pagerMessage = 'Back from less. Your setup is unchanged.',
+        );
+    } catch (_) {
+      if (mounted)
+        setState(
+          () =>
+              _pagerMessage = 'Could not open less. You can still review here.',
+        );
+    } finally {
+      _openingPager = false;
+    }
+  }
 
   @override
   void dispose() {
@@ -159,6 +189,7 @@ class _InlineSetupState extends State<InlineSetup> {
                   ),
                 ),
                 const SizedBox(height: 1),
+                if (_pagerMessage != null) Text(_pagerMessage!, style: _muted),
                 Wrap(
                   spacing: 2,
                   runSpacing: 1,
@@ -171,6 +202,9 @@ class _InlineSetupState extends State<InlineSetup> {
                             primary: true,
                             autofocus: true,
                           ),
+                    if (_step == InlineSetupStep.review &&
+                        widget.onOpenPager != null)
+                      _action('View in pager', _openPager),
                     if (_step == InlineSetupStep.review)
                       _action(
                         'Back',
@@ -317,11 +351,15 @@ class _InlineSetupPreviewState extends State<InlineSetupPreview> {
   InlineSetupResult? _result;
   var _finished = false;
   var _step = InlineSetupStep.configure;
+  var _started = false;
+
+  bool get _running => (!widget.fullScreen || _started) && !_finished;
 
   void _reset() => setState(() {
     _result = null;
     _finished = false;
     _step = InlineSetupStep.configure;
+    _started = true;
   });
 
   @override
@@ -332,7 +370,7 @@ class _InlineSetupPreviewState extends State<InlineSetupPreview> {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            if (!widget.fullScreen || _finished) ...[
+            if (!widget.fullScreen || !_running) ...[
               const Text(r'~/projects $ ls', style: _muted),
               const Text('notes/    sandbox/', style: _muted),
               const SizedBox(height: 1),
@@ -342,7 +380,11 @@ class _InlineSetupPreviewState extends State<InlineSetupPreview> {
                     : r'~/projects $ project-setup',
               ),
             ],
-            if (!_finished)
+            if (widget.fullScreen && !_started) ...[
+              const SizedBox(height: 1),
+              Button(text: 'Run command', autofocus: true, onPressed: _reset),
+            ],
+            if (_running)
               Flexible(
                 fit: widget.fullScreen ? FlexFit.tight : FlexFit.loose,
                 child: SizedBox(

@@ -12,7 +12,7 @@ Use this file for the running implementation narrative.
 ## 2026-09-24 — bounded inline commands for RK
 
 Implemented the explicit-height inline host and native lifecycle in an isolated
-worktree. The public entry is `TerminalMode.inline(rows: ...)`; height changes
+worktree. The public entry is `TerminalMode(inlineRows: ...)`; height changes
 use the existing `TerminalSession` scope. The hard boundary is region ownership,
 not a widget fork: offset ANSI/input/caret, gate writes across geometry changes,
 and release/re-anchor through child handoff and job control. The supervisor now

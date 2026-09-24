@@ -9,8 +9,8 @@ void main() {
   late Directory directory;
   late String path;
   const terminal = CellSize(80, 24);
-  const mode = TerminalMode.inline(
-    rows: 4,
+  const mode = TerminalMode(
+    inlineRows: 4,
     keyboardProtocol: KeyboardProtocolMode.legacy,
   );
 
@@ -56,7 +56,7 @@ void main() {
 
       writeInlineTerminalLease(
         path,
-        mode: const TerminalMode.inline(rows: 4),
+        mode: const TerminalMode(inlineRows: 4),
         active: true,
       );
       expect(inlineTerminalRecovery(path, terminal), contains('\x1B[<1u'));

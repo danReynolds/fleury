@@ -65,7 +65,7 @@ the main buffer so earlier output remains available:
 ```dart
 await runApp(
   const FleuryApp(title: 'Choose a source', home: SourcePicker()),
-  mode: const TerminalMode.inline(rows: 14, mouse: true),
+  mode: const TerminalMode(inlineRows: 14, mouse: true),
   enableHotReload: false,
 );
 // Print the result here, after the live region has been cleared.

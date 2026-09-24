@@ -12,7 +12,7 @@ Future<void> main(List<String> args) async {
   }
   final result = await runApp(
     const FleuryApp(title: 'Inline viewport', home: _InlineFixture()),
-    mode: const TerminalMode.inline(rows: 8, mouse: true, mouseMotion: true),
+    mode: const TerminalMode(inlineRows: 8, mouse: true, mouseMotion: true),
     enableHotReload: args.contains('--supervised'),
     debug: const DebugConfig(enabled: false),
     args: args,

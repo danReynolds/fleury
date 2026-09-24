@@ -12,8 +12,8 @@ Future<void> runInlineSetup(List<String> args) async {
   if (args.contains('--help') || args.contains('-h')) {
     print(
       'Inline project setup demo\n'
-      'Usage: dart run packages/samples/bin/inline.dart [--full-screen]\n'
-      'Generates a configuration in memory. No files are written.',
+      'Usage: dart run packages/samples/bin/inline.dart [--full-screen] [--handoff]\n'
+      'Generates a configuration in memory. No project files are written.',
     );
     return;
   }
@@ -26,6 +26,9 @@ Future<void> runInlineSetup(List<String> args) async {
       title: 'Project setup',
       home: ScopeBuilder<TerminalSession>(
         builder: (_, session) => InlineSetup(
+          onOpenPager: args.contains('--handoff')
+              ? (result) => _openPager(session, result)
+              : null,
           onStepChanged: fullScreen
               ? null
               : (step) => unawaited(session.resizeInline(step.rows)),
@@ -38,8 +41,8 @@ Future<void> runInlineSetup(List<String> args) async {
     ),
     mode: fullScreen
         ? const TerminalMode(mouse: true, mouseMotion: true)
-        : TerminalMode.inline(
-            rows: InlineSetupStep.configure.rows,
+        : TerminalMode(
+            inlineRows: InlineSetupStep.configure.rows,
             mouse: true,
             mouseMotion: true,
           ),
@@ -56,4 +59,28 @@ Future<void> runInlineSetup(List<String> args) async {
           AppSignal.terminate => 15,
           AppSignal.hangup => 1,
         };
+}
+
+Future<void> _openPager(
+  TerminalSession session,
+  InlineSetupResult result,
+) async {
+  final directory = await Directory.systemTemp.createTemp('fleury-preview-');
+  try {
+    final file = File('${directory.path}/pubspec.yaml');
+    await file.writeAsString('${result.manifest}\n');
+    await session.runWithHandoff(() async {
+      final pager = await Process.start(
+        'less',
+        ['--', file.path],
+        mode: ProcessStartMode.inheritStdio,
+        // Always keep the pager open for the demo, including a short manifest.
+        environment: {'LESS': '', 'LESSOPEN': ''},
+      );
+      if (await pager.exitCode != 0)
+        throw StateError('less exited unsuccessfully');
+    });
+  } finally {
+    await directory.delete(recursive: true);
+  }
 }
