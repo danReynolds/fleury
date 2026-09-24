@@ -982,13 +982,14 @@ class FleuryTester {
     return registry;
   }
 
-  /// Latest command invocation result for the active command registry, if any.
+  /// The latest command invocation result visible from the focused context:
+  /// from its nearest command registry or any registry above it, the app's
+  /// included, whichever recorded last.
   CommandInvocationResult? get lastCommandResult {
     _assertNotDisposed('lastCommandResult');
     final buildContext = _defaultCommandContext(null);
     if (buildContext == null) return null;
-    return FleuryApp.maybeOf(buildContext)?.commands.lastResult ??
-        CommandRegistryScope.maybeOf(buildContext)?.lastResult;
+    return CommandRegistryScope.maybeOf(buildContext)?.latestVisibleResult;
   }
 
   /// Invokes a command by stable ID and flushes builds triggered by it.

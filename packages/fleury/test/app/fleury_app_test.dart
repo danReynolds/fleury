@@ -1022,6 +1022,48 @@ void main() {
     expect(tester.exists(text('Build: ok')), isTrue);
   });
 
+  testWidgets('lastCommandResult is the latest command, scoped or not', (
+    tester,
+  ) async {
+    const palette = CommandId('app.palette');
+    const save = CommandId('editor.save');
+    tester.pumpWidget(
+      FleuryApp(
+        title: 'Editor',
+        commands: [
+          AppCommand(
+            id: palette,
+            title: 'Palette',
+            shortcuts: [KeySequence.ctrl.k],
+            run: (_) {},
+          ),
+        ],
+        home: CommandScope(
+          commands: [
+            AppCommand(
+              id: save,
+              title: 'Save',
+              shortcuts: [KeySequence.ctrl.s],
+              run: (_) {},
+            ),
+          ],
+          child: const Focus(autofocus: true, child: Text('editor')),
+        ),
+      ),
+    );
+    tester.pump();
+
+    for (final (key, expected) in [
+      (KeyCode.k, palette),
+      (KeyCode.s, save),
+      (KeyCode.k, palette),
+    ]) {
+      tester.sendKey(KeyEvent(key, modifiers: const {KeyModifier.ctrl}));
+      await Future<void>.delayed(Duration.zero);
+      expect(tester.lastCommandResult?.id, expected);
+    }
+  });
+
   testWidgets('tester invokes commands by id and records results', (
     tester,
   ) async {

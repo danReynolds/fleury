@@ -174,6 +174,11 @@ class CommandRegistry extends Notifier {
   CommandRegistry? _parent;
   List<AppCommand> _commands;
   CommandInvocationResult? _lastResult;
+
+  /// When [_lastResult] was recorded, on one clock shared by every registry,
+  /// so the latest across a registry chain can be told apart.
+  int _lastRecorded = 0;
+  static int _recordClock = 0;
   bool _disposed = false;
 
   CommandRegistry? get parent => _parent;
@@ -196,6 +201,24 @@ class CommandRegistry extends Notifier {
   }
 
   CommandInvocationResult? get lastResult => _lastResult;
+
+  /// Framework-internal: the latest result recorded in this registry or any
+  /// registry above it — the latest invocation visible from here. A screen's
+  /// command records in the screen's own registry, so reading only the app
+  /// registry would miss it once any app command has run.
+  @internal
+  CommandInvocationResult? get latestVisibleResult {
+    CommandInvocationResult? latest;
+    var recorded = 0;
+    for (CommandRegistry? registry = this; registry != null;) {
+      if (registry._lastRecorded > recorded) {
+        recorded = registry._lastRecorded;
+        latest = registry._lastResult;
+      }
+      registry = registry._parent;
+    }
+    return latest;
+  }
 
   List<AppCommand> activeCommands({BuildContext? buildContext}) {
     final context = _context(buildContext);
@@ -327,6 +350,7 @@ class CommandRegistry extends Notifier {
   CommandInvocationResult _record(CommandInvocationResult result) {
     if (_disposed) return result;
     _lastResult = result;
+    _lastRecorded = ++_recordClock;
     notify();
     return result;
   }
