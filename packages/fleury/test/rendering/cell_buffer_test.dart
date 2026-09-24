@@ -370,6 +370,80 @@ void main() {
     });
   });
 
+  group('A composite paints like a direct paint', () {
+    // compositeRectFrom's contract is the direct paint it stands in for, so
+    // every case composites a source and compares it with writing the same
+    // text straight into the same destination.
+    const background = CellStyle(background: RgbColor(0, 0, 200));
+    List<Cell> row(CellBuffer buffer) => [
+      for (var col = 0; col < buffer.size.cols; col++) buffer.atColRow(col, 0),
+    ];
+    CellBuffer filled(int cols) =>
+        CellBuffer(CellSize(cols, 1))
+          ..fillRect(CellRect.fromLTWH(0, 0, cols, 1), style: background);
+
+    void expectLikeDirect(
+      CellBuffer Function() destination,
+      int sourceCols,
+      Map<int, String> writes,
+      int at,
+    ) {
+      final source = CellBuffer(CellSize(sourceCols, 1));
+      final direct = destination();
+      for (final MapEntry(key: col, value: text) in writes.entries) {
+        source.writeText(CellOffset(col, 0), text);
+        direct.writeText(CellOffset(at + col, 0), text);
+      }
+      final composite = destination()
+        ..compositeRectFrom(
+          source,
+          CellRect.fromLTWH(0, 0, sourceCols, 1),
+          CellOffset(at, 0),
+        );
+      expect(row(composite), row(direct));
+    }
+
+    test('cells the source left empty keep the background', () {
+      expectLikeDirect(() => filled(8), 5, {0: 'ab', 4: 'c'}, 1);
+    });
+
+    test('scattered runs sever exactly the wide pairs they bisect', () {
+      // Every run edge lands mid-pair: 'a' on 漢's continuation, 中 across
+      // two pairs, 'b' and 'c' on continuations again.
+      expectLikeDirect(
+        () =>
+            CellBuffer(const CellSize(12, 1))
+              ..writeText(CellOffset.zero, '漢字漢字漢字'),
+        12,
+        {1: 'a', 5: '中', 9: 'b', 11: 'c'},
+        0,
+      );
+    });
+
+    test('a run ending at the source edge severs the pair it bisects', () {
+      // 'b' overwrites 字's leading, orphaning its continuation past the
+      // source's last column.
+      expectLikeDirect(
+        () =>
+            CellBuffer(const CellSize(6, 1))..writeText(CellOffset.zero, '漢字漢'),
+        2,
+        {0: 'ab'},
+        1,
+      );
+    });
+
+    test('a wide glyph the left clip cuts is skipped', () {
+      // A direct paint skips a grapheme that starts off-grid, so the cell
+      // under its visible half keeps the background.
+      expectLikeDirect(() => filled(6), 3, {0: '漢a'}, -1);
+    });
+
+    test('a wide glyph the right clip cuts lands as the edge marker', () {
+      // A direct paint writes `?` where a wide grapheme has no room.
+      expectLikeDirect(() => filled(6), 3, {0: 'a漢'}, 4);
+    });
+  });
+
   group('Narrow graphemes', () {
     test('writes a single-column ASCII grapheme as a leading cell', () {
       final buf = CellBuffer(const CellSize(3, 1));

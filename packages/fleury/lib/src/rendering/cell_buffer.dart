@@ -535,27 +535,79 @@ final class CellBuffer {
         );
         continue;
       }
-      // Only what the source painted lands; its empty cells are transparent.
-      var col = colStart;
-      while (col < colEnd) {
-        if (source._cells[srcBase + col].role == CellRole.empty) {
-          col++;
-          continue;
+      _compositeRow(source, srcBase, srcCol, dstRow, dstCol0, colStart, colEnd);
+    }
+  }
+
+  /// The transparent counterpart of [_copySpan], for one clipped row: every
+  /// cell [source] painted lands, and every cell it left empty keeps what
+  /// this buffer holds. Rect column `c` is source index `srcBase + c` and
+  /// destination column `dstCol0 + c`; `colStart <= c < colEnd` is visible.
+  ///
+  /// Wide pairs stay whole on both sides, cell by cell: a run of painted
+  /// cells severs a destination pair its first cell bisects as it starts,
+  /// and one its last cell bisects as it ends. (A span copy per run cost
+  /// several times the mirror copy on scattered content, a run every other
+  /// cell.) A source pair the clip cuts lands as a direct paint at that edge
+  /// would: skipped on the left, where [writeText] skips a grapheme starting
+  /// off-grid, and the grid-edge `?` on the right.
+  void _compositeRow(
+    CellBuffer source,
+    int srcBase,
+    int srcCol,
+    int dstRow,
+    int dstCol0,
+    int colStart,
+    int colEnd,
+  ) {
+    final from = source._cells;
+    final cells = _cells;
+    final dstBase = dstRow * _size.cols + dstCol0;
+    final inheritBackground = source._imagePlacements.isNotEmpty;
+    var inherited = const Cell.overlay();
+    var col = colStart;
+    // The clip cut this pair's leading off.
+    if (from[srcBase + col].role == CellRole.continuation) col++;
+    var inRun = false;
+    for (; col < colEnd; col++) {
+      var cell = from[srcBase + col];
+      if (cell.role == CellRole.empty) {
+        // The run just ended; a continuation here lost its leading to it.
+        if (inRun && cells[dstBase + col].role == CellRole.continuation) {
+          cells[dstBase + col] = const Cell.empty();
         }
-        final runStart = col;
-        do {
-          col++;
-        } while (col < colEnd &&
-            source._cells[srcBase + col].role != CellRole.empty);
-        _copySpan(
-          source,
-          srcBase + runStart,
-          srcCol + runStart,
-          dstRow,
-          dstCol0 + runStart,
-          col - runStart,
-        );
+        inRun = false;
+        continue;
       }
+      if (!inRun) {
+        inRun = true;
+        _evictWideNeighbors(dstCol0 + col, dstRow, dstBase + col);
+      }
+      // An image overlay the source left unstyled shows this buffer's
+      // background through its gaps, as [_copyCellRange] gives it.
+      if (inheritBackground &&
+          cell.role == CellRole.overlay &&
+          cell.style.background == null) {
+        final background = cells[dstBase + col].style.background;
+        if (inherited.style.background != background) {
+          inherited = Cell.overlay(style: CellStyle(background: background));
+        }
+        cell = inherited;
+      }
+      cells[dstBase + col] = cell;
+    }
+    if (!inRun) return;
+    if (srcCol + colEnd < source._size.cols &&
+        from[srcBase + colEnd].role == CellRole.continuation) {
+      // The clip cut the last pair's continuation off.
+      cells[dstBase + colEnd - 1] = Cell.leading(
+        grapheme: '?',
+        style: from[srcBase + colEnd - 1].style,
+      );
+    }
+    if (dstCol0 + colEnd < _size.cols &&
+        cells[dstBase + colEnd].role == CellRole.continuation) {
+      cells[dstBase + colEnd] = const Cell.empty();
     }
   }
 
