@@ -453,9 +453,10 @@ class RenderFlex extends RenderObject implements RenderObjectWithChildren {
       return;
     }
     // A child outside the buffer paints nothing, so it is skipped: a
-    // scrolled Column paints only the rows in view. Nothing needs an
-    // offscreen paint any more — selection and semantics geometry derive
-    // from layout — so text rows are culled like any other.
+    // scrolled Column paints only the rows in view. Selection, focus and
+    // semantics geometry derive from layout, so a skipped child loses only
+    // its paint. A child is judged by its layout box: paint it spills
+    // outside that box (a Stack's overflowing Positioned) goes with it.
     for (final c in _children) {
       final childOffset = _childOffsets[c] ?? CellOffset.zero;
       final paintOffset = offset + childOffset;

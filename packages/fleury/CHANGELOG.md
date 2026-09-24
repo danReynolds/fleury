@@ -53,6 +53,29 @@
   the current size instead of the previous one.
 - `Animation.loop` keeps running through hot reload. Pulse, shimmer, and
   other repeating effects no longer freeze after the first reload.
+- Wrapped `Text` keeps its lines through a resize. Widening a wrapped text
+  until it fit one line and then narrowing it again showed only its first
+  line.
+- A paragraph's leading spaces are its indentation, and wrapping keeps them.
+  Multi-line help text, `JsonView` nesting, and nested Markdown bullets
+  render indented instead of flush left. An indent that leaves no room for
+  the paragraph's first word gives way to it rather than taking a row of its
+  own.
+- `Row` and `Column` align their children within the space they are given,
+  not within their content. `CrossAxisAlignment.end` in an `Expanded` pane
+  reaches the pane's edge, a row in a taller `SizedBox` centers vertically,
+  and a `mainAxisSize: min` flex that is forced wider centers along its main
+  axis. When the children overflow, `spaceBetween`, `spaceAround`, and
+  `spaceEvenly` leave no gaps instead of painting siblings over each other.
+- A `RepaintBoundary`, and a `ListView` item clipped at the viewport edge,
+  paint over their parent as their child would directly: a cell the child
+  left empty shows what lies beneath it. Ragged text in a filled panel no
+  longer punches holes in the panel's background (every `ListView` item has
+  a boundary). An overlay entry that paints no fill of its own now shows the
+  app beneath its empty cells too; the built-in dialogs, menus, and popups
+  all paint an opaque fill.
+- A `ScrollView` over a `Column` no longer paints the rows of text that are
+  scrolled out of view.
 - Debugger mode changes preserve application state and layout. Opening the
   shell starts a bounded 60-frame recording that continues while hidden;
   Rebuilds shows the worst frame's phase costs. Inspector reports scroll with

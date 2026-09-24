@@ -580,6 +580,9 @@ class RenderRichText extends RenderObject
     // break and is dropped; a paragraph's own leading spaces are its
     // indentation and are kept.
     var wrapped = false;
+    // Whether a word is placed yet. Until one is, [line] holds at most the
+    // paragraph's indentation.
+    var placedWord = false;
     void breakLine() {
       out.add(line);
       line = <_Glyph>[];
@@ -616,8 +619,18 @@ class RenderRichText extends RenderObject
           line.add(_glyphs[i]);
         }
         lineWidth += ww;
+        placedWord = true;
       } else {
-        if (lineWidth > 0) breakLine();
+        if (!placedWord) {
+          // Only the indentation is here. Breaking would leave a row of
+          // nothing but spaces — all a one-line box would show — so the
+          // indentation gives way to the word instead.
+          line.clear();
+          lineWidth = 0;
+        } else if (lineWidth > 0) {
+          breakLine();
+        }
+        placedWord = true;
         if (ww > maxCols) {
           // Hard-break at unit boundaries. A unit is one glyph, or one whole
           // lowered cluster group (shared groupId): atoms of one source

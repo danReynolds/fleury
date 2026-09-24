@@ -400,6 +400,11 @@ final class CellBuffer {
   /// How a cached or scratch buffer is composited back — a repaint
   /// boundary's cache, a clipped viewport — much faster than re-walking the
   /// subtree's paint.
+  ///
+  /// One case differs from painting directly: a cell [source] painted and
+  /// then emptied itself (half of a wide glyph it later overwrote) cannot be
+  /// told from one it never painted, so it keeps what lies beneath, where a
+  /// direct paint would have left it empty.
   void compositeFrom(CellBuffer source, CellOffset destOffset) {
     _copyRect(
       source,
@@ -619,14 +624,14 @@ final class CellBuffer {
   /// overwriting — a leading just left of the span, or a continuation just
   /// right of it, would otherwise be orphaned (the interior is fully
   /// overwritten). This is the invariant every grapheme write and image
-  /// placement maintains. A copy skipped it because "the frame buffer is
-  /// cleared at the start of every frame" — true, and irrelevant once a
-  /// SIBLING has painted into that cleared buffer this frame. A cached
-  /// repaint boundary (every ListView item, every overlay entry) blitting
-  /// over CJK text left an orphaned leading the renderer then modelled as
-  /// one column and the terminal drew as two: everything after it on the row
-  /// landed one cell to the right, and stayed there, because the shown
-  /// buffer believed the frame was correct.
+  /// placement maintains, and [_compositeRow] keeps it too. Copies once
+  /// skipped it because "the frame buffer is cleared at the start of every
+  /// frame" — true, and irrelevant once a SIBLING has painted into that
+  /// cleared buffer this frame. A buffer landing over CJK text left an
+  /// orphaned leading the renderer then modelled as one column and the
+  /// terminal drew as two: everything after it on the row landed one cell
+  /// to the right, and stayed there, because the shown buffer believed the
+  /// frame was correct.
   void _copySpan(
     CellBuffer source,
     int srcStart,
@@ -850,7 +855,7 @@ final class CellBuffer {
 
   /// Replays the already-measured cell at (`srcCol`, `srcRow`) of [source]
   /// into (`dstCol`, `dstRow`) of this buffer — the per-cell counterpart of
-  /// [copyRectFrom], for the widgets that paint a child into a scratch buffer
+  /// [compositeRectFrom], for the widgets that paint a child into a scratch buffer
   /// and composite the result back (ScrollView's viewport, Flex's overflow
   /// clip, the effect layers).
   ///

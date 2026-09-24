@@ -11,6 +11,15 @@ import '../support/harness.dart';
 
 const _fill = RgbColor(0, 0, 200);
 
+/// Every cell of [buffer], row by row.
+List<List<Cell>> _cells(CellBuffer buffer) => [
+  for (var row = 0; row < buffer.size.rows; row++)
+    [
+      for (var col = 0; col < buffer.size.cols; col++)
+        buffer.atColRow(col, row),
+    ],
+];
+
 /// 'B' where a cell carries the container background, '.' where it doesn't.
 List<String> _backgroundMap(CellBuffer buffer) => [
   for (var row = 0; row < buffer.size.rows; row++)
@@ -18,6 +27,12 @@ List<String> _backgroundMap(CellBuffer buffer) => [
       for (var col = 0; col < buffer.size.cols; col++)
         buffer.atColRow(col, row).style.background == _fill ? 'B' : '.',
     ].join(),
+];
+
+/// The rendered text, row by row, without the fill's trailing spaces.
+List<String> _text(FleuryTester tester, CellSize size) => [
+  for (final line in tester.renderToString(size: size).trimRight().split('\n'))
+    line.trimRight(),
 ];
 
 Widget _filled(CellSize size, Widget child) => Container(
@@ -36,12 +51,12 @@ void main() {
     testWidgets('a RepaintBoundary around $name paints like $name', (tester) {
       const size = CellSize(10, 2);
       tester.pumpWidget(_filled(size, child));
-      final direct = _backgroundMap(tester.render(size: size));
+      final direct = _cells(tester.render(size: size));
 
       tester.pumpWidget(_filled(size, RepaintBoundary(child: child)));
-      expect(_backgroundMap(tester.render(size: size)), direct);
+      expect(_cells(tester.render(size: size)), direct);
       expect(
-        _backgroundMap(tester.render(size: size)),
+        _cells(tester.render(size: size)),
         direct,
         reason: 'the cache hit composites the same way',
       );
@@ -59,9 +74,11 @@ void main() {
         ),
       ),
     );
-    expect(_backgroundMap(tester.render(size: size)), [
+    final buffer = tester.render(size: size);
+    expect(_backgroundMap(buffer), [
       for (var row = 0; row < size.rows; row++) 'B' * size.cols,
     ]);
+    expect(_text(tester, size), ['ab', 'abcdef', 'xy', 'xyz']);
   });
 
   testWidgets('an item straddling the viewport edge keeps the background', (
@@ -81,5 +98,6 @@ void main() {
     expect(_backgroundMap(tester.render(size: size)), [
       for (var row = 0; row < size.rows; row++) 'B' * size.cols,
     ]);
+    expect(_text(tester, size), ['a1', 'a2', 'b1']);
   });
 }

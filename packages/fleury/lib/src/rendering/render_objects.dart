@@ -123,24 +123,6 @@ class RenderText extends RenderObject
   // line uses _intrinsicWidth directly, so short labels allocate no list.
   List<int> _lineWidths = const <int>[];
 
-  /// Memoized slow-path layout, keyed on the constraints that produced
-  /// it. The wrap algorithm is the hottest path in the renderer
-  /// (see `benchmark/widgets_benchmarks.dart`); reusing a cached
-  /// result across frames when neither the text nor the constraints
-  /// changed eliminates ~80% of the steady-state layout cost. Any
-  /// text / softWrap / width-resolver / policy setter that would
-  /// change the wrap output also calls [_invalidateLayoutCache].
-  ///
-  /// The entry keeps the lines it measured, and a hit restores them: the
-  /// single-line fast path replaces [_lines] without touching the entry, so
-  /// a size alone would describe lines that are no longer there.
-  _WrappedTextLayout? _cachedLayout;
-
-  void _invalidateLayoutCache() {
-    _cachedLayout = null;
-    markNeedsLayout();
-  }
-
   /// The canonical logical text (RFC 0019 decision 3): what was set, not what
   /// is painted. The display form lives in [_text] via [_projection].
   String get text => _logicalText;
@@ -161,14 +143,12 @@ class RenderText extends RenderObject
       _lines = <String>[display];
       _lineWidths = const <int>[];
       _moreLinesTruncated = false;
-      // A wrap cached for the previous text is not this text's wrap.
-      _cachedLayout = null;
       markNeedsPaintOnly();
       return;
     }
     _text = display;
     _intrinsicWidth = nextIntrinsicWidth;
-    _invalidateLayoutCache();
+    markNeedsLayout();
   }
 
   CellStyle get style => _style;
@@ -183,18 +163,18 @@ class RenderText extends RenderObject
   set softWrap(bool value) {
     if (_softWrap == value) return;
     _softWrap = value;
-    _invalidateLayoutCache();
+    markNeedsLayout();
   }
 
   int? get maxLines => _maxLines;
   set maxLines(int? value) {
     if (_maxLines == value) return;
     _maxLines = value;
-    _invalidateLayoutCache();
+    markNeedsLayout();
   }
 
   // Overflow only affects paint (which graphemes/ellipsis show), not the
-  // line breaking, so changing it leaves the layout cache valid.
+  // line breaking, so changing it needs no layout.
   // ignore: unnecessary_getters_setters
   TextOverflow get overflow => _overflow;
   set overflow(TextOverflow value) {
@@ -205,7 +185,7 @@ class RenderText extends RenderObject
 
   // textAlign also only affects paint — it shifts each line's start
   // column inside the box but doesn't change which graphemes wrap
-  // where. Layout cache stays valid across changes.
+  // where, so changing it needs no layout.
   // ignore: unnecessary_getters_setters
   TextAlign get textAlign => _textAlign;
   set textAlign(TextAlign value) {
@@ -219,7 +199,7 @@ class RenderText extends RenderObject
     if (identical(_widthResolver, value)) return;
     _widthResolver = value;
     _recomputeIntrinsicWidth();
-    _invalidateLayoutCache();
+    markNeedsLayout();
   }
 
   TextPresentationPolicy get textPolicy => _textPolicy;
@@ -234,7 +214,7 @@ class RenderText extends RenderObject
     _projection = projectText(_logicalText, policy: value);
     _text = _projection.displayText;
     _recomputeIntrinsicWidth();
-    _invalidateLayoutCache();
+    markNeedsLayout();
   }
 
   /// Display width the text would occupy if given unbounded horizontal
@@ -289,9 +269,7 @@ class RenderText extends RenderObject
 
     // Single-line fast path: no newlines AND either wrapping is off,
     // no width bound, or the text already fits. This is the dominant
-    // case for short labels (ListView items, button text). Skip the
-    // layout cache here — it's already cheap, and the cache-check
-    // overhead would be a net loss.
+    // case for short labels (ListView items, button text).
     if (!hasNewlines &&
         (!_softWrap || maxCols == null || _intrinsicWidth <= maxCols)) {
       // Honor maxLines on the fast path too (0 → empty), matching the
@@ -311,36 +289,18 @@ class RenderText extends RenderObject
       return constraints.constrain(CellSize(cols, 1));
     }
 
-    // Slow paths (real wrap, multi-paragraph): consult the cache.
-    // These are the cases where re-running the algorithm every frame
-    // dominated the wrap-Text benchmarks.
-    final cached = _cachedLayout;
-    if (cached != null && constraints == cached.constraints) {
-      _lines = cached.lines;
-      _lineWidths = cached.lineWidths;
-      _moreLinesTruncated = cached.moreLinesTruncated;
-      return cached.size;
-    }
-    if (cached != null && !_softWrap) {
-      // Unwrapped paragraphs are independent of the viewport width. Reuse
-      // their measured widths, while refreshing the line-list identity so
-      // point-based selection observes the new geometry on the next paint.
-      _lines = List<String>.of(cached.lines);
-      _lineWidths = cached.lineWidths;
-      _moreLinesTruncated = cached.moreLinesTruncated;
+    // Unchanged constraints on a clean object never reach here (layout
+    // skips it). So a clean object means only the constraints changed, and
+    // unwrapped paragraphs do not depend on them: keep the lines and their
+    // measured widths, refreshing the line-list identity so point-based
+    // selection observes the new geometry on the next paint.
+    if (!_softWrap && !needsLayout) {
+      _lines = List<String>.of(_lines);
       var widest = 0;
       for (final width in _lineWidths) {
         if (width > widest) widest = width;
       }
-      final result = constraints.constrain(CellSize(widest, _lines.length));
-      _cachedLayout = _WrappedTextLayout(
-        constraints,
-        result,
-        _lines,
-        _lineWidths,
-        _moreLinesTruncated,
-      );
-      return result;
+      return constraints.constrain(CellSize(widest, _lines.length));
     }
 
     if (!_softWrap || maxCols == null) {
@@ -370,16 +330,7 @@ class RenderText extends RenderObject
     final cols = maxCols == null
         ? maxLineWidth
         : (maxLineWidth < maxCols ? maxLineWidth : maxCols);
-    final result = constraints.constrain(CellSize(cols, _lines.length));
-
-    _cachedLayout = _WrappedTextLayout(
-      constraints,
-      result,
-      _lines,
-      _lineWidths,
-      _moreLinesTruncated,
-    );
-    return result;
+    return constraints.constrain(CellSize(cols, _lines.length));
   }
 
   // Intrinsic sizing: the unwrapped natural width, and the line count under
@@ -607,6 +558,9 @@ class RenderText extends RenderObject
     // paragraph start. Nothing placed on it yet means its separator falls at
     // the break and is dropped.
     var wrapped = false;
+    // Whether a word is placed yet. Until one is, the line holds at most the
+    // paragraph's indentation.
+    var placedWord = false;
 
     void breakLine() {
       out.add(current.toString());
@@ -639,11 +593,21 @@ class RenderText extends RenderObject
         }
         current.write(token);
         currentWidth += tokenWidth;
+        placedWord = true;
         continue;
       }
 
       // Token doesn't fit on the current line.
-      if (currentWidth > 0) breakLine();
+      if (!placedWord) {
+        // Only the indentation is here. Breaking would leave a row of
+        // nothing but spaces — all a one-line box would show — so the
+        // indentation gives way to the word instead.
+        current.clear();
+        currentWidth = 0;
+      } else if (currentWidth > 0) {
+        breakLine();
+      }
+      placedWord = true;
       if (tokenWidth <= maxWidth) {
         current.write(token);
         currentWidth = tokenWidth;
@@ -1273,21 +1237,3 @@ final List<String> _asciiGraphemes = [
 String _singleUnitGrapheme(int codeUnit) => codeUnit >= 0x20 && codeUnit <= 0x7E
     ? _asciiGraphemes[codeUnit - 0x20]
     : String.fromCharCode(codeUnit);
-
-/// One slow-path [RenderText] layout: the constraints it ran under, and
-/// everything it produced.
-final class _WrappedTextLayout {
-  const _WrappedTextLayout(
-    this.constraints,
-    this.size,
-    this.lines,
-    this.lineWidths,
-    this.moreLinesTruncated,
-  );
-
-  final CellConstraints constraints;
-  final CellSize size;
-  final List<String> lines;
-  final List<int> lineWidths;
-  final bool moreLinesTruncated;
-}

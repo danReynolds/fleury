@@ -463,14 +463,32 @@ void main() {
     test('whitespace at a wrap break is still dropped', () {
       expect(linesAt('hello  world', 5), ['hello', 'world']);
     });
+
+    test('an indent with no room left for the first word gives way', () {
+      // Breaking after the indentation would leave a row of nothing but
+      // spaces; the word takes the row instead.
+      expect(linesAt('   indented words here', 10), ['indented', 'words here']);
+      expect(linesAt('top\n    word', 6), ['top', 'word']);
+    });
+
+    test('a one-line indented log line shows its path, not its indent', () {
+      // A captured output line: indentation, then a path wider than the
+      // rest of the row.
+      const path = '/usr/local/share/fleury/lib/src/rendering/cell_buffer.dart';
+      final text = RenderText(text: '        $path:523', maxLines: 1)
+        ..layout(const CellConstraints(maxCols: 40, maxRows: 1));
+      final buffer = CellBuffer(const CellSize(40, 1));
+      text.paint(buffer, CellOffset.zero);
+      expect(_rowContent(buffer, 0), path.substring(0, 40));
+    });
   });
 
-  group('RenderText layout cache', () {
-    // The wrap cache is keyed on constraints; a single-line layout in
-    // between overwrote the lines it describes. Returning to the wrapping
-    // width restored the 2-row size with one unwrapped line, and every line
-    // after the first vanished (a terminal widened and restored, or a
-    // sibling toggling an Expanded text's width).
+  group('RenderText relayout across widths', () {
+    // Laid out at another width and back, a text wraps for the width it
+    // has now. A cache of the earlier wrap once restored its 2-row size
+    // around the single line laid out in between, and every line after the
+    // first vanished (a terminal widened and restored, or a sibling toggling
+    // an Expanded text's width).
     List<String> paintAt(RenderText text, int cols) {
       text.layout(CellConstraints(maxCols: cols, maxRows: 3));
       final buffer = CellBuffer(const CellSize(12, 3));
@@ -494,6 +512,15 @@ void main() {
       expect(paintAt(text, 20), ['hello world']);
       text.text = 'jolly roger';
       expect(paintAt(text, 5), ['jolly', 'roger']);
+    });
+
+    test('unwrapped paragraphs keep their lines through a resize', () {
+      final text = RenderText(text: 'ab\ncdef', softWrap: false);
+      expect(paintAt(text, 10), ['ab', 'cdef']);
+      expect(paintAt(text, 3), ['ab', 'cde']);
+      expect(text.size, const CellSize(3, 2));
+      expect(paintAt(text, 10), ['ab', 'cdef']);
+      expect(text.size, const CellSize(4, 2));
     });
   });
 }

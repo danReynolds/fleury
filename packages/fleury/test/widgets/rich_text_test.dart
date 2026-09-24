@@ -32,6 +32,24 @@ void main() {
     });
   }
 
+  test('an indent span with no room left for the first word gives way', () {
+    // Breaking after the indentation would leave a row of nothing but
+    // spaces; the word takes the row instead.
+    final render = RenderRichText(
+      span: const TextSpan(
+        children: [
+          TextSpan(text: '      '),
+          TextSpan(text: 'child item'),
+        ],
+      ),
+      base: CellStyle.none,
+    )..layout(const CellConstraints(maxCols: 10));
+    final buffer = CellBuffer(const CellSize(10, 2));
+    render.paint(buffer, CellOffset.zero);
+    expect(render.size.rows, 1);
+    expect(_row(buffer, 0), 'child item');
+  });
+
   test('an indented paragraph keeps its indent across a wrap', () {
     final render = RenderRichText(
       span: const TextSpan(text: 'top\n   indented words here'),

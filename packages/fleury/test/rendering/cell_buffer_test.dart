@@ -438,6 +438,22 @@ void main() {
       expectLikeDirect(() => filled(6), 3, {0: '漢a'}, -1);
     });
 
+    test('an image overlay shows the background beneath it', () {
+      final bytes = Uint8List.fromList([1, 2, 3]);
+      final source = CellBuffer(const CellSize(4, 1))
+        ..writeImage(const CellOffset(1, 0), bytes, width: 2, height: 1);
+      final direct = filled(6)
+        ..writeImage(const CellOffset(2, 0), bytes, width: 2, height: 1);
+      final composite = filled(6)
+        ..compositeRectFrom(
+          source,
+          CellRect.fromLTWH(0, 0, 4, 1),
+          const CellOffset(1, 0),
+        );
+      expect(row(composite), row(direct));
+      expect(composite.atColRow(2, 0).style.background, background.background);
+    });
+
     test('a wide glyph the right clip cuts lands as the edge marker', () {
       // A direct paint writes `?` where a wide grapheme has no room.
       expectLikeDirect(() => filled(6), 3, {0: 'a漢'}, 4);
