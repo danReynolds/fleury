@@ -538,7 +538,11 @@ class NavigatorState extends State<Navigator> {
   /// false). Returns whether a pop happened. Unlike [pop], this consults
   /// pop guards — including at the root, so a screen can intercept a
   /// would-be app exit. [pop] itself is unconditional (programmatic).
-  bool maybePop() {
+  bool maybePop() => _tryPop() == _PopAttempt.popped;
+
+  /// [maybePop], reporting why nothing popped: a guard or a non-dismissible
+  /// modal refused, or there is nothing to pop (the root).
+  _PopAttempt _tryPop() {
     final top = _topLive;
     if (top != null && top.guards.isNotEmpty) {
       final blockers = top.guards.where((g) => !g.allowsPop).toList();
@@ -546,17 +550,17 @@ class NavigatorState extends State<Navigator> {
         for (final g in blockers) {
           g.notifyBlocked();
         }
-        return false;
+        return _PopAttempt.refused;
       }
     }
     // A non-dismissible modal refuses semantic/back dismissal on EVERY
     // consult path — the route-level Esc binding alone isn't enough, since
     // app back bindings and semantics drivers route through maybePop.
     // Programmatic pop() stays unconditional.
-    if (top != null && !top.barrierDismissible) return false;
-    if (!canPop) return false;
+    if (top != null && !top.barrierDismissible) return _PopAttempt.refused;
+    if (!canPop) return _PopAttempt.nothingToPop;
     pop();
-    return true;
+    return _PopAttempt.popped;
   }
 
   // ---------------------------------------------------------------
@@ -905,7 +909,15 @@ class _RouteHost extends StatelessWidget {
             ? [
                 KeyBinding(
                   KeySequence.escape,
-                  onTrigger: (_) => navigator.maybePop(),
+                  onTrigger: (event) {
+                    // At the root Esc has nothing to pop, so it is not this
+                    // route's key: it bubbles to what binds Esc above the
+                    // navigator (app commands, a toaster, an outer
+                    // navigator). A guard's refusal still consumes it.
+                    if (navigator._tryPop() == _PopAttempt.nothingToPop) {
+                      event.bubble();
+                    }
+                  },
                   hideFromHintBar: true,
                 ),
               ]
@@ -1144,3 +1156,6 @@ extension NavigatorContext on BuildContext {
   /// Pops every screen above the root.
   void popToRoot() => Navigator.of(this).popToRoot();
 }
+
+/// Why [NavigatorState.maybePop] did or did not pop.
+enum _PopAttempt { popped, refused, nothingToPop }

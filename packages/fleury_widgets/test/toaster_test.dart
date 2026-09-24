@@ -412,6 +412,35 @@ void main() {
     expect(out.contains('first'), isTrue, reason: 'older toast remains');
   });
 
+  testWidgets('Esc dismisses a persistent toast from a navigator root', (
+    tester,
+  ) {
+    // The root route has nothing to pop, so its Esc reaches the Toaster: the
+    // keyboard path to dismiss a toast that never times out.
+    late BuildContext ctx;
+    tester.pumpWidget(
+      Toaster(
+        child: Navigator(
+          home: Column(
+            children: [
+              _Capture((c) => ctx = c),
+              Button(text: 'x', autofocus: true, onPressed: () {}),
+            ],
+          ),
+        ),
+      ),
+    );
+    tester.pump();
+
+    Toaster.show(ctx, 'Saved', persistent: true);
+    tester.pump();
+    expect(_screen(tester, rows: 10).contains('Saved'), isTrue);
+
+    tester.sendKey(const KeyEvent(KeyCode.escape));
+    tester.pump();
+    expect(_screen(tester, rows: 10).contains('Saved'), isFalse);
+  });
+
   testWidgets('toasts float over a presented modal', (tester) async {
     // The Toaster's overlay entry sits above the navigator, so a toast
     // shows on top of a dialog presented on the navigator.
