@@ -76,6 +76,30 @@
   all paint an opaque fill.
 - A `ScrollView` over a `Column` no longer paints the rows of text that are
   scrolled out of view.
+- Holding Ctrl+C no longer quits an app that handled the press, such as a
+  copy of the selection or the app's own interrupt binding. Only an
+  unhandled press quits; its key repeats do not.
+- The numeric keypad works on kitty-protocol terminals. Digits and operators
+  type, KP Enter submits and activates, and the NumLock-off keys move the
+  caret and delete. A keypad key reports what it means, as it does in the
+  browser, and carries the keypad on its position (`KeyPosition.numpad1`,
+  `KeyPosition.numpadEnter`): a binding for the keypad key itself uses the
+  position.
+- In the browser, a printable key reaches each `KeyDetector` once, and a
+  consumed Shift+letter no longer types its capital as well. `Tree`,
+  `DataTable`, `Select`, and `Menu` type-ahead jump to the first match.
+- A click in a text field while a large paste is still being applied
+  finishes the paste first: it stays whole, undoes in one step, and the
+  caret lands on what was clicked.
+- Shift+Backspace, Shift+Delete, and Shift+Enter work in text fields on
+  kitty-protocol terminals and in the browser. Ctrl+Backspace and
+  Alt+Backspace delete the word before the caret.
+- Tab through a form in a `ScrollView` follows the form's order and scrolls
+  each field into view, however far the form is scrolled. `focusNext` and
+  `focusPrevious` reveal the node they move to, and so does arrow
+  traversal.
+- `TextArea` no longer measures its whole document on every keystroke and
+  caret move.
 - Debugger mode changes preserve application state and layout. Opening the
   shell starts a bounded 60-frame recording that continues while hidden;
   Rebuilds shows the worst frame's phase costs. Inspector reports scroll with

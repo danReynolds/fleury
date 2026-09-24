@@ -21,13 +21,13 @@
 | B | medium | RenderFlex aligns children within the unconstrained content size instead of the final box, and on overflow spaceBetween/Around/Evenly produce negative gaps that overlap siblings | Fixed |
 | B | medium | RepaintBoundary cache blits and ListView's clip path copy empty cells over the parent's paint, punching holes in backgrounds (every ListView item is wrapped in a boundary by default) | Fixed |
 | B | low | RenderFlex's offscreen cull never fires for subtrees containing text, so a ScrollView paints its entire content every frame | Fixed |
-| C | high | Holding Ctrl+C exits the app even when the press was handled, e.g. after copying a selection or an app's Interrupt binding | Open |
-| C | high | The numeric keypad does nothing on kitty-protocol terminals (the default setup): digits are dropped, and KP Enter and NumLock-off navigation keys are ignored | Open |
-| C | medium | Browser: printable keys reach detectors twice, and Shift+letter typeahead skips a match | Open |
-| C | medium | Clicking in a text field while a large paste is still being applied inserts the rest of the paste at the click point, scrambling the order | Decision pending: paste ownership when focus moves |
-| C | medium | Shift+Backspace (also Shift+Delete, Shift+Enter, Ctrl+Backspace) does nothing in TextInput/TextArea on kitty-protocol terminals and in the browser | Open |
-| C | medium | Tab in an overflowing ScrollView form skips hidden fields and never scrolls to them | Open |
-| C | medium | TextArea re-measures the whole document on every keystroke and caret move, then throws the result away | Open |
+| C | high | Holding Ctrl+C exits the app even when the press was handled, e.g. after copying a selection or an app's Interrupt binding | Fixed |
+| C | high | The numeric keypad does nothing on kitty-protocol terminals (the default setup): digits are dropped, and KP Enter and NumLock-off navigation keys are ignored | Fixed |
+| C | medium | Browser: printable keys reach detectors twice, and Shift+letter typeahead skips a match | Fixed |
+| C | medium | Clicking in a text field while a large paste is still being applied inserts the rest of the paste at the click point, scrambling the order | Fixed |
+| C | medium | Shift+Backspace (also Shift+Delete, Shift+Enter, Ctrl+Backspace) does nothing in TextInput/TextArea on kitty-protocol terminals and in the browser | Fixed |
+| C | medium | Tab in an overflowing ScrollView form skips hidden fields and never scrolls to them | Fixed |
+| C | medium | TextArea re-measures the whole document on every keystroke and caret move, then throws the result away | Fixed |
 | D | high | Command shortcuts freeze `enabled`/`visible` at build time: the shortcut is dead or swallows the key while every other surface says the command is enabled | Open |
 | D | high | Opening the debug panel (Ctrl+G -> docked, or Esc fullscreen -> docked) unmounts and re-creates the whole app: all State lost and navigation reset | Fixed: #273 keeps the app at one element path; this branch fixes the GlobalKey move into a LayoutBuilder underneath |
 | D | high | Root route consumes Esc even when nothing can pop, so FleuryApp Esc commands, the Toaster's Esc-dismiss and app-level Esc bindings never fire | Open |
