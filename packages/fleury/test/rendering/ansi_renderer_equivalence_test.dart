@@ -16,6 +16,7 @@
 import 'dart:math';
 
 import 'package:fleury/fleury.dart';
+import 'package:fleury/src/rendering/ansi_render_target.dart';
 import 'package:test/test.dart';
 
 /// A minimal terminal: tracks the cursor and writes single-width graphemes,
@@ -157,6 +158,75 @@ CellBuffer _randomAsciiBuffer(Random rng, int cols, int rows) {
 }
 
 void main() {
+  group('inline region containment', () {
+    test('random diffs preserve every surrounding row', () {
+      final rng = Random(0xF1E0);
+      for (var trial = 0; trial < 300; trial++) {
+        final cols = 1 + rng.nextInt(30);
+        final rows = 1 + rng.nextInt(10);
+        final top = rng.nextInt(12);
+        final prev = _randomAsciiBuffer(rng, cols, rows);
+        final next = _randomAsciiBuffer(rng, cols, rows);
+        final above = List.generate(top, (_) => List.filled(cols, '^'));
+        final below = List.generate(3, (_) => List.filled(cols, 'v'));
+        final sink = StringAnsiSink();
+        const AnsiRenderer().renderDiff(
+          prev,
+          next,
+          sink,
+          target: AnsiRenderTarget.inline(top: top),
+          // Exercise both the bounded and unbounded renderer paths.
+          dirtyBounds: trial.isEven ? next.diffAgainst(prev).bounds : null,
+        );
+        expect(
+          _apply([...above, ..._gridOf(prev), ...below], sink.output),
+          [...above, ..._gridOf(next), ...below],
+          reason: 'trial $trial: ${cols}x$rows at row $top',
+        );
+      }
+    });
+
+    test(
+      'scroll-shaped updates patch the region without scrolling history',
+      () {
+        const size = CellSize(20, 10);
+        final prev = CellBuffer(size);
+        final next = CellBuffer(size);
+        for (var row = 0; row < size.rows; row++) {
+          prev.writeText(
+            CellOffset(0, row),
+            String.fromCharCode(65 + row) * 20,
+          );
+          next.writeText(
+            CellOffset(0, row),
+            String.fromCharCode(66 + row) * 20,
+          );
+        }
+        // Both an explicit FrameScrolled hint and the renderer's own detection
+        // must be harmless. A top of zero still owns only these ten rows.
+        for (final top in [0, 4]) {
+          for (final hint in [null, 1]) {
+            final sink = StringAnsiSink();
+            const AnsiRenderer().renderDiff(
+              prev,
+              next,
+              sink,
+              target: AnsiRenderTarget.inline(top: top),
+              scrollUpRows: hint,
+            );
+            expect(sink.output, isNot(matches(RegExp(r'\x1b\[\d*S'))));
+            final above = List.generate(top, (_) => List.filled(20, '^'));
+            final below = [List.filled(20, 'v')];
+            expect(
+              _apply([...above, ..._gridOf(prev), ...below], sink.output),
+              [...above, ..._gridOf(next), ...below],
+            );
+          }
+        }
+      },
+    );
+  });
+
   group('AnsiRenderer cursor encoding — output equivalence', () {
     test('diff applied to previous reproduces next (300 random frames)', () {
       final rng = Random(0xC0FFEE);
