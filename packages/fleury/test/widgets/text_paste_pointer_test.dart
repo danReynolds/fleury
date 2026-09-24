@@ -67,9 +67,8 @@ void main() {
     tester.pumpWidget(TextArea(controller: controller, autofocus: true));
     tester.render(size: _size);
     tester.paste(_paste);
-    tester.pump();
 
-    // 'END' follows the caret, on the caret's row.
+    // 'END' follows the caret, on the caret's row, in the frame drawn next.
     final buffer = tester.render(size: _size);
     CellOffset? end;
     for (var row = 0; row < _size.rows && end == null; row++) {
@@ -83,6 +82,11 @@ void main() {
       }
     }
     expect(end, isNotNull, reason: 'the suffix is on screen');
+    // A frame, then its post-frame paste step: the controller moves past
+    // the text laid out, as it does between frames at runtime.
+    final laidOut = controller.text.length;
+    tester.pump();
+    expect(controller.text.length, greaterThan(laidOut));
 
     _click(tester, end!.col, end.row);
     tester.pump();
