@@ -2,8 +2,8 @@
 //
 // Verifies that:
 //   - TickerScheduler.reassemble() fires every registered callback.
-//   - Animation self-registers and settles at its target on reassemble,
-//     cancelling any in-flight animation.
+//   - Animation self-registers and settles a finite run at its target on
+//     reassemble, cancelling the in-flight animation. A loop keeps running.
 //   - FrameTicker self-registers and resets its frame counter.
 //   - dispose unregisters cleanly (no callbacks after dispose).
 
@@ -111,6 +111,34 @@ void main() {
       tester.binding.tickerScheduler.reassemble();
 
       await expectLater(future.orCancel, throwsA(isA<TickerCanceled>()));
+    });
+
+    testWidgets('a loop keeps running through reassemble', (tester) async {
+      final m = Animation(0.0);
+      tester.pumpWidget(_Show(m));
+      final future = m.loop(
+        between: (0.0, 1.0),
+        period: const Duration(milliseconds: 100),
+      );
+      tester.pump(const Duration(milliseconds: 30));
+      final before = m.value;
+
+      // run_app's order: the tree reassembles, then the scheduler does.
+      tester.owner.reassembleApplication();
+      tester.binding.tickerScheduler.reassemble();
+
+      expect(m.value, before, reason: 'no jump: the loop is not settled');
+      expect(m.isMoving, isTrue);
+      final seen = <double>{};
+      for (var i = 0; i < 10; i++) {
+        tester.pump(const Duration(milliseconds: 33));
+        seen.add(m.value);
+      }
+      expect(seen.length, greaterThan(5), reason: 'still animating: $seen');
+      var canceled = false;
+      future.orCancel.catchError((_) => canceled = true);
+      await Future<void>.delayed(Duration.zero);
+      expect(canceled, isFalse, reason: 'the loop future stays open');
     });
 
     testWidgets('unregisters on dispose', (tester) {

@@ -33,7 +33,7 @@ class ErrorBoundary extends SingleChildRenderObjectWidget {
   final void Function(FrameContainmentError error)? onError;
 
   /// Overrides the owner-level containment policy for this boundary.
-  /// Defaults to [BuildOwner.rethrowContainedRenderErrors] — false in
+  /// Defaults to [BuildOwner.rethrowContainedErrors] — false in
   /// production hosts (contain), true under FleuryTester (a widget test
   /// with a layout bug should fail the test, not render a red panel).
   final bool? rethrowContained;
@@ -61,8 +61,7 @@ class ErrorBoundary extends SingleChildRenderObjectWidget {
     final focusManager = FocusManager.maybeOfIdentityDependency(context);
     final pointerRouter = PointerRouterScope.maybeOf(context);
     render
-      ..rethrowContained =
-          rethrowContained ?? owner.rethrowContainedRenderErrors
+      ..rethrowContained = rethrowContained ?? owner.rethrowContainedErrors
       ..onContained = onError ?? owner.onContainedRenderError
       // A contain/recover transition drops or restores the projected
       // semantic descendants — a structural change the retained-leaf

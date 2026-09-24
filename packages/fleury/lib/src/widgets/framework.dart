@@ -17,6 +17,8 @@
 // What is not yet in scope:
 //   - Frame scheduling beyond BuildOwner.flushBuild + onScheduleBuild
 
+import 'dart:collection';
+
 import 'package:meta/meta.dart';
 
 import '../debug/debug_invalidation.dart';
@@ -1182,6 +1184,74 @@ abstract class Element implements BuildContext {
     return inflateWidget(newWidget);
   }
 
+  /// [child] if it is still this element's active child, else null.
+  ///
+  /// A child update that throws can leave the slot pointing at an element it
+  /// already deactivated, unmounted, or lost to a GlobalKey move. A slot must
+  /// never keep such an element: the next rebuild would update it in place.
+  @protected
+  Element? activeChildOrNull(Element? child) =>
+      child != null && child.mounted && identical(child._parent, this)
+      ? child
+      : null;
+
+  /// Contains a child update that threw the way a thrown `build` is
+  /// contained: reports [error] to [BuildOwner.onBuildError] and puts the
+  /// owner's error widget in the slot [child] occupied.
+  ///
+  /// Covers what runs while a child mounts or updates: `initState`,
+  /// `didUpdateWidget`, a render object's create or update, a duplicate key.
+  /// The nearest element that builds its child catches it, as in Flutter, so
+  /// a multi-child parent's whole subtree is replaced and its reconcile never
+  /// has to recover a half-updated list. Rethrows when the owner installs no
+  /// [BuildOwner.errorBuilder], like a raw owner's thrown `build`, and under
+  /// [BuildOwner.rethrowContainedErrors].
+  ///
+  /// The caller's slot must go through [activeChildOrNull] afterwards, even
+  /// when this throws:
+  ///
+  ///     try {
+  ///       _child = replaceChildWithError(_child, error, stack);
+  ///     } finally {
+  ///       _child = activeChildOrNull(_child);
+  ///     }
+  @protected
+  Element? replaceChildWithError(
+    Element? child,
+    Object error,
+    StackTrace stack,
+  ) {
+    child = activeChildOrNull(child);
+    final owner = _owner;
+    final builder = owner?.errorBuilder;
+    if (owner == null || builder == null || owner.rethrowContainedErrors) {
+      Error.throwWithStackTrace(error, stack);
+    }
+    owner.onBuildError?.call(error, stack);
+    return updateChild(child, builder(error, stack));
+  }
+
+  /// Rebuilds the dirty elements below this one, shallowest first.
+  ///
+  /// For an element that builds its child during layout, like LayoutBuilder:
+  /// what that build dirties, such as the readers of a Scope it updated,
+  /// missed the frame's build flush. Rebuilt here, before the subtree lays
+  /// out, they paint this frame's state instead of the last frame's and
+  /// leave no extra frame behind.
+  @protected
+  void rebuildDirtyDescendants() => _owner?._rebuildDirtyBelow(this);
+
+  bool _isBelow(Element ancestor) {
+    for (
+      var parent = _parent;
+      parent != null && parent._depth >= ancestor._depth;
+      parent = parent._parent
+    ) {
+      if (identical(parent, ancestor)) return true;
+    }
+    return false;
+  }
+
   /// Creates an element for [newWidget] and mounts it under this element.
   ///
   /// If [newWidget] carries a [GlobalKey] whose element is available for
@@ -1322,20 +1392,20 @@ abstract class ComponentElement extends Element {
       // runWithBuildTarget already restored [current] on its way out of the
       // throw; report + substitute through the per-owner error hooks.
       final owner = _owner;
-      owner?.onBuildError?.call(error, stack);
       final builder = owner?.errorBuilder;
-      if (builder == null) rethrow; // no boundary installed → propagate
+      // No boundary installed, or the test harness's rethrow → propagate.
+      if (builder == null || owner!.rethrowContainedErrors) rethrow;
+      owner.onBuildError?.call(error, stack);
       built = builder(error, stack);
     }
     try {
       _child = updateChild(_child, built);
-    } catch (_) {
-      final child = _child;
-      if (child != null &&
-          (!child.mounted || !identical(child.elementParent, this))) {
-        _child = null;
+    } catch (error, stack) {
+      try {
+        _child = replaceChildWithError(_child, error, stack);
+      } finally {
+        _child = activeChildOrNull(_child);
       }
-      rethrow;
     }
   }
 
@@ -1493,25 +1563,33 @@ const int _maxBuildPasses = 512;
 class BuildOwner {
   BuildOwner({this.errorBuilder, this.onBuildError});
 
-  /// Builds the widget shown in place of a subtree whose `build` threw, so
-  /// the catch in [ComponentElement.performRebuild] renders an error panel
-  /// instead of crashing. Null means "no boundary" — errors propagate (the
+  /// Builds the widget shown in place of a subtree whose `build` threw, or
+  /// whose child threw while mounting or updating (`initState`,
+  /// `didUpdateWidget`, a render object's create or update), so the catch in
+  /// [ComponentElement.performRebuild] renders an error panel instead of
+  /// crashing. Null means "no boundary" — errors propagate (the
   /// raw-owner default; [TuiRuntime] and the test harness install
   /// `ErrorWidget.builder`). Per-owner, not process-global: two runtimes in
   /// one isolate never share a boundary, and a host cannot forget to
   /// install one.
   Widget Function(Object error, StackTrace stack)? errorBuilder;
 
-  /// Optional sink for build errors (logging/telemetry). Called before the
-  /// error widget is substituted.
+  /// Optional sink for build errors (logging/telemetry), called once for each
+  /// error the [errorBuilder] contains, before the error widget is
+  /// substituted. An error that propagates instead (no [errorBuilder], or
+  /// [rethrowContainedErrors]) is not reported here; whoever catches it has
+  /// it.
   void Function(Object error, StackTrace stack)? onBuildError;
 
-  /// Containment policy for layout/paint exceptions absorbed by
-  /// [ErrorBoundary] render objects (explicit or the implicit route/
-  /// overlay boundaries). False in production hosts — contain and render
-  /// the error presentation; FleuryTester sets true so a widget test with
-  /// a layout bug fails the test instead of silently rendering a panel.
-  bool rethrowContainedRenderErrors = false;
+  /// Whether errors that would be contained propagate instead: a thrown
+  /// `build`, a child that throws while it mounts or updates (see
+  /// [errorBuilder]), and layout/paint exceptions absorbed by [ErrorBoundary]
+  /// render objects (explicit or the implicit route/overlay boundaries).
+  /// False in production hosts — contain and render the error presentation;
+  /// FleuryTester sets true so a widget test with a bug fails the test
+  /// instead of silently rendering a panel. A test of the panel itself sets
+  /// it back to false.
+  bool rethrowContainedErrors = false;
 
   /// Sink for newly contained layout/paint failures (once per error-state
   /// entry). Hosts wire this to their error reporter so a contained panel
@@ -1529,16 +1607,17 @@ class BuildOwner {
 
   final Set<Element> _dirtyElements = <Element>{};
 
-  /// Roots of subtrees detached this build pass (via [Element._deactivateChild])
-  /// but not yet permanently removed. Each either gets reclaimed by a new
-  /// parent during the same [flushBuild] (a global-keyed move) or is
-  /// unmounted by [_finalizeInactiveElements] once the pass settles.
+  /// Roots of subtrees detached (via [Element._deactivateChild]) but not yet
+  /// permanently removed. Each either gets reclaimed by a new parent in the
+  /// same frame (a global-keyed move, possibly into a LayoutBuilder during
+  /// layout) or is unmounted by [_finalizeInactiveElements]: after the frame's
+  /// layout, or after a [flushBuild] that runs outside any frame.
   final Set<Element> _inactiveElements = <Element>{};
 
-  /// The parent that first inflated each [GlobalKey] during the current build
-  /// (across all of a [flushBuild]'s passes; reset at its start). Detects a key
-  /// reused on two widgets at once — the second [Element.inflateWidget] to claim
-  /// a key another parent still holds throws.
+  /// The parent that first inflated each [GlobalKey] during the current frame
+  /// (see [beginFrame]), or during the current [flushBuild] outside a frame.
+  /// Detects a key reused on two widgets at once — the second
+  /// [Element.inflateWidget] to claim a key another parent still holds throws.
   ///
   /// Enforced in release, not just under `assert`: a GlobalKey stolen from a
   /// parent that then re-inflates it (see [Element._retakeInactiveElement]) must
@@ -1634,8 +1713,9 @@ class BuildOwner {
       } catch (_) {
         // A compatible root update can throw synchronously before flushBuild
         // starts (for example from child reconciliation). Claims belong to one
-        // build attempt and must not poison an immediate recovery update.
-        _globalKeyClaims.clear();
+        // build attempt and must not poison an immediate recovery update. In
+        // a frame they belong to the frame, which clears them when it closes.
+        if (_openFrames == 0) _globalKeyClaims.clear();
         rethrow;
       }
     }
@@ -1647,6 +1727,54 @@ class BuildOwner {
       _root = null;
     }
     return mountRoot(newRoot);
+  }
+
+  /// Frames opened by [beginFrame] and not yet closed by [endFrame].
+  int _openFrames = 0;
+
+  /// Opens a frame: every build until the matching [endFrame] — a root
+  /// update, a [flushBuild], [renderFrame]'s build, a LayoutBuilder's build
+  /// during layout — shares one set of GlobalKey claims, and a subtree any of
+  /// them deactivates stays reclaimable until the frame's layout is done.
+  ///
+  /// A host whose frame starts with a build of its own opens the frame
+  /// first, so that build does not finalize before layout: a resize rebuilds
+  /// the root, then renders. Otherwise a GlobalKey'd subtree the rebuild
+  /// deactivated would be disposed before a LayoutBuilder could reclaim it.
+  /// Frames nest; only the outermost [endFrame] settles.
+  void beginFrame() {
+    if (_openFrames++ == 0) _globalKeyClaims.clear();
+  }
+
+  /// Closes a frame opened by [beginFrame]. The outermost close unmounts
+  /// what the frame deactivated and did not reclaim, and resets the claims.
+  ///
+  /// Pass [completed] false for a frame whose build threw: it closes without
+  /// unmounting, like a failed [flushBuild], so what it deactivated stays
+  /// reclaimable and a retry moves GlobalKey'd State instead of re-creating
+  /// it.
+  void endFrame({bool completed = true}) {
+    assert(_openFrames > 0, 'BuildOwner.endFrame without a beginFrame.');
+    if (--_openFrames > 0) return;
+    try {
+      if (completed) _finalizeInactiveElements();
+    } finally {
+      _globalKeyClaims.clear();
+    }
+  }
+
+  /// Runs [body] as one frame; see [beginFrame] and [endFrame].
+  T runFrame<T>(T Function() body) {
+    beginFrame();
+    final T result;
+    try {
+      result = body();
+    } catch (_) {
+      endFrame(completed: false);
+      rethrow;
+    }
+    endFrame();
+    return result;
   }
 
   /// Whether any element is waiting to rebuild.
@@ -1671,7 +1799,12 @@ class BuildOwner {
   /// `setState` with n=1–5 the difference is below measurement noise.
   ///
   /// See RFC 0009 §5.6 H6.
+  ///
+  /// Inside a frame (see [beginFrame]) the flush is part of that frame: it
+  /// keeps the frame's GlobalKey claims and leaves deactivated subtrees for
+  /// the frame to settle after layout. Outside a frame it settles them itself.
   BuildFlushStats flushBuild() {
+    if (_openFrames > 0) return _flushBuild(finalize: false);
     _globalKeyClaims.clear();
     try {
       return _flushBuild();
@@ -1683,7 +1816,7 @@ class BuildOwner {
     }
   }
 
-  BuildFlushStats _flushBuild() {
+  BuildFlushStats _flushBuild({bool finalize = true}) {
     var passCount = 0;
     var rebuiltElementCount = 0;
     var maxDirtyElementCount = 0;
@@ -1718,46 +1851,72 @@ class BuildOwner {
               'two widgets that mark each other dirty every frame.',
         );
       }
-      final snapshot = _dirtyElements.toList()
-        ..sort((a, b) => a._depth - b._depth);
+      final snapshot = _dirtyElements.toList();
       _dirtyElements.clear();
       passCount += 1;
       rebuiltElementCount += snapshot.length;
       if (snapshot.length > maxDirtyElementCount) {
         maxDirtyElementCount = snapshot.length;
       }
-      var processed = 0;
-      try {
-        for (final element in snapshot) {
-          processed += 1;
-          element.rebuild();
-        }
-      } finally {
-        // A rebuild can throw past the per-element containment (initState,
-        // didUpdateWidget, updateShouldNotify have no errorBuilder catch).
-        // The snapshot was already drained from the queue, so the untouched
-        // remainder would be stranded dirty-but-unqueued — markNeedsBuild
-        // would short-circuit on them forever. Re-enqueue so the next flush
-        // retries. (The thrower itself cleared its own flag at rebuild()
-        // start and is intentionally not re-queued.)
-        if (processed < snapshot.length) {
-          for (var i = processed; i < snapshot.length; i++) {
-            final element = snapshot[i];
-            if (element._lifecycle == _ElementLifecycle.active &&
-                element._dirty) {
-              _dirtyElements.add(element);
-            }
-          }
-        }
-      }
+      _rebuildInDepthOrder(snapshot);
     }
-    _finalizeInactiveElements();
+    if (finalize) _finalizeInactiveElements();
     if (passCount == 0) return BuildFlushStats.zero;
     return BuildFlushStats(
       passCount: passCount,
       rebuiltElementCount: rebuiltElementCount,
       maxDirtyElementCount: maxDirtyElementCount,
     );
+  }
+
+  /// Rebuilds the active dirty elements below [ancestor] until none are left,
+  /// shallowest first. See [Element.rebuildDirtyDescendants]. A subtree that
+  /// keeps dirtying itself is left to the next [flushBuild], which names it.
+  void _rebuildDirtyBelow(Element ancestor) {
+    for (
+      var pass = 0;
+      pass < _maxBuildPasses && _dirtyElements.isNotEmpty;
+      pass++
+    ) {
+      final below = [
+        for (final element in _dirtyElements)
+          if (element._lifecycle == _ElementLifecycle.active &&
+              element._isBelow(ancestor))
+            element,
+      ];
+      if (below.isEmpty) return;
+      _dirtyElements.removeAll(below);
+      _rebuildInDepthOrder(below);
+    }
+  }
+
+  /// Rebuilds [batch], already removed from the dirty queue, shallowest
+  /// first so a parent's rebuild settles its children before they would
+  /// rebuild on their own.
+  ///
+  /// A rebuild can still throw past per-element containment: a raw owner
+  /// installs no error widget, and a dirty render-object element (re-dirtied
+  /// by a GlobalKey steal) has no component between its reconcile and this
+  /// loop. The rest of the batch would then be stranded dirty but dequeued,
+  /// where markNeedsBuild short-circuits on them forever, so it is queued
+  /// again for the next flush. (The thrower cleared its own flag at
+  /// rebuild() start and is intentionally not re-queued.)
+  void _rebuildInDepthOrder(List<Element> batch) {
+    batch.sort((a, b) => a._depth - b._depth);
+    var processed = 0;
+    try {
+      for (final element in batch) {
+        processed += 1;
+        element.rebuild();
+      }
+    } finally {
+      for (var i = processed; i < batch.length; i++) {
+        final element = batch[i];
+        if (element._lifecycle == _ElementLifecycle.active && element._dirty) {
+          _dirtyElements.add(element);
+        }
+      }
+    }
   }
 
   /// Host teardown: permanently unmounts any deactivated-but-unfinalized
@@ -1854,18 +2013,20 @@ class BuildOwner {
     // render tier could never ask for a frame again.
     renderDamageTracker.phase = RenderFramePhase.build;
     try {
-      return _renderFramePhases(
-        root,
-        buffer,
-        onPhaseTiming: onPhaseTiming,
-        onBuildStats: onBuildStats,
+      return runFrame(
+        () => _renderFrameBody(
+          root,
+          buffer,
+          onPhaseTiming: onPhaseTiming,
+          onBuildStats: onBuildStats,
+        ),
       );
     } finally {
       renderDamageTracker.phase = RenderFramePhase.idle;
     }
   }
 
-  RenderObject _renderFramePhases(
+  RenderObject _renderFrameBody(
     Element root,
     CellBuffer buffer, {
     void Function(Duration build, Duration layout, Duration paint)?
@@ -1873,7 +2034,7 @@ class BuildOwner {
     void Function(BuildFlushStats stats)? onBuildStats,
   }) {
     final sw = onPhaseTiming != null ? (Stopwatch()..start()) : null;
-    final buildStats = flushBuild();
+    final buildStats = _flushBuild(finalize: false);
     final buildElapsed = sw?.elapsed ?? Duration.zero;
     onBuildStats?.call(buildStats);
 
@@ -1899,12 +2060,21 @@ class BuildOwner {
     renderDamageTracker
       ..screenSize = buffer.size
       ..phase = RenderFramePhase.layout;
-    rootRender.layout(CellConstraints.loose(buffer.size));
+    // Finalize after layout, not after the build flush: layout builds too,
+    // and a GlobalKey'd subtree the build phase deactivated can be reclaimed
+    // by a LayoutBuilder here (a panel maximized into one). Finalizing
+    // earlier disposed it — the move became dispose + initState. Once layout
+    // ends, even by throwing, what it did not reclaim is gone: a frame that
+    // keeps failing in layout must not keep removed State alive.
+    try {
+      rootRender.layout(CellConstraints.loose(buffer.size));
+    } catch (error, stack) {
+      final errors = _TeardownErrors()..add(error, stack);
+      errors.capture(_finalizeInactiveElements);
+      errors.throwIfAny();
+      Error.throwWithStackTrace(error, stack); // Unreachable.
+    }
     final layoutElapsed = sw?.elapsed ?? Duration.zero;
-    // Layout can rebuild (LayoutBuilder) and deactivate subtrees AFTER this
-    // frame's flushBuild already finalized — without this, their
-    // State.dispose would wait for the next non-idle frame, indefinitely in
-    // an idle TUI. Finalize again so a layout-time swap disposes this frame.
     _finalizeInactiveElements();
 
     sw?.reset();
@@ -2144,26 +2314,26 @@ class LeafRenderObjectElement extends RenderObjectElement {
 /// Element for a [MultiChildRenderObjectWidget].
 ///
 /// Owns an ordered list of child elements and reconciles them on every
-/// rebuild. Reconciliation strategy:
+/// rebuild, in Flutter's shape:
 ///
-/// 1. Build a map of `Key -> old element` for keyed olds.
-/// 2. Maintain a queue of unkeyed olds in their original order.
-/// 3. For each new widget at position `i`:
-///    - If the widget has a key, look it up in the map. If found and
-///      compatible (`Widget.canUpdate`), reuse and update in place. The
-///      keyed old's state survives a reorder.
-///    - Otherwise, take the next unkeyed old from the queue. If
-///      compatible, reuse and update. If not, unmount it and try the
-///      next. If the queue empties, inflate a fresh element.
-/// 4. Unmount any remaining keyed olds (in the map) and any leftover
-///    unkeyed olds in the queue.
-/// 5. Sync the render-object children list to match the new element
-///    order.
+/// 1. Update the unchanged top in place, while old and new match
+///    (`Widget.canUpdate`) position by position. A list whose children only
+///    changed their widgets ends here.
+/// 2. Find the unchanged bottom the same way, from the end.
+/// 3. Reconcile only the changed middle. A keyed old moves to the new
+///    position with its key. An unkeyed old is matched by type, in order:
+///    the first unkeyed new widget of a type updates the first unkeyed old of
+///    that type, and unkeyed olds beyond the new widgets of their type are
+///    released before anything inflates. Anything unmatched is inflated
+///    fresh.
+/// 4. Update the unchanged bottom, so children still update top to bottom.
+/// 5. Release the middle's unmatched keyed olds, then sync the render-object
+///    children to the new element order.
 ///
-/// This is the simpler form of the Flutter reconciliation algorithm —
-/// it's O(n) and correct. The forward/backward stable-prefix walks that
-/// optimize Flutter's algorithm for "only the middle changed" patterns
-/// can be added later if profiling demands it.
+/// The bottom scan and the typed matching are what keep the State of a
+/// sibling next to a conditional child. `if (error != null) Text(error)` above
+/// a `TextInput` must not remount the input when the error appears, nor when
+/// a spinner above it goes away while a hint below it becomes an error.
 class MultiChildRenderObjectElement extends RenderObjectElement {
   MultiChildRenderObjectElement(MultiChildRenderObjectWidget super.widget);
 
@@ -2210,10 +2380,10 @@ class MultiChildRenderObjectElement extends RenderObjectElement {
       }
     }
 
-    final result = List<Element?>.filled(newWidgets.length, null);
-    final keyedOlds = <Key, Element>{};
-    final unkeyedOlds = <Element>[];
-    var unkeyedIndex = 0;
+    // An old child a GlobalKey inflate has already moved under another
+    // parent is not ours to update or release.
+    bool matches(Element old, Widget newWidget) =>
+        identical(old._parent, this) && Widget.canUpdate(old.widget, newWidget);
 
     void deactivateOld(Element child) {
       // A GlobalKey inflate elsewhere in this loop can steal an old child
@@ -2227,44 +2397,95 @@ class MultiChildRenderObjectElement extends RenderObjectElement {
       _deactivateChild(child);
     }
 
+    List<Element?>? result;
     try {
-      final stableUnkeyed = _reconcileStableUnkeyedChildren(
-        oldChildren,
-        newWidgets,
-      );
-      if (stableUnkeyed != null) return stableUnkeyed;
+      var newTop = 0;
+      var oldTop = 0;
+      var newBottom = newWidgets.length - 1;
+      var oldBottom = oldChildren.length - 1;
 
-      // Partition the old children into keyed (by-key) and unkeyed (queue).
-      for (final old in oldChildren) {
-        final k = old.widget.key;
-        if (k != null) {
-          final shadowed = keyedOlds[k];
-          if (shadowed != null) {
-            // Duplicate local keys among siblings: the map overwrite would
-            // silently orphan the first element ACTIVE (its State never
-            // disposed, its dependency edges still live — a monotonic leak on
-            // every rebuild). Fail loudly in debug, like Flutter; in release,
-            // deactivate the shadowed element so nothing leaks.
-            assert(
-              false,
-              'Duplicate key $k among the children of $widget. Each child of '
-              'a multi-child widget must have a unique key.',
-            );
-            deactivateOld(shadowed);
-          }
-          keyedOlds[k] = old;
-        } else {
-          unkeyedOlds.add(old);
-        }
+      // 1. The unchanged top, updated in place. The steady state (every
+      // child kept its position) ends here without allocating.
+      while (oldTop <= oldBottom && newTop <= newBottom) {
+        final old = oldChildren[oldTop];
+        final newWidget = newWidgets[newTop];
+        if (!matches(old, newWidget)) break;
+        updateChild(old, newWidget);
+        newTop += 1;
+        oldTop += 1;
+      }
+      if (newTop > newBottom && oldTop > oldBottom) return oldChildren;
+      final slots = result = List<Element?>.filled(newWidgets.length, null);
+      for (var index = 0; index < newTop; index++) {
+        slots[index] = oldChildren[index];
       }
 
-      for (var i = 0; i < newWidgets.length; i++) {
-        final newWidget = newWidgets[i];
+      // 2. The unchanged bottom, found now and updated last.
+      while (oldTop <= oldBottom && newTop <= newBottom) {
+        if (!matches(oldChildren[oldBottom], newWidgets[newBottom])) break;
+        oldBottom -= 1;
+        newBottom -= 1;
+      }
+
+      // 3. The changed middle. Keyed olds are indexed so they can move. An
+      // unkeyed old can only be told apart from its neighbours by its type,
+      // so unkeyed olds queue by type and are matched in order.
+      Map<Key, Element>? keyedOlds;
+      Map<Type, Queue<Element>>? unkeyedOlds;
+      for (var index = oldTop; index <= oldBottom; index++) {
+        final old = oldChildren[index];
+        final k = old.widget.key;
+        if (k == null) {
+          ((unkeyedOlds ??= {})[old.widget.runtimeType] ??= Queue<Element>())
+              .add(old);
+          continue;
+        }
+        final keyed = keyedOlds ??= {};
+        final shadowed = keyed[k];
+        if (shadowed != null) {
+          // Duplicate local keys among siblings: the map overwrite would
+          // silently orphan the first element ACTIVE (its State never
+          // disposed, its dependency edges still live — a monotonic leak on
+          // every rebuild). Fail loudly in debug, like Flutter; in release,
+          // deactivate the shadowed element so nothing leaks.
+          assert(
+            false,
+            'Duplicate key $k among the children of $widget. Each child of '
+            'a multi-child widget must have a unique key.',
+          );
+          deactivateOld(shadowed);
+        }
+        keyed[k] = old;
+      }
+      if (unkeyedOlds != null) {
+        // An unkeyed old beyond the number of new unkeyed widgets of its
+        // type can never be matched. Release it before any new child
+        // inflates, so an inflate that throws leaves no removed widget
+        // mounted with its pointer and focus registrations still live.
+        final wanted = <Type, int>{};
+        for (var index = newTop; index <= newBottom; index++) {
+          final newWidget = newWidgets[index];
+          if (newWidget.key == null) {
+            wanted.update(
+              newWidget.runtimeType,
+              (n) => n + 1,
+              ifAbsent: () => 1,
+            );
+          }
+        }
+        for (final MapEntry(key: type, value: queue) in unkeyedOlds.entries) {
+          final keep = wanted[type] ?? 0;
+          while (queue.length > keep) {
+            deactivateOld(queue.removeLast());
+          }
+        }
+      }
+      for (var index = newTop; index <= newBottom; index++) {
+        final newWidget = newWidgets[index];
         final newKey = newWidget.key;
         Element? matched;
-
         if (newKey != null) {
-          final candidate = keyedOlds.remove(newKey);
+          final candidate = keyedOlds?.remove(newKey);
           // A candidate stolen mid-loop by an earlier slot's GlobalKey
           // inflate is stale: it is already committed under its new parent,
           // and matching it here would place one element at two tree
@@ -2279,43 +2500,44 @@ class MultiChildRenderObjectElement extends RenderObjectElement {
             }
           }
         } else {
-          // Walk the unkeyed queue until we find a compatible old.
-          while (unkeyedIndex < unkeyedOlds.length) {
-            final candidate = unkeyedOlds[unkeyedIndex];
-            unkeyedIndex += 1;
-            if (Widget.canUpdate(candidate.widget, newWidget)) {
+          final queue = unkeyedOlds?[newWidget.runtimeType];
+          while (matched == null && queue != null && queue.isNotEmpty) {
+            final candidate = queue.removeFirst();
+            if (matches(candidate, newWidget)) {
               matched = candidate;
-              break;
             } else {
               deactivateOld(candidate);
             }
           }
         }
-
-        if (matched != null) {
-          // Same identical-instance skip updateChild and the stable-unkeyed
-          // fast path apply: without it, a keyed child whose widget instance
-          // didn't change deep-rebuilds anyway — and its State receives a
-          // didUpdateWidget where oldWidget is IDENTICAL to widget (a contract
-          // violation) — on every pass that reaches this path (e.g. the
-          // re-reconcile scheduled by insertChildRenderObject after a mount).
-          if (!canSkipWidgetUpdate(matched.widget, newWidget)) {
-            matched.update(newWidget);
-          }
-          result[i] = matched;
-        } else {
-          result[i] = inflateWidget(newWidget);
-        }
+        // updateChild skips an identical widget instance: a matched child
+        // whose widget did not change must not deep-rebuild, and its State
+        // must not see a didUpdateWidget whose oldWidget IS its widget.
+        slots[index] = matched != null
+            ? updateChild(matched, newWidget)
+            : inflateWidget(newWidget);
       }
 
-      // Deactivate leftover olds (finalized at the end of the build pass
-      // unless a global-keyed one is reclaimed elsewhere first).
-      for (final el in keyedOlds.values) {
+      // 4. The unchanged bottom, in order.
+      for (
+        var newIndex = newBottom + 1, oldIndex = oldBottom + 1;
+        newIndex < newWidgets.length;
+        newIndex++, oldIndex++
+      ) {
+        final old = oldChildren[oldIndex];
+        final newWidget = newWidgets[newIndex];
+        slots[newIndex] = identical(old._parent, this)
+            ? updateChild(old, newWidget)
+            : inflateWidget(newWidget);
+      }
+
+      // 5. Release the middle's unmatched olds (finalized at the end of the
+      // frame unless a global-keyed one is reclaimed elsewhere first).
+      for (final el in keyedOlds?.values ?? const <Element>[]) {
         deactivateOld(el);
       }
-      while (unkeyedIndex < unkeyedOlds.length) {
-        deactivateOld(unkeyedOlds[unkeyedIndex]);
-        unkeyedIndex += 1;
+      for (final queue in unkeyedOlds?.values ?? const <Queue<Element>>[]) {
+        queue.forEach(deactivateOld);
       }
 
       // A later slot's GlobalKey inflate can steal an element that an
@@ -2323,7 +2545,7 @@ class MultiChildRenderObjectElement extends RenderObjectElement {
       // the stale-candidate check above). Committing it would place one
       // element at two tree positions; fail with the designed duplicate
       // error instead, before any render-object adoption runs.
-      for (final el in result) {
+      for (final el in slots) {
         if (el != null && !identical(el._parent, this)) {
           throw StateError(
             'Duplicate GlobalKey detected in the widget tree.\n'
@@ -2336,7 +2558,7 @@ class MultiChildRenderObjectElement extends RenderObjectElement {
         }
       }
 
-      return result.cast<Element>();
+      return slots.cast<Element>();
     } catch (error, stack) {
       // Lifecycle callbacks and render-object updates are not transactionally
       // reversible: a compatible prefix may already have observed the new
@@ -2348,15 +2570,11 @@ class MultiChildRenderObjectElement extends RenderObjectElement {
       final retained = <Element>[];
       final seen = Set<Element>.identity();
       void retainIfOwned(Element? child) {
-        if (child != null &&
-            child._lifecycle == _ElementLifecycle.active &&
-            identical(child._parent, this) &&
-            seen.add(child)) {
-          retained.add(child);
-        }
+        final owned = activeChildOrNull(child);
+        if (owned != null && seen.add(owned)) retained.add(owned);
       }
 
-      for (final child in result) {
+      for (final child in result ?? const <Element?>[]) {
         retainIfOwned(child);
       }
       for (final child in oldChildren) {
@@ -2367,34 +2585,6 @@ class MultiChildRenderObjectElement extends RenderObjectElement {
       errors.throwIfAny();
       Error.throwWithStackTrace(error, stack); // Unreachable.
     }
-  }
-
-  List<Element>? _reconcileStableUnkeyedChildren(
-    List<Element> oldChildren,
-    List<Widget> newWidgets,
-  ) {
-    if (oldChildren.length != newWidgets.length) return null;
-    if (oldChildren.isEmpty) return oldChildren;
-
-    for (var index = 0; index < oldChildren.length; index++) {
-      final oldChild = oldChildren[index];
-      final newWidget = newWidgets[index];
-      if (oldChild.widget.key != null || newWidget.key != null) return null;
-      if (!Widget.canUpdate(oldChild.widget, newWidget)) return null;
-    }
-
-    // Common steady-state path for dense rows/grids: all children are
-    // unkeyed, positional, and compatible. Avoid building keyed maps and
-    // unkeyed queues; render-object order is still checked by the caller
-    // because component children can change their internal render root.
-    for (var index = 0; index < oldChildren.length; index++) {
-      final child = oldChildren[index];
-      final newWidget = newWidgets[index];
-      if (!canSkipWidgetUpdate(child.widget, newWidget)) {
-        child.update(newWidget);
-      }
-    }
-    return oldChildren;
   }
 
   /// Walks each child element looking for its first descendant render
@@ -2492,11 +2682,7 @@ class SingleChildRenderObjectElement extends RenderObjectElement {
     try {
       _child = updateChild(_child, widget.child);
     } catch (_) {
-      final child = _child;
-      if (child != null &&
-          (!child.mounted || !identical(child.elementParent, this))) {
-        _child = null;
-      }
+      _child = activeChildOrNull(_child);
       rethrow;
     }
   }

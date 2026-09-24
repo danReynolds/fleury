@@ -9,6 +9,7 @@
 //   - Children removed: their State.dispose runs.
 
 import 'package:fleury/fleury.dart';
+import 'package:fleury/fleury_test_support.dart' show byType;
 import 'package:fleury/src/widgets/framework.dart' show WidgetUpdatePruner;
 import 'package:test/test.dart';
 
@@ -303,6 +304,156 @@ void main() {
       );
 
       expect(builds, ['same', 'changed']);
+    });
+  });
+
+  group('A change above a stateful sibling keeps its State', () {
+    // `if (error != null) Text(error)` above an input, or `loading ?
+    // Text(..) : SizedBox()` — a changed unkeyed child ahead of a stateful
+    // one must not remount it. The unchanged suffix carries it.
+    List<Widget> children(Widget? above, List<String> lifecycle) => [
+      const Text('Name:'),
+      ?above,
+      _Trackable(label: 'field', lifecycle: lifecycle),
+      const Text('footer'),
+    ];
+
+    for (final (name, before, after) in [
+      ('inserted', null, const Text('bad') as Widget),
+      ('removed', const Text('bad') as Widget, null),
+      (
+        'swapped for another type',
+        const SizedBox(height: 1) as Widget,
+        const Text('loading…') as Widget,
+      ),
+    ]) {
+      test('a child $name', () {
+        final lifecycle = <String>[];
+        final owner = BuildOwner();
+        final root = owner.mountRoot(
+          Column(children: children(before, lifecycle)),
+        );
+        final state = _statesOf(root).single..value = 7;
+
+        owner.updateRoot(root, Column(children: children(after, lifecycle)));
+
+        final kept = _statesOf(root).single;
+        expect(kept, same(state));
+        expect(kept.value, 7);
+        expect(lifecycle, ['init:field']);
+      });
+    }
+
+    test('a change in the middle keeps both ends', () {
+      final lifecycle = <String>[];
+      final owner = BuildOwner();
+      Widget column(List<Widget> middle) => Column(
+        children: [
+          _Trackable(label: 'top', lifecycle: lifecycle),
+          ...middle,
+          _Trackable(label: 'bottom', lifecycle: lifecycle),
+        ],
+      );
+      final root = owner.mountRoot(column(const [Text('a'), SizedBox()]));
+      final before = _statesOf(root);
+
+      owner.updateRoot(root, column(const [SizedBox(), Text('b'), Text('c')]));
+
+      final after = _statesOf(root);
+      expect(after[0], same(before[0]));
+      expect(after[1], same(before[1]));
+      expect(lifecycle, ['init:top', 'init:bottom']);
+    });
+
+    test('a text field keeps its draft when a message appears above it', () {
+      final controller = TextEditingController(text: 'hello');
+      final owner = BuildOwner();
+      Widget form(String? error) => Column(
+        children: [
+          const Text('Name:'),
+          if (error != null) Text(error),
+          TextInput(controller: controller),
+        ],
+      );
+      final root = owner.mountRoot(form(null));
+      final input = byType(TextInput).apply(root).single;
+
+      owner.updateRoot(root, form('min 5 chars'));
+
+      // The same element means the same State: cursor, selection, focus.
+      expect(byType(TextInput).apply(root).single, same(input));
+    });
+
+    test('both ends changing at once keeps the sibling between them', () {
+      // `[if (loading) spinner, field, error ? errorLine : hint]` when a
+      // submit fails: the top and bottom scans both stop, so the field is in
+      // the changed middle and is matched by its type.
+      final lifecycle = <String>[];
+      final owner = BuildOwner();
+      final root = owner.mountRoot(
+        Column(
+          children: [
+            const SizedBox(height: 1),
+            _Trackable(label: 'field', lifecycle: lifecycle),
+            const Text('hint'),
+          ],
+        ),
+      );
+      final state = _statesOf(root).single..value = 7;
+
+      owner.updateRoot(
+        root,
+        Column(
+          children: [
+            _Trackable(label: 'field', lifecycle: lifecycle),
+            const SizedBox(height: 1, child: Text('error')),
+          ],
+        ),
+      );
+
+      expect(_statesOf(root).single, same(state));
+      expect(lifecycle, ['init:field']);
+    });
+
+    test('a keyed swap around an unkeyed stateful child keeps it', () {
+      final lifecycle = <String>[];
+      final owner = BuildOwner();
+      Widget column(String first, String last) => Column(
+        children: [
+          Text(first, key: ValueKey(first)),
+          _Trackable(label: 'field', lifecycle: lifecycle),
+          Text(last, key: ValueKey(last)),
+        ],
+      );
+      final root = owner.mountRoot(column('a', 'b'));
+      final state = _statesOf(root).single;
+
+      owner.updateRoot(root, column('b', 'a'));
+
+      expect(_statesOf(root).single, same(state));
+      expect(lifecycle, ['init:field']);
+    });
+
+    test('a sliding window over mixed types inflates only the new row', () {
+      // A tail-N log where every third line is a warning of another type:
+      // dropping the oldest line (a warning) and appending a plain line must
+      // update the rows in place, not re-create the whole window.
+      final lifecycle = <String>[];
+      Widget line(int i) => i % 3 == 0
+          ? Row(
+              children: [_Trackable(label: 'warn$i', lifecycle: lifecycle)],
+            )
+          : _Trackable(label: 'line$i', lifecycle: lifecycle);
+      Widget window(int first) =>
+          Column(children: [for (var i = first; i < first + 31; i++) line(i)]);
+      final owner = BuildOwner();
+      final root = owner.mountRoot(window(0));
+      lifecycle.clear();
+
+      owner.updateRoot(root, window(1));
+
+      expect(lifecycle.where((e) => e.startsWith('init:')), hasLength(1));
+      expect(lifecycle.where((e) => e.startsWith('dispose:')), hasLength(1));
     });
   });
 

@@ -236,6 +236,11 @@ final class FrameDriver {
   Element? _rootElement;
   Widget Function()? _rootBuilder;
   CellSize? _lastSize;
+
+  /// Set when the viewport changes size, cleared once the root has been
+  /// rebuilt for it. A rebuild that throws leaves it set, so the next frame
+  /// retries instead of laying out the old MediaQuery in the new buffer.
+  bool _resizePending = false;
   var _disposed = false;
   var _inFrameRender = false;
   var _frameDeferredOnBacklog = false;
@@ -357,14 +362,13 @@ final class FrameDriver {
     // semantic actions here) runs after the viewport read, before the
     // resize check — the order the embed host always had.
     _onBeforeFrame?.call(reason);
-    if (_lastSize != null && size != _lastSize) {
-      // The viewport changed size: reset the diff base and rebuild the
-      // root (propagates through MediaQuery). The rendered frame below is
-      // a full repaint at the new size.
-      handleResize();
-    }
+    // The viewport changed size: the frame below resets the diff base and
+    // rebuilds the root (propagates through MediaQuery), then renders a full
+    // repaint at the new size.
+    if (_lastSize != null && size != _lastSize) _resizePending = true;
     _lastSize = size;
-    if (!snapshot.metricsChanged &&
+    if (!_resizePending &&
+        !snapshot.metricsChanged &&
         !_frameLoop.needsRender(size) &&
         !runtime.hasFrameWork) {
       // No-change frame: nothing rebuilt, nothing invalidated, buffers
@@ -386,25 +390,35 @@ final class FrameDriver {
     _inFrameRender = true;
     TuiRenderedFrame? frame;
     try {
-      frame = _frameLoop.render(
-        size: size,
-        paint: (next) {
-          RenderLayoutDebugStats.beginFrame(enabled: debugWatching);
-          RepaintBoundaryDebugStats.beginFrame(enabled: debugWatching);
-          runtime.renderFrame(
-            next,
-            onPhaseTiming: (b, l, p) {
-              phaseBuild = b;
-              phaseLayout = l;
-              phasePaint = p;
-              if (debugWatching) _onPhaseTiming?.call(b, l, p);
-            },
-            onBuildStats: (stats) {
-              buildStats = stats;
-            },
-          );
-        },
-      );
+      // The resize's root rebuild runs in the backstop and in the same frame
+      // as the render: a throw fails this frame like any render error, and a
+      // GlobalKey'd subtree the rebuild deactivates stays reclaimable by a
+      // LayoutBuilder until layout is done.
+      frame = runtime.owner.runFrame(() {
+        if (_resizePending) {
+          handleResize();
+          _resizePending = false;
+        }
+        return _frameLoop.render(
+          size: size,
+          paint: (next) {
+            RenderLayoutDebugStats.beginFrame(enabled: debugWatching);
+            RepaintBoundaryDebugStats.beginFrame(enabled: debugWatching);
+            runtime.renderFrame(
+              next,
+              onPhaseTiming: (b, l, p) {
+                phaseBuild = b;
+                phaseLayout = l;
+                phasePaint = p;
+                if (debugWatching) _onPhaseTiming?.call(b, l, p);
+              },
+              onBuildStats: (stats) {
+                buildStats = stats;
+              },
+            );
+          },
+        );
+      });
       _consecutiveBackstopFrames = 0;
     } catch (error, stack) {
       // Root backstop: whatever escaped every ErrorBoundary (a throw in

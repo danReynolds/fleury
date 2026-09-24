@@ -19,6 +19,9 @@ void main() {
 
       final seenA = <Object>[];
       final seenB = <Object>[];
+      // Contain like production so the pump returns and the hook is the
+      // only observer.
+      testerA.owner.rethrowContainedErrors = false;
       testerA.owner.onBuildError = (e, s) => seenA.add(e);
       testerB.owner.onBuildError = (e, s) => seenB.add(e);
 
@@ -30,7 +33,8 @@ void main() {
     });
 
     test('a raw BuildOwner (no errorBuilder) rethrows build errors', () {
-      final owner = BuildOwner();
+      final reported = <Object>[];
+      final owner = BuildOwner(onBuildError: (e, _) => reported.add(e));
       expect(
         () => owner.mountRoot(const _Boom()),
         throwsA(isA<StateError>()),
@@ -38,10 +42,17 @@ void main() {
             'null errorBuilder means "no boundary" — low-level harnesses '
             'keep propagate-on-throw semantics',
       );
+      expect(
+        reported,
+        isEmpty,
+        reason:
+            'onBuildError reports contained errors; the caller has this one',
+      );
     });
 
     test('customizing one tester\'s builder does not leak to the next', () {
       final testerA = FleuryTester();
+      testerA.owner.rethrowContainedErrors = false;
       testerA.owner.errorBuilder = (e, s) => const Text('custom panel');
       testerA.pumpWidget(const _Boom());
       final outA = testerA.renderToString(size: const CellSize(20, 2));
@@ -50,6 +61,7 @@ void main() {
 
       final testerB = FleuryTester();
       addTearDown(testerB.dispose);
+      testerB.owner.rethrowContainedErrors = false;
       testerB.pumpWidget(const _Boom());
       final outB = testerB.renderToString(size: const CellSize(20, 4));
       expect(
