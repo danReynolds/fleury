@@ -2030,7 +2030,7 @@ class BuildOwner {
     final layoutElapsed = sw?.elapsed ?? Duration.zero;
     // Finalize after layout, not after the build flush: layout builds too,
     // and a GlobalKey'd subtree the build phase deactivated can be reclaimed
-    // by a LayoutBuilder here (DebugShell docks the whole app that way).
+    // by a LayoutBuilder here (a panel maximized into one).
     // Finalizing earlier disposed it — the move became dispose + initState.
     // Once is also enough: a layout-time swap disposes this frame.
     _finalizeInactiveElements();

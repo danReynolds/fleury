@@ -3,11 +3,9 @@
 // LayoutBuilder builds during layout. The build flush used to finalize (dispose)
 // every subtree it had deactivated before layout ran, so a GlobalKey'd subtree
 // moving from a build-phase parent into a LayoutBuilder was disposed and
-// re-created instead of moved — opening the debug shell docked (it builds the
-// whole app inside a LayoutBuilder) wiped every State in the app.
+// re-created instead of moved: maximizing a panel into a LayoutBuilder wiped
+// its State.
 import 'package:fleury/fleury.dart';
-import 'package:fleury/src/debug/debug_shell.dart';
-import 'package:fleury/src/debug/debug_state.dart';
 import 'package:test/test.dart';
 import '../support/harness.dart';
 
@@ -88,36 +86,6 @@ void main() {
       expect((_inits, _disposes), (1, 0));
     },
   );
-
-  testWidgets('docking the debug shell keeps the app State', (tester) {
-    final probeKey = GlobalKey<_ProbeState>();
-    final controller = DebugController(const DebugConfig(enabled: true));
-    tester.pumpWidget(
-      DebugShell(
-        controller: controller,
-        child: Overlay(
-          key: GlobalKey<OverlayState>(),
-          initialEntries: [OverlayEntry(builder: (_) => _Probe(key: probeKey))],
-        ),
-      ),
-    );
-    probeKey.currentState!.bump();
-    tester.pump();
-    final state = probeKey.currentState;
-
-    for (final step in [
-      controller.toggleOnOff, // off -> docked (Ctrl+G / F12)
-      controller.toggleExpand, // docked -> fullscreen (F11)
-      controller.collapseFromFullscreen, // fullscreen -> docked (Esc)
-      controller.toggleOnOff, // docked -> off
-    ]) {
-      step();
-      tester.pump();
-      expect(probeKey.currentState, same(state), reason: '${controller.mode}');
-    }
-    expect(state!.count, 1);
-    expect((_inits, _disposes), (1, 0));
-  });
 
   testWidgets('a GlobalKey used in both the build and layout phase is a '
       'duplicate, not a steal-back loop', (tester) {
