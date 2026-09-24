@@ -151,6 +151,47 @@ void main() {
     expect(output, contains('deploy.log'));
   });
 
+  for (final unreadable in [false, true]) {
+    testWidgets('the keyboard climbs out of an '
+        '${unreadable ? 'unreadable' : 'empty'} directory', (tester) {
+      // A directory with nothing to list leaves no rows to hold focus;
+      // the browser holds it, so Backspace and Left still go up.
+      final tmp = Directory.systemTemp.createTempSync('fleuryfb_leaf_');
+      addTearDown(() {
+        if (unreadable) Process.runSync('chmod', ['755', '${tmp.path}/a']);
+        tmp.deleteSync(recursive: true);
+      });
+      Directory('${tmp.path}/a').createSync();
+      File('${tmp.path}/z.txt').writeAsStringSync('z');
+      final controller = FileBrowserController();
+      addTearDown(controller.dispose);
+      tester.pumpWidget(
+        FileBrowser(
+          initialDirectory: tmp.path,
+          controller: controller,
+          autofocus: true,
+        ),
+      );
+      final start = controller.currentDirectory;
+
+      for (final key in [KeyCode.backspace, KeyCode.arrowLeft]) {
+        if (unreadable) {
+          Process.runSync('chmod', ['000', '${tmp.path}/a']);
+        }
+        tester.sendKey(const KeyEvent(KeyCode.enter));
+        expect(controller.currentDirectory, endsWith('a'));
+        tester.render(size: const CellSize(40, 4));
+
+        tester.sendKey(KeyEvent(key));
+
+        expect(controller.currentDirectory, start, reason: '$key goes up');
+        if (unreadable) {
+          Process.runSync('chmod', ['755', '${tmp.path}/a']);
+        }
+      }
+    }, skip: unreadable && Platform.isWindows ? 'no chmod' : false);
+  }
+
   testWidgets('semantic open navigates directories and activates files', (
     tester,
   ) async {

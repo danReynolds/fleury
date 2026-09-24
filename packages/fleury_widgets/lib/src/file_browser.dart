@@ -517,16 +517,27 @@ class _FileBrowserState extends State<FileBrowser> {
     final canActivate =
         widget.onActivate != null || selected?.entry.isDirectory == true;
 
-    Widget body = _error != null
+    // With no rows to list (an empty or unreadable directory) the browser
+    // itself holds focus, inside the same key handling, so Left and
+    // Backspace still go up: there is no list to hold it.
+    final Widget? placeholder = _error != null
         ? Text('  $_error', style: const CellStyle(dim: true))
         : order.isEmpty
         ? const Text('  (empty)', style: CellStyle(dim: true))
-        : KeyDetector(
-            onKey: (event) {
-              if ((_onNavigationKey)(event) == KeyEventResult.handled)
-                event.consume();
-            },
-            child: Focus(
+        : null;
+    Widget body = KeyDetector(
+      onKey: (event) {
+        if ((_onNavigationKey)(event) == KeyEventResult.handled) {
+          event.consume();
+        }
+      },
+      child: placeholder != null
+          ? Focus(
+              focusNode: _focusNode,
+              autofocus: widget.autofocus,
+              child: placeholder,
+            )
+          : Focus(
               canRequestFocus: false,
               child: ListView.builder(
                 controller: _controller._listController,
@@ -553,7 +564,7 @@ class _FileBrowserState extends State<FileBrowser> {
                 },
               ),
             ),
-          );
+    );
 
     body = SizedBox(height: visible, child: body);
 
