@@ -127,17 +127,17 @@ class FleuryTester {
       scheduler: _scheduler,
     );
     _keyboardNotifier = KeyboardStateNotifier(_dispatcher);
-    // Match the runtime: render an error panel for a thrown build()
-    // rather than letting the exception escape the test harness. Per-owner,
-    // so a test customizing hooks can't leak into the next test.
+    // The runtime's error panel, for a test that opts back into containment.
+    // Per-owner, so a test customizing hooks can't leak into the next test.
     _owner = BuildOwner(
       errorBuilder: (error, stack) => ErrorWidget.builder(error, stack),
     );
-    // Containment inverts for tests: a layout/paint bug should FAIL the
-    // test loudly, not render a red panel behind passing assertions. A
-    // containment test opts back in per-boundary with
+    // Containment inverts for tests: a bug in build, a lifecycle hook,
+    // layout, or paint should FAIL the test loudly, not render a red panel
+    // behind passing assertions. A containment test opts back in with
+    // `owner.rethrowContainedErrors = false`, or per boundary with
     // `ErrorBoundary(rethrowContained: false)`.
-    _owner.rethrowContainedRenderErrors = true;
+    _owner.rethrowContainedErrors = true;
     // Off by default in tests so it doesn't perturb golden output; an
     // overflow-specific test opts back in.
     RenderFlex.debugShowOverflow = false;

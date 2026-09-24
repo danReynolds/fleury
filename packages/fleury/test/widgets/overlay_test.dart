@@ -788,7 +788,7 @@ void main() {
       tester,
     ) {
       // Production posture: contain instead of the tester's rethrow.
-      tester.owner.rethrowContainedRenderErrors = false;
+      tester.owner.rethrowContainedErrors = false;
       final contained = <FrameContainmentError>[];
       tester.owner.onContainedRenderError = contained.add;
       // The throw happens INSIDE the entry boundary's cached paint (under

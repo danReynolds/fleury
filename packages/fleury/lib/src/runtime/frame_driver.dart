@@ -357,12 +357,11 @@ final class FrameDriver {
     // semantic actions here) runs after the viewport read, before the
     // resize check — the order the embed host always had.
     _onBeforeFrame?.call(reason);
-    if (_lastSize != null && size != _lastSize) {
-      // The viewport changed size: reset the diff base and rebuild the
-      // root (propagates through MediaQuery). The rendered frame below is
-      // a full repaint at the new size.
-      handleResize();
-    }
+    // The viewport changed size: the frame below resets the diff base and
+    // rebuilds the root (propagates through MediaQuery), then renders a full
+    // repaint at the new size. A size change always needs a render, so this
+    // frame is never skipped.
+    final resized = _lastSize != null && size != _lastSize;
     _lastSize = size;
     if (!snapshot.metricsChanged &&
         !_frameLoop.needsRender(size) &&
@@ -386,6 +385,11 @@ final class FrameDriver {
     _inFrameRender = true;
     TuiRenderedFrame? frame;
     try {
+      // Inside the backstop: a root rebuild that throws fails this frame
+      // like any other render error. Outside it, the throw escaped the
+      // driver, and because the size was never recorded, every later frame
+      // retried the resize and threw again.
+      if (resized) handleResize();
       frame = _frameLoop.render(
         size: size,
         paint: (next) {

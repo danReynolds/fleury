@@ -204,7 +204,10 @@ user's terminal — the unglamorous correctness that decides whether a TUI
 feels professional.
 
 **Errors are contained at every phase.** A thrown `build()` renders an
-error panel for that subtree (`ErrorWidget`); a thrown layout or paint is
+error panel for that subtree (`ErrorWidget`), and so does a child that
+throws while it mounts or updates (`initState`, `didUpdateWidget`, a render
+object's create or update): the nearest building ancestor puts the panel
+in that child's place, as Flutter does. A thrown layout or paint is
 absorbed by the nearest `ErrorBoundary` — the framework installs one at
 every route and overlay-entry root, so a crashing dialog can't take down
 the page beneath it — and renders the same red panel in the boundary's

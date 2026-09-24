@@ -101,16 +101,22 @@ class _LayoutBuilderElement extends RenderObjectElement {
     // a listenable read in a layout-time builder never registers anywhere
     // and the memo would freeze it. Restored before updateChild so children
     // attribute their own reads.
-    final built = runWithBuildTarget(() => widget.builder(this, constraints));
+    //
+    // A throw from the builder or from the child's mount or update is
+    // contained like ComponentElement's: the error widget takes the slot.
+    // Letting it escape into layout would hand it to the route's
+    // ErrorBoundary, which blanks the whole route.
     try {
+      final built = runWithBuildTarget(() => widget.builder(this, constraints));
       _child = updateChild(_child, built);
-    } catch (_) {
-      final child = _child;
-      if (child != null &&
-          (!child.mounted || !identical(child.elementParent, this))) {
-        _child = null;
+    } catch (error, stack) {
+      _child = activeChildOrNull(_child);
+      try {
+        _child = replaceChildWithError(_child, error, stack);
+      } catch (_) {
+        _child = activeChildOrNull(_child);
+        rethrow;
       }
-      rethrow;
     }
   }
 

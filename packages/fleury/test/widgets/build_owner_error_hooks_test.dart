@@ -19,6 +19,9 @@ void main() {
 
       final seenA = <Object>[];
       final seenB = <Object>[];
+      // Contain like production so the pump returns and the hook is the
+      // only observer.
+      testerA.owner.rethrowContainedErrors = false;
       testerA.owner.onBuildError = (e, s) => seenA.add(e);
       testerB.owner.onBuildError = (e, s) => seenB.add(e);
 
@@ -42,6 +45,7 @@ void main() {
 
     test('customizing one tester\'s builder does not leak to the next', () {
       final testerA = FleuryTester();
+      testerA.owner.rethrowContainedErrors = false;
       testerA.owner.errorBuilder = (e, s) => const Text('custom panel');
       testerA.pumpWidget(const _Boom());
       final outA = testerA.renderToString(size: const CellSize(20, 2));
@@ -50,6 +54,7 @@ void main() {
 
       final testerB = FleuryTester();
       addTearDown(testerB.dispose);
+      testerB.owner.rethrowContainedErrors = false;
       testerB.pumpWidget(const _Boom());
       final outB = testerB.renderToString(size: const CellSize(20, 4));
       expect(

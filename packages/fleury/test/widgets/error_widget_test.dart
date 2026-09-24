@@ -9,13 +9,17 @@ class _Boom extends StatelessWidget {
 }
 
 void main() {
+  // The panel is production behaviour. The test harness rethrows instead
+  // (a bug fails the test), so each test here opts back into containment.
   testWidgets('a thrown build renders an error panel, not a crash', (tester) {
+    tester.owner.rethrowContainedErrors = false;
     tester.pumpWidget(const _Boom());
     final out = tester.renderToString(size: const CellSize(20, 4));
     expect(out.contains('kaboom'), isTrue, reason: 'error shown, app survived');
   });
 
   testWidgets('a sibling survives a broken widget', (tester) {
+    tester.owner.rethrowContainedErrors = false;
     tester.pumpWidget(const Column(children: [_Boom(), Text('still here')]));
     final out = tester.renderToString(size: const CellSize(20, 6));
     expect(out.contains('kaboom'), isTrue);
@@ -24,6 +28,7 @@ void main() {
 
   testWidgets('onBuildError observes the error', (tester) {
     Object? seen;
+    tester.owner.rethrowContainedErrors = false;
     tester.owner.onBuildError = (e, s) => seen = e;
     tester.pumpWidget(const _Boom());
     tester.render(size: const CellSize(20, 4));
@@ -34,6 +39,7 @@ void main() {
     final previous = ErrorWidget.builder;
     ErrorWidget.builder = (e, s) => const Text('custom failure');
     addTearDown(() => ErrorWidget.builder = previous);
+    tester.owner.rethrowContainedErrors = false;
     tester.pumpWidget(const _Boom());
     final out = tester.renderToString(size: const CellSize(20, 2));
     expect(out.contains('custom failure'), isTrue);

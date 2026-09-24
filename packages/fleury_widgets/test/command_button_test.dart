@@ -209,11 +209,15 @@ void main() {
     final registry = CommandRegistry();
     addTearDown(registry.dispose);
 
-    tester.pumpWidget(_host(registry));
-
     expect(
-      tester.renderToString(size: const CellSize(100, 6), emptyMark: ' '),
-      contains('could not find command "packages.inspect"'),
+      () => tester.pumpWidget(_host(registry)),
+      throwsA(
+        isA<StateError>().having(
+          (error) => error.message,
+          'message',
+          contains('could not find command "packages.inspect"'),
+        ),
+      ),
     );
   });
 }

@@ -1182,6 +1182,44 @@ abstract class Element implements BuildContext {
     return inflateWidget(newWidget);
   }
 
+  /// [child] if it is still this element's active child, else null.
+  ///
+  /// A child update that throws can leave the slot pointing at an element it
+  /// already deactivated, unmounted, or lost to a GlobalKey move. A slot must
+  /// never keep such an element: the next rebuild would update it in place.
+  @protected
+  Element? activeChildOrNull(Element? child) =>
+      child != null && child.mounted && identical(child._parent, this)
+      ? child
+      : null;
+
+  /// Contains a child update that threw the way a thrown `build` is
+  /// contained: reports [error] to [BuildOwner.onBuildError] and puts the
+  /// owner's error widget in the slot [child] occupied.
+  ///
+  /// Covers what runs while a child mounts or updates: `initState`,
+  /// `didUpdateWidget`, a render object's create or update, a duplicate key.
+  /// The nearest element that builds its child catches it, as in Flutter, so
+  /// a multi-child parent's whole subtree is replaced and its reconcile never
+  /// has to recover a half-updated list. [child] must already have passed
+  /// through [activeChildOrNull]. Rethrows when the owner installs no
+  /// [BuildOwner.errorBuilder], like a raw owner's thrown `build`, and under
+  /// [BuildOwner.rethrowContainedErrors].
+  @protected
+  Element? replaceChildWithError(
+    Element? child,
+    Object error,
+    StackTrace stack,
+  ) {
+    final owner = _owner;
+    final builder = owner?.errorBuilder;
+    if (owner == null || builder == null || owner.rethrowContainedErrors) {
+      Error.throwWithStackTrace(error, stack);
+    }
+    owner.onBuildError?.call(error, stack);
+    return updateChild(child, builder(error, stack));
+  }
+
   /// Creates an element for [newWidget] and mounts it under this element.
   ///
   /// If [newWidget] carries a [GlobalKey] whose element is available for
@@ -1324,18 +1362,20 @@ abstract class ComponentElement extends Element {
       final owner = _owner;
       owner?.onBuildError?.call(error, stack);
       final builder = owner?.errorBuilder;
-      if (builder == null) rethrow; // no boundary installed → propagate
+      // No boundary installed, or the test harness's rethrow → propagate.
+      if (builder == null || owner!.rethrowContainedErrors) rethrow;
       built = builder(error, stack);
     }
     try {
       _child = updateChild(_child, built);
-    } catch (_) {
-      final child = _child;
-      if (child != null &&
-          (!child.mounted || !identical(child.elementParent, this))) {
-        _child = null;
+    } catch (error, stack) {
+      _child = activeChildOrNull(_child);
+      try {
+        _child = replaceChildWithError(_child, error, stack);
+      } catch (_) {
+        _child = activeChildOrNull(_child);
+        rethrow;
       }
-      rethrow;
     }
   }
 
@@ -1493,9 +1533,11 @@ const int _maxBuildPasses = 512;
 class BuildOwner {
   BuildOwner({this.errorBuilder, this.onBuildError});
 
-  /// Builds the widget shown in place of a subtree whose `build` threw, so
-  /// the catch in [ComponentElement.performRebuild] renders an error panel
-  /// instead of crashing. Null means "no boundary" — errors propagate (the
+  /// Builds the widget shown in place of a subtree whose `build` threw, or
+  /// whose child threw while mounting or updating (`initState`,
+  /// `didUpdateWidget`, a render object's create or update), so the catch in
+  /// [ComponentElement.performRebuild] renders an error panel instead of
+  /// crashing. Null means "no boundary" — errors propagate (the
   /// raw-owner default; [TuiRuntime] and the test harness install
   /// `ErrorWidget.builder`). Per-owner, not process-global: two runtimes in
   /// one isolate never share a boundary, and a host cannot forget to
@@ -1506,12 +1548,15 @@ class BuildOwner {
   /// error widget is substituted.
   void Function(Object error, StackTrace stack)? onBuildError;
 
-  /// Containment policy for layout/paint exceptions absorbed by
-  /// [ErrorBoundary] render objects (explicit or the implicit route/
-  /// overlay boundaries). False in production hosts — contain and render
-  /// the error presentation; FleuryTester sets true so a widget test with
-  /// a layout bug fails the test instead of silently rendering a panel.
-  bool rethrowContainedRenderErrors = false;
+  /// Whether errors that would be contained propagate instead: a thrown
+  /// `build`, a child that throws while it mounts or updates (see
+  /// [errorBuilder]), and layout/paint exceptions absorbed by [ErrorBoundary]
+  /// render objects (explicit or the implicit route/overlay boundaries).
+  /// False in production hosts — contain and render the error presentation;
+  /// FleuryTester sets true so a widget test with a bug fails the test
+  /// instead of silently rendering a panel. A test of the panel itself sets
+  /// it back to false.
+  bool rethrowContainedErrors = false;
 
   /// Sink for newly contained layout/paint failures (once per error-state
   /// entry). Hosts wire this to their error reporter so a contained panel
@@ -1733,13 +1778,15 @@ class BuildOwner {
           element.rebuild();
         }
       } finally {
-        // A rebuild can throw past the per-element containment (initState,
-        // didUpdateWidget, updateShouldNotify have no errorBuilder catch).
-        // The snapshot was already drained from the queue, so the untouched
-        // remainder would be stranded dirty-but-unqueued — markNeedsBuild
-        // would short-circuit on them forever. Re-enqueue so the next flush
-        // retries. (The thrower itself cleared its own flag at rebuild()
-        // start and is intentionally not re-queued.)
+        // A rebuild can still throw past per-element containment: a raw
+        // owner installs no error widget, and a dirty render-object element
+        // (re-dirtied by a GlobalKey steal) has no component between its
+        // reconcile and this loop. The snapshot was already drained from the
+        // queue, so the untouched remainder would be stranded
+        // dirty-but-unqueued — markNeedsBuild would short-circuit on them
+        // forever. Re-enqueue so the next flush retries. (The thrower itself
+        // cleared its own flag at rebuild() start and is intentionally not
+        // re-queued.)
         if (processed < snapshot.length) {
           for (var i = processed; i < snapshot.length; i++) {
             final element = snapshot[i];
