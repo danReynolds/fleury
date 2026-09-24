@@ -2,7 +2,7 @@
 
 **Scope:** `main` at #270, framework core through the widget, serve, and semantics packages.
 **Method:** a multi-agent sweep, run twice, with finders split by subsystem. An independent verifier reproduced every finding with its own probe, and none was refuted. Findings are grouped into fix batches, most severe first within each.
-**Tracking:** each batch lands as one reviewed PR. Batch A is the first. Five findings wait on a product decision; they stay open until it is made.
+**Tracking:** each batch lands as one reviewed PR. Batch A is the first (#274). Six findings wait on a product decision; they stay open until it is made.
 
 ## Status
 
@@ -14,7 +14,7 @@
 | A | medium | A setState scheduled from a microtask makes frames chain as microtasks; SIGTERM, Ctrl+C and the grace force-exit never run | Fixed |
 | A | medium | Hot reload permanently stops every Animation.loop(), freezing built-in Animate .pulse()/.shimmer()/repeat effects | Fixed |
 | A | medium | N events delivered in one event-loop turn (one stdin read, one socket chunk) render N full frames | Decision pending: coalesce events into one frame |
-| A | medium | On exit, mouse reports that arrive during teardown stay queued on the tty and the shell reads them as garbage | Fixed, and for Ctrl+Z and handoff too |
+| A | medium | On exit, mouse reports that arrive during teardown stay queued on the tty and the shell reads them as garbage | Decision pending: draining the tty before exit, Ctrl+Z, or handoff reads away typeahead; not draining leaves mouse reports for the shell |
 | A | low | Rebuilds requested during a LayoutBuilder's layout-time build wait for the next frame: a Scope fed from constraints paints the previous size on every resize | Fixed |
 | B | high | RenderText's layout cache goes stale after a single-line fast-path layout, so wrapped lines vanish after narrow→wide→narrow | Open |
 | B | high | Soft-wrap drops leading whitespace at the start of every paragraph: multi-line Text and all RichText lose indentation (JsonView tree and nested Markdown lists render flat) | Open |
