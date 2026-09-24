@@ -811,8 +811,14 @@ class FleuryTester {
     final buffer = render(size: size);
     final out = StringBuffer();
     for (var row = 0; row < buffer.size.rows; row++) {
+      // Trim by cell, not by text: a glyph that happens to equal the mark
+      // is content, and a mark of any length (even empty) trims the same.
+      var end = buffer.size.cols;
+      while (end > 0 && buffer.atColRow(end - 1, row).role == CellRole.empty) {
+        end--;
+      }
       final line = StringBuffer();
-      for (var col = 0; col < buffer.size.cols; col++) {
+      for (var col = 0; col < end; col++) {
         final cell = buffer.atColRow(col, row);
         switch (cell.role) {
           case CellRole.empty:
@@ -829,7 +835,7 @@ class FleuryTester {
             break;
         }
       }
-      out.writeln(_rstrip(line.toString(), emptyMark));
+      out.writeln(line.toString());
     }
     return out.toString();
   }
@@ -1228,12 +1234,4 @@ final class _CommandResolution {
 
   final AppCommand command;
   final CommandRegistry registry;
-}
-
-String _rstrip(String s, String mark) {
-  var end = s.length;
-  while (end > 0 && s.substring(end - mark.length, end) == mark) {
-    end -= mark.length;
-  }
-  return s.substring(0, end);
 }
