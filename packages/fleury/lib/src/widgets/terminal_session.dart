@@ -29,6 +29,22 @@ final class TerminalSession {
   /// Whether [driver] can hand the terminal to a child at all.
   bool get supportsHandoff => driver is TerminalHandoffDriver;
 
+  /// Whether this native session owns an inline region.
+  bool get isInline =>
+      driver is InlineTerminalDriver &&
+      (driver as InlineTerminalDriver).isInline;
+
+  /// Resizes a live inline region. Call from an interaction or lifecycle
+  /// callback, not while building. Full-screen and remote sessions retain
+  /// their host's size and reject this operation.
+  /// During suspend or subprocess handoff, the request takes effect on return.
+  Future<void> resizeInline(int rows) {
+    if (!isInline) {
+      throw StateError('This session does not own an inline terminal region.');
+    }
+    return (driver as InlineTerminalDriver).resizeInline(rows);
+  }
+
   /// Runs [operation] with the terminal handed to it: cooked input, main
   /// screen, mouse off, frame writes suppressed, and `runApp`'s stray-output
   /// capture paused so a child that inherits stdio gets the real descriptors.

@@ -19,11 +19,14 @@ import 'package:ffi/ffi.dart';
 import 'package:meta/meta.dart';
 
 import '../foundation/geometry.dart';
+import '../rendering/ansi_render_target.dart';
 import 'capabilities.dart';
 import '../input/events.dart';
 import '../input/keyboard_state.dart';
 import '../runtime/dev_signal_ack.dart';
+import '../runtime/inline_terminal_lease.dart';
 import 'input_parser.dart';
+import 'inline_terminal_region.dart';
 import 'terminal_driver.dart';
 import 'terminal_probe.dart';
 import 'terminal_query_runner.dart';
@@ -38,7 +41,7 @@ import 'pointer_shapes.dart';
 /// it may stop the process before Fleury can restore terminal modes.
 class PosixTerminalDriver
     with TerminalAttentionSequences
-    implements TerminalDriver, TerminalHandoffDriver {
+    implements TerminalDriver, TerminalHandoffDriver, InlineTerminalDriver {
   PosixTerminalDriver({
     Stdin? stdinOverride,
     Stdout? stdoutOverride,
@@ -166,6 +169,31 @@ class PosixTerminalDriver
   bool _suspended = false;
   ActiveTerminalState? _terminalState;
   TerminalMode? get _mode => _terminalState?.effectiveMode;
+  InlineTerminalRegion? _inline;
+  Future<void> _inlineTail = Future<void>.value();
+  int _inlineChanges = 0;
+  bool _inlineNeedsRepaint = false;
+
+  @override
+  bool get isInline => _inline != null;
+
+  @internal
+  AnsiRenderTarget get renderTarget =>
+      _inline?.target ?? const AnsiRenderTarget.fullScreen();
+
+  @internal
+  void recordInlineCursor(CellOffset cursor) {
+    final inline = _inline;
+    if (inline != null &&
+        _inlineChanges == 0 &&
+        !_suspended &&
+        !_handoffActive &&
+        inline.isAllocated &&
+        _physicalSize == inline.terminalSize) {
+      inline.recordCursor(cursor);
+    }
+  }
+
   bool get _changedStdin => _terminalState?.rawInputOwned ?? false;
   bool get _wroteEnterSequences => _terminalState?.outputModesOwned ?? false;
 
@@ -245,13 +273,19 @@ class PosixTerminalDriver
   bool? _originalEchoMode;
 
   @override
-  CellSize get size {
+  CellSize get size => _inline?.size ?? _physicalSize;
+
+  CellSize get _physicalSize {
     int cols;
     int rows;
     try {
       cols = _stdout.terminalColumns;
       rows = _stdout.terminalLines;
     } on StdoutException {
+      // A guessed size could make an inline clear reach shell-owned rows.
+      // Zero is explicitly rejected on acquire/resize; release treats it as
+      // unknown geometry and leaves the old rows alone.
+      if (_inline != null) return CellSize.zero;
       // No reportable size — happens under non-interactive PTYs (e.g.
       // `script` invocations without a controlling terminal) and CI
       // runners that haven't negotiated a window size. Fall back to
@@ -413,6 +447,9 @@ class PosixTerminalDriver
         ? merged
         : merged.copyWith(ambiguousCharWidth: width);
     return withWidth.copyWith(
+      imageProtocol: isInline
+          ? ImageProtocol.halfBlock
+          : withWidth.imageProtocol,
       measuredWidths: _measuredGlyphWidths,
       textPolicy: textPolicy,
     );
@@ -427,10 +464,175 @@ class PosixTerminalDriver
   @override
   bool get isInteractive => _stdoutIsTerminal;
 
+  Future<CellOffset> _queryInlineCursor() async {
+    try {
+      final reply = await _queryRunner.request(
+        '\x1B[6n\x1B[c',
+        timeout: const Duration(seconds: 1),
+      );
+      final match = RegExp(
+        r'\x1b\[(\d+);(\d+)R',
+      ).firstMatch(String.fromCharCodes(reply));
+      if (match != null) {
+        final row = int.tryParse(match[1]!);
+        final col = int.tryParse(match[2]!);
+        if (row != null && col != null && row > 0 && col > 0) {
+          return CellOffset(col - 1, row - 1);
+        }
+      }
+    } on TimeoutException {
+      // A cursor report is required ownership evidence, not an optional
+      // capability probe. Do not paint at a guessed origin on failure.
+    }
+    throw StateError(
+      'The terminal did not report its cursor position. Inline mode cannot '
+      'reserve a safe region; use TerminalMode.interactive instead.',
+    );
+  }
+
+  void _scheduleInlineResize() {
+    unawaited(_changeInline().catchError((Object _) {}));
+  }
+
+  Future<(CellSize, CellOffset)> _queryInlineAnchor() async {
+    // A cursor report belongs to the dimensions it was requested under. A
+    // second resize can arrive while that reply is in flight (e.g. SSH).
+    // Each query is bounded and cancellable by restore(). Keep painting gated
+    // until one report is stable; a long window drag must not quit the app.
+    final generation = _lifecycleGeneration;
+    while ((_active || _entering) && generation == _lifecycleGeneration) {
+      final physical = _physicalSize;
+      if (physical.isEmpty) {
+        throw StateError('Inline mode requires a reportable terminal size.');
+      }
+      final cursor = await _queryInlineCursor();
+      if (physical == _physicalSize) return (physical, cursor);
+    }
+    throw StateError('Inline cursor acquisition was cancelled by teardown.');
+  }
+
+  @override
+  Future<void> resizeInline(int rows) {
+    final inline = _inline;
+    if (inline == null || !_active || _restoring) {
+      throw StateError('No active inline terminal session.');
+    }
+    inline.requestRows(rows);
+    return _changeInline();
+  }
+
+  Future<void> _changeInline({bool reacquire = false}) async {
+    final inline = _inline;
+    if (inline == null) return;
+    final previous = _inlineTail;
+    final released = Completer<void>();
+    _inlineTail = released.future;
+    _inlineChanges++;
+    try {
+      await previous;
+      if (!_active ||
+          _restoring ||
+          (!reacquire && (_suspended || _handoffActive))) {
+        return;
+      }
+      final generation = _lifecycleGeneration;
+      final physical = _physicalSize;
+      if (physical.isEmpty) {
+        throw StateError('Inline viewport needs a nonempty terminal.');
+      }
+      if (inline.isAllocated &&
+          physical == inline.terminalSize &&
+          inline.size.rows == inline.requestedRows.clamp(1, physical.rows)) {
+        return;
+      }
+      // Cancel capture before changing coordinate systems. Input can keep
+      // updating widget state while frame writes and mouse reports are gated.
+      if (!_events.isClosed) {
+        _events.add(
+          const MouseEvent(
+            kind: MouseEventKind.cancel,
+            button: MouseButton.none,
+            col: 0,
+            row: 0,
+          ),
+        );
+      }
+      final (
+        terminal,
+        cursor,
+      ) = inline.isAllocated && physical == inline.terminalSize
+          ? (physical, inline.terminalCursor)
+          : await _queryInlineAnchor();
+      if (!_active || _restoring || generation != _lifecycleGeneration) return;
+      _recordInlineLease(region: false);
+      final bytes = inline.isAllocated
+          ? inline.resize(terminal, cursor)
+          : inline.acquire(terminal, cursor);
+      _stdout.write(bytes);
+      await _stdout.flush();
+      if (!_active || _restoring || generation != _lifecycleGeneration) return;
+      _recordInlineLease();
+      _inlineNeedsRepaint = true;
+    } catch (error, stack) {
+      if (_active && !_restoring && !_events.isClosed) {
+        _events.addError(error, stack);
+      }
+      rethrow;
+    } finally {
+      _inlineChanges--;
+      released.complete();
+      if (_inlineChanges == 0 && _inlineNeedsRepaint) {
+        _inlineNeedsRepaint = false;
+        if (_active && !_restoring && !_events.isClosed) {
+          _events.add(ResizeEvent(size));
+        }
+      }
+    }
+  }
+
+  void _releaseInline() {
+    final inline = _inline;
+    if (inline != null) {
+      // Recovery metadata must never prevent ordinary terminal cleanup.
+      try {
+        _recordInlineLease(region: false);
+      } catch (_) {}
+      _stdout.write(inline.release(_physicalSize));
+    }
+  }
+
+  void _recordInlineLease({
+    bool active = true,
+    bool region = true,
+    TerminalMode? mode,
+  }) {
+    final effective = mode ?? _mode;
+    if (effective == null || effective.inlineRows == null) return;
+    final inline = _inline;
+    final allocated = region && inline != null && inline.isAllocated;
+    writeInlineTerminalLease(
+      Platform.environment[inlineTerminalLeaseEnvironment],
+      mode: effective,
+      active: active,
+      terminal: allocated ? inline.terminalSize : null,
+      top: allocated ? inline.target.top : null,
+      rows: allocated ? inline.size.rows : null,
+      pointerStackOwned: _pointerStackOwned,
+    );
+  }
+
   @override
   Future<TerminalSessionProfile> enter(TerminalMode mode) async {
     if (_active) {
       throw StateError('PosixTerminalDriver.enter called on an active driver.');
+    }
+    if (mode.inlineRows != null) {
+      if (!_stdinIsTerminal || !_stdoutIsTerminal) {
+        throw StateError(
+          'Inline mode requires terminal input and output for cursor reporting.',
+        );
+      }
+      _inline = InlineTerminalRegion(mode.inlineRows!);
     }
     // Reject a second same-process interactive session up front, before any
     // terminal mutation, so the terminal is left untouched and the failure is
@@ -573,8 +775,27 @@ class PosixTerminalDriver
     await _probeCapabilities(negotiated.alternateScreen, negotiationClock);
     _checkStillEntering(enterGeneration);
 
+    if (_inline != null) {
+      try {
+        final (terminal, cursor) = await _queryInlineAnchor();
+        _checkStillEntering(enterGeneration);
+        _recordInlineLease(region: false);
+        _stdout.write(_inline!.acquire(terminal, cursor));
+        await _stdout.flush();
+        _checkStillEntering(enterGeneration);
+        _recordInlineLease();
+      } catch (_) {
+        await restore();
+        rethrow;
+      }
+    }
+
     _resizeSubscription = _watchSignal(ProcessSignal.sigwinch, (_) {
-      if (!_events.isClosed) _events.add(ResizeEvent(size));
+      if (isInline) {
+        _scheduleInlineResize();
+      } else if (!_events.isClosed) {
+        _events.add(ResizeEvent(size));
+      }
     });
 
     _stdout.write(_pushPointerShape());
@@ -651,7 +872,7 @@ class PosixTerminalDriver
       if (onAlternateScreen &&
           widthProbeIsPermittedByEnvironment(Platform.environment))
         (_CapabilityProbe.glyphWidths, glyphWidthQuery),
-      if (_imageProbePermitted())
+      if (!isInline && _imageProbePermitted())
         (_CapabilityProbe.image, kittyGraphicsQueryWithCleanup),
     ];
     if (queries.isEmpty) return;
@@ -775,6 +996,7 @@ class PosixTerminalDriver
         effective,
         KeyboardProtocolMode.disambiguated,
       );
+      _recordInlineLease();
       await _stdout.flush();
       int? after;
       final fallbackTimeout = _nextProbeTimeout(negotiationClock);
@@ -820,6 +1042,7 @@ class PosixTerminalDriver
       effective,
       KeyboardProtocolMode.legacy,
     );
+    _recordInlineLease();
   }
 
   /// Lifecycle is only safe to keep when text survives it: event types (2),
@@ -881,8 +1104,10 @@ class PosixTerminalDriver
 
   /// Builds the mode-entry escape sequence (alt screen, hide cursor,
   /// bracketed paste, Kitty keyboard, mouse), shared by [enter] and resume.
-  String _enterSequences(TerminalMode mode) =>
-      buildTerminalEnterSequences(mode) + _pushPointerShape();
+  String _enterSequences(TerminalMode mode) {
+    _recordInlineLease(mode: mode, region: false);
+    return buildTerminalEnterSequences(mode) + _pushPointerShape();
+  }
 
   /// Applies the fleet override before any sequence is built.
   ///
@@ -904,6 +1129,7 @@ class PosixTerminalDriver
   String _pushPointerShape() {
     if (!_pointerShapes || _pointerStackOwned) return '';
     _pointerStackOwned = true;
+    _recordInlineLease();
     return pushPointerShape;
   }
 
@@ -916,6 +1142,30 @@ class PosixTerminalDriver
   }
 
   bool _interceptParsedEvent(TuiEvent event) {
+    final inline = _inline;
+    if (inline != null && event is MouseEvent) {
+      if (!_active ||
+          _inlineChanges > 0 ||
+          !inline.isAllocated ||
+          _suspended ||
+          _handoffActive ||
+          _physicalSize != inline.terminalSize) {
+        return true;
+      }
+      final local = inline.target.toLocal(CellOffset(event.col, event.row));
+      if (!_events.isClosed) {
+        _events.add(
+          MouseEvent(
+            kind: event.kind,
+            button: event.button,
+            col: local.col,
+            row: local.row,
+            modifiers: event.modifiers,
+          ),
+        );
+      }
+      return true;
+    }
     if (!suspendOnCtrlZ ||
         !_active ||
         !_nativeRawMode ||
@@ -993,6 +1243,10 @@ class PosixTerminalDriver
       return;
     }
     _suspended = true;
+    await _inlineTail;
+    if (!_active || _restoring || lifecycleGeneration != _lifecycleGeneration) {
+      return;
+    }
     // Input authority leaves with the terminal: whatever the user is holding
     // will be released into the shell, and this driver will never see the
     // release. Say so — the runtime recovers held keys on a focus-out (RFC
@@ -1008,8 +1262,10 @@ class PosixTerminalDriver
     if (!_handoffActive) {
       final inputRestored = !_changedStdin || _restoreCookedMode();
       try {
+        _releaseInline();
         if (_wroteEnterSequences) _stdout.write(_exitSequences(mode));
         await _stdout.flush();
+        _recordInlineLease(active: false, region: false);
       } catch (_) {}
       // restore() can run while the flush yields (SIGTERM, stdin EOF, or an
       // app-requested exit). A stale suspend continuation must never stop the
@@ -1098,6 +1354,8 @@ class PosixTerminalDriver
         handoffMode = mode;
         didHandoff = true;
         _handoffActive = true;
+        await _inlineTail;
+        if (!_active || !identical(_mode, mode)) return await operation();
         // Same contract as suspend: the child owns the terminal now, so held
         // keys are released into it, never reported here.
         if (!_events.isClosed) {
@@ -1112,11 +1370,13 @@ class PosixTerminalDriver
           stdinPaused = true;
         }
         try {
+          _releaseInline();
           if (_wroteEnterSequences) _stdout.write(_exitSequences(mode));
         } catch (_) {}
         if (_changedStdin) _restoreCookedMode();
         try {
           await _stdout.flush();
+          _recordInlineLease(active: false, region: false);
         } catch (_) {}
 
         final hs = onHandoffStart;
@@ -1148,6 +1408,15 @@ class PosixTerminalDriver
                 if (_wroteEnterSequences) _stdout.write(_enterSequences(mode));
                 await _stdout.flush();
               } catch (_) {}
+              if (isInline) {
+                // Queries share stdin with normal input, so resume the parent
+                // only after the child exits, but before acquiring its anchor.
+                if (stdinPaused) {
+                  _stdinSubscription?.resume();
+                  stdinPaused = false;
+                }
+                await _changeInline(reacquire: true);
+              }
             }
           } finally {
             try {
@@ -1172,13 +1441,28 @@ class PosixTerminalDriver
   void _resume() {
     final mode = _mode;
     if (mode == null || !_active) return;
-    // Clear the write gate BEFORE re-entering so the repaint below can paint.
-    _suspended = false;
     // A nested suspend seam during an editor handoff must not re-enter our mode
     // while the child owns the screen. The handoff's own finally re-enters.
     if (_handoffActive) return;
     if (_changedStdin) _setRawMode();
     if (_wroteEnterSequences) _stdout.write(_enterSequences(mode));
+    if (isInline) {
+      unawaited(
+        _changeInline(reacquire: true)
+            .then((_) {
+              if (!_active || _restoring) return;
+              _suspended = false;
+              if (!_events.isClosed) {
+                _events.add(const TerminalFocusEvent(focused: true));
+                _events.add(ResizeEvent(size));
+              }
+            })
+            // _changeInline already reports failures through driver.events.
+            .catchError((Object _) {}),
+      );
+      return;
+    }
+    _suspended = false;
     if (!_events.isClosed) {
       // Authority is back (nothing is held: the shell saw the releases), then
       // the same-size resize that forces the full repaint.
@@ -1301,6 +1585,7 @@ class PosixTerminalDriver
       // Disable input modes first so no stray sequences leak as the
       // terminal returns to the shell.
       try {
+        _releaseInline();
         _stdout.write(_exitSequences(_mode ?? TerminalMode.interactive));
       } catch (_) {}
       _terminalState?.outputModesOwned = false;
@@ -1311,6 +1596,7 @@ class PosixTerminalDriver
     // in alt-screen / cursor-hidden state when the process exits.
     try {
       await _stdout.flush();
+      _recordInlineLease(active: false, region: false);
     } catch (_) {
       // Flush can throw if the stream is already closed; nothing we
       // can do at that point.
@@ -1340,6 +1626,14 @@ class PosixTerminalDriver
     // or restored for the shell across a Ctrl+Z ([_suspended]) — writing them
     // would interleave ANSI with an editor's screen or the bare shell prompt.
     if (_handoffActive || _suspended) return;
+    final inline = _inline;
+    if (inline != null) {
+      if (_inlineChanges > 0 || !inline.isAllocated) return;
+      if (_physicalSize != inline.terminalSize) {
+        _scheduleInlineResize();
+        return;
+      }
+    }
     _stdout.write(data);
   }
 

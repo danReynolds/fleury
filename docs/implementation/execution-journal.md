@@ -9,6 +9,21 @@ This journal is intentionally more tactical than
 [decision-log.md](decision-log.md). Use the decision log for durable decisions.
 Use this file for the running implementation narrative.
 
+## 2026-09-24 — bounded inline commands for RK
+
+Implemented the explicit-height inline host and native lifecycle in an isolated
+worktree. The public entry is `TerminalMode.inline(rows: ...)`; height changes
+use the existing `TerminalSession` scope. The hard boundary is region ownership,
+not a widget fork: offset ANSI/input/caret, gate writes across geometry changes,
+and release/re-anchor through child handoff and job control. The supervisor now
+recovers typed inline leases after crashes without popping the alternate screen.
+
+Core and native fullscreen regressions pass; the new PTY harness qualifies
+macOS/Linux geometry and lifecycle, and real RK use/init interactions pass in a
+temporary consumer build. See [the implementation record](inline-terminal-viewport.md)
+for exact evidence and remaining terminal-app acceptance. Logs-before-region,
+automatic content height, persistent final frames, and Windows remain deferred.
+
 ## Operating Goal
 
 Build Fleury from the existing codebase into a top-tier reactive TUI framework:

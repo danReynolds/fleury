@@ -101,6 +101,11 @@ class WindowsTerminalDriver
 
   @override
   Future<TerminalSessionProfile> enter(TerminalMode mode) async {
+    if (mode.inlineRows != null) {
+      throw UnsupportedError(
+        'Inline terminal mode currently supports macOS and Linux.',
+      );
+    }
     if (_active) {
       throw StateError(
         'WindowsTerminalDriver.enter called on an active driver.',

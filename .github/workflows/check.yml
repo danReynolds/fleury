@@ -51,6 +51,31 @@ jobs:
       - name: Scenario benchmark oracles
         run: dart tool/fleury_dev.dart benchmark scenario-gate
 
+  inline-terminal:
+    name: inline terminal (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 10
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dart-lang/setup-dart@v1
+        with:
+          sdk: "3.12.2"
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Resolve the native fixture and terminal emulator
+        run: |
+          cd packages/fleury
+          dart pub get
+          cd ../..
+          python -m pip install -r tool/inline-pty-requirements.txt
+      - name: Exercise inline rendering and lifecycle over a PTY
+        run: python tool/check_inline_tui.py
+
   create-smoke:
     name: create smoke (${{ matrix.os }}, Dart ${{ matrix.sdk }})
     runs-on: ${{ matrix.os }}

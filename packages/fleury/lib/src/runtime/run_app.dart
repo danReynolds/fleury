@@ -1365,6 +1365,12 @@ Future<AppExit> _runAppImpl(
                     sink: sink,
                     renderer: renderer,
                     debug: debugController,
+                    readTarget: usedDriver is PosixTerminalDriver
+                        ? () => usedDriver.renderTarget
+                        : null,
+                    onCursorPositioned: usedDriver is PosixTerminalDriver
+                        ? usedDriver.recordInlineCursor
+                        : null,
                     readCaret: () => focusManager.focusedNode?.caretRect,
                     // Native graphics protocol, when the terminal has one:
                     // widgets place neutral image placements; the encoder

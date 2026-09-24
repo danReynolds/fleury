@@ -1,88 +1,108 @@
 # Bounded inline terminal viewport
 
-Status: in progress, 2026-09-24. The renderer foundation is implemented;
-`runApp` does not yet offer a usable inline session.
+Status: implemented in `codex/inline-viewport`, 2026-09-24. Native macOS/Linux
+PTY qualification and a temporary RK consumer build pass. Ready for code review
+and terminal-app dogfooding; not yet merged or published.
 
 RK's `use` and `init` matrices are the first consumer. They should occupy a
-small region below the command while earlier shell output remains visible.
+small region below the command while earlier shell output remains available.
 This activates the adopter-demand trigger in [RFC 0016](../rfcs/0016-inline-mode.md).
 
-## Scope
+## Public contract
+
+```dart
+await runApp(app, mode: const TerminalMode.inline(rows: 14, mouse: true));
+print('Done.');
+```
 
 One full-width region with an explicit, changeable row count, clamped to the
-terminal height. Existing widgets receive that region's logical size and keep
-their ordinary layout, scrolling, focus, and keyboard behavior. Exit clears
-the live region; the command can then print its final result.
+terminal height. Existing widgets see the region's logical size and keep
+ordinary layout, scrolling, focus, and keyboard behavior. Exit clears the live
+region; the caller prints the result. From an interaction/lifecycle callback,
+`TerminalSession.of(context).resizeInline(20)` requests another height. Requests
+during handoff or suspend apply on return. `isInline` distinguishes this native
+operation from full-screen and remote sessions.
 
-Initial qualification covers native macOS and Linux. Natural content-height
-measurement, continuously inserting logs above a running UI, persistent final
-frames, Windows, and native graphics protocols are follow-ups. Images use
-the existing glyph fallback in the first inline implementation.
+See the [consumer guide](../../packages/fleury/doc/inline_terminal.md) and
+[runnable picker](../../packages/fleury/example/inline_picker.dart).
 
-## Implementation slices
+## Ownership and rendering
 
-### 1. Rendering foundation — implemented
+`InlineTerminalRegion` tracks the allocation and last local hardware cursor;
+`PosixTerminalDriver` serializes geometry changes and owns all terminal I/O.
 
-`AnsiRenderTarget` describes the host's current full-screen or inline target.
-It is a presentation detail, not the app-facing height configuration. The
-host must reserve the rows, provide a valid origin, and release old rows when
-changing the allocation.
+- Entry requires stdin/stdout TTYs and a real cursor report through
+  `TerminalQueryRunner`. Missing reports fail after mode restoration; no
+  fallback origin is guessed. Partial shell lines survive entry.
+- Newlines reserve rows and move earlier output into normal scrollback as
+  needed. The driver owns autowrap separately from alternate-screen mode.
+- The same logical size reaches layout and frame buffers. `AnsiRenderTarget`
+  offsets ANSI rows and caret/debug output; only owned rows are cleared.
+  Explicit and detected whole-terminal scroll optimizations are disabled.
+- Native image protocols and painting width probes are bypassed. Inline
+  images use glyph rendering; native image placement is rejected by the
+  presenter before emitting bytes if a host incorrectly supplies an encoder.
+- Mouse input is translated to local coordinates. Out-of-bounds releases are
+  preserved for capture; relocation cancels the old pointer interaction.
+- The presenter reports the final local caret, or a stable bottom-left
+  resting cursor. Resize obtains the actual terminal cursor, recovers the
+  origin, and repaints. Geometry changing during a query causes a retry with
+  painting still gated; each query is bounded and teardown cancels the wait.
+- Frame writes and mouse delivery are gated while allocation is uncertain,
+  suspended, or handed off. A lifecycle generation prevents pending queries
+  from reactivating a restored session. Coalesced height requests emit a final
+  repaint even when an earlier queued request did the actual allocation.
+- Handoff and suspend clear the allocation before giving the terminal away;
+  return obtains a fresh anchor after shell/child output. Normal exit, signals,
+  and startup failure share the existing restoration path.
 
-- `AnsiRenderer` offsets absolute row addressing. Same-row cursor movement
-  stays relative and local buffers remain unchanged.
-- Inline targets disable both explicit and detected whole-terminal scroll
-  optimizations. A region starting at row zero is still bounded.
-- `AnsiFramePresenter` clears only the current region's rows, offsets the
-  caret and paint-flash overlays, and repaints when the target moves.
-- Coordinate conversion preserves out-of-bounds positions, so native input
-  integration can deliver captured drags and releases without clamping them
-  into an edge widget.
-- Unsupported native image placement fails before emitting frame bytes.
+The private supervisor lease stores typed mode and geometry metadata in its
+existing temporary directory. It records actual keyboard/pointer-stack
+ownership and becomes inactive after normal release. Crash cleanup uses the
+committed region only when physical dimensions still match. Stale dimensions
+cause a newline and mode restoration, leaving uncertain content alone. Metadata
+never supplies raw executable escape bytes.
 
-The target is intentionally not exported from the public barrels yet. The
-runtime continues to select the existing full-screen path. No application
-should try to enable this with `TerminalMode(alternateScreen: false)`.
+The retained renderer continues to use absolute addressing within a known,
+owned region. The original RFC's relative-addressing and transcript proposals
+remain a broader future feature. Disabling `alternateScreen` alone is not an
+inline viewport.
 
-Evidence: 595 rendering/presentation/runtime regression tests pass, including
-300 randomized inline diffs that preserve surrounding simulated shell rows,
-explicit and detected scroll cases, region relocation, caret and debug
-coordinates, and the existing full-screen ANSI byte golden. These are model
-and unit tests, not native inline terminal qualification.
+## Validation and evidence boundary
 
-### 2. Native region ownership and runtime integration — next
+- Core regression suite: 3,718 tests passed, one existing ambient probe skipped;
+  the final focused rerun passes 32 tests, including resize-during-query,
+  unreportable terminal dimensions, and pointer crash recovery.
+  Existing full-screen ANSI byte golden remains unchanged.
+- Existing native full-screen and development-supervisor PTY suites: 19 passed.
+- `tool/check_inline_tui.py`: eight scenarios pass on macOS (Dart 3.12.2) and
+  Linux aarch64 Docker (Dart 3.13.3). Covers 80x18 and 40x12 layouts, shell
+  scrollback preservation, text, offset mouse clicks, height changes, width/
+  height resize, subprocess output, Ctrl+Z/resume, Ctrl+C, SIGINT/SIGTERM,
+  supervised restart, SIGKILL, and abrupt positive-code exit. A separate session
+  guardian checks actual termios after Dart exits and never restores it itself.
+- New unit tests cover unavailable cursor reports, stale geometry on release,
+  outside mouse release, pending-resize shutdown, handoff height requests,
+  invalid/oversized recovery metadata, and owned-only clearing. Rendering tests
+  include 300 randomized diffs preserving surrounding simulated shell rows.
+- Temporary RK build with `TerminalMode.inline(rows: 20)`: real `use` selects
+  and executes a disposable Local installation; `init` reviews before creating
+  configuration. Both restore terminal modes without alternate-screen entry.
+  RK's checked-in dependency and the user's installations are unchanged.
+- CI now runs the inline PTY harness on macOS and Linux with Dart 3.12.2.
+  These workflow changes have not yet run in hosted CI.
 
-- Settle the app-facing viewport configuration and mechanism for changing
-  its requested row count. Keep terminal row origins out of application code.
-- Use `TerminalQueryRunner` to obtain the cursor anchor without stealing
-  keystrokes. Define a safe, tested failure path when cursor reports are
-  unavailable; never assume row zero and paint over the shell.
-- Reserve rows with controlled newlines, accounting for bottom-of-screen
-  scrolling. Own and restore autowrap separately from alternate-screen mode.
-- Supply the same logical size to root layout and `FrameDriver`, and a
-  matching render target to the ANSI presenter. Schedule a full repaint
-  after any allocation change, even when the logical size is unchanged.
-- Translate native mouse reports into local coordinates. Preserve captured
-  releases outside the region and clear hover when the pointer leaves it.
-- Clear/release the old allocation before handoff or suspend; reacquire an
-  anchor after foreign output before resuming painting. Serialize allocation
-  changes and suppress frame output while the anchor is uncertain.
-- Integrate ordinary exit, startup failure, signals, and the development
-  supervisor's restart/crash cleanup. Avoid painting probes outside owned
-  rows and advertise the glyph image fallback for inline sessions.
+The automated harness uses a real PTY and a Python terminal emulator. It is not
+Apple Terminal/tmux visual acceptance: the emulator models resize by retaining
+cursor-relative rows, and physical terminal reflow can differ. Native Terminal
+UI automation was unavailable in this environment. Manual terminal dogfooding
+remains before release qualification.
 
-Absolute row addressing is safe for the bounded region only while the host
-knows its current anchor and prevents uncoordinated scrolling. The original
-RFC's relative-addressing discussion describes a broader, continuously
-growing transcript. Do not treat this renderer work alone as that feature.
+## Intentional limits
 
-### 3. Native qualification and RK adoption — pending
-
-Retain PTY scenarios for entry near the screen bottom, shell output above
-the region, clicks, drags outside the region, focus loss, growing/shrinking,
-width reflow, rapid resize, Ctrl+C, startup failure, suspend/resume,
-subprocess output, and development restart. Verify prompt position and
-restored modes, in addition to emitted bytes. Run on macOS and Linux, then
-visually dogfood at least a narrow and an ordinary terminal.
-
-Only after that should RK select inline viewports for its command matrices.
-Keep existing full-screen Fleury applications and browser embeds unchanged.
+Natural content-height measurement, permanent log insertion above a live UI,
+persistent final frames, Windows inline support, and native image protocols
+are deferred. Stray output retains Fleury's existing capture/replay behavior.
+During supervised development the VM-service banner can remain above the UI.
+If resize is unprocessed when the process exits, uncertain rows may remain;
+preserving shell content takes precedence over speculative clearing.

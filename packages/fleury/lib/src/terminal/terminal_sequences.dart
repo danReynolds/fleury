@@ -11,7 +11,7 @@ String buildTerminalEnterSequences(TerminalMode mode) {
   // extra line, and the following `\r\n` over-advances — desyncing every row
   // below it (persistent garble, most visible once long content scrolls into
   // view). Restored on exit.
-  if (mode.alternateScreen) buf.write('\x1B[?7l');
+  if (mode.alternateScreen || mode.inlineRows != null) buf.write('\x1B[?7l');
   if (mode.hideCursor) buf.write('\x1B[?25l');
   if (mode.bracketedPaste) buf.write('\x1B[?2004h');
   // Focus reporting (DECSET 1004). Opportunistic: it cannot be queried, so
@@ -62,7 +62,7 @@ String buildTerminalExitSequences(TerminalMode mode) {
   if (mode.resetStyleOnExit) buf.write('\x1B[0m');
   // Restore autowrap (DECAWM) before leaving the alt screen, so the shell we
   // hand back behaves normally.
-  if (mode.alternateScreen) buf.write('\x1B[?7h');
+  if (mode.alternateScreen || mode.inlineRows != null) buf.write('\x1B[?7h');
   if (mode.alternateScreen) buf.write('\x1B[?1049l');
   return buf.toString();
 }

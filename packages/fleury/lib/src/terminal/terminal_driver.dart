@@ -159,8 +159,9 @@ enum KeyboardProtocolMode {
 ///
 /// Defaults to the standard interactive TUI configuration (raw input,
 /// alternate screen, hidden cursor, style reset on exit). Callers can
-/// opt out of individual modes — for example, debug tools may want to
-/// run without alternate screen so output stays in scrollback.
+/// opt out of individual modes. Use [TerminalMode.inline] for a bounded
+/// main-buffer UI: disabling [alternateScreen] alone does not reserve rows
+/// or constrain rendering.
 @immutable
 final class TerminalMode {
   const TerminalMode({
@@ -173,7 +174,31 @@ final class TerminalMode {
     this.focusReporting = true,
     this.mouse = false,
     this.mouseMotion = false,
-  });
+  }) : inlineRows = null;
+
+  /// A bounded region in the main terminal buffer, beneath the command.
+  ///
+  /// Earlier shell output stays visible. [rows] is clamped to the terminal
+  /// height; content scrolls inside that viewport using ordinary widgets.
+  /// The live region is cleared on exit, ready for the command's final output.
+  /// Requires a POSIX terminal with cursor-position reporting. Remote hosts
+  /// keep their own viewport; native Windows does not yet support this mode.
+  const TerminalMode.inline({
+    required int rows,
+    this.hideCursor = true,
+    this.resetStyleOnExit = true,
+    this.bracketedPaste = true,
+    this.keyboardProtocol = KeyboardProtocolMode.lifecycle,
+    this.focusReporting = true,
+    this.mouse = false,
+    this.mouseMotion = false,
+  }) : assert(rows > 0, 'inline rows must be positive'),
+       inlineRows = rows,
+       rawInput = true,
+       alternateScreen = false;
+
+  /// Requested initial height, or null for an ordinary terminal session.
+  final int? inlineRows;
 
   /// The standard interactive TUI mode.
   static const TerminalMode interactive = TerminalMode();
@@ -221,17 +246,28 @@ final class TerminalMode {
 TerminalMode terminalModeWithKeyboardProtocol(
   TerminalMode mode,
   KeyboardProtocolMode keyboardProtocol,
-) => TerminalMode(
-  rawInput: mode.rawInput,
-  alternateScreen: mode.alternateScreen,
-  hideCursor: mode.hideCursor,
-  resetStyleOnExit: mode.resetStyleOnExit,
-  bracketedPaste: mode.bracketedPaste,
-  keyboardProtocol: keyboardProtocol,
-  focusReporting: mode.focusReporting,
-  mouse: mode.mouse,
-  mouseMotion: mode.mouseMotion,
-);
+) => mode.inlineRows != null
+    ? TerminalMode.inline(
+        rows: mode.inlineRows!,
+        hideCursor: mode.hideCursor,
+        resetStyleOnExit: mode.resetStyleOnExit,
+        bracketedPaste: mode.bracketedPaste,
+        keyboardProtocol: keyboardProtocol,
+        focusReporting: mode.focusReporting,
+        mouse: mode.mouse,
+        mouseMotion: mode.mouseMotion,
+      )
+    : TerminalMode(
+        rawInput: mode.rawInput,
+        alternateScreen: mode.alternateScreen,
+        hideCursor: mode.hideCursor,
+        resetStyleOnExit: mode.resetStyleOnExit,
+        bracketedPaste: mode.bracketedPaste,
+        keyboardProtocol: keyboardProtocol,
+        focusReporting: mode.focusReporting,
+        mouse: mode.mouse,
+        mouseMotion: mode.mouseMotion,
+      );
 
 /// Typed record of the terminal state a native driver actually owns.
 ///
@@ -336,6 +372,17 @@ abstract interface class OutputFlowControl {
 /// repaint after resume.
 abstract interface class TerminalHandoffDriver {
   Future<T> runWithTerminalHandoff<T>(FutureOr<T> Function() operation);
+}
+
+/// A native driver that can resize a live inline region.
+abstract interface class InlineTerminalDriver {
+  bool get isInline;
+
+  /// Changes the requested row count, clamped to the physical terminal.
+  /// Completes once the new region is reserved and a repaint is requested.
+  /// While suspended or handed to a subprocess, stores the request instead;
+  /// the new height takes effect when this session regains the terminal.
+  Future<void> resizeInline(int rows);
 }
 
 /// Runs [operation] through [driver]'s handoff hook when supported.

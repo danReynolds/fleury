@@ -55,6 +55,31 @@ For a small one-screen program, passing the screen directly is still valid:
 `runApp(const StatusScreen())`. Use `FleuryApp` as soon as the program has an
 app-wide theme, commands/status, extensions, or more than one screen.
 
+## Inline terminal commands
+
+For a picker or setup command, reserve a smaller region below the shell prompt:
+
+```dart
+await runApp(
+  const FleuryApp(title: 'Choose a source', home: SourcePicker()),
+  mode: const TerminalMode.inline(rows: 14, mouse: true),
+  enableHotReload: false,
+);
+print('Source selected.');
+```
+
+Earlier output stays in the main buffer and scrollback. Widgets receive the
+requested height, clamped to the terminal, and keep their usual layout, focus,
+and scrolling behavior. On exit Fleury clears the live region, ready for your
+command's result. From a callback, use
+`await TerminalSession.of(context).resizeInline(20)` to change the height.
+
+This mode supports native macOS and Linux terminals with cursor reporting.
+Height is explicit; inserting logs above the UI and retaining the final frame
+are not implemented. Browser embeds still use their host element's size.
+See the [inline terminal guide](https://github.com/danReynolds/fleury/blob/main/packages/fleury/doc/inline_terminal.md)
+for subprocess handoff, development sessions, and resize limitations.
+
 ## Host services and the app shell
 
 The host entrypoints install shared target services around whatever root you

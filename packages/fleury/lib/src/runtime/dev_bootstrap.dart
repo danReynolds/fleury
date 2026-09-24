@@ -60,6 +60,8 @@ import 'dart:io';
 import 'package:vm_service/vm_service.dart' hide Isolate;
 
 import '../terminal/terminal_driver.dart' show TerminalMode;
+import '../foundation/geometry.dart';
+import 'inline_terminal_lease.dart';
 import '../terminal/terminal_sequences.dart';
 import 'dev_signal_ack.dart';
 import 'handle_discovery.dart';
@@ -228,6 +230,19 @@ final class DevBootstrap {
 
   VmService? _vm;
   Process? _child;
+  Directory? _terminalStateDirectory;
+  String? _inlineRecovery;
+  String? get _inlineLeasePath => _terminalStateDirectory == null
+      ? null
+      : '${_terminalStateDirectory!.path}/inline-terminal.json';
+
+  CellSize get _terminalSize {
+    try {
+      return CellSize(stdout.terminalColumns, stdout.terminalLines);
+    } catch (_) {
+      return CellSize.zero;
+    }
+  }
 
   /// When the current child was spawned and how many have been — the
   /// inputs of [devEarlyExitHint].
@@ -667,16 +682,19 @@ final class DevBootstrap {
                 firstChild: _childCount == 1,
               );
         if (hint != null) stderr.writeln(hint);
-        if (code < 0) {
+        if (code < 0 || (_inlineRecovery?.isNotEmpty ?? false)) {
           await _emergencyTtyRestore();
-          exit(128 - code);
+          if (code < 0) exit(128 - code);
         }
         exit(code);
       }
       _restartInFlight = false;
-      if (code < 0) {
-        // Died by signal (the restart escalation's SIGKILL, or an external
-        // kill): raw mode and the alt screen died with it, unrestored.
+      final inlineRecovery = inlineTerminalRecovery(
+        _inlineLeasePath,
+        _terminalSize,
+      );
+      if (code < 0 || (inlineRecovery?.isNotEmpty ?? false)) {
+        // A signal or abrupt inline exit can leave terminal modes owned.
         // Restore before the respawn so the exit sequences land on the old
         // screen, never on top of the new child's.
         await _emergencyTtyRestore();
@@ -692,9 +710,15 @@ final class DevBootstrap {
 
   Future<bool> _spawnChild() async {
     _childReady = false;
+    try {
+      _terminalStateDirectory?.deleteSync(recursive: true);
+    } catch (_) {}
+    _terminalStateDirectory = null;
+    _inlineRecovery = null;
     final Directory infoDir;
     try {
       infoDir = Directory.systemTemp.createTempSync('fleury_dev_');
+      _terminalStateDirectory = infoDir;
     } catch (error) {
       // Disk full / unwritable tmp: a throw here in the respawn path would
       // kill the supervise loop and orphan the session — degrade instead.
@@ -726,7 +750,7 @@ final class DevBootstrap {
       // child's own fallback write may land after this; it is wrapped in a
       // best-effort catch on its side.
       try {
-        infoDir.deleteSync(recursive: true);
+        infoFile.deleteSync();
       } catch (_) {}
     }
   }
@@ -753,6 +777,7 @@ final class DevBootstrap {
           // (see maybeStartSupervisedChildHandshake), guarding against
           // --write-service-info behavior drift across SDKs.
           kDevSvcFileEnv: infoFile.path,
+          inlineTerminalLeaseEnvironment: _inlineLeasePath!,
         },
       );
     } catch (error) {
@@ -1039,8 +1064,14 @@ final class DevBootstrap {
 
   Future<void> _emergencyTtyRestore() async {
     try {
-      stdout.write(buildTerminalExitSequences(TerminalMode.interactive));
+      final inline =
+          _inlineRecovery ??
+          inlineTerminalRecovery(_inlineLeasePath, _terminalSize);
+      stdout.write(
+        inline ?? buildTerminalExitSequences(TerminalMode.interactive),
+      );
       await stdout.flush();
+      _inlineRecovery = '';
     } catch (_) {}
     try {
       final proc = await Process.start('stty', const [
@@ -1072,6 +1103,11 @@ final class DevBootstrap {
       child.kill(ProcessSignal.sigkill);
       await child.exitCode;
     }
+    _inlineRecovery ??= inlineTerminalRecovery(_inlineLeasePath, _terminalSize);
+    try {
+      _terminalStateDirectory?.deleteSync(recursive: true);
+    } catch (_) {}
+    _terminalStateDirectory = null;
   }
 
   /// Appends to `FLEURY_DEV_BOOTSTRAP_LOG` when set — the supervisor can
