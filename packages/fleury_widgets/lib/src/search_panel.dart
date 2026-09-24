@@ -273,6 +273,12 @@ class _SearchPanelState extends State<SearchPanel> {
   List<SearchResult>? _indexedResults;
   SearchResultIndex? _searchIndex;
 
+  // The ranked order, kept until the index, the query or the matcher
+  // changes: navigation, activation and copy read it, and each used to rank
+  // every result again (two passes per arrow key).
+  List<int>? _order;
+  (SearchResultIndex, String, SearchResultMatcher?)? _orderKey;
+
   @override
   void initState() {
     super.initState();
@@ -332,11 +338,11 @@ class _SearchPanelState extends State<SearchPanel> {
     }
     if (widget.results != oldWidget.results ||
         widget.matcher != oldWidget.matcher) {
+      // The index still holds the old results, so this reuses it (and the
+      // cached order) rather than indexing the old list again.
       final previousResult = _selectedResultFor(
         oldWidget.results,
-        SearchResultIndex(
-          oldWidget.results,
-        ).order(query: _query.text, matcher: oldWidget.matcher),
+        _orderFor(oldWidget.results, oldWidget.matcher),
       )?.result;
       if (widget.results != oldWidget.results) {
         _indexedResults = null;
@@ -371,8 +377,29 @@ class _SearchPanelState extends State<SearchPanel> {
     return next;
   }
 
-  List<int> get _currentOrder =>
-      _resultIndex.order(query: _query.text, matcher: widget.matcher);
+  List<int> get _currentOrder => _orderFor(widget.results, widget.matcher);
+
+  List<int> _orderFor(
+    List<SearchResult> results,
+    SearchResultMatcher? matcher,
+  ) {
+    final index = identical(results, widget.results)
+        ? _resultIndex
+        : (identical(results, _indexedResults) ? _searchIndex! : null) ??
+              SearchResultIndex(results);
+    final query = _query.text;
+    final key = _orderKey;
+    final cached = _order;
+    if (cached != null &&
+        key != null &&
+        identical(key.$1, index) &&
+        key.$2 == query &&
+        identical(key.$3, matcher)) {
+      return cached;
+    }
+    _orderKey = (index, query, matcher);
+    return _order = index.order(query: query, matcher: matcher);
+  }
 
   void _resetSelectionForOrder(
     List<int> order, {
