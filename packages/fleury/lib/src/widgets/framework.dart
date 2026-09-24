@@ -1683,7 +1683,7 @@ class BuildOwner {
     }
   }
 
-  BuildFlushStats _flushBuild() {
+  BuildFlushStats _flushBuild({bool finalize = true}) {
     var passCount = 0;
     var rebuiltElementCount = 0;
     var maxDirtyElementCount = 0;
@@ -1751,7 +1751,7 @@ class BuildOwner {
         }
       }
     }
-    _finalizeInactiveElements();
+    if (finalize) _finalizeInactiveElements();
     if (passCount == 0) return BuildFlushStats.zero;
     return BuildFlushStats(
       passCount: passCount,
@@ -1872,8 +1872,33 @@ class BuildOwner {
     onPhaseTiming,
     void Function(BuildFlushStats stats)? onBuildStats,
   }) {
+    // The frame, not the build flush, is the unit of GlobalKey bookkeeping.
+    // Layout builds too (LayoutBuilder), so a subtree deactivated by the
+    // build phase must stay reclaimable until layout is done, and a key
+    // claimed in both phases is one duplicate, not a steal-back loop. Claims
+    // clear and deactivated subtrees finalize once, after layout.
+    _globalKeyClaims.clear();
+    try {
+      return _renderFrameBody(
+        root,
+        buffer,
+        onPhaseTiming: onPhaseTiming,
+        onBuildStats: onBuildStats,
+      );
+    } finally {
+      _globalKeyClaims.clear();
+    }
+  }
+
+  RenderObject _renderFrameBody(
+    Element root,
+    CellBuffer buffer, {
+    void Function(Duration build, Duration layout, Duration paint)?
+    onPhaseTiming,
+    void Function(BuildFlushStats stats)? onBuildStats,
+  }) {
     final sw = onPhaseTiming != null ? (Stopwatch()..start()) : null;
-    final buildStats = flushBuild();
+    final buildStats = _flushBuild(finalize: false);
     final buildElapsed = sw?.elapsed ?? Duration.zero;
     onBuildStats?.call(buildStats);
 
@@ -1901,10 +1926,11 @@ class BuildOwner {
       ..phase = RenderFramePhase.layout;
     rootRender.layout(CellConstraints.loose(buffer.size));
     final layoutElapsed = sw?.elapsed ?? Duration.zero;
-    // Layout can rebuild (LayoutBuilder) and deactivate subtrees AFTER this
-    // frame's flushBuild already finalized — without this, their
-    // State.dispose would wait for the next non-idle frame, indefinitely in
-    // an idle TUI. Finalize again so a layout-time swap disposes this frame.
+    // Finalize after layout, not after the build flush: layout builds too,
+    // and a GlobalKey'd subtree the build phase deactivated can be reclaimed
+    // by a LayoutBuilder here (DebugShell docks the whole app that way).
+    // Finalizing earlier disposed it — the move became dispose + initState.
+    // Once is also enough: a layout-time swap disposes this frame.
     _finalizeInactiveElements();
 
     sw?.reset();
