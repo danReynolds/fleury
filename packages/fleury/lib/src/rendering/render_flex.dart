@@ -3,7 +3,6 @@
 // flex children.
 
 import '../foundation/geometry.dart';
-import '../widgets/selection/selectable.dart';
 import 'cell.dart';
 import 'cell_buffer.dart';
 import 'layout.dart';
@@ -453,13 +452,14 @@ class RenderFlex extends RenderObject implements RenderObjectWithChildren {
       _paintClipped(buffer, offset);
       return;
     }
+    // A child outside the buffer paints nothing, so it is skipped: a
+    // scrolled Column paints only the rows in view. Nothing needs an
+    // offscreen paint any more — selection and semantics geometry derive
+    // from layout — so text rows are culled like any other.
     for (final c in _children) {
       final childOffset = _childOffsets[c] ?? CellOffset.zero;
       final paintOffset = offset + childOffset;
-      if (_isOutsidePaintBuffer(paintOffset, c.size, buffer.size) &&
-          !_subtreeNeedsOffscreenPaint(c)) {
-        continue;
-      }
+      if (_isOutsidePaintBuffer(paintOffset, c.size, buffer.size)) continue;
       c.paint(buffer, paintOffset);
     }
   }
@@ -478,22 +478,6 @@ class RenderFlex extends RenderObject implements RenderObjectWithChildren {
         bottom <= 0 ||
         left >= bufferSize.cols ||
         top >= bufferSize.rows;
-  }
-
-  bool _subtreeNeedsOffscreenPaint(RenderObject object) {
-    if (object is Selectable) return true;
-    if (object is RenderObjectWithSingleChild) {
-      final child = object.child;
-      return child != null && _subtreeNeedsOffscreenPaint(child);
-    }
-    if (object is RenderObjectWithChildren) {
-      var found = false;
-      object.visitRenderChildren((child) {
-        if (!found && _subtreeNeedsOffscreenPaint(child)) found = true;
-      });
-      return found;
-    }
-    return false;
   }
 
   void _paintClipped(CellBuffer buffer, CellOffset offset) {

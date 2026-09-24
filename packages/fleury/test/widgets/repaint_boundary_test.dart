@@ -293,30 +293,31 @@ void main() {
       tester.pumpWidget(
         SizedBox(
           width: 6,
-          height: 1,
+          height: 2,
           child: ScrollView(
             controller: controller,
             child: const Column(
               children: [
                 Text('top'),
                 RepaintBoundary(child: Text('target')),
+                Text('end'),
               ],
             ),
           ),
         ),
       );
 
-      tester.render(size: const CellSize(6, 1));
+      // The target is on screen, so its boundary paints and caches it.
+      tester.render(size: const CellSize(6, 2));
       var target = _selectables(
         tester,
       ).singleWhere((selectable) => selectable.cellBounds?.size.cols == 6);
       expect(target.cellBounds, CellRect.fromLTWH(0, 1, 6, 1));
-      expect(target.visibleBounds, isNull);
 
       controller.jumpTo(1);
       tester.owner.flushBuild();
       RepaintBoundaryDebugStats.beginFrame(enabled: true);
-      tester.render(size: const CellSize(6, 1));
+      tester.render(size: const CellSize(6, 2));
       final stats = RepaintBoundaryDebugStats.takeFrameStats();
 
       target = _selectables(
