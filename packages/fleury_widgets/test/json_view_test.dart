@@ -1,3 +1,5 @@
+import 'dart:collection';
+
 import 'package:fleury/fleury.dart';
 import 'package:fleury_test/fleury_test.dart';
 import 'package:fleury_widgets/fleury_widgets.dart';
@@ -330,6 +332,45 @@ void main() {
       );
     });
 
+    testWidgets('a collapsed container reports an unsafe string inside it', (
+      tester,
+    ) {
+      tester.pumpWidget(
+        JsonView(
+          value: const {
+            'outer': {'inner': 'bad\x1b]52;c;secret\x07'},
+          },
+        ),
+      );
+
+      final outer = tester.semantics().single(
+        role: SemanticRole.jsonNode,
+        label: 'outer',
+      );
+      expect(outer.state['expanded'], isFalse);
+      expect(outer.state.outputSanitized, isTrue);
+    });
+
+    testWidgets('moving the cursor does not walk the document again', (tester) {
+      // Rows used to be rebuilt from the whole document on every cursor
+      // move: normalized, and every container's subtree rescanned.
+      final value = _CountingMap({
+        'a': 1,
+        'b': [2, 3],
+        'c': {'d': 4},
+      });
+      tester.pumpWidget(JsonView(value: value, autofocus: true));
+      tester.render(size: const CellSize(40, 8));
+      final reads = value.entryReads;
+
+      for (var i = 0; i < 5; i++) {
+        tester.sendKey(const KeyEvent(KeyCode.arrowDown));
+        tester.render(size: const CellSize(40, 8));
+      }
+
+      expect(value.entryReads, reads);
+    });
+
     testWidgets('display and copy collapse unsafe terminal payloads', (
       tester,
     ) async {
@@ -433,4 +474,33 @@ void main() {
       expect(out.first, contains('Payload'));
     });
   });
+}
+
+/// A map that counts how often its entries are walked.
+final class _CountingMap extends MapBase<String, Object?> {
+  _CountingMap(this._inner);
+
+  final Map<String, Object?> _inner;
+  var entryReads = 0;
+
+  @override
+  Iterable<MapEntry<String, Object?>> get entries {
+    entryReads++;
+    return _inner.entries;
+  }
+
+  @override
+  Object? operator [](Object? key) => _inner[key];
+
+  @override
+  void operator []=(String key, Object? value) => _inner[key] = value;
+
+  @override
+  void clear() => _inner.clear();
+
+  @override
+  Iterable<String> get keys => _inner.keys;
+
+  @override
+  Object? remove(Object? key) => _inner.remove(key);
 }

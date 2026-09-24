@@ -119,6 +119,10 @@ class JsonViewController extends Notifier {
   final ListController _list;
   bool _disposed = false;
 
+  /// Bumped by every change to what is expanded, and by nothing else: the
+  /// rows depend on it, the cursor does not.
+  int _expansionRevision = 0;
+
   ListController get _listController => _list;
 
   /// Immutable snapshot of JSON Pointer paths explicitly marked expanded.
@@ -151,14 +155,20 @@ class JsonViewController extends Notifier {
     _checkNotDisposed();
     final changed =
         _collapsedPointers.remove(pointer) | _expandedPointers.add(pointer);
-    if (changed) notify();
+    if (changed) {
+      _expansionRevision++;
+      notify();
+    }
   }
 
   void collapse(String pointer) {
     _checkNotDisposed();
     final changed =
         _expandedPointers.remove(pointer) | _collapsedPointers.add(pointer);
-    if (changed) notify();
+    if (changed) {
+      _expansionRevision++;
+      notify();
+    }
   }
 
   void toggle(String pointer, {required bool expanded}) {
@@ -264,8 +274,22 @@ List<JsonViewRow> buildJsonViewRows(
   Set<String> expandedPointers = const <String>{},
   Set<String> collapsedPointers = const <String>{},
   int? maxLineLength = 1000,
+}) => _buildJsonViewRows(
+  _NormalizedJson(value),
+  defaultExpandedDepth: defaultExpandedDepth,
+  expandedPointers: expandedPointers,
+  collapsedPointers: collapsedPointers,
+  maxLineLength: maxLineLength,
+);
+
+List<JsonViewRow> _buildJsonViewRows(
+  _NormalizedJson document, {
+  required int defaultExpandedDepth,
+  required Set<String> expandedPointers,
+  required Set<String> collapsedPointers,
+  required int? maxLineLength,
 }) {
-  final root = _normalizeJsonValue(value);
+  final root = document.root;
   final rows = <JsonViewRow>[];
 
   bool expandedFor(String pointer, int depth, bool expandable) {
@@ -314,7 +338,7 @@ List<JsonViewRow> buildJsonViewRows(
         preview: preview,
         line: line,
         outputSanitized:
-            _jsonValueNeedsSanitization(node) || (key != null && label != key),
+            document.needsSanitization(node) || (key != null && label != key),
         outputTruncated: line != rawLine,
         outputOriginalLength: rawLine.length,
       ),
@@ -528,13 +552,48 @@ class _JsonViewState extends State<JsonView> {
     super.dispose();
   }
 
-  List<JsonViewRow> get _rows => buildJsonViewRows(
-    widget.document.value,
-    defaultExpandedDepth: widget.defaultExpandedDepth,
-    expandedPointers: _controller._expandedPointers,
-    collapsedPointers: _controller._collapsedPointers,
-    maxLineLength: widget.maxLineLength,
-  );
+  // The document is normalized once, and its rows are built again only when
+  // something they show changes: a cursor move or a focus change reuses
+  // them. Rebuilding them walked the whole document, collapsed parts too.
+  _NormalizedJson? _normalized;
+  List<JsonViewRow>? _cachedRows;
+  (JsonViewDocument, JsonViewController, int, int, int?)? _rowsKey;
+
+  List<JsonViewRow> get _rows {
+    final document = widget.document;
+    var normalized = _normalized;
+    if (normalized == null || !identical(normalized.source, document.value)) {
+      normalized = _normalized = _NormalizedJson(document.value);
+    }
+    final key = (
+      document,
+      _controller,
+      _controller._expansionRevision,
+      widget.defaultExpandedDepth,
+      widget.maxLineLength,
+    );
+    final cached = _cachedRows;
+    if (cached != null && _sameRowsKey(_rowsKey, key)) return cached;
+    _rowsKey = key;
+    return _cachedRows = _buildJsonViewRows(
+      normalized,
+      defaultExpandedDepth: widget.defaultExpandedDepth,
+      expandedPointers: _controller._expandedPointers,
+      collapsedPointers: _controller._collapsedPointers,
+      maxLineLength: widget.maxLineLength,
+    );
+  }
+
+  static bool _sameRowsKey(
+    (JsonViewDocument, JsonViewController, int, int, int?)? a,
+    (JsonViewDocument, JsonViewController, int, int, int?) b,
+  ) =>
+      a != null &&
+      identical(a.$1, b.$1) &&
+      identical(a.$2, b.$2) &&
+      a.$3 == b.$3 &&
+      a.$4 == b.$4 &&
+      a.$5 == b.$5;
 
   JsonViewRow? _selectedRow(List<JsonViewRow> rows) {
     if (rows.isEmpty) return null;
@@ -880,21 +939,6 @@ CellStyle _jsonTypeStyle(JsonValueType type, ThemeData theme) {
   };
 }
 
-Object? _normalizeJsonValue(Object? value) {
-  if (value == null || value is String || value is bool) return value;
-  if (value is num) return value.isFinite ? value : value.toString();
-  if (value is Map) {
-    return <String, Object?>{
-      for (final entry in value.entries)
-        entry.key.toString(): _normalizeJsonValue(entry.value),
-    };
-  }
-  if (value is Iterable) {
-    return <Object?>[for (final item in value) _normalizeJsonValue(item)];
-  }
-  return value.toString();
-}
-
 JsonValueType _typeOf(Object? value) {
   if (value is Map<String, Object?>) return JsonValueType.object;
   if (value is List<Object?>) return JsonValueType.array;
@@ -966,20 +1010,54 @@ Object? _sanitizeJsonValue(Object? value) {
   return value;
 }
 
-bool _jsonValueNeedsSanitization(Object? value) {
-  if (value is String) return _sanitizeJsonLabel(value) != value;
-  if (value is Map<String, Object?>) {
-    for (final entry in value.entries) {
-      if (_sanitizeJsonLabel(entry.key) != entry.key) return true;
-      if (_jsonValueNeedsSanitization(entry.value)) return true;
-    }
+/// A JSON value normalized once, with what each of its containers' subtrees
+/// needs sanitized worked out in the same pass, so a row asks in O(1)
+/// instead of rescanning its subtree on every build.
+final class _NormalizedJson {
+  _NormalizedJson(this.source) {
+    root = _normalize(source);
   }
-  if (value is List<Object?>) {
-    for (final item in value) {
-      if (_jsonValueNeedsSanitization(item)) return true;
-    }
+
+  /// The value as supplied, to tell whether a document still holds it.
+  final Object? source;
+  late final Object? root;
+  final _dirtySubtrees = Expando<bool>();
+
+  bool needsSanitization(Object? node) {
+    if (node is String) return _sanitizeJsonLabel(node) != node;
+    if (node is Map || node is List) return _dirtySubtrees[node!] ?? false;
+    return false;
   }
-  return false;
+
+  Object? _normalize(Object? value) {
+    if (value == null || value is String || value is bool) return value;
+    if (value is num) return value.isFinite ? value : value.toString();
+    if (value is Map) {
+      var dirty = false;
+      final map = <String, Object?>{};
+      for (final entry in value.entries) {
+        final key = entry.key.toString();
+        final child = _normalize(entry.value);
+        dirty =
+            dirty || _sanitizeJsonLabel(key) != key || needsSanitization(child);
+        map[key] = child;
+      }
+      if (dirty) _dirtySubtrees[map] = true;
+      return map;
+    }
+    if (value is Iterable) {
+      var dirty = false;
+      final list = <Object?>[];
+      for (final item in value) {
+        final child = _normalize(item);
+        dirty = dirty || needsSanitization(child);
+        list.add(child);
+      }
+      if (dirty) _dirtySubtrees[list] = true;
+      return list;
+    }
+    return value.toString();
+  }
 }
 
 String _encodeJsonValue(Object? value, {bool pretty = false}) {
@@ -992,7 +1070,9 @@ String _encodeJsonValue(Object? value, {bool pretty = false}) {
 String _escapePointerToken(String token) =>
     token.replaceAll('~', '~0').replaceAll('/', '~1');
 
+final _identifier = RegExp(r'^[A-Za-z_][A-Za-z0-9_]*$');
+
 String _pathSegment(String key) {
-  if (RegExp(r'^[A-Za-z_][A-Za-z0-9_]*$').hasMatch(key)) return key;
+  if (_identifier.hasMatch(key)) return key;
   return '[${_encodeJsonValue(_sanitizeJsonLabel(key))}]';
 }
