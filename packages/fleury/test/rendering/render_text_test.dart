@@ -429,6 +429,73 @@ void main() {
       expect(a.text, arabic);
     });
   });
+
+  group('RenderText paragraph indentation', () {
+    // A paragraph's leading spaces are its indentation, not whitespace at a
+    // wrap break: multi-line help text, JsonView rows and nested Markdown
+    // bullets all indent this way.
+    List<String> linesAt(String source, int cols) {
+      final text = RenderText(text: source)
+        ..layout(CellConstraints(maxCols: cols, maxRows: 8));
+      final buffer = CellBuffer(CellSize(cols, 8));
+      text.paint(buffer, CellOffset.zero);
+      return [
+        for (var row = 0; row < text.size.rows; row++)
+          _rowContent(buffer, row).replaceAll('·', ' ').trimRight(),
+      ];
+    }
+
+    test('each paragraph keeps its indent', () {
+      expect(linesAt('Usage:\n  app --flag\n    nested', 40), [
+        'Usage:',
+        '  app --flag',
+        '    nested',
+      ]);
+    });
+
+    test('an indented paragraph that wraps keeps its first-line indent', () {
+      expect(linesAt('   indented words here', 12), [
+        '   indented',
+        'words here',
+      ]);
+    });
+
+    test('whitespace at a wrap break is still dropped', () {
+      expect(linesAt('hello  world', 5), ['hello', 'world']);
+    });
+  });
+
+  group('RenderText layout cache', () {
+    // The wrap cache is keyed on constraints; a single-line layout in
+    // between overwrote the lines it describes. Returning to the wrapping
+    // width restored the 2-row size with one unwrapped line, and every line
+    // after the first vanished (a terminal widened and restored, or a
+    // sibling toggling an Expanded text's width).
+    List<String> paintAt(RenderText text, int cols) {
+      text.layout(CellConstraints(maxCols: cols, maxRows: 3));
+      final buffer = CellBuffer(const CellSize(12, 3));
+      text.paint(buffer, CellOffset.zero);
+      return [
+        for (var row = 0; row < text.size.rows; row++)
+          _rowContent(buffer, row).replaceAll('·', ''),
+      ];
+    }
+
+    test('returning to a wrapping width restores the wrapped lines', () {
+      final text = RenderText(text: 'hello world');
+      expect(paintAt(text, 5), ['hello', 'world']);
+      expect(paintAt(text, 20), ['hello world']);
+      expect(paintAt(text, 5), ['hello', 'world']);
+    });
+
+    test('text changed while it fits wraps fresh at the old width', () {
+      final text = RenderText(text: 'hello world');
+      expect(paintAt(text, 5), ['hello', 'world']);
+      expect(paintAt(text, 20), ['hello world']);
+      text.text = 'jolly roger';
+      expect(paintAt(text, 5), ['jolly', 'roger']);
+    });
+  });
 }
 
 final class _StyleToggleModel extends Notifier {

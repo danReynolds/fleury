@@ -99,13 +99,47 @@ void main() {
   testWidgets('colors a value by type, distinct from its label', (tester) {
     tester.pumpWidget(JsonView(value: const {'name': 'fleury'}));
     final buffer = tester.render(size: const CellSize(40, 4));
-    // Row 0 is the root object; row 1 is `name: "fleury"`. The label 'n' sits
-    // at col 0; the string value's opening quote at col 6.
-    final label = buffer.atColRow(0, 1);
-    final value = buffer.atColRow(6, 1);
+    // Row 0 is the root object; row 1 is `    name: "fleury"`, indented
+    // under it. The label 'n' sits at col 4; the string value's opening quote
+    // at col 10.
+    final label = buffer.atColRow(4, 1);
+    final value = buffer.atColRow(10, 1);
+    expect(label.grapheme, 'n');
     expect(value.grapheme, '"');
     expect(value.style.foreground, isNotNull);
     expect(value.style.foreground, isNot(label.style.foreground));
+  });
+
+  testWidgets('nested rows are indented under their parent', (tester) {
+    // Rows other than the selected one are RichText; a wrap that dropped
+    // their leading spaces rendered the whole tree flush left.
+    tester.pumpWidget(
+      JsonView(
+        value: const {
+          'user': {
+            'name': 'ada',
+            'tags': ['x', 'y'],
+          },
+          'id': 7,
+        },
+        defaultExpandedDepth: 3,
+      ),
+    );
+    final rows = tester
+        .renderToString(size: const CellSize(40, 8), emptyMark: ' ')
+        .split('\n')
+        .map((row) => row.trimRight())
+        .where((row) => row.isNotEmpty)
+        .toList();
+    expect(rows, [
+      '▾ \$ {object 2}',
+      '  ▾ user {object 2}',
+      '      name: "ada"',
+      '    ▾ tags [array 2]',
+      '        [0]: "x"',
+      '        [1]: "y"',
+      '    id: 7',
+    ]);
   });
 
   testWidgets('Right expands a branch and Left collapses it', (tester) {

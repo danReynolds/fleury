@@ -123,19 +123,21 @@ class RenderText extends RenderObject
   // line uses _intrinsicWidth directly, so short labels allocate no list.
   List<int> _lineWidths = const <int>[];
 
-  /// Memoized layout result, keyed on the constraints that produced
+  /// Memoized slow-path layout, keyed on the constraints that produced
   /// it. The wrap algorithm is the hottest path in the renderer
   /// (see `benchmark/widgets_benchmarks.dart`); reusing a cached
   /// result across frames when neither the text nor the constraints
   /// changed eliminates ~80% of the steady-state layout cost. Any
   /// text / softWrap / width-resolver / policy setter that would
   /// change the wrap output also calls [_invalidateLayoutCache].
-  CellConstraints? _cachedConstraints;
-  CellSize? _cachedSize;
+  ///
+  /// The entry keeps the lines it measured, and a hit restores them: the
+  /// single-line fast path replaces [_lines] without touching the entry, so
+  /// a size alone would describe lines that are no longer there.
+  _WrappedTextLayout? _cachedLayout;
 
   void _invalidateLayoutCache() {
-    _cachedConstraints = null;
-    _cachedSize = null;
+    _cachedLayout = null;
     markNeedsLayout();
   }
 
@@ -159,6 +161,8 @@ class RenderText extends RenderObject
       _lines = <String>[display];
       _lineWidths = const <int>[];
       _moreLinesTruncated = false;
+      // A wrap cached for the previous text is not this text's wrap.
+      _cachedLayout = null;
       markNeedsPaintOnly();
       return;
     }
@@ -310,22 +314,32 @@ class RenderText extends RenderObject
     // Slow paths (real wrap, multi-paragraph): consult the cache.
     // These are the cases where re-running the algorithm every frame
     // dominated the wrap-Text benchmarks.
-    final cached = _cachedSize;
-    if (cached != null && constraints == _cachedConstraints) {
-      return cached;
+    final cached = _cachedLayout;
+    if (cached != null && constraints == cached.constraints) {
+      _lines = cached.lines;
+      _lineWidths = cached.lineWidths;
+      _moreLinesTruncated = cached.moreLinesTruncated;
+      return cached.size;
     }
     if (cached != null && !_softWrap) {
       // Unwrapped paragraphs are independent of the viewport width. Reuse
       // their measured widths, while refreshing the line-list identity so
       // point-based selection observes the new geometry on the next paint.
-      _lines = List<String>.of(_lines);
+      _lines = List<String>.of(cached.lines);
+      _lineWidths = cached.lineWidths;
+      _moreLinesTruncated = cached.moreLinesTruncated;
       var widest = 0;
       for (final width in _lineWidths) {
         if (width > widest) widest = width;
       }
       final result = constraints.constrain(CellSize(widest, _lines.length));
-      _cachedConstraints = constraints;
-      _cachedSize = result;
+      _cachedLayout = _WrappedTextLayout(
+        constraints,
+        result,
+        _lines,
+        _lineWidths,
+        _moreLinesTruncated,
+      );
       return result;
     }
 
@@ -358,8 +372,13 @@ class RenderText extends RenderObject
         : (maxLineWidth < maxCols ? maxLineWidth : maxCols);
     final result = constraints.constrain(CellSize(cols, _lines.length));
 
-    _cachedConstraints = constraints;
-    _cachedSize = result;
+    _cachedLayout = _WrappedTextLayout(
+      constraints,
+      result,
+      _lines,
+      _lineWidths,
+      _moreLinesTruncated,
+    );
     return result;
   }
 
@@ -553,7 +572,8 @@ class RenderText extends RenderObject
   /// paragraph splits on single spaces and greedily packs tokens onto
   /// the current line. Tokens wider than [maxWidth] are broken at
   /// grapheme boundaries. Whitespace that falls at a line break is
-  /// dropped rather than carried onto the next line.
+  /// dropped rather than carried onto the next line; a paragraph's own
+  /// leading whitespace is its indentation and is kept.
   List<String> _wrap(String text, int maxWidth) {
     if (maxWidth <= 0) return <String>[''];
     final lines = <String>[];
@@ -576,20 +596,33 @@ class RenderText extends RenderObject
       out.add('');
       return;
     }
+    // Every token after the first is preceded by one space, its separator:
+    // `'  x'.split(' ')` is `['', '', 'x']`. An empty token is a space in a
+    // run of spaces.
     final tokens = text.split(' ');
     final current = StringBuffer();
     var currentWidth = 0;
     var tokenStart = paragraphStart;
+    // Whether the current line was opened by a wrap break rather than the
+    // paragraph start. Nothing placed on it yet means its separator falls at
+    // the break and is dropped.
+    var wrapped = false;
 
-    for (final token in tokens) {
+    void breakLine() {
+      out.add(current.toString());
+      current.clear();
+      currentWidth = 0;
+      wrapped = true;
+    }
+
+    for (var index = 0; index < tokens.length; index++) {
+      final token = tokens[index];
       final tokenGlobalStart = tokenStart;
       tokenStart += token.length + 1;
-      final isFirstOnLine = currentWidth == 0;
+      final separated = index > 0 && !(wrapped && currentWidth == 0);
       if (token.isEmpty) {
-        // Empty token comes from consecutive spaces. Honor it as a
-        // single space when there's room; otherwise drop it (don't
-        // start a new line with leading whitespace).
-        if (!isFirstOnLine && currentWidth + 1 <= maxWidth) {
+        // A space in a run: kept while there's room, dropped at a break.
+        if (separated && currentWidth + 1 <= maxWidth) {
           current.write(' ');
           currentWidth += 1;
         }
@@ -597,10 +630,10 @@ class RenderText extends RenderObject
       }
 
       final tokenWidth = _widthResolver.widthOfText(token, _policy);
-      final needed = isFirstOnLine ? tokenWidth : 1 + tokenWidth;
+      final needed = separated ? 1 + tokenWidth : tokenWidth;
 
       if (currentWidth + needed <= maxWidth) {
-        if (!isFirstOnLine) {
+        if (separated) {
           current.write(' ');
           currentWidth += 1;
         }
@@ -610,11 +643,7 @@ class RenderText extends RenderObject
       }
 
       // Token doesn't fit on the current line.
-      if (!isFirstOnLine) {
-        out.add(current.toString());
-        current.clear();
-        currentWidth = 0;
-      }
+      if (currentWidth > 0) breakLine();
       if (tokenWidth <= maxWidth) {
         current.write(token);
         currentWidth = tokenWidth;
@@ -632,9 +661,7 @@ class RenderText extends RenderObject
           continue;
         }
         if (currentWidth + w > maxWidth) {
-          out.add(current.toString());
-          current.clear();
-          currentWidth = 0;
+          breakLine();
           // A single unit wider than maxWidth gets its own row; paint
           // clipping will trim what doesn't fit.
           if (w > maxWidth) {
@@ -1246,3 +1273,21 @@ final List<String> _asciiGraphemes = [
 String _singleUnitGrapheme(int codeUnit) => codeUnit >= 0x20 && codeUnit <= 0x7E
     ? _asciiGraphemes[codeUnit - 0x20]
     : String.fromCharCode(codeUnit);
+
+/// One slow-path [RenderText] layout: the constraints it ran under, and
+/// everything it produced.
+final class _WrappedTextLayout {
+  const _WrappedTextLayout(
+    this.constraints,
+    this.size,
+    this.lines,
+    this.lineWidths,
+    this.moreLinesTruncated,
+  );
+
+  final CellConstraints constraints;
+  final CellSize size;
+  final List<String> lines;
+  final List<int> lineWidths;
+  final bool moreLinesTruncated;
+}
