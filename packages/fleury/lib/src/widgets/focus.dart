@@ -199,8 +199,9 @@ class FocusNode {
   /// layout of the `Focus` widget that carries it. Null when the node cannot
   /// take input, has no widget, or its widget is not presented or is fully
   /// clipped out of view (scrolled past the viewport): you scroll to such a
-  /// widget, you don't arrow to it. Directional traversal, reading order, and
-  /// click-to-focus read it; nothing writes it.
+  /// widget, you don't arrow to it. Directional traversal and click-to-focus
+  /// read it; nothing writes it. Tab order reads the node's place in its
+  /// scroll viewports instead, which a scrolled-out node still has.
   CellRect? get rect {
     final host = _boundsHost;
     if (host == null) return null;
@@ -211,37 +212,38 @@ class FocusNode {
     return geometry.bounds;
   }
 
-  /// Where Tab finds this node: the top-left of its rectangle, pinned into
-  /// the area it is clipped to. A node scrolled out of its viewport sits at
-  /// the viewport's nearest edge, so Tab reaches it where the viewport is
-  /// rather than after everything on screen. Among nodes pinned to one cell,
-  /// [clip] puts a viewport's own node before what is clipped inside it and
-  /// [bounds] keeps content order. Null when the node cannot take input or
-  /// is not presented.
-  ({int row, int col, CellRect bounds, CellRect? clip})?
-  get _traversalPosition {
+  /// Where Tab finds this node: the scroll viewports it sits in, outermost
+  /// first, then the node itself, each with its unclipped rectangle on
+  /// screen. Null when the node cannot take input or is not presented.
+  ///
+  /// Inside one viewport, rectangles are the content's own layout shifted by
+  /// the scroll, so they order content however far it is scrolled and
+  /// whatever is clipped; a viewport's content is placed among its
+  /// neighbours by the viewport's own rectangle ([_compareTabPlaces]).
+  List<_TabLevel>? get _tabPlace {
     final host = _boundsHost;
     if (host == null) return null;
     final manager = _manager;
     if (manager != null && !manager._acceptsInput(this)) return null;
     final geometry = host.screenGeometry();
     if (geometry == null) return null;
-    final bounds = geometry.bounds;
-    final clip = geometry.clip;
-    if (clip == null) {
-      return (row: bounds.top, col: bounds.left, bounds: bounds, clip: null);
+    if (host is! RenderObject) return [_TabLevel(this, geometry.bounds, 0)];
+    final viewports = <(RenderObject, int)>[];
+    var depth = 0;
+    for (var node = host.parent; node != null; node = node.parent) {
+      depth++;
+      if (node is RenderScrollViewport) viewports.add((node, depth));
     }
-    return (
-      row: _pin(bounds.top, clip.top, clip.bottom),
-      col: _pin(bounds.left, clip.left, clip.right),
-      bounds: bounds,
-      clip: clip,
-    );
+    return [
+      for (final (viewport, up) in viewports.reversed)
+        _TabLevel(
+          viewport,
+          viewport.screenGeometry()?.bounds ?? geometry.bounds,
+          depth - up,
+        ),
+      _TabLevel(this, geometry.bounds, depth),
+    ];
   }
-
-  static int _pin(int value, int start, int end) => end <= start
-      ? start
-      : (value < start ? start : (value >= end ? end - 1 : value));
 
   /// Scrolls the viewports above this node's widget until it shows, as Tab
   /// and the arrow keys do when they move focus here.
@@ -872,8 +874,10 @@ class FocusManager extends Notifier {
   /// whether focus moved. This is the mechanism behind Tab traversal;
   /// the key bindings live in [FocusTraversalGroup].
   ///
-  /// Reading order is derived from each node's painted `rect`, so it
-  /// matches what the user sees regardless of mount order. When a trapping
+  /// Reading order is derived from each node's layout, so it matches what
+  /// the user sees regardless of mount order; inside a scroll view it
+  /// follows the content, including what is scrolled out of view, and the
+  /// node focus moves to is scrolled into view. When a trapping
   /// [FocusScope] is active, traversal is confined to nodes inside it.
   bool focusNext() => _cycleFocus(forward: true);
 
@@ -901,11 +905,11 @@ class FocusManager extends Notifier {
   }
 
   /// Focusable nodes in reading order (row, then column) of their
-  /// [FocusNode._traversalPosition]s, with attachment order as a stable
-  /// tiebreak and unpresented nodes last. A node scrolled out of view keeps
-  /// its place in its viewport's content, so the order does not depend on
-  /// how far the user has scrolled. Filtered to the active focus trap when
-  /// one is open — Tab inside a trapped dialog cannot escape it.
+  /// [FocusNode._tabPlace]s, with attachment order as a stable tiebreak and
+  /// unpresented nodes last. A node scrolled out of view keeps its place in
+  /// its viewport's content, so the order does not depend on how far the
+  /// user has scrolled. Filtered to the active focus trap when one is open —
+  /// Tab inside a trapped dialog cannot escape it.
   List<FocusNode> _traversalOrder() {
     final attachIndex = <FocusNode, int>{};
     for (var i = 0; i < _attachedNodes.length; i++) {
@@ -916,23 +920,15 @@ class FocusManager extends Notifier {
         .where(isTraversable)
         .where((n) => trap == null || _isUnderScopeMarker(n, trap))
         .toList();
-    // Geometry is derived on read; resolve each node's position once, not
-    // once per comparison.
-    final positions = {for (final n in nodes) n: n._traversalPosition};
+    // Geometry is derived on read; resolve each node's place once, not once
+    // per comparison.
+    final places = {for (final n in nodes) n: n._tabPlace};
     nodes.sort((a, b) {
-      final pa = positions[a];
-      final pb = positions[b];
+      final pa = places[a];
+      final pb = places[b];
       if (pa != null && pb != null) {
-        if (pa.row != pb.row) return pa.row - pb.row;
-        if (pa.col != pb.col) return pa.col - pb.col;
-        final nesting = _compareNesting(pa.clip, pb.clip);
-        if (nesting != 0) return nesting;
-        if (pa.bounds.top != pb.bounds.top) {
-          return pa.bounds.top - pb.bounds.top;
-        }
-        if (pa.bounds.left != pb.bounds.left) {
-          return pa.bounds.left - pb.bounds.left;
-        }
+        final order = _compareTabPlaces(pa, pb);
+        if (order != 0) return order;
       } else if (pa == null && pb != null) {
         return 1;
       } else if (pa != null && pb == null) {
@@ -943,16 +939,26 @@ class FocusManager extends Notifier {
     return nodes;
   }
 
-  /// Orders two clips that share a cell outer first: a node clipped only by
-  /// the area around a viewport (the viewport's own node) comes before the
-  /// nodes clipped inside it. A null clip is the outermost.
-  static int _compareNesting(CellRect? a, CellRect? b) {
-    if (a == b) return 0;
-    if (a == null) return -1;
-    if (b == null) return 1;
-    if (a.intersect(b) == b) return -1;
-    if (b.intersect(a) == a) return 1;
-    return 0;
+  /// Orders two Tab places at the first level where they part: past the
+  /// viewports both sit in, compare what each holds there — a viewport it is
+  /// inside, or the node itself — by position, then by depth, so a node
+  /// that encloses a viewport (a scroll view's own node) comes before the
+  /// content inside it. Two different viewports in one place order by
+  /// identity, so each viewport's content stays together.
+  static int _compareTabPlaces(List<_TabLevel> a, List<_TabLevel> b) {
+    var i = 0;
+    while (i < a.length - 1 &&
+        i < b.length - 1 &&
+        identical(a[i].owner, b[i].owner)) {
+      i++;
+    }
+    final x = a[i];
+    final y = b[i];
+    if (x.bounds.top != y.bounds.top) return x.bounds.top - y.bounds.top;
+    if (x.bounds.left != y.bounds.left) return x.bounds.left - y.bounds.left;
+    if (x.depth != y.depth) return x.depth - y.depth;
+    if (x.owner is FocusNode && y.owner is FocusNode) return 0;
+    return identityHashCode(x.owner) - identityHashCode(y.owner);
   }
 
   /// The innermost enclosing focus-trap marker element of [node], or null
@@ -2056,4 +2062,15 @@ class _FocusDetectorState extends State<FocusDetector> {
 
   @override
   Widget build(BuildContext context) => widget.child;
+}
+
+/// One level of a focus node's place in Tab order: a scroll viewport it sits
+/// in, or the node itself, with its unclipped rectangle on screen and its
+/// depth in the render tree.
+final class _TabLevel {
+  const _TabLevel(this.owner, this.bounds, this.depth);
+
+  final Object owner;
+  final CellRect bounds;
+  final int depth;
 }

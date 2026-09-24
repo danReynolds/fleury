@@ -135,4 +135,144 @@ void main() {
     expect(b.hasFocus, isTrue);
     expect(controller.offset, 1);
   });
+
+  /// Presses Tab [times] times, rendering between presses, and records the
+  /// label of each focused node ('' for a node with none).
+  List<String> tabThrough(
+    FleuryTester tester,
+    List<FocusNode> nodes,
+    int times,
+  ) {
+    final landed = <String>[];
+    for (var i = 0; i < times; i++) {
+      tester.sendKey(const KeyEvent(KeyCode.tab));
+      tester.render(size: size);
+      final focused = nodes.where((node) => node.hasFocus);
+      landed.add(focused.isEmpty ? '' : focused.single.debugLabel!);
+    }
+    return landed;
+  }
+
+  testWidgets('Tab visits a two-column form row by row', (tester) {
+    final a = [for (var i = 0; i < 6; i++) FocusNode(debugLabel: 'a$i')];
+    final b = [for (var i = 0; i < 6; i++) FocusNode(debugLabel: 'b$i')];
+    for (final node in [...a, ...b]) {
+      addTearDown(node.dispose);
+    }
+    tester.pumpWidget(
+      FocusTraversalGroup(
+        child: Column(
+          children: [
+            SizedBox(
+              height: 3,
+              child: ScrollView(
+                controller: controller,
+                child: Column(
+                  children: [
+                    for (var i = 0; i < 6; i++)
+                      Row(
+                        children: [
+                          SizedBox(
+                            width: 10,
+                            child: TextInput(
+                              focusNode: a[i],
+                              autofocus: i == 0,
+                              placeholder: 'a$i',
+                            ),
+                          ),
+                          SizedBox(
+                            width: 10,
+                            child: TextInput(
+                              focusNode: b[i],
+                              placeholder: 'b$i',
+                            ),
+                          ),
+                        ],
+                      ),
+                  ],
+                ),
+              ),
+            ),
+            Focus(focusNode: submit, child: const Text('[ Submit ]')),
+          ],
+        ),
+      ),
+    );
+    tester.render(size: size);
+
+    expect(tabThrough(tester, [...a, ...b, submit], 12), [
+      'b0',
+      'a1',
+      'b1',
+      'a2',
+      'b2',
+      'a3',
+      'b3',
+      'a4',
+      'b4',
+      'a5',
+      'b5',
+      'submit',
+    ]);
+  });
+
+  testWidgets('Tab walks through a nested scroll view in content order', (
+    tester,
+  ) {
+    final inner = ScrollController();
+    addTearDown(inner.dispose);
+    final f = [for (var i = 0; i < 4; i++) FocusNode(debugLabel: 'f$i')];
+    final g = [for (var i = 0; i < 3; i++) FocusNode(debugLabel: 'g$i')];
+    for (final node in [...f, ...g]) {
+      addTearDown(node.dispose);
+    }
+    Widget field(FocusNode node) => TextInput(
+      focusNode: node,
+      autofocus: node == f[0],
+      placeholder: node.debugLabel!,
+    );
+    tester.pumpWidget(
+      FocusTraversalGroup(
+        child: Column(
+          children: [
+            SizedBox(
+              height: 4,
+              child: ScrollView(
+                controller: controller,
+                child: Column(
+                  children: [
+                    field(f[0]),
+                    field(f[1]),
+                    SizedBox(
+                      height: 2,
+                      child: ScrollView(
+                        controller: inner,
+                        child: Column(children: [for (final n in g) field(n)]),
+                      ),
+                    ),
+                    field(f[2]),
+                    field(f[3]),
+                  ],
+                ),
+              ),
+            ),
+            Focus(focusNode: submit, child: const Text('[ Submit ]')),
+          ],
+        ),
+      ),
+    );
+    tester.render(size: size);
+
+    // The inner scroll view's own node comes before its content.
+    expect(tabThrough(tester, [...f, ...g, submit], 8), [
+      'f1',
+      '',
+      'g0',
+      'g1',
+      'g2',
+      'f2',
+      'f3',
+      'submit',
+    ]);
+  });
 }
