@@ -14,22 +14,39 @@ it overlays the app without changing the app’s layout.
 Click **Slow build** below, then find **Worst build** in Rebuilds. The app
 blocks one build for about 100 ms; the panel measures the actual frame. Switch
 to **Errors** after clicking **Throw error**, or **Logs** after **Write logs**.
-You can scroll the reports and expand the panel for more room.
+Use **Fullscreen demo** for more room; **Expand panel** gives the debugger
+the whole app surface.
 
 <DebuggingDemo />
 
-Build dominates here. Inspect synchronous work in the build method;
-move expensive computation to a state update or load it asynchronously. If
-layout dominates instead, inspect layout work and cache misses. If paint or
-diff dominates, inspect the changed region and cell counts before optimizing
-widget builds.
+Build dominates here. Cache repeated computation when its inputs change;
+for substantial CPU work, use a [worker isolate in native apps](/fleury/guides/loading-data/#keep-heavy-work-off-the-ui-isolate).
+Awaiting I/O frees the UI, but making a CPU-heavy function async does not.
+If layout dominates, inspect layout work and cache misses. If paint or diff
+dominates, inspect the changed region and cell counts first.
 
 Use **Reset demo** to start a fresh recording. In your own app, repeat the
-same interaction after changing the code. Compare the same phase
-and terminal size; the **>16 ms** count is a useful flag, not a complete measure
+same interaction after changing the code. Check responsiveness as well as
+timings at the same terminal size; the **>16 ms** count is a useful flag, not a complete measure
 of input latency. A busy app can replace all 60 recorded frames quickly.
 
-## Run it with your app
+## Follow an error to its caller
+
+Click **Throw error** in the demo, then open **Errors**. The callback fails,
+but the app keeps running. Find the save handler in the stack trace; in your
+own app, start with the first relevant application frame. The last 50 errors
+remain available after their banners disappear, newest first.
+
+After fixing the cause, repeat the action and check for a **new timestamp**;
+old entries remain in history. For an expected load failure, render an error
+state and recovery action using [Loading data](/fleury/guides/loading-data/).
+
+To inspect the events leading to a failure, click **Write logs** and open
+**Logs**. Press **/** and type `sync:` to isolate the 12 new lines. **Enter**
+keeps the filter, **Esc** clears it, and **s** switches between stdout, stderr,
+and both.
+
+## Use the debugger locally
 
 Press **Ctrl+G** in a native development run, or launch the fuller playground
 from a Fleury checkout:
@@ -43,12 +60,20 @@ its normal keys. Trigger **Spike a slow frame**, reopen the panel, and select
 **Rebuilds**. The recording keeps the last 60 frames while hidden. Inspect the
 worst frame: reopening the panel can produce a newer, faster one.
 
+Native sessions also capture ordinary prints and descriptor-level output,
+including FFI writes, so stray output does not overwrite the app. Captured
+output replays after exit. With `fleury serve`, check the server console.
+
 ## Find unnecessary work
 
-For repeated activity, the question is which change keeps scheduling work.
-Trigger **Rebuild storm** and inspect **Sources** in Rebuilds. These are
-invalidation origins, not a CPU stack trace. Look for state or notifier updates
-that reach a larger subtree than necessary.
+In the native playground, start **Toggle live stream**, then watch **Sources**
+in Rebuilds while updates continue. These are the latest frame’s invalidation
+origins, not a CPU stack trace. Look for state or notifier updates that reach a
+larger subtree than necessary. Close the panel and **Stop live stream** when done.
+
+Opening the panel also schedules work, so the latest sources can belong to the
+debugger. **Worst sources** retains the origins of the single frame with the
+highest total duration; it does not summarize the recording.
 
 Press **p** while the debugger is open to enable paint flash. Close the panel
 and repeat the interaction: the flash remains active, so you can compare the
@@ -59,7 +84,7 @@ Use the counters to distinguish the work involved:
 
 | Evidence | What it tells you |
 | --- | --- |
-| Sources | Which build, layout, or paint objects requested work. |
+| Sources | Which build, layout, or paint objects requested work in the latest frame. |
 | Layouts: run / skipped | Whether the frame reused layout results. |
 | Boundaries: repainted / cached | Whether repaint boundaries reused painted content. |
 | Dirty cells and spans | How much changed in the final cell diff. A rebuild need not produce terminal output. |
@@ -68,28 +93,6 @@ A repaint boundary helps when painting is the cost you can isolate. It does
 not remove expensive build work. See [Performance](/fleury/architecture/performance/)
 for the rendering model and [State management](/fleury/guides/state-management/)
 for narrowing subscriptions.
-
-## Follow an error to its caller
-
-In the playground, activate **Throw in a handler**. Fleury reports the uncaught
-callback error and keeps the app running. Open **Errors** for the message and
-full stack trace; page down to follow it into your code. The last 50 errors
-remain available after their banners disappear, newest first.
-
-Fix the first relevant application frame in the trace, then repeat the action.
-Old entries remain in history, so check whether a **new timestamp** appears.
-For an expected load failure, render an error state and recovery action using
-[Loading data](/fleury/guides/loading-data/) instead of relying on the runtime
-error banner.
-
-For context around a failure, open **Logs** with **F12**. The playground’s
-**Emit a log burst** action writes 40 lines. Press **/** and type a substring to
-filter them; **Enter** keeps the filter, **Esc** clears it, and **s** switches
-between stdout, stderr, and both.
-
-Native sessions capture ordinary prints and descriptor-level output, including
-FFI writes, so stray output does not overwrite the app. Captured output replays
-after exit. In a served browser session, check the server console instead.
 
 ## Inspect an action that does not respond
 

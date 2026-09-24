@@ -10,7 +10,8 @@ widget code.
 
 ## Inspect the affected session
 
-Run this in the same terminal, SSH connection, and multiplexer pane as the app:
+With the [Fleury CLI installed](/fleury/getting-started/#1-create-a-project), run
+this in the same terminal, SSH connection, and multiplexer pane as the app:
 
 ```sh
 fleury diagnose
@@ -58,6 +59,7 @@ clipboard.
 | Links show their URL as text | OSC 8 hyperlinks | Check whether links are unsupported, suppressed, or explicitly disabled. |
 | Clicks or held keys do nothing | App mouse mode; **Live → Keyboard** in the debugger | Check enabled input modes and negotiated key events, not only terminal support. |
 | Copy works only inside the app | Clipboard write report | Check the transport and policy used for that operation. |
+| Frames flicker or appear partially drawn | Synchronized output | Check whether the terminal confirmed support below. |
 
 ## Check color and text rendering
 
@@ -66,8 +68,8 @@ even when another setting requests it. Otherwise an explicit depth wins over
 environment detection. Use it to reproduce a reduced palette locally:
 
 ```sh
-FLEURY_COLOR_DEPTH=16 dart run bin/main.dart
-FLEURY_COLOR_DEPTH=256 dart run bin/main.dart
+FLEURY_COLOR_DEPTH=16 dart run bin/run_app.dart
+FLEURY_COLOR_DEPTH=256 dart run bin/run_app.dart
 ```
 
 The other accepted depths are `truecolor` and `none`. Choose colors in the
@@ -79,7 +81,7 @@ can select ASCII drawing characters. Check `LC_ALL`, `LC_CTYPE`, and `LANG` in
 that order; the first configured locale wins. To test the ASCII fallback:
 
 ```sh
-FLEURY_GLYPH_TIER=ascii dart run bin/main.dart
+FLEURY_GLYPH_TIER=ascii dart run bin/run_app.dart
 ```
 
 If Unicode is enabled but columns drift, inspect the probe's **Width policy**.
@@ -113,7 +115,7 @@ Windows Terminal.
 To compare the fallback in the same app:
 
 ```sh
-FLEURY_HYPERLINKS=0 dart run bin/main.dart
+FLEURY_HYPERLINKS=0 dart run bin/run_app.dart
 ```
 
 Setting it to `1` forces hyperlink output, including through a multiplexer.
@@ -133,13 +135,22 @@ successful standalone keyboard probe is not evidence that this running session
 receives releases. [Key handling](/fleury/guides/focus-and-keyboard/) covers
 capability-aware input.
 
-For clipboard issues, inspect the result of `Clipboard.writeWithReport`.
+For clipboard issues, run this from an app callback and inspect the result
+in the debugger’s **Logs** tab:
+
+```dart
+final report = await ClipboardScope.of(context)
+    .writeWithReport('Clipboard check');
+print(report.toJson());
+```
+
 A successful platform-tool write, an emitted OSC 52 escape, and an in-process
 copy are different outcomes. OSC 52 emission is unverified until you paste into
 another application; over SSH, local platform tools are skipped by default.
 
 ## Synchronized output
 
+For flicker or partially drawn frames, check synchronized output in the diagnosis.
 Fleury brackets frames with synchronized output only when the terminal query
 confirms mutable DEC mode 2026 support. Otherwise it sends ordinary ANSI frames.
 For a terminal with a known incorrect report, `FLEURY_SYNC_OUTPUT=1` or `0`
