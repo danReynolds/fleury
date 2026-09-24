@@ -1,5 +1,11 @@
 # Changelog
 
+- Debugger mode changes preserve application state and layout. Opening the
+  shell starts a bounded 60-frame recording that continues while hidden;
+  Rebuilds shows the worst frame's phase costs. Inspector reports scroll with
+  Page Up/Down, Errors includes full traces, and Tree reports hyperlink and
+  input/clipboard policies. Debugger tabs expose semantic activation, and the
+  host SPI exports the optional diagnostics services used by the live guide.
 - A keyed `ListView` that grows by appending validates and indexes only the
   new keys instead of rebuilding its key index; a duplicate in the append
   still throws and leaves the previous keys intact.

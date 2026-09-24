@@ -1062,8 +1062,14 @@ void main() {
       expect(output, contains('— dirty sources —'));
       expect(output, contains('build:DemoWidget/_DemoState'));
       expect(output, contains('Worst frame  #7 11ms'));
-      expect(output, contains('— recent frames —'));
-      expect(output, contains('#7  key:enter 11ms 12 dirty 2,3 4×5'));
+      expect(tryConsumeDebugKey(controller, _key(KeyCode.pageDown)), isTrue);
+      tester.pump();
+      final scrolled = tester.renderToString(
+        size: const CellSize(88, 28),
+        emptyMark: ' ',
+      );
+      expect(scrolled, contains('— recent frames —'));
+      expect(scrolled, contains('#7  key:enter 11ms 12 dirty 2,3 4×5'));
     });
   });
 
