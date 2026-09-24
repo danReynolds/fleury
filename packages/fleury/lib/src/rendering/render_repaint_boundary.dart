@@ -318,7 +318,9 @@ class RenderRepaintBoundary extends RenderObject
     // armed it is a PARENT boundary's cache, and that parent measures what was
     // painted into it from this damage: suppressing hid a nested cache-hit
     // child from its parent's bounds and blanked the row.
-    buffer.copyRectFrom(cacheForCopy, bounds, destOffset);
+    // A composite, not a mirror: cells the child left empty keep what the
+    // parent painted there, exactly as painting the child directly would.
+    buffer.compositeRectFrom(cacheForCopy, bounds, destOffset);
   }
 
   static String _describeCell(Cell cell) =>

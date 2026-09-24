@@ -369,23 +369,15 @@ final class CellBuffer {
   }
 
   /// Copies every cell from [source] into this buffer with its top-left
-  /// landing at [destOffset]. Cells outside this buffer are clipped. Used by
-  /// `RenderRepaintBoundary` to blit a cached sub-buffer into the main frame
-  /// — much faster than re-walking the subtree's paint.
-  ///
-  /// Assumes the destination region was cleared (or contains no wide-cell
-  /// invariants that would be violated by direct overwrite). The main paint
-  /// path satisfies this because the frame buffer is cleared at the start of
-  /// every frame.
+  /// landing at [destOffset], empty cells included: the region becomes an
+  /// exact mirror of [source]. Cells outside this buffer are clipped. For
+  /// painting a buffer over what is already painted, use [compositeFrom].
   void copyFrom(CellBuffer source, CellOffset destOffset) {
     _copyRect(source, 0, 0, source._size.cols, source._size.rows, destOffset);
   }
 
   /// Copies the [srcRect] region of [source] into this buffer with its
-  /// top-left landing at [destOffset]. Same assumptions as [copyFrom];
-  /// useful when the source is largely empty (e.g. a `RepaintBoundary`'s
-  /// cache) and only the tight bounding box of its content needs to be
-  /// blitted.
+  /// top-left landing at [destOffset], as an exact mirror like [copyFrom].
   void copyRectFrom(
     CellBuffer source,
     CellRect srcRect,
@@ -398,6 +390,45 @@ final class CellBuffer {
       srcRect.size.cols,
       srcRect.size.rows,
       destOffset,
+    );
+  }
+
+  /// Paints [source] into this buffer with its top-left landing at
+  /// [destOffset], as if its content were painted here directly: every cell
+  /// [source] painted lands, and every cell it left empty keeps what this
+  /// buffer already holds (an ancestor's background, an earlier sibling).
+  /// How a cached or scratch buffer is composited back — a repaint
+  /// boundary's cache, a clipped viewport — much faster than re-walking the
+  /// subtree's paint.
+  void compositeFrom(CellBuffer source, CellOffset destOffset) {
+    _copyRect(
+      source,
+      0,
+      0,
+      source._size.cols,
+      source._size.rows,
+      destOffset,
+      transparent: true,
+    );
+  }
+
+  /// Paints the [srcRect] region of [source] into this buffer with its
+  /// top-left landing at [destOffset], as [compositeFrom] does. Useful when
+  /// the source is largely empty and only the tight bounding box of its
+  /// content needs compositing.
+  void compositeRectFrom(
+    CellBuffer source,
+    CellRect srcRect,
+    CellOffset destOffset,
+  ) {
+    _copyRect(
+      source,
+      srcRect.offset.col,
+      srcRect.offset.row,
+      srcRect.size.cols,
+      srcRect.size.rows,
+      destOffset,
+      transparent: true,
     );
   }
 
@@ -431,8 +462,9 @@ final class CellBuffer {
     int srcRow,
     int cols,
     int rows,
-    CellOffset destOffset,
-  ) {
+    CellOffset destOffset, {
+    bool transparent = false,
+  }) {
     if (cols <= 0 || rows <= 0) return;
     final dstCol0 = destOffset.col;
     final dstRow0 = destOffset.row;
@@ -457,8 +489,10 @@ final class CellBuffer {
     if (_imagePlacements.isNotEmpty) _imageOcclusionDirty = true;
     // Fast path: full-width rows landing at column 0 of this buffer — the
     // sliced source rows map to a contiguous range in the destination, so
-    // one `setRange` covers the whole block.
-    if (dstCol0 == 0 &&
+    // one `setRange` covers the whole block. An exact mirror only: a
+    // composite skips the source's empty cells.
+    if (!transparent &&
+        dstCol0 == 0 &&
         srcCol == 0 &&
         cols == _size.cols &&
         cols == srcStride) {
@@ -489,48 +523,84 @@ final class CellBuffer {
       if (dstCol0 < 0) colStart = -dstCol0;
       if (dstCol0 + colEnd > _size.cols) colEnd = _size.cols - dstCol0;
       if (colEnd <= colStart) continue;
-      final srcStart = (srcRow + r) * srcStride + srcCol + colStart;
-      final dstStart = dstRow * _size.cols + dstCol0 + colStart;
-      final len = colEnd - colStart;
-      // Sever any wide pair the destination range's edges bisect BEFORE
-      // overwriting — a leading just left of the range, or a continuation
-      // just right of it, would otherwise be orphaned (the interior is fully
-      // overwritten). This is the invariant every grapheme write and image
-      // placement maintains; the blit skipped it because "the frame buffer
-      // is cleared at the start of every frame" — true, and irrelevant once
-      // a SIBLING has painted into that cleared buffer this frame. A cached
-      // repaint boundary (every ListView item, every overlay entry) blitting
-      // over CJK text left an orphaned leading the renderer then modelled as
-      // one column and the terminal drew as two: everything after it on the
-      // row landed one cell to the right, and stayed there, because the
-      // shown buffer believed the frame was correct.
-      final dstBase = dstRow * _size.cols;
-      _evictWideNeighbors(
-        dstCol0 + colStart,
-        dstRow,
-        dstBase + dstCol0 + colStart,
-      );
-      _evictWideNeighbors(
-        dstCol0 + colEnd - 1,
-        dstRow,
-        dstBase + dstCol0 + colEnd - 1,
-      );
-      _copyCellRange(source, srcStart, dstStart, len);
-      // The copied slice itself can be cut mid-pair when the destination
-      // clip trimmed it (a blit partly off-screen) or the caller's rect did.
-      // A continuation as the first copied cell has its leading outside the
-      // slice; a wide leading as the last copied cell has its continuation
-      // outside it. Narrow graphemes are leading cells too, so the last-cell
-      // case is decided by the SOURCE's next cell, not by the role alone.
-      if (source._cells[srcStart].role == CellRole.continuation) {
-        _cells[dstStart] = const Cell.empty();
+      final srcBase = (srcRow + r) * srcStride + srcCol;
+      if (!transparent) {
+        _copySpan(
+          source,
+          srcBase + colStart,
+          srcCol + colStart,
+          dstRow,
+          dstCol0 + colStart,
+          colEnd - colStart,
+        );
+        continue;
       }
-      final srcLast = srcStart + len - 1;
-      if (srcCol + colEnd < srcStride &&
-          source._cells[srcLast].role == CellRole.leading &&
-          source._cells[srcLast + 1].role == CellRole.continuation) {
-        _cells[dstStart + len - 1] = const Cell.empty();
+      // Only what the source painted lands; its empty cells are transparent.
+      var col = colStart;
+      while (col < colEnd) {
+        if (source._cells[srcBase + col].role == CellRole.empty) {
+          col++;
+          continue;
+        }
+        final runStart = col;
+        do {
+          col++;
+        } while (col < colEnd &&
+            source._cells[srcBase + col].role != CellRole.empty);
+        _copySpan(
+          source,
+          srcBase + runStart,
+          srcCol + runStart,
+          dstRow,
+          dstCol0 + runStart,
+          col - runStart,
+        );
       }
+    }
+  }
+
+  /// Copies [length] cells of one [source] row, starting at the flat index
+  /// [srcStart] (in source column [srcColumn]), into row [dstRow] of this
+  /// buffer at [dstCol].
+  ///
+  /// Severs any wide pair the destination span's edges bisect BEFORE
+  /// overwriting — a leading just left of the span, or a continuation just
+  /// right of it, would otherwise be orphaned (the interior is fully
+  /// overwritten). This is the invariant every grapheme write and image
+  /// placement maintains. A copy skipped it because "the frame buffer is
+  /// cleared at the start of every frame" — true, and irrelevant once a
+  /// SIBLING has painted into that cleared buffer this frame. A cached
+  /// repaint boundary (every ListView item, every overlay entry) blitting
+  /// over CJK text left an orphaned leading the renderer then modelled as
+  /// one column and the terminal drew as two: everything after it on the row
+  /// landed one cell to the right, and stayed there, because the shown
+  /// buffer believed the frame was correct.
+  void _copySpan(
+    CellBuffer source,
+    int srcStart,
+    int srcColumn,
+    int dstRow,
+    int dstCol,
+    int length,
+  ) {
+    final dstStart = dstRow * _size.cols + dstCol;
+    _evictWideNeighbors(dstCol, dstRow, dstStart);
+    _evictWideNeighbors(dstCol + length - 1, dstRow, dstStart + length - 1);
+    _copyCellRange(source, srcStart, dstStart, length);
+    // The span itself can be cut mid-pair when a clip trimmed it (a blit
+    // partly off-screen) or the caller's rect did. A continuation as the
+    // first copied cell has its leading outside the span; a wide leading as
+    // the last copied cell has its continuation outside it. Narrow graphemes
+    // are leading cells too, so the last-cell case is decided by the
+    // SOURCE's next cell, not by the role alone.
+    if (source._cells[srcStart].role == CellRole.continuation) {
+      _cells[dstStart] = const Cell.empty();
+    }
+    final srcLast = srcStart + length - 1;
+    if (srcColumn + length < source._size.cols &&
+        source._cells[srcLast].role == CellRole.leading &&
+        source._cells[srcLast + 1].role == CellRole.continuation) {
+      _cells[dstStart + length - 1] = const Cell.empty();
     }
   }
 
