@@ -62,8 +62,12 @@ void main() {
       role: SemanticRole.dialog,
       label: 'Confirm',
     );
-    expect(node.actions, contains(SemanticAction.dismiss));
     expect(node.state.values['hasTitle'], isTrue);
+    expect(
+      node.actions,
+      isEmpty,
+      reason: 'dismissal belongs to the route that presents a dialog',
+    );
   });
 
   testWidgets('semantic dismiss pops a presented dialog', (tester) async {
@@ -75,14 +79,74 @@ void main() {
     tester.pump(const Duration(milliseconds: 300));
     expect(Navigator.of(ctx).depth, 2);
 
+    // The presented dialog's route carries its dismiss.
     await tester
-        .target(role: SemanticRole.dialog, label: 'Confirm')
+        .target(role: SemanticRole.route, label: 'Dialog')
         .perform(SemanticAction.dismiss);
 
     tester.pump(const Duration(milliseconds: 300));
     await Future<void>.delayed(Duration.zero);
     tester.pump();
     expect(Navigator.of(ctx).depth, 1);
+  });
+
+  testWidgets('a must-answer dialog offers no dismiss to semantics', (
+    tester,
+  ) async {
+    late BuildContext ctx;
+    tester.pumpWidget(Navigator(home: _Host((c) => ctx = c)));
+    Navigator.of(ctx).present<bool>(
+      const Dialog(title: 'Confirm', child: Text('must answer')),
+      barrierDismissible: false,
+    );
+    tester.pump(const Duration(milliseconds: 300));
+
+    final tree = tester.semantics();
+    final dialog = tree.single(role: SemanticRole.dialog, label: 'Confirm');
+    final route = tree.single(role: SemanticRole.route, label: 'Dialog');
+    expect(dialog.actions, isNot(contains(SemanticAction.dismiss)));
+    expect(route.actions, isNot(contains(SemanticAction.dismiss)));
+    expect(Navigator.of(ctx).depth, 2);
+  });
+
+  testWidgets('dismissing a guarded dialog asks its PopScope', (tester) async {
+    late BuildContext ctx;
+    var blocked = 0;
+    tester.pumpWidget(Navigator(home: _Host((c) => ctx = c)));
+    Navigator.of(ctx).present<void>(
+      Dialog(
+        title: 'Edit',
+        child: PopScope(
+          canPop: false,
+          onBlocked: () => blocked++,
+          child: const Text('unsaved'),
+        ),
+      ),
+    );
+    tester.pump(const Duration(milliseconds: 300));
+
+    await tester
+        .target(role: SemanticRole.route, label: 'Dialog')
+        .perform(SemanticAction.dismiss);
+    tester.pump(const Duration(milliseconds: 300));
+
+    expect(blocked, 1);
+    expect(Navigator.of(ctx).depth, 2);
+  });
+
+  testWidgets('a dialog shown inline offers no dismiss', (tester) async {
+    late BuildContext ctx;
+    tester.pumpWidget(Navigator(home: _Host((c) => ctx = c)));
+    Navigator.of(ctx).push<void>(
+      const Dialog(title: 'Inline', child: Text('part of the page')),
+    );
+    tester.pump(const Duration(milliseconds: 300));
+
+    final dialog = tester.semantics().single(
+      role: SemanticRole.dialog,
+      label: 'Inline',
+    );
+    expect(dialog.actions, isNot(contains(SemanticAction.dismiss)));
   });
 }
 
