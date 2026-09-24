@@ -93,4 +93,20 @@ void main() {
 
     expect(selected, [1]);
   });
+
+  testWidgets('a simulated keypad press is the press a terminal sends', (
+    tester,
+  ) {
+    // A test pressing a keypad position gets the same folded event the
+    // parser delivers, so a button takes KP Enter either way.
+    var pressed = 0;
+    tester.pumpWidget(
+      Button(text: 'OK', autofocus: true, onPressed: () => pressed++),
+    );
+
+    tester.press(KeyPosition.numpadEnter);
+
+    expect(pressed, 1);
+    expect(KeyPosition.numpad1.hintLabel, 'KP1');
+  });
 }

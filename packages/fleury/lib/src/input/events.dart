@@ -2,6 +2,7 @@ import 'package:meta/meta.dart';
 
 import '../foundation/geometry.dart';
 import 'key_dispatch.dart';
+import 'key_tables.dart';
 
 /// The non-character keys a terminal can report, as an enumerable set.
 ///
@@ -657,7 +658,9 @@ enum KeyPosition implements KeySelector, KeySequence {
   /// positions with no US-101 twin ([intlBackslash]).
   KeyCode? get usTwin {
     final s = special;
-    if (s != null) return KeyCode.forSpecial(s);
+    // A keypad key produces what it means, as the parser reports it; the
+    // keypad itself is the position.
+    if (s != null) return keypadMeaning[s] ?? KeyCode.forSpecial(s);
     final c = usCharacter;
     if (c != null) return KeyCode.char(c);
     return null;
@@ -1483,10 +1486,15 @@ final class _KeyStep {
       // with the key the user actually has under that finger.
       final twin = position.usTwin;
       final twinChar = twin?.character;
+      // A keypad position is labelled as the keypad key (KP1), not as what
+      // it types, which the main block has too.
+      final keypad = position.special;
       // Same casing rule as a logical atom below: bare renders as the key
       // produces it, a chord uppercases. Otherwise one hint bar reads
       // `[q] Quit  [W] Thrust` and the inconsistency looks like a bug.
-      final base = twin == null
+      final base = keypad != null && keypadMeaning.containsKey(keypad)
+          ? _specialLabel(keypad)
+          : twin == null
           ? position.name
           : (twin.special != null
                 ? _specialLabel(twin.special!)
