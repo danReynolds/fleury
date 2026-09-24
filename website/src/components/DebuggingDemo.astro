@@ -1,0 +1,11 @@
+<figure class="debugging-demo">
+  <iframe src="/fleury/debugger-demo.html" title="Try Fleury’s live debugger" loading="lazy"></iframe>
+  <figcaption>Browser execution uses the same debugger panel and frame recorder as a terminal run. Native paint flashing and terminal diagnosis are available in the playground below.</figcaption>
+</figure>
+
+<style>
+  .debugging-demo { width: calc(100% + 12rem); max-width: calc(100vw - 20rem); margin-inline: -6rem; }
+  iframe { display: block; width: 100%; height: 550px; border: 1px solid var(--sl-color-gray-5); border-radius: 10px; background: #0b1117; }
+  figcaption { margin-top: .7rem; color: var(--sl-color-gray-2); font-size: .85rem; line-height: 1.6; }
+  @media (max-width: 70rem) { .debugging-demo { width: 100%; max-width: 100%; margin-inline: 0; } }
+</style>

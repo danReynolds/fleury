@@ -3,35 +3,20 @@ title: Debugging
 description: Trace slow frames, unexpected rebuilds, and runtime errors with Fleury’s built-in debugger.
 ---
 
+import DebuggingDemo from '../../../components/DebuggingDemo.astro';
+
 Fleury’s debugger connects a rendered frame to its phase timings, invalidation
 sources, logs, and errors. Open it with **Ctrl+G** in a native development run;
 it overlays the app without changing the app’s layout.
 
 ## Reproduce a slow frame
 
-Use your own app, or run the debug playground from a Fleury checkout:
+Click **Slow build** below, then find **Worst build** in Rebuilds. The app
+blocks one build for about 100 ms; the panel measures the actual frame. Switch
+to **Errors** after clicking **Throw error**, or **Logs** after **Write logs**.
+You can scroll the reports and expand the panel for more room.
 
-```sh
-dart run packages/samples/bin/samples.dart debug
-```
-
-Open the debugger once to start recording, then close it with **Ctrl+G** so the
-app receives its normal keys. Activate **Spike a slow frame**, reopen the
-debugger, and select **Rebuilds**. Use **F11** to expand and **Page Down** to
-scroll the report.
-
-The recording keeps the last 60 frames while the panel is hidden. Read the
-**worst frame**, not just the latest one: opening the panel itself can produce
-a newer frame. The playground deliberately spends about 120 ms in build, so
-its breakdown has this shape:
-
-```text title="Example: slow build"
-Worst frame    #41 121ms
-Worst build    120ms
-Worst layout   0.2ms
-Worst paint    0.3ms
-Worst diff     0.1ms
-```
+<DebuggingDemo />
 
 Build dominates here. Inspect synchronous work in the build method;
 move expensive computation to a state update or load it asynchronously. If
@@ -39,9 +24,24 @@ layout dominates instead, inspect layout work and cache misses. If paint or
 diff dominates, inspect the changed region and cell counts before optimizing
 widget builds.
 
-Repeat the same interaction after changing the code. Compare the same phase
+Use **Reset demo** to start a fresh recording. In your own app, repeat the
+same interaction after changing the code. Compare the same phase
 and terminal size; the **>16 ms** count is a useful flag, not a complete measure
 of input latency. A busy app can replace all 60 recorded frames quickly.
+
+## Run it with your app
+
+Press **Ctrl+G** in a native development run, or launch the fuller playground
+from a Fleury checkout:
+
+```sh
+dart run packages/samples/bin/samples.dart debug
+```
+
+Open the debugger once to start recording, then close it so the app receives
+its normal keys. Trigger **Spike a slow frame**, reopen the panel, and select
+**Rebuilds**. The recording keeps the last 60 frames while hidden. Inspect the
+worst frame: reopening the panel can produce a newer, faster one.
 
 ## Find unnecessary work
 

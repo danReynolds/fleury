@@ -4,7 +4,8 @@
   shell starts a bounded 60-frame recording that continues while hidden;
   Rebuilds shows the worst frame's phase costs. Inspector reports scroll with
   Page Up/Down, Errors includes full traces, and Tree reports hyperlink and
-  input/clipboard policies.
+  input/clipboard policies. Debugger tabs expose semantic activation, and the
+  host SPI exports the optional diagnostics services used by the live guide.
 - **Breaking:** a scope is read one way, as a call or as a widget:
   `context.scope<T>()` or `ScopeBuilder<T>`, which behave the same.
   `Scope.of` and `Scope.maybeOf` are removed; an optional scope is read with a

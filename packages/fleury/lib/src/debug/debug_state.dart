@@ -111,6 +111,9 @@ class DebugController extends Notifier {
   DebugMode get mode => _mode;
   DebugTab get tab => _tab;
   bool get paintFlash => _paintFlash;
+
+  /// Set by hosts that do not implement the terminal paint-flash overlay.
+  bool paintFlashAvailable = true;
   int get semanticCursorIndex => _semanticCursorIndex;
 
   /// The Logs-tab case-insensitive substring filter; empty when inactive.
@@ -229,6 +232,7 @@ class DebugController extends Notifier {
 
   void togglePaintFlash() {
     _checkNotDisposed();
+    if (!paintFlashAvailable) return;
     _paintFlash = !_paintFlash;
     notify();
   }

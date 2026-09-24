@@ -88,6 +88,46 @@ class _CounterState extends State<_Counter> {
   }
 }
 
+class _DebugCounter extends StatefulWidget {
+  const _DebugCounter({super.key});
+  @override
+  State<_DebugCounter> createState() => _DebugCounterState();
+}
+
+class _DebugCounterState extends State<_DebugCounter> {
+  int count = 0;
+  bool slow = false;
+  @override
+  Widget build(BuildContext context) {
+    if (slow) {
+      slow = false;
+      final watch = Stopwatch()..start();
+      while (watch.elapsedMilliseconds < 20) {}
+    }
+    return KeyBindings(
+      bindings: [
+        KeyBinding(
+          KeySequence.e,
+          onTrigger: (_) => throw StateError('debug error'),
+        ),
+      ],
+      child: Column(
+        children: [
+          Text('count $count'),
+          Button(
+            text: 'Slow',
+            autofocus: true,
+            onPressed: () => setState(() {
+              count++;
+              slow = true;
+            }),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
 class _NavigationProbe extends StatelessWidget {
   const _NavigationProbe({required this.onBuild, required this.child});
 
@@ -457,6 +497,98 @@ MeasuredCellBox _box({
 );
 
 void main() {
+  test(
+    'isolated debugger records real phases while hidden and survives errors',
+    () async {
+      final root = web.document.createElement('div');
+      final surface = DomGridSurface(root: root, size: const CellSize(96, 32));
+      final input = _FakeInputSource();
+      final flush = _FakeFlush();
+      final debug = DebugController(
+        const DebugConfig(startMode: DebugMode.docked),
+      )..selectTab(DebugTab.rebuilds);
+      final errors = RuntimeErrorReporter();
+      final logs = LogBuffer();
+      final key = GlobalKey<_DebugCounterState>();
+      final host = await runTuiSurface(
+        () => _DebugCounter(key: key),
+        surface: surface,
+        inputSource: input,
+        flushScheduler: flush.schedule,
+        debugController: debug,
+        errorReporter: errors,
+        logBuffer: logs,
+      );
+      addTearDown(() async {
+        await host.dispose();
+        debug.dispose();
+        errors.dispose();
+        logs.dispose();
+      });
+      Future<void> pump() async {
+        for (var i = 0; i < 5; i++) {
+          if (flush.pending) flush.fire();
+          await Future<void>.delayed(Duration.zero);
+        }
+      }
+
+      await pump();
+      final state = key.currentState;
+      input.emit(const KeyEvent(KeyCode.enter));
+      await pump();
+      final slow = debug.frameHistory
+          .where((f) => f.build.inMilliseconds >= 20)
+          .single;
+      expect(slow.dirtySources, isNotEmpty);
+      expect(root.textContent, contains('count 1'));
+      expect(
+        debug.semanticSnapshot()!.nodes.any((n) => n.label == 'Slow'),
+        isTrue,
+      );
+
+      input.emit(
+        const KeyEvent(KeyCode.char('g'), modifiers: {KeyModifier.ctrl}),
+      );
+      await pump();
+      expect(debug.mode, DebugMode.off);
+      input.emit(const KeyEvent(KeyCode.enter, type: KeyEventType.up));
+      input.emit(const KeyEvent(KeyCode.enter));
+      await pump();
+      expect(
+        debug.frameHistory.where((f) => f.build.inMilliseconds >= 20),
+        hasLength(2),
+      );
+      input.emit(
+        const KeyEvent(
+          KeyCode.char('g'),
+          type: KeyEventType.up,
+          modifiers: {KeyModifier.ctrl},
+        ),
+      );
+      input.emit(
+        const KeyEvent(KeyCode.char('g'), modifiers: {KeyModifier.ctrl}),
+      );
+      await pump();
+      expect(debug.mode, DebugMode.docked);
+      expect(key.currentState, same(state));
+      expect(key.currentState!.count, 2);
+
+      input.emit(const TextInputEvent('e'));
+      await pump();
+      expect(errors.history.single.error.toString(), contains('debug error'));
+      debug.selectTab(DebugTab.errors);
+      await pump();
+      expect(root.textContent, contains('debug error'));
+      input.emit(const KeyEvent(KeyCode.enter, type: KeyEventType.up));
+      input.emit(const KeyEvent(KeyCode.enter));
+      await pump();
+      expect(key.currentState!.count, 3);
+      await host.dispose();
+      debug.dispose();
+      expect(DebugEvents.hasListeners, isFalse);
+    },
+  );
+
   test('renders a Fleury widget tree through a retained DOM surface', () async {
     final root = web.document.createElement('div');
     final surface = DomGridSurface(root: root, size: const CellSize(20, 3));
@@ -1681,6 +1813,8 @@ void main() {
     final semantics = SemanticDomPresenter(root: semanticRoot);
     final instrumentation = RecordingWebHostInstrumentation();
     final flush = _FakeFlush();
+    final errors = RuntimeErrorReporter();
+    addTearDown(errors.dispose);
 
     final host = await runTuiSurface(
       () => Semantics(
@@ -1699,6 +1833,7 @@ void main() {
       semanticPresenter: semantics,
       flushScheduler: flush.schedule,
       instrumentation: instrumentation,
+      errorReporter: errors,
     );
 
     flush.fire();
@@ -1722,9 +1857,14 @@ void main() {
     await host.awaitSemanticIdle();
     expect(
       instrumentation.frames.last.reason,
-      'semantic-action:activate:failed',
+      contains('semantic-action:activate:failed'),
     );
 
+    expect(
+      errors.history.single.error.toString(),
+      contains('semantic action failed'),
+    );
+    expect(errors.history.single.stackTrace.toString(), isNotEmpty);
     await host.dispose();
   });
 

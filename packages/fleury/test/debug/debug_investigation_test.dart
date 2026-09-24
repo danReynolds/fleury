@@ -1,7 +1,5 @@
 import 'package:fleury/fleury.dart';
 import 'package:fleury/src/debug/debug_shell.dart';
-import 'package:fleury/src/debug/debug_state.dart';
-import 'package:fleury/src/runtime/runtime_error_overlay.dart';
 import 'package:test/test.dart';
 
 import '../support/harness.dart';
@@ -42,6 +40,14 @@ class _StateProbeState extends State<_StateProbe> {
 }
 
 void main() {
+  test('hosts can disable an unavailable paint-flash overlay', () {
+    final controller = DebugController(const DebugConfig())
+      ..paintFlashAvailable = false;
+    addTearDown(controller.dispose);
+    controller.togglePaintFlash();
+    expect(controller.paintFlash, isFalse);
+  });
+
   test(
     'scrolling reports settle instead of refreshing themselves at idle',
     () async {

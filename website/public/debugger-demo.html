@@ -1,0 +1,31 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Live Fleury debugger</title>
+  <style>
+    @font-face { font-family: FleuryMono; src: url('./fonts/fleury-mono.woff2') format('woff2'); font-display: block; }
+    * { box-sizing: border-box; }
+    body { margin: 0; color: #c8d3e0; background: #0b1117; font: 13px system-ui, sans-serif; }
+    header { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; padding: 10px 12px; border-bottom: 1px solid #283340; }
+    #status { flex: 1 1 220px; color: #71e9be; }
+    button { font: inherit; color: inherit; background: #141e27; border: 1px solid #38444f; border-radius: 5px; padding: 5px 9px; cursor: pointer; }
+    button:hover { border-color: #71e9be; }
+    button:focus-visible { outline: 2px solid #71e9be; outline-offset: 2px; }
+    .viewport { overflow-x: auto; }
+    #surface { width: 100%; min-width: 90ch; height: 37.7em; font: 13px/1.25 FleuryMono, monospace; background: #0b1117; }
+    .fleury-screen, .fleury-row, .fleury-semantics { margin: 0; padding: 0; }
+  </style>
+</head>
+<body>
+  <header>
+    <span id="status" role="status">Starting the debugger…</span>
+    <button id="toggle" type="button" aria-pressed="true">Hide debugger</button>
+    <button id="expand" type="button">Expand panel</button>
+    <button id="reset" type="button">Reset demo</button>
+  </header>
+  <div class="viewport"><div id="surface" role="group" aria-label="Notes preview and Fleury debugger"></div></div>
+  <script src="./fleury-debugger.js" defer></script>
+</body>
+</html>

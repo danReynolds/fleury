@@ -296,7 +296,9 @@ class _DebugPanelState extends State<DebugPanel> {
       _row('Held', _heldLine),
       const Text(''),
       Text(
-        widget.controller.paintFlash
+        !widget.controller.paintFlashAvailable
+            ? 'Paint flash: native terminal only'
+            : widget.controller.paintFlash
             ? '[p] paint-flash: ON'
             : '[p] paint-flash: off',
         style: const CellStyle(dim: true),
@@ -1230,17 +1232,23 @@ class _TabStrip extends StatelessWidget {
         // Clickable: a mouse tap selects the tab (arrows / Tab also cycle via
         // the shell's key handler). The chips read as buttons — now they act
         // like them.
-        GestureDetector(
-          onTap: () => controller.selectTab(tab),
-          child: Text(
-            ' ${_label(tab)} ',
-            style: selected
-                ? const CellStyle(
-                    foreground: RgbColor(0, 0, 0),
-                    background: RgbColor(120, 200, 255),
-                    bold: true,
-                  )
-                : const CellStyle(dim: true),
+        Semantics(
+          role: SemanticRole.button,
+          label: _label(tab),
+          actions: const {SemanticAction.activate},
+          onAction: (_) => controller.selectTab(tab),
+          child: GestureDetector(
+            onTap: () => controller.selectTab(tab),
+            child: Text(
+              ' ${_label(tab)} ',
+              style: selected
+                  ? const CellStyle(
+                      foreground: RgbColor(0, 0, 0),
+                      background: RgbColor(120, 200, 255),
+                      bold: true,
+                    )
+                  : const CellStyle(dim: true),
+            ),
           ),
         ),
       );
