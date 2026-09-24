@@ -215,6 +215,19 @@ class _HangingFlushStdout extends _RecordingStdout {
 
 Future<void> _pump() => Future<void>.delayed(const Duration(milliseconds: 10));
 
+/// Answers every Cursor Position Report and Device Attributes query in
+/// [bytes], in order, like a responsive terminal without the optional
+/// protocols. Answering only the first query of a write leaves a batched
+/// probe waiting for its later sentinels, and every later query waits behind
+/// its late-reply quarantine.
+String _answerBasicQueries(String bytes) {
+  final found = <(int, String)>[
+    for (final m in '\x1B[6n'.allMatches(bytes)) (m.start, '\x1B[1;2R'),
+    for (final m in '\x1B[c'.allMatches(bytes)) (m.start, '\x1B[?1;2c'),
+  ]..sort((a, b) => a.$1.compareTo(b.$1));
+  return found.map((f) => f.$2).join();
+}
+
 void main() {
   test(
     'unsupported Kitty input falls back to legacy parsing across resume',
@@ -372,12 +385,9 @@ void main() {
         onWrite: (bytes) {
           // Reply to whichever startup probes the ambient environment enables,
           // keeping this lifecycle test deterministic and fast.
-          if (bytes.contains('\x1B[6n')) {
-            scheduleMicrotask(
-              () => input.push('\x1B[1;2R\x1B[?1;2c'.codeUnits),
-            );
-          } else if (bytes.contains('\x1B[c')) {
-            scheduleMicrotask(() => input.push('\x1B[?1;2c'.codeUnits));
+          final reply = _answerBasicQueries(bytes);
+          if (reply.isNotEmpty) {
+            scheduleMicrotask(() => input.push(reply.codeUnits));
           }
         },
       );
@@ -426,13 +436,22 @@ void main() {
           isEmpty,
           reason: 'the job-control chord belongs to the driver, not the app',
         );
+        final releaseAt = trace.indexWhere(
+          (entry) =>
+              entry.startsWith('write:') && entry.contains('\x1B[?1003l'),
+        );
         final restoreAt = trace.indexOf('mode:restore');
         final exitAt = trace.indexWhere(
           (entry) =>
               entry.startsWith('write:') && entry.contains('\x1B[?1049l'),
         );
-        final flushAt = trace.indexOf('flush');
+        final flushAt = trace.indexOf('flush', exitAt);
         final stopAt = trace.indexOf('stop');
+        expect(
+          releaseAt,
+          allOf(greaterThanOrEqualTo(0), lessThan(restoreAt)),
+          reason: 'input reports stop while raw input is still read',
+        );
         expect(restoreAt, greaterThanOrEqualTo(0));
         expect(exitAt, greaterThan(restoreAt));
         expect(flushAt, greaterThan(exitAt));

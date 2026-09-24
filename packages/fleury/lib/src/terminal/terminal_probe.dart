@@ -491,7 +491,7 @@ WidthMeasurements parseGlyphWidthReply(List<int> response) {
 final String glyphWidthQuery =
     '${widthProbeBattery.map((g) => '\r${g.glyph}\x1B[6n').join()}'
     '\r\x1B[K'
-    '$_deviceAttributesQuery';
+    '$deviceAttributesQuery';
 
 /// Every column reported by a Cursor Position Report (`ESC [ row ; col R`) in
 /// [responseBytes], in arrival order. Scans past any other CSI reply (e.g. the
@@ -554,12 +554,15 @@ final class _ProbeDefinition {
   final _ProbeParser parse;
 }
 
-const _deviceAttributesQuery = '\x1B[c';
+/// Primary Device Attributes (DA1). Every terminal answers it, in order with
+/// what it read before, so its reply marks that everything written ahead of
+/// it has been processed.
+const deviceAttributesQuery = '\x1B[c';
 
 /// DECRQM query for synchronized-output mode 2026, bracketed by DA1 so an
 /// unsupported terminal resolves promptly instead of consuming the timeout.
 /// DECRQM for synchronized output (mode 2026), DA1-terminated.
-const synchronizedOutputQuery = '\x1B[?2026\$p$_deviceAttributesQuery';
+const synchronizedOutputQuery = '\x1B[?2026\$p$deviceAttributesQuery';
 
 /// The kitty graphics capability query, DA1-terminated.
 const kittyGraphicsQuery = _kittyGraphicsQuery;
@@ -568,14 +571,14 @@ const kittyGraphicsQuery = _kittyGraphicsQuery;
 /// sentinel: for a batch where it is the last query, so a terminal that
 /// prints the unrecognized APC payload as text is cleaned up after it.
 const kittyGraphicsQueryWithCleanup =
-    '$_kittyGraphicsApc\r\x1B[K$_deviceAttributesQuery';
+    '$_kittyGraphicsApc\r\x1B[K$deviceAttributesQuery';
 
 /// Runtime negotiation's query: the app's enter sequences ALREADY pushed a
 /// tier, so a bare status read reports what the terminal honoured of it.
 @visibleForTesting
 const kittyKeyboardRuntimeQuery = _kittyKeyboardQuery;
 
-const _kittyKeyboardQuery = '\x1B[?u$_deviceAttributesQuery';
+const _kittyKeyboardQuery = '\x1B[?u$deviceAttributesQuery';
 
 /// The DIAGNOSTIC's query, which must measure SUPPORT rather than current
 /// state.
@@ -594,15 +597,15 @@ const _kittyKeyboardSupportQuery =
     '\x1B[>31u' // push: request every progressive-enhancement flag
     '\x1B[?u' // query: what stuck
     '\x1B[<1u' // pop: restore the prior stack entry
-    '$_deviceAttributesQuery';
+    '$deviceAttributesQuery';
 const _kittyGraphicsApc = '\x1B_Gi=31,s=1,v=1,a=q,t=d,f=24;AAAA\x1B\\';
-const _kittyGraphicsQuery = '$_kittyGraphicsApc$_deviceAttributesQuery';
+const _kittyGraphicsQuery = '$_kittyGraphicsApc$deviceAttributesQuery';
 
 const List<_ProbeDefinition> _probeDefinitions = <_ProbeDefinition>[
   _ProbeDefinition(
     id: 'primaryDeviceAttributes',
     label: 'Primary device attributes',
-    request: _deviceAttributesQuery,
+    request: deviceAttributesQuery,
     parse: _parsePrimaryDeviceAttributes,
   ),
   _ProbeDefinition(

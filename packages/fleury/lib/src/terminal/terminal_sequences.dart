@@ -38,8 +38,18 @@ String buildTerminalEnterSequences(TerminalMode mode) {
   return buf.toString();
 }
 
-/// Builds the mode-exit escape sequence shared by native terminal drivers.
-String buildTerminalExitSequences(TerminalMode mode) {
+/// Builds the mode-exit escape sequence shared by native terminal drivers:
+/// [buildTerminalInputExitSequences] followed by
+/// [buildTerminalScreenExitSequences].
+String buildTerminalExitSequences(TerminalMode mode) =>
+    buildTerminalInputExitSequences(mode) +
+    buildTerminalScreenExitSequences(mode);
+
+/// The part of [buildTerminalExitSequences] that stops the terminal's input
+/// reports: mouse, focus, bracketed paste, and the enhanced keyboard. A
+/// driver that drains the reports still in flight writes this first, alone,
+/// and must not write it again: the keyboard pop is not idempotent.
+String buildTerminalInputExitSequences(TerminalMode mode) {
   final buf = StringBuffer();
   // Disable mouse modes unconditionally, including all-motion 1003, so none
   // leak back to the shell. This stays unconditional even when the session
@@ -58,6 +68,13 @@ String buildTerminalExitSequences(TerminalMode mode) {
   if (mode.kittyKeyboard) buf.write('\x1B[<1u');
   if (mode.focusReporting) buf.write('\x1B[?1004l');
   if (mode.bracketedPaste) buf.write('\x1B[?2004l');
+  return buf.toString();
+}
+
+/// The part of [buildTerminalExitSequences] that hands the screen back: the
+/// cursor, the style, autowrap, and the main screen.
+String buildTerminalScreenExitSequences(TerminalMode mode) {
+  final buf = StringBuffer();
   if (mode.hideCursor) buf.write('\x1B[?25h');
   if (mode.resetStyleOnExit) buf.write('\x1B[0m');
   // Restore autowrap (DECAWM) before leaving the alt screen, so the shell we
