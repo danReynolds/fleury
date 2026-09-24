@@ -1,3 +1,5 @@
+import 'package:meta/meta.dart';
+
 import '../foundation/collections.dart';
 import '../foundation/change_notifier.dart';
 import '../rendering/cell.dart';
@@ -100,10 +102,20 @@ final class StatusItem {
 }
 
 /// Mutable status model installed by [FleuryApp].
+///
+/// Two sources feed it. [update] sets the items an app or command reports
+/// itself — a task's progress, a command's result. [FleuryApp] also derives
+/// items from its `status` builder and extensions, and re-derives them after
+/// every command and rebuild; those never replace what [update] set. [items]
+/// shows the derived items, each replaced by a set item with the same id,
+/// then the set items with ids of their own.
 class StatusController extends Notifier {
   StatusController({List<StatusItem> items = const <StatusItem>[]})
-    : _items = List<StatusItem>.of(items);
+    : _set = List<StatusItem>.of(items),
+      _items = List<StatusItem>.of(items);
 
+  List<StatusItem> _set;
+  List<StatusItem> _derived = const <StatusItem>[];
   List<StatusItem> _items;
   bool _disposed = false;
 
@@ -112,10 +124,35 @@ class StatusController extends Notifier {
   bool get isNotEmpty => _items.isNotEmpty;
   int get length => _items.length;
 
+  /// Replaces the items this controller was given by earlier [update]
+  /// calls. Pass the items you own: [items] includes the derived ones too.
   void update(List<StatusItem> items) {
     _checkNotDisposed();
-    if (listEquals(_items, items)) return;
-    _items = List<StatusItem>.of(items);
+    if (listEquals(_set, items)) return;
+    _set = List<StatusItem>.of(items);
+    _merge();
+  }
+
+  /// Framework-internal: replaces the items [FleuryApp] derives from its
+  /// status builder and extensions.
+  @internal
+  void updateDerived(List<StatusItem> items) {
+    _checkNotDisposed();
+    if (listEquals(_derived, items)) return;
+    _derived = List<StatusItem>.of(items);
+    _merge();
+  }
+
+  void _merge() {
+    final setById = {for (final item in _set) item.id: item};
+    final derivedIds = {for (final item in _derived) item.id};
+    final merged = [
+      for (final item in _derived) setById[item.id] ?? item,
+      for (final item in _set)
+        if (!derivedIds.contains(item.id)) item,
+    ];
+    if (listEquals(_items, merged)) return;
+    _items = merged;
     notify();
   }
 

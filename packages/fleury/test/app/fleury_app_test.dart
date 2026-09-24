@@ -906,7 +906,9 @@ void main() {
     expect(diagnoses, 1);
   });
 
-  testWidgets('commands can update status through command context', (tester) {
+  testWidgets('commands can update status through command context', (
+    tester,
+  ) async {
     tester.pumpWidget(
       FleuryApp(
         title: 'Ops Console',
@@ -936,6 +938,9 @@ void main() {
     tester.sendKey(
       const KeyEvent(KeyCode.char('f'), modifiers: {KeyModifier.ctrl}),
     );
+    // Past the command's completion, which re-derives the app's status.
+    await Future<void>.delayed(Duration.zero);
+    tester.pump();
 
     expect(tester.exists(text('Task: done')), isTrue);
     final task = tester.semantics().single(
@@ -944,6 +949,77 @@ void main() {
     );
     expect(task.state.statusId, 'task');
     expect(task.state.severity, 'success');
+  });
+
+  testWidgets('an async command\'s final status survives beside the derived', (
+    tester,
+  ) async {
+    tester.pumpWidget(
+      FleuryApp(
+        title: 'Ops Console',
+        status: (_) => [StatusItem.text('Branch', value: 'main')],
+        commands: [
+          AppCommand(
+            id: _refresh,
+            title: 'Deploy',
+            run: (context) async {
+              context.status!.update([
+                StatusItem.text('Deploy', value: 'running'),
+              ]);
+              await Future<void>.delayed(const Duration(milliseconds: 10));
+              context.status!.update([
+                StatusItem.error('Deploy', value: 'FAILED'),
+              ]);
+            },
+          ),
+        ],
+        child: const Column(
+          children: [
+            Expanded(child: Focus(autofocus: true, child: Text('Body'))),
+            AppStatusBar(),
+          ],
+        ),
+      ),
+    );
+
+    await tester.invokeCommand(_refresh);
+    tester.pump();
+
+    expect(tester.exists(text('Deploy: FAILED')), isTrue);
+    expect(tester.exists(text('Branch: main')), isTrue);
+  });
+
+  testWidgets('a status set by hand survives an unrelated command', (
+    tester,
+  ) async {
+    late BuildContext context;
+    tester.pumpWidget(
+      FleuryApp(
+        title: 'Ops Console',
+        commands: [AppCommand(id: _refresh, title: 'Refresh', run: (_) {})],
+        child: Column(
+          children: [
+            Expanded(
+              child: _CaptureContext(
+                onBuild: (c) => context = c,
+                child: const Focus(autofocus: true, child: Text('Body')),
+              ),
+            ),
+            const AppStatusBar(emptyText: 'Idle'),
+          ],
+        ),
+      ),
+    );
+    FleuryApp.of(
+      context,
+    ).status.update([StatusItem.success('Build', value: 'ok')]);
+    tester.pump();
+    expect(tester.exists(text('Build: ok')), isTrue);
+
+    await tester.invokeCommand(_refresh);
+    tester.pump();
+
+    expect(tester.exists(text('Build: ok')), isTrue);
   });
 
   testWidgets('tester invokes commands by id and records results', (
@@ -1006,4 +1082,18 @@ void main() {
 
     expect(right.hasFocus, isTrue);
   });
+}
+
+/// Hands its build context to [onBuild].
+final class _CaptureContext extends StatelessWidget {
+  const _CaptureContext({required this.onBuild, required this.child});
+
+  final void Function(BuildContext context) onBuild;
+  final Widget child;
+
+  @override
+  Widget build(BuildContext context) {
+    onBuild(context);
+    return child;
+  }
 }

@@ -333,7 +333,7 @@ class _FleuryAppState extends State<FleuryApp> {
   }
 
   void _syncStatus() {
-    _status.update(_appStatusItems(widget, _app));
+    _status.updateDerived(_appStatusItems(widget, _app));
   }
 
   List<KeyBinding> _bindings(BuildContext context) {
