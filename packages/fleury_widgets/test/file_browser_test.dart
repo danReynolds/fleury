@@ -192,6 +192,64 @@ void main() {
     }, skip: unreadable && Platform.isWindows ? 'no chmod' : false);
   }
 
+  testWidgets('a rebuilt inline entityFilter neither re-reads nor moves', (
+    tester,
+  ) {
+    // An inline closure is a new predicate on every parent build; the
+    // directory is read when it opens or on reload(), not on each rebuild.
+    final dir = _scratchDir();
+    final controller = FileBrowserController();
+    addTearDown(controller.dispose);
+    Widget browser() => FileBrowser(
+      initialDirectory: dir,
+      controller: controller,
+      autofocus: true,
+      entityFilter: (entity) => !entity.path.endsWith('.tmp'),
+    );
+    tester.pumpWidget(browser());
+    tester.sendKey(const KeyEvent(KeyCode.arrowDown));
+    tester.sendKey(const KeyEvent(KeyCode.arrowDown));
+    expect(controller.currentIndex, 2);
+    File('$dir/new.txt').writeAsStringSync('new');
+
+    tester.pumpWidget(browser());
+
+    expect(controller.currentIndex, 2, reason: 'the cursor stays put');
+    expect(
+      tester.renderToString(size: const CellSize(40, 8)),
+      isNot(contains('new.txt')),
+      reason: 'the disk was not read again',
+    );
+
+    controller.reload();
+    expect(
+      tester.renderToString(size: const CellSize(40, 8)),
+      contains('new.txt'),
+    );
+  });
+
+  testWidgets('a query change keeps the selected entry selected', (tester) {
+    final dir = _scratchDir();
+    final controller = FileBrowserController();
+    addTearDown(controller.dispose);
+    Widget browser(String query) => FileBrowser(
+      initialDirectory: dir,
+      controller: controller,
+      autofocus: true,
+      filter: FileBrowserFilterDescriptor(query: query),
+    );
+    // src/, alpha.txt, deploy.log: select deploy.log.
+    tester.pumpWidget(browser(''));
+    tester.sendKey(const KeyEvent(KeyCode.arrowDown));
+    tester.sendKey(const KeyEvent(KeyCode.arrowDown));
+
+    // 'l' lists alpha.txt then deploy.log: deploy.log moves to row 1.
+    tester.pumpWidget(browser('l'));
+
+    final selected = tester.semantics().single(role: SemanticRole.tree);
+    expect(selected.state['selectedPath'], endsWith('deploy.log'));
+  });
+
   testWidgets('semantic open navigates directories and activates files', (
     tester,
   ) async {

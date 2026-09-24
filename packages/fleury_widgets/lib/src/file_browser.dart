@@ -100,6 +100,21 @@ class FileBrowserController extends Notifier {
     host._openDirectory(path, interaction: false);
   }
 
+  /// Reads the current directory again, applying the browser's current
+  /// `entityFilter`, and keeps the selected entry selected when it is still
+  /// listed. The browser reads its directory only when it opens one or this
+  /// is called: a new filter closure on a rebuild does not re-read the disk.
+  void reload() {
+    _checkNotDisposed();
+    final host = _host;
+    if (host == null) {
+      throw StateError(
+        "FileBrowserController is not attached to a FileBrowser.",
+      );
+    }
+    host._reload();
+  }
+
   void _directoryChanged() => notify();
 
   void _attach(_FileBrowserState host) {
@@ -216,7 +231,10 @@ class FileBrowser extends StatefulWidget {
   /// Text and hidden-file filter applied to loaded entries.
   final FileBrowserFilterDescriptor filter;
 
-  /// Optional filesystem-entity predicate applied before rows are built.
+  /// Optional filesystem-entity predicate applied when a directory is read:
+  /// on opening one, and on [FileBrowserController.reload]. A new predicate
+  /// takes effect at the next of those, so an inline closure rebuilt with
+  /// its parent never re-reads the disk.
   final FileBrowserEntityFilter? entityFilter;
 
   /// Whether Ctrl+C and semantic copy export the selected entry.
@@ -280,11 +298,36 @@ class _FileBrowserState extends State<FileBrowser> {
       _focusNode = widget.focusNode ?? FocusNode(debugLabel: 'FileBrowser');
       _ownsFocusNode = widget.focusNode == null;
     }
-    if (widget.entityFilter != oldWidget.entityFilter ||
-        widget.filter.showHidden != oldWidget.filter.showHidden) {
-      _reloadCurrentDirectory();
+    // The selected entry stays selected wherever it is still listed.
+    if (widget.filter.showHidden != oldWidget.filter.showHidden) {
+      _keepSelection(() => _entries = _readEntries(_currentDirectory));
     } else if (widget.filter.query != oldWidget.filter.query) {
-      _resetSelection();
+      _keepSelection(() {});
+    }
+  }
+
+  void _reload() {
+    setState(() {
+      _keepSelection(() => _entries = _readEntries(_currentDirectory));
+    });
+  }
+
+  /// Runs [change] to the entries or their order, then selects the entry
+  /// that was selected before if it is still listed, else the first row.
+  void _keepSelection(void Function() change) {
+    final before = _selectedEntry(_currentOrder)?.entry.path;
+    change();
+    final order = _currentOrder;
+    final index = before == null
+        ? -1
+        : order.indexWhere((i) => _entries[i].path == before);
+    _updatingController = true;
+    try {
+      _controller.currentIndex = order.isEmpty
+          ? null
+          : (index >= 0 ? index : 0);
+    } finally {
+      _updatingController = false;
     }
   }
 
