@@ -415,13 +415,18 @@ final class KeyboardSession {
   /// once and without it the next time. Exact keying alone would then open
   /// a second record for a key already held and leave the first one
   /// unclosable — a silent stuck key. Fall back to §13.3's degradation so a
-  /// mismatched pair still closes the press it opened.
+  /// mismatched pair still closes the press it opened. Two known positions
+  /// that differ are two keys, even with one meaning: main-block ArrowLeft
+  /// and the keypad's 4 with NumLock off are both ArrowLeft.
   Object? _lookupHeld(KeyEvent event) {
     final exact = event.position ?? event.code;
     if (_held.containsKey(exact)) return exact;
     for (final MapEntry(key: id, value: record) in _held.entries) {
       if (record.matches(event.position ?? event.code)) return id;
-      if (record.code == event.code) return id;
+      if ((record.position == null || event.position == null) &&
+          record.code == event.code) {
+        return id;
+      }
     }
     return null;
   }
