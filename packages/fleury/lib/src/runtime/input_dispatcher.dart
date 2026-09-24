@@ -328,7 +328,9 @@ class InputDispatcher {
   /// Whether [text] is what the printable key [code] typed: its character,
   /// or an ASCII capital of it. A printable's identity is unshifted (Shift
   /// and Caps Lock ride the modifiers and the text), so the DOM reports
-  /// Shift+D as `d` and types `D`.
+  /// Shift+D as `d` and types `D`. This undoes exactly the lowering the DOM
+  /// source applies (`_shortcutChar` in fleury_web's dom_input_source.dart);
+  /// change the two together.
   static bool _isTextOfKey(String text, KeyCode code) {
     final character = code.character!;
     if (text == character) return true;

@@ -50,6 +50,22 @@ void main() {
     );
   });
 
+  test('a keystroke in a bounded area measures no more than its line', () {
+    const constraints = CellConstraints(maxCols: 80, maxRows: 10);
+    area.layout(constraints);
+    resolver.calls = 0;
+
+    // New text, so a new line list: no memo can answer for it.
+    area.text = '${'x' * line}\n' * 499 + 'x' * line + 'y';
+    area.layout(constraints);
+
+    expect(
+      resolver.calls,
+      lessThan(2 * line),
+      reason: 'the caret line, not 500',
+    );
+  });
+
   test('an unbounded area measures its document once per text', () {
     const constraints = CellConstraints(maxRows: 10);
     area.layout(constraints);

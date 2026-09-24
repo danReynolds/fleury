@@ -98,8 +98,12 @@
   each field into view, however far the form is scrolled. `focusNext` and
   `focusPrevious` reveal the node they move to, and so does arrow
   traversal.
-- `TextArea` no longer measures its whole document on every keystroke and
-  caret move.
+- `TextArea` no longer measures its whole document on every caret move, or
+  on every keystroke unless it sizes to its content's width.
+- A key held on the keypad and the main-block key with the same meaning
+  (KP 4 with NumLock off, and Left) are tracked as two keys.
+- A letter typed after an abandoned key chord reaches `KeyDetector`s, such
+  as a list's type-ahead, on kitty-protocol terminals and in the browser.
 - Debugger mode changes preserve application state and layout. Opening the
   shell starts a bounded 60-frame recording that continues while hidden;
   Rebuilds shows the worst frame's phase costs. Inspector reports scroll with
