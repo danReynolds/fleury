@@ -35,21 +35,14 @@ Future<void> main(List<String> args) async {
   print(result?.summary ?? 'Setup cancelled.');
 }
 
-class MoreRoomButton extends StatelessWidget {
-  const MoreRoomButton({super.key});
-
-  @override
-  Widget build(BuildContext context) => ScopeBuilder<TerminalSession>(
-    builder: (_, session) => Button(
-      text: 'More room',
-      onPressed: session.isInline
-          ? () async {
-              await session.resizeInline(20);
-            }
-          : null,
-    ),
-  );
-}
+Widget setupWithHost() => ScopeBuilder<TerminalSession>(
+  builder: (_, session) => InlineSetup(
+    onComplete: (_) => requestExit(),
+    onStepChanged: (step) async {
+      if (session.isInline) await session.resizeInline(step.rows);
+    },
+  ),
+);
 
 Future<void> openPreview(TerminalSession session, File previewFile) async {
   await session.runWithHandoff(() async {

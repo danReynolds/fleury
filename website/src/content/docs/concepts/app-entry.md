@@ -26,8 +26,8 @@ void main() => runApp(
 
 `runApp` takes a **widget instance** and returns a `Future<AppExit>` that completes
 after the app exits and the terminal has been restored. `AppExit` distinguishes
-an orderly request from an unclaimed process signal so the caller can choose its
-own exit code. On startup `runApp` acquires the terminal and, by default, switches
+an orderly request from an unclaimed process signal or unhandled Ctrl+C so the
+caller can choose its own exit code. On startup `runApp` acquires the terminal and, by default, switches
 to raw input and the alternate screen with a hidden cursor. It mounts your
 tree, paints the first frame, and then renders again after every input event and
 every `setState`. On exit — `Ctrl-C`, or your handler asking to stop — it restores
@@ -64,7 +64,7 @@ the main buffer so earlier output remains available:
 
 ```dart
 await runApp(
-  const FleuryApp(title: 'Choose a source', home: SourcePicker()),
+  app, // Your root widget.
   mode: const TerminalMode.inline(rows: 14, mouse: true),
   enableHotReload: false,
 );

@@ -1,5 +1,9 @@
 # Changelog
 
+- **Breaking:** Unhandled Ctrl+C now returns
+  `AppExit.signal(AppSignal.interrupt)` from `runApp`, matching SIGINT, instead
+  of `AppExit.requested`. CLI callers can preserve exit code 130. A widget
+  that handles Ctrl+C, such as copying selected text, still takes precedence.
 - **Breaking:** `BuildOwner.rethrowContainedRenderErrors` is now
   `rethrowContainedErrors`, and it covers build errors as well as layout and
   paint. Under `FleuryTester`, a widget whose `build`, `initState`, or

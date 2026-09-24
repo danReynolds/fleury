@@ -7,6 +7,32 @@ String render(FleuryTester tester) =>
     tester.renderToString(size: tester.viewportSize, emptyMark: ' ');
 
 void main() {
+  testWidgets(
+    'short review keeps content scrollable and actions visible after handoff',
+    (tester) async {
+      tester.viewportSize = const CellSize(40, 8);
+      tester.pumpWidget(
+        InlineSetup(onComplete: (_) {}, onOpenPager: (_) async {}),
+      );
+      await tester.field('Project name').fill('small_terminal');
+      await tester.button('Review →').press();
+      await tester.button('View in pager').press();
+      expect(render(tester), contains('Back from less.'));
+      expect(render(tester), contains('[ Cancel ]'));
+
+      await tester.button('Generate config').focus();
+      tester.press(KeySequence.shift.tab);
+      tester.press(KeySequence.end);
+      tester.pump();
+      expect(render(tester), contains("test: '^1.26.3'"));
+      expect(render(tester), contains('[ Cancel ]'));
+      tester.press(KeySequence.escape);
+      tester.pump();
+      expect(render(tester), contains('small_terminal'));
+      expect(render(tester), isNot(contains('Back from less.')));
+    },
+  );
+
   testWidgets('pager callback preserves the reviewed setup on return', (
     tester,
   ) async {

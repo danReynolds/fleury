@@ -11,6 +11,15 @@ final class InlineTerminalRegion {
     return rows;
   }
 
+  static void _validateCursor(CellSize terminal, CellOffset cursor) {
+    if (cursor.col < 0 ||
+        cursor.col >= terminal.cols ||
+        cursor.row < 0 ||
+        cursor.row >= terminal.rows) {
+      throw StateError('Inline cursor must be inside the terminal viewport.');
+    }
+  }
+
   int _requestedRows;
   int get requestedRows => _requestedRows;
   void requestRows(int rows) => _requestedRows = _validateRows(rows);
@@ -34,9 +43,10 @@ final class InlineTerminalRegion {
     if (terminal.isEmpty) {
       throw StateError('Inline viewport needs a nonempty terminal.');
     }
+    _validateCursor(terminal, cursor);
     if (_allocated) throw StateError('Inline region is already allocated.');
     final bytes = StringBuffer();
-    var start = cursor.row.clamp(0, terminal.rows - 1);
+    var start = cursor.row;
     // Preserve an existing partial line (e.g. output without a final newline).
     if (cursor.col > 0) {
       bytes.write('\r\n');
@@ -47,11 +57,12 @@ final class InlineTerminalRegion {
   }
 
   String resize(CellSize terminal, CellOffset cursor, {int? rows}) {
-    if (rows != null) _requestedRows = _validateRows(rows);
-    if (!_allocated) return acquire(terminal, cursor);
     if (terminal.isEmpty) {
       throw StateError('Inline viewport needs a nonempty terminal.');
     }
+    _validateCursor(terminal, cursor);
+    if (rows != null) _requestedRows = _validateRows(rows);
+    if (!_allocated) return acquire(terminal, cursor);
     // Preserve the cursor's relative row when the terminal moved its buffer
     // during resize. Full-width rows are rendered with autowrap disabled.
     final top = terminal == _terminalSize

@@ -259,7 +259,9 @@ void main() {
       output.terminalColumns = 40;
       cursor = const CellOffset(0, 10);
       holdCursor = false;
-      input.send('\x1B[8;1R\x1B[?1;2c');
+      // A stale report can be outside even the queried dimensions. Discard it
+      // before validating bounds, then validate the fresh stable-size reply.
+      input.send('\x1B[8;70R\x1B[?1;2c');
       await _settle();
       expect(cursorQueries, 3, reason: 'entry, stale report, fresh report');
       expect(driver.size, const CellSize(40, 4));
@@ -271,6 +273,50 @@ void main() {
       expect(errors, isEmpty);
     },
   );
+
+  for (final (label, invalid) in [
+    ('row', const CellOffset(0, 24)),
+    ('column', const CellOffset(80, 7)),
+  ]) {
+    test('out-of-bounds entry $label restores without allocating', () async {
+      cursor = invalid;
+      await expectLater(driver.enter(mode), throwsStateError);
+      expect(driver.isActive, isFalse);
+      expect(modes.raw, isFalse);
+      expect(output.bytes.toString(), contains('\x1B[?7h'));
+      expect(output.bytes.toString(), isNot(contains('\n')));
+      expect(output.bytes.toString(), isNot(contains('\x1B[2K')));
+    });
+  }
+
+  for (final (label, invalid) in [
+    ('row', const CellOffset(0, 24)),
+    ('column', const CellOffset(60, 7)),
+  ]) {
+    test('out-of-bounds resize $label cannot authorize a clear', () async {
+      await driver.enter(mode);
+      output.bytes.clear();
+      output.terminalColumns = 60;
+      cursor = invalid;
+      signals[ProcessSignal.sigwinch]!(ProcessSignal.sigwinch);
+      await _settle();
+      expect(errors.single, isA<StateError>());
+      expect(output.bytes.toString(), isNot(contains('\n')));
+      expect(output.bytes.toString(), isNot(contains('\x1B[2K')));
+      await driver.restore();
+      expect(modes.raw, isFalse);
+      expect(output.bytes.toString(), isNot(contains('\x1B[2K')));
+    });
+  }
+
+  test('last-column last-row cursor is valid ownership evidence', () async {
+    cursor = const CellOffset(79, 23);
+    await driver.enter(mode);
+    expect(driver.isActive, isTrue);
+    expect(driver.size, const CellSize(80, 4));
+    expect(driver.renderTarget.top, 20);
+    expect(errors, isEmpty);
+  });
 
   test(
     'unreportable size fails before painting and still restores modes',

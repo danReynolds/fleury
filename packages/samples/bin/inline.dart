@@ -26,12 +26,12 @@ Future<void> runInlineSetup(List<String> args) async {
       title: 'Project setup',
       home: ScopeBuilder<TerminalSession>(
         builder: (_, session) => InlineSetup(
-          onOpenPager: args.contains('--handoff')
+          onOpenPager: args.contains('--handoff') && session.supportsHandoff
               ? (result) => _openPager(session, result)
               : null,
-          onStepChanged: fullScreen
-              ? null
-              : (step) => unawaited(session.resizeInline(step.rows)),
+          onStepChanged: session.isInline
+              ? (step) => unawaited(session.resizeInline(step.rows))
+              : null,
           onComplete: (value) {
             result = value;
             requestExit();
@@ -49,16 +49,16 @@ Future<void> runInlineSetup(List<String> args) async {
     enableHotReload: false,
     debug: const DebugConfig(enabled: false),
   );
+  if (exit.signal case final signal?) {
+    exitCode = switch (signal) {
+      AppSignal.interrupt => 130,
+      AppSignal.terminate => 143,
+      AppSignal.hangup => 129,
+    };
+    return;
+  }
   stdout.writeln(result?.summary ?? 'Setup cancelled.');
   await stdout.flush();
-  if (exit.signal != null)
-    exitCode =
-        128 +
-        switch (exit.signal!) {
-          AppSignal.interrupt => 2,
-          AppSignal.terminate => 15,
-          AppSignal.hangup => 1,
-        };
 }
 
 Future<void> _openPager(

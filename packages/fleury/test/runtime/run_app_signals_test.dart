@@ -96,22 +96,74 @@ void main() {
       await driver.dispose();
     });
 
-    test('unhandled Ctrl+C resolves AppExit.requested (regression)', () async {
-      final driver = FakeTerminalDriver();
-      final future = runApp(
-        const Text('hi'),
-        driver: driver,
-        enableHotReload: false,
-      );
-      await pump();
+    for (final mode in [
+      TerminalMode.interactive,
+      const TerminalMode.inline(rows: 10),
+    ]) {
+      test(
+        'unhandled Ctrl+C preserves interrupt in '
+        '${mode.inlineRows == null ? 'full-screen' : 'inline'} mode',
+        () async {
+          final driver = FakeTerminalDriver();
+          final future = runApp(
+            const Text('hi'),
+            driver: driver,
+            mode: mode,
+            enableHotReload: false,
+          );
+          await pump();
 
-      driver.enqueue(
-        const KeyEvent(KeyCode.char('c'), modifiers: {KeyModifier.ctrl}),
+          driver.enqueue(
+            const KeyEvent(KeyCode.char('c'), modifiers: {KeyModifier.ctrl}),
+          );
+          final exit = await future;
+          expect(exit.signal, AppSignal.interrupt);
+          expect(driver.isActive, isFalse);
+          await driver.dispose();
+        },
       );
-      final exit = await future;
-      expect(exit.signal, isNull);
-      await driver.dispose();
-    });
+    }
+
+    test(
+      'a widget can claim Ctrl+C without interrupting the command',
+      () async {
+        final driver = FakeTerminalDriver();
+        var claimed = 0;
+        final future = runApp(
+          KeyBindings(
+            bindings: [
+              KeyBinding(KeySequence.ctrl.c, onTrigger: (_) => claimed++),
+            ],
+            child: const Focus(autofocus: true, child: Text('working')),
+          ),
+          driver: driver,
+          enableHotReload: false,
+        );
+        try {
+          await pump();
+          driver.enqueue(
+            const KeyEvent(KeyCode.char('c'), modifiers: {KeyModifier.ctrl}),
+          );
+          driver.enqueue(
+            const KeyEvent(
+              KeyCode.char('c'),
+              modifiers: {KeyModifier.ctrl},
+              type: KeyEventType.up,
+            ),
+          );
+          await pump();
+          expect(claimed, 1);
+          expect(driver.isActive, isTrue);
+
+          requestExit();
+          expect((await future).signal, isNull);
+        } finally {
+          requestExit();
+          await future;
+          await driver.dispose();
+        }
+      },
+    );
 
     test("the documented quit pattern: a widget-level 'q' binding + "
         'requestExit exits on typed text', () async {

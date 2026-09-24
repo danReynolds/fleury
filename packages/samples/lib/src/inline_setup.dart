@@ -136,7 +136,10 @@ class _InlineSetupState extends State<InlineSetup> {
   }
 
   void _changeStep(InlineSetupStep step) {
-    setState(() => _step = step);
+    setState(() {
+      _step = step;
+      if (step == InlineSetupStep.configure) _pagerMessage = null;
+    });
     widget.onStepChanged?.call(step);
   }
 
@@ -162,62 +165,62 @@ class _InlineSetupState extends State<InlineSetup> {
         bindings: [KeyBinding(KeySequence.escape, onTrigger: (_) => _escape())],
         child: Container(
           color: fleurySampleTheme.colorScheme.background,
-          child: Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 2, vertical: 1),
-            child: Column(
-              // A page owns its focus lifecycle. Remove the old controls
-              // before mounting the new page's autofocus candidate.
-              key: ValueKey(_step),
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: [
-                Row(
-                  children: [
-                    Expanded(child: Text('Project setup', style: _accent)),
-                    Text(
-                      _step == InlineSetupStep.configure ? '1 / 2' : '2 / 2',
-                      style: _muted,
-                    ),
-                  ],
-                ),
-                const SizedBox(height: 1),
-                Expanded(
-                  child: ScrollView(
-                    scrollbar: true,
-                    child: _step == InlineSetupStep.configure
-                        ? _configure()
-                        : _reviewContent(),
-                  ),
-                ),
-                const SizedBox(height: 1),
-                if (_pagerMessage != null) Text(_pagerMessage!, style: _muted),
-                Wrap(
-                  spacing: 2,
-                  runSpacing: 1,
-                  children: [
-                    _step == InlineSetupStep.configure
-                        ? _action('Review →', _review, primary: true)
-                        : _action(
-                            'Generate config',
-                            () => _complete(_result),
-                            primary: true,
-                            autofocus: true,
-                          ),
-                    if (_step == InlineSetupStep.review &&
-                        widget.onOpenPager != null)
-                      _action('View in pager', _openPager),
-                    if (_step == InlineSetupStep.review)
-                      _action(
-                        'Back',
-                        () => _changeStep(InlineSetupStep.configure),
-                      ),
-                    _action('Cancel', () => _complete(null)),
-                  ],
-                ),
-              ],
-            ),
+          child: LayoutBuilder(
+            builder: (_, constraints) =>
+                _body(compact: (constraints.maxRows ?? 12) < 12),
           ),
         ),
       ),
+    ),
+  );
+
+  Widget _body({required bool compact}) => Padding(
+    padding: EdgeInsets.symmetric(horizontal: 2, vertical: compact ? 0 : 1),
+    child: Column(
+      // A page owns its focus lifecycle. Remove the old controls
+      // before mounting the new page's autofocus candidate.
+      key: ValueKey(_step),
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        Row(
+          children: [
+            Expanded(child: Text('Project setup', style: _accent)),
+            Text(
+              _step == InlineSetupStep.configure ? '1 / 2' : '2 / 2',
+              style: _muted,
+            ),
+          ],
+        ),
+        SizedBox(height: compact ? 0 : 1),
+        Expanded(
+          child: ScrollView(
+            scrollbar: true,
+            child: _step == InlineSetupStep.configure
+                ? _configure()
+                : _reviewContent(),
+          ),
+        ),
+        SizedBox(height: compact ? 0 : 1),
+        Wrap(
+          spacing: 2,
+          runSpacing: 0,
+          children: [
+            _step == InlineSetupStep.configure
+                ? _action('Review →', _review, primary: true)
+                : _action(
+                    'Generate config',
+                    () => _complete(_result),
+                    primary: true,
+                    autofocus: true,
+                  ),
+            if (_step == InlineSetupStep.review && widget.onOpenPager != null)
+              _action('View in pager', _openPager),
+            if (_step == InlineSetupStep.review)
+              _action('Back', () => _changeStep(InlineSetupStep.configure)),
+            _action('Cancel', () => _complete(null)),
+          ],
+        ),
+      ],
     ),
   );
 
@@ -245,15 +248,19 @@ class _InlineSetupState extends State<InlineSetup> {
         ),
       const SizedBox(height: 1),
       const Text('Template'),
-      RadioGroup<ProjectTemplate>(
-        semanticLabel: 'Project template',
-        axis: Axis.horizontal,
-        value: _template,
-        onChanged: (value) => setState(() => _template = value),
-        options: [
-          for (final template in ProjectTemplate.values)
-            RadioOption(value: template, label: template.label),
-        ],
+      LayoutBuilder(
+        builder: (_, constraints) => RadioGroup<ProjectTemplate>(
+          semanticLabel: 'Project template',
+          axis: (constraints.maxCols ?? 40) < 32
+              ? Axis.vertical
+              : Axis.horizontal,
+          value: _template,
+          onChanged: (value) => setState(() => _template = value),
+          options: [
+            for (final template in ProjectTemplate.values)
+              RadioOption(value: template, label: template.label),
+          ],
+        ),
       ),
       Text(_template.description, style: _muted),
       const SizedBox(height: 1),
@@ -292,6 +299,10 @@ class _InlineSetupState extends State<InlineSetup> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
+        if (_pagerMessage != null) ...[
+          Text(_pagerMessage!, style: _muted),
+          const SizedBox(height: 1),
+        ],
         const Text('Your project, at a glance.'),
         const SizedBox(height: 1),
         LayoutBuilder(

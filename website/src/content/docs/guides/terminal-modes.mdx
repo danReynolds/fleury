@@ -12,8 +12,9 @@ A terminal UI can become the user's workspace or help them finish one step in a
 command. Fleury supports both: **full-screen** uses the terminal viewport;
 **inline** reserves a smaller region beneath the current cursor.
 
-Try the same setup form in each mode. In the full-screen tab, run the command
-to watch the form take over. Finish or cancel to return to the shell.
+The examples below run a real Fleury form inside illustrated terminal buffers.
+In the full-screen tab, run the command to watch the form take over. Finish or
+cancel to return to the shell; **Run again** resets the browser illustration.
 
 <Tabs>
 <TabItem label="Inline">
@@ -65,53 +66,72 @@ affects native terminal selection throughout the window. Terminal-specific
 selection modifiers and scrollback behavior still apply.
 
 The alternate screen normally has no scrollback of its own. A `ScrollView` or
-`ListView` scrolls content inside your UI, independently of terminal scrollback. Redrawing frames does not create a durable history of
-the interaction, and Fleury's inline mode clears its final frame on exit.
+`ListView` scrolls content inside your UI, independently of terminal scrollback.
+Redrawing frames does not create a durable history of the interaction, and
+Fleury's inline mode clears its final frame on exit.
 
 ## Choose the mode at startup
 
-Use the same widget tree with either configuration:
+Pass your widget tree to `runApp` and choose its terminal mode:
 
 ```dart
-// Full-screen: the default. Mouse input is opt-in.
-const TerminalMode(mouse: true)
-
-// Inline: a region up to 17 rows tall.
-const TerminalMode.inline(rows: 17, mouse: true)
+await runApp(
+  app,
+  mode: const TerminalMode.inline(rows: 17, mouse: true),
+  enableHotReload: false,
+);
 ```
 
-Pass that value as `mode:` to `runApp`. The inline constructor requires a row
-count; the full-screen constructor has no height setting. Choose at startup:
-the current API does not switch an active session between the two modes.
+Here, `app` is your root widget. For full-screen, use
+`mode: const TerminalMode(mouse: true)` with the same tree. The inline constructor
+requires a row count; the full-screen constructor has no height setting. Mouse
+input is optional in both.
+
+Native inline currently requires macOS/Linux, terminal input/output, and cursor
+position reporting. It does not support Windows or redirected input/output.
+[Current inline support](#current-inline-support) describes the remaining limits.
+
+Choose the mode at startup. Keep multiple interactive steps inside **one
+`runApp` session**; a native process cannot start another interactive session
+after it exits. Move between widgets or pages within that session, as the setup
+form does. Use handoff for another program that needs the terminal.
+
 Setting `TerminalMode(alternateScreen: false)` alone does not create an inline
 region: it provides neither the allocation nor the rendering bounds.
 
 ### Finish back at the prompt
 
-When the setup form finishes, it calls `requestExit()`. Fleury clears the inline
-region or leaves the alternate screen, restores terminal input, and completes
+When the setup form finishes, its host calls `requestExit()`. Fleury clears the
+inline region or leaves the alternate screen, restores terminal input, and completes
 `runApp`. The command can then print its result. That is why the summary in the
 demo stays at the prompt after the form disappears.
 
 The [native setup host](https://github.com/danReynolds/fleury/blob/main/packages/samples/bin/inline.dart)
-shows this boundary. `runApp` also returns an `AppExit` so the caller can preserve
-signal exit codes. The sample disables hot reload so its startup and final
+shows this boundary. Treat a signal exit separately from a completed or cancelled
+form: preserve its exit status and skip the ordinary result message. An unhandled
+Ctrl+C returns `AppExit.signal(AppSignal.interrupt)`, conventionally exit code 130.
+The sample disables hot reload so its startup and final
 output run once; both terminal modes support development sessions.
 
 ### Give inline steps enough room
 
-Height is explicit. A form can ask for more rows when it opens a review page:
+The setup form requests 17 rows for editing and 21 for review. Its native host
+connects page changes to the terminal; the shared form only reports which step
+is active:
 
 ```dart
 ScopeBuilder<TerminalSession>(
-  builder: (_, session) => Button(
-    text: 'More room',
-    onPressed: session.isInline
-        ? () async { await session.resizeInline(20); }
-        : null,
+  builder: (_, session) => InlineSetup(
+    onComplete: (_) => requestExit(),
+    onStepChanged: (step) async {
+      if (session.isInline) await session.resizeInline(step.rows);
+    },
   ),
 )
 ```
+
+`InlineSetup` is the [sample form](https://github.com/danReynolds/fleury/blob/main/packages/samples/lib/src/inline_setup.dart),
+not a framework widget. In full-screen mode it simply uses the available space.
 
 Read the session while building, then resize from an interaction or lifecycle
 callback. Resizing erases the old allocation, reserves the new one, and repaints.
@@ -120,8 +140,7 @@ Full-screen and remote sessions reject inline resize requests.
 
 Use `Expanded` and scrollable content so a short terminal can still reach every
 control. Keep primary actions visible while longer content scrolls. The setup
-showcase uses 17 rows for its form and 21 for review, with a stacked preview at
-narrow widths. [Layout](/fleury/guides/layout/) and
+showcase stacks its preview at narrow widths. [Layout](/fleury/guides/layout/) and
 [Lists & scrolling](/fleury/guides/lists-and-scrolling/) cover those widgets.
 
 ## Output and subprocesses
@@ -134,8 +153,8 @@ command's final result after awaiting `runApp`.
 ### Let another program use the terminal
 
 Suppose the setup form offers **View in pager**. Selecting it opens the generated
-configuration in `less`; pressing **q** closes the pager and brings you back to
-the same form, with your name, template, and review step preserved.
+configuration in `less`, a separate terminal pager. Pressing **q** closes it and
+brings you back to the same form, with your name, template, and review step preserved.
 
 <InlineRecording recording="inline-handoff" label="Watch setup open less and resume" duration="Native terminal recording" />
 
@@ -194,7 +213,7 @@ input should work again. This recording captures the inline run on a native PTY:
 
 Inline requires native macOS or Linux with terminal input/output and cursor
 position reporting. Entry fails after restoring modes if Fleury cannot obtain
-a cursor report. Windows inline mode and piped input/output are unsupported.
+a valid cursor report. Windows inline mode and piped input/output are unsupported.
 
 Natural content height, permanent log insertion above a running region, and
 retaining the final frame are not implemented. Native image protocols fall back

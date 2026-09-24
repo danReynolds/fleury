@@ -1,8 +1,10 @@
+import 'dart:io';
+
 import 'package:fleury/fleury.dart';
 
 Future<void> main() async {
   String? selected;
-  await runApp(
+  final outcome = await runApp(
     FleuryApp(
       title: 'Choose a source',
       home: Padding(
@@ -33,6 +35,14 @@ Future<void> main() async {
     enableHotReload: false,
     debug: const DebugConfig(enabled: false),
   );
+  if (outcome.signal case final signal?) {
+    exitCode = switch (signal) {
+      AppSignal.interrupt => 130,
+      AppSignal.terminate => 143,
+      AppSignal.hangup => 129,
+    };
+    return;
+  }
   // The live region has been cleared and the terminal returned to the caller.
   print(selected == null ? 'Cancelled.' : 'Selected $selected.');
 }

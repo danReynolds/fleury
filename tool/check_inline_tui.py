@@ -210,14 +210,14 @@ def lifecycle(dart, supervised=False, crash=False, abrupt=False):
             os.kill(pid, signal.SIGCONT)
             app.wait(lambda: "INLINE-READY" in app.text(), "resume frame")
             app.send(b"\x03")
-            app.finish(0)  # Raw Ctrl+C is AppExit.requested, not an OS signal.
+            app.finish(130)  # Raw Ctrl+C preserves the same outcome as SIGINT.
         print(f"PASS inline lifecycle supervised={supervised} crash={crash} abrupt={abrupt}")
     finally:
         app.close()
 
 
 def signals(dart):
-    for sent, expected in [(signal.SIGINT, 130), (signal.SIGTERM, 0)]:
+    for sent, expected in [(signal.SIGINT, 130), (signal.SIGTERM, 143)]:
         app = Session(dart)
         try:
             app.wait(lambda: app.app_pid() is not None, 'ready for signal')

@@ -506,7 +506,21 @@ class PosixTerminalDriver
         throw StateError('Inline mode requires a reportable terminal size.');
       }
       final cursor = await _queryInlineCursor();
-      if (physical == _physicalSize) return (physical, cursor);
+      if (physical != _physicalSize) continue;
+      // Only validate against the dimensions that produced this report. A
+      // resize in flight requires a fresh query, but an impossible coordinate
+      // at a stable size must never become a guessed allocation via clamping.
+      if (cursor.col < 0 ||
+          cursor.col >= physical.cols ||
+          cursor.row < 0 ||
+          cursor.row >= physical.rows) {
+        throw StateError(
+          'The terminal reported a cursor outside its '
+          '${physical.cols}x${physical.rows} viewport. Inline mode cannot '
+          'reserve a safe region.',
+        );
+      }
+      return (physical, cursor);
     }
     throw StateError('Inline cursor acquisition was cancelled by teardown.');
   }

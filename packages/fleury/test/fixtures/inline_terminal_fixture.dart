@@ -19,7 +19,12 @@ Future<void> main(List<String> args) async {
   );
   stdout.writeln('INLINE-DONE');
   await stdout.flush();
-  exit(result.signal == AppSignal.interrupt ? 130 : 0);
+  exit(switch (result.signal) {
+    AppSignal.interrupt => 130,
+    AppSignal.terminate => 143,
+    AppSignal.hangup => 129,
+    null => 0,
+  });
 }
 
 class _InlineFixture extends StatefulWidget {

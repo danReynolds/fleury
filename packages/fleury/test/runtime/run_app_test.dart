@@ -518,9 +518,10 @@ void main() {
           driver.enqueue(
             const KeyEvent(KeyCode.char('c'), modifiers: {KeyModifier.ctrl}),
           );
-          await future;
+          final outcome = await future;
 
           expect(driver.isActive, isFalse);
+          expect(outcome.signal, AppSignal.interrupt);
         } finally {
           await driver.dispose();
         }

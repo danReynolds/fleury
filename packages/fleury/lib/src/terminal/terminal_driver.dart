@@ -178,8 +178,9 @@ final class TerminalMode {
 
   /// A bounded region in the main terminal buffer, beneath the command.
   ///
-  /// Earlier shell output stays visible. [rows] is clamped to the terminal
-  /// height; content scrolls inside that viewport using ordinary widgets.
+  /// Earlier output remains in the main buffer and may move into scrollback
+  /// as space is reserved. [rows] is clamped to the terminal height; content
+  /// scrolls inside that viewport using ordinary widgets.
   /// The live region is cleared on exit, ready for the command's final output.
   /// Requires a POSIX terminal with cursor-position reporting. Remote hosts
   /// keep their own viewport; native Windows does not yet support this mode.

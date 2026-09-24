@@ -72,4 +72,40 @@ void main() {
     expect(() => region.requestRows(-1), throwsArgumentError);
     expect(region.requestedRows, 2);
   });
+
+  test('invalid cursor reports never acquire a region', () {
+    for (final cursor in const [
+      CellOffset(-1, 7),
+      CellOffset(0, -1),
+      CellOffset(80, 7),
+      CellOffset(0, 24),
+    ]) {
+      final region = InlineTerminalRegion(4);
+      expect(
+        () => region.acquire(const CellSize(80, 24), cursor),
+        throwsStateError,
+      );
+      expect(region.isAllocated, isFalse);
+    }
+  });
+
+  test('invalid resize cursor cannot change the existing allocation', () {
+    final region = InlineTerminalRegion(4);
+    region.acquire(const CellSize(80, 24), const CellOffset(0, 7));
+    final previousTarget = region.target;
+    final previousCursor = region.terminalCursor;
+    expect(
+      () => region.resize(
+        const CellSize(60, 10),
+        const CellOffset(60, 7),
+        rows: 6,
+      ),
+      throwsStateError,
+    );
+    expect(region.target, previousTarget);
+    expect(region.terminalCursor, previousCursor);
+    expect(region.size, const CellSize(80, 4));
+    expect(region.terminalSize, const CellSize(80, 24));
+    expect(region.requestedRows, 4);
+  });
 }

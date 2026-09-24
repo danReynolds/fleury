@@ -90,12 +90,13 @@ final class EventHandled extends EventResponse {
 /// then `exit()` yourself).
 @immutable
 final class AppExit {
-  /// An orderly exit: [requestExit], an [ExitRequested] response, the
-  /// unhandled-Ctrl+C escape hatch, or the input stream ending (stdin
-  /// EOF / remote disconnect).
+  /// An orderly exit: [requestExit], an [ExitRequested] response, or the
+  /// input stream ending (stdin EOF / remote disconnect).
   const AppExit.requested() : signal = null;
 
-  /// An unclaimed [SignalEvent] ended the app; [signal] says which.
+  /// An unclaimed [SignalEvent] or unhandled Ctrl+C ended the app.
+  /// Ctrl+C reports [AppSignal.interrupt] even when raw input delivers it as
+  /// a key, so callers can preserve the same exit status as SIGINT.
   const AppExit.signal(AppSignal this.signal);
 
   final AppSignal? signal;
@@ -119,8 +120,8 @@ typedef TuiEventHandler = EventResponse? Function(TuiEvent event);
 /// seam behind [requestExit].
 Completer<AppExit>? _activeExitCompleter;
 
-/// Asks the running app to exit cleanly, exactly like an unhandled
-/// Ctrl+C: the event loop stops, cleanup runs (terminal restored), and
+/// Asks the running app to exit cleanly: the event loop stops, cleanup
+/// runs (terminal restored), and
 /// [runApp]'s future resolves with [AppExit.requested].
 ///
 /// This is the programmatic quit for `q` keys, palette "Quit" commands,
@@ -741,7 +742,9 @@ Future<AppExit> _runAppImpl(
           event.hasCtrl &&
           dispatchResult != KeyEventResult.handled &&
           surfaceSink == null) {
-        if (!exit.isCompleted) exit.complete(const AppExit.requested());
+        if (!exit.isCompleted) {
+          exit.complete(const AppExit.signal(AppSignal.interrupt));
+        }
         return;
       }
 
