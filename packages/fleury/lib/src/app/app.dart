@@ -1,5 +1,3 @@
-import 'dart:async' show unawaited;
-
 import '../foundation/collections.dart';
 import '../foundation/change_notifier.dart';
 import '../semantics/semantics.dart';
@@ -354,11 +352,9 @@ class _FleuryAppState extends State<FleuryApp> {
                 _commandEnabled(command, source);
           },
           onTrigger: (_) {
-            unawaited(
-              _commands.invoke(
-                command.id,
-                buildContext: _commandSourceContext(context),
-              ),
+            _commands.invokeFromGesture(
+              command.id,
+              buildContext: _commandSourceContext(context),
             );
           },
         ),
@@ -656,11 +652,12 @@ final class _FleuryAppSemanticsElement extends ComponentElement
           command.semanticAction != action) {
         return false;
       }
-      await widget.controller.commands.invokeCommand(
-        command,
-        buildContext: widget.commandContext(),
+      return semanticOutcomeOf(
+        await widget.controller.commands.invokeCommand(
+          command,
+          buildContext: widget.commandContext(),
+        ),
       );
-      return true;
     }
     return false;
   }

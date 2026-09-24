@@ -1,4 +1,6 @@
-import 'dart:async' show FutureOr, unawaited;
+import 'dart:async' show FutureOr, Zone, unawaited;
+
+import 'package:meta/meta.dart';
 
 import '../foundation/change_notifier.dart';
 import '../semantics/semantics.dart';
@@ -285,6 +287,36 @@ class CommandRegistry extends Notifier {
     }
   }
 
+  /// [invoke] for a gesture that does not wait on the result — a shortcut, a
+  /// button, a palette row. A command that throws is reported as an
+  /// uncaught error of the calling zone (runApp shows it in its error
+  /// overlay, as it does a throwing key binding) rather than only being
+  /// recorded in [lastResult], where no gesture looks.
+  void invokeFromGesture(CommandId id, {BuildContext? buildContext}) {
+    unawaited(invoke(id, buildContext: buildContext).then(_reportFailure));
+  }
+
+  /// [invokeCommand] for a gesture, as [invokeFromGesture].
+  void invokeCommandFromGesture(
+    AppCommand command, {
+    BuildContext? buildContext,
+  }) {
+    unawaited(
+      invokeCommand(command, buildContext: buildContext).then(_reportFailure),
+    );
+  }
+
+  static void _reportFailure(CommandInvocationResult result) {
+    final error = result.error;
+    if (result.status != CommandInvocationStatus.failed || error == null) {
+      return;
+    }
+    Zone.current.handleUncaughtError(
+      error,
+      result.stackTrace ?? StackTrace.empty,
+    );
+  }
+
   _CommandInvocationContext _context(BuildContext? buildContext) {
     return _CommandInvocationContext(
       commands: this,
@@ -422,7 +454,7 @@ class _CommandScopeState extends State<CommandScope> {
           label: command.title,
           isEnabled: () => command.visible(context) && command.enabled(context),
           onTrigger: (_) {
-            unawaited(registry.invoke(command.id, buildContext: this.context));
+            registry.invokeFromGesture(command.id, buildContext: this.context);
           },
         ),
       );
@@ -549,12 +581,33 @@ final class _CommandScopeSemanticsElement extends ComponentElement
           command.semanticAction != action) {
         return false;
       }
-      await widget.registry.invokeCommand(
-        command,
-        buildContext: widget.buildContext,
+      return semanticOutcomeOf(
+        await widget.registry.invokeCommand(
+          command,
+          buildContext: widget.buildContext,
+        ),
       );
-      return true;
     }
     return false;
+  }
+}
+
+/// What a semantic action that invoked a command reports: handled when it
+/// completed, not handled when the command is disabled or gone, and — when
+/// it failed — the command's own error, rethrown, so the action reports
+/// `failed` (and runApp's error overlay shows it) instead of `completed`.
+@internal
+bool semanticOutcomeOf(CommandInvocationResult result) {
+  switch (result.status) {
+    case CommandInvocationStatus.completed:
+      return true;
+    case CommandInvocationStatus.failed:
+      Error.throwWithStackTrace(
+        result.error!,
+        result.stackTrace ?? StackTrace.empty,
+      );
+    case CommandInvocationStatus.disabled:
+    case CommandInvocationStatus.notFound:
+      return false;
   }
 }

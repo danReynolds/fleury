@@ -1,5 +1,3 @@
-import 'dart:async' show unawaited;
-
 import 'package:fleury/fleury_core.dart';
 
 /// A [Button] backed by an [AppCommand] in the active command registry.
@@ -68,9 +66,7 @@ class CommandButton extends StatelessWidget {
       autofocus: autofocus,
       style: style,
       onPressed: enabled
-          ? () {
-              unawaited(registry.invoke(command, buildContext: context));
-            }
+          ? () => registry.invokeFromGesture(command, buildContext: context)
           : null,
     );
   }

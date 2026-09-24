@@ -1,4 +1,4 @@
-import 'dart:async' show scheduleMicrotask, unawaited;
+import 'dart:async' show scheduleMicrotask;
 
 import 'package:fleury/fleury_core.dart';
 
@@ -314,9 +314,8 @@ List<CommandPaletteItem> _activePaletteCommands(
         category: command.category,
         shortcut: command.primaryShortcutLabel,
         enabled: registry.isEnabled(command, buildContext: context),
-        onInvoke: () {
-          unawaited(registry.invokeCommand(command, buildContext: context));
-        },
+        onInvoke: () =>
+            registry.invokeCommandFromGesture(command, buildContext: context),
       ),
     );
   }
