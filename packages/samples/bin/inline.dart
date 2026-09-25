@@ -20,7 +20,8 @@ Future<void> runInlineSetup(List<String> args) async {
   }
   if (args.contains('--repeat') &&
       (!(Platform.isMacOS || Platform.isLinux) ||
-          !stdin.hasTerminal || !stdout.hasTerminal)) {
+          !stdin.hasTerminal ||
+          !stdout.hasTerminal)) {
     stderr.writeln('--repeat requires macOS/Linux terminal input and output.');
     exitCode = 64;
     return;
@@ -42,19 +43,12 @@ Future<bool> _showSetup(List<String> args) async {
   final exit = await runApp(
     FleuryApp(
       title: 'Project setup',
-      home: ScopeBuilder<TerminalSession>(
-        builder: (_, session) => InlineSetup(
-          onOpenPager: args.contains('--handoff') && session.supportsHandoff
-              ? (result) => _openPager(session, result)
-              : null,
-          onStepChanged: session.isInline
-              ? (step) => unawaited(session.resizeInline(step.rows))
-              : null,
-          onComplete: (value) {
-            result = value;
-            requestExit();
-          },
-        ),
+      home: _SetupHost(
+        pager: args.contains('--handoff'),
+        onComplete: (value) {
+          result = value;
+          requestExit();
+        },
       ),
     ),
     mode: fullScreen
@@ -78,6 +72,27 @@ Future<bool> _showSetup(List<String> args) async {
   stdout.writeln(result?.summary ?? 'Setup cancelled.');
   await stdout.flush();
   return result != null;
+}
+
+class _SetupHost extends StatelessWidget {
+  const _SetupHost({required this.pager, required this.onComplete});
+
+  final bool pager;
+  final void Function(InlineSetupResult?) onComplete;
+
+  @override
+  Widget build(BuildContext context) {
+    final session = context.scope<TerminalSession>();
+    return InlineSetup(
+      onOpenPager: pager && session.supportsHandoff
+          ? (result) => _openPager(session, result)
+          : null,
+      onStepChanged: session.isInline
+          ? (step) => unawaited(session.resizeInline(step.rows))
+          : null,
+      onComplete: onComplete,
+    );
+  }
 }
 
 Future<void> _openPager(

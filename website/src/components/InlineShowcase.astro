@@ -7,8 +7,8 @@ const { fullScreen = false } = Astro.props;
 <div class="inline-showcase">
   <FleuryExample id={fullScreen ? 'terminal-modes.fullscreen' : 'showcase.inline'} cols={84} rows={29} interactive expandable={false} />
   <p class="inline-caption">{fullScreen
-    ? 'Run the command to see the form take over, then finish or cancel to return to the shell. The form is real Fleury; the terminal buffers are illustrated. Configuration stays in memory.'
-    : 'Name your project, review it, then finish back at the prompt. The shell is a browser preview; the form is real Fleury. Configuration stays in memory.'}</p>
+    ? 'Notice how the form replaces the shell while it runs. Finish or cancel: the earlier output returns, with the command’s result underneath.'
+    : 'Notice how the earlier output stays above the form. Review grows the live region; finishing clears it and leaves a lasting summary.'}</p>
 </div>
 
 <style>

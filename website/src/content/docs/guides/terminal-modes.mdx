@@ -6,6 +6,8 @@ description: Choose how your UI fits into a terminal session, understand the buf
 import { Tabs, TabItem } from '@astrojs/starlight/components';
 import InlineShowcase from '../../../components/InlineShowcase.astro';
 import InlineRecording from '../../../components/InlineRecording.astro';
+import TerminalWorkflow from '../../../components/TerminalWorkflow.astro';
+import TerminalModesCode from '../../../components/TerminalModesCode.astro';
 import TerminalBuffers from '../../../components/TerminalBuffers.astro';
 
 A terminal UI can become the user's workspace or help them finish one step in a
@@ -32,7 +34,7 @@ cancel to return to the shell; **Run again** resets the browser illustration.
 | Good fit | Editors, dashboards, file managers, multi-pane workspaces | Pickers, setup forms, confirmations, bounded progress displays |
 | Space | The terminal's width and height | Full width and an explicit number of rows, clamped to the terminal height |
 | Earlier shell output | Hidden while the app runs; restored on exit | Remains in the main buffer; reserving space can move it into scrollback |
-| When Fleury exits | Leaves the alternate screen | Clears the live region |
+| When Fleury exits | Restores the previous screen | Clears the live region |
 | Lasting result | Print after awaiting `runApp` | Print after awaiting `runApp` |
 
 Choose full-screen when users need room to explore, navigate between views, or
@@ -72,166 +74,73 @@ Fleury's inline mode clears its final frame on exit.
 
 ## Choose the mode at startup
 
-Pass your widget tree to `runApp` and choose its terminal mode:
+Use the same form in either mode. Inline asks for a row count; full-screen uses
+the terminal's size. Mouse input is optional in both.
 
-```dart
-await runApp(
-  app,
-  mode: const TerminalMode.inline(rows: 17, mouse: true),
-  enableHotReload: false,
-);
-```
+<Tabs>
+<TabItem label="inline.dart">
+<TerminalModesCode file="inline.dart" />
+</TabItem>
+<TabItem label="full_screen.dart">
+<TerminalModesCode file="full_screen.dart" />
+</TabItem>
+</Tabs>
 
-Here, `app` is your root widget. For full-screen, use
-`mode: const TerminalMode(mouse: true)` with the same tree. The inline constructor
-requires a row count; the full-screen constructor has no height setting. Mouse
-input is optional in both.
-
-Native inline currently requires macOS/Linux, terminal input/output, and cursor
-position reporting. It does not support Windows or redirected input/output.
-[Current inline support](#current-inline-support) describes the remaining limits.
-
-Choose the mode for each `runApp` invocation. On native macOS/Linux terminals,
-you can await one UI, run ordinary CLI code, and open another UI in the same
-process. Each invocation gets a fresh driver and can choose its own mode.
-
-Keep steps inside one session when they belong to a continuous UI, as the setup
-form does. End the session when the CLI should regain control. Use handoff when
-another program temporarily needs the terminal and you want to return to the
-current UI with its state intact.
-
-Setting `TerminalMode(alternateScreen: false)` alone does not create an inline
-region: it provides neither the allocation nor the rendering bounds.
+`InlineSetup` is the sample form used above. These commands disable hot reload
+so their startup and completion code run once.
 
 ### Finish back at the prompt
 
-When the setup form finishes, its host calls `requestExit()`. Fleury clears the
-inline region or leaves the alternate screen, restores terminal input, and completes
-`runApp`. The command can then print its result. That is why the summary in the
-demo stays at the prompt after the form disappears.
+The form calls `requestExit()` when it finishes. Fleury removes the UI, restores
+terminal input, and completes `runApp`. Print the command's result after awaiting
+it so the summary stays in the terminal.
 
-The [native setup host](https://github.com/danReynolds/fleury/blob/main/packages/samples/bin/inline.dart)
-shows this boundary. Treat a signal exit separately from a completed or cancelled
-form: preserve its exit status and skip the ordinary result message. An unhandled
-Ctrl+C returns `AppExit.signal(AppSignal.interrupt)`, conventionally exit code 130.
-The sample disables hot reload so its startup and final
-output run once; both terminal modes support development sessions.
+## Resize an inline UI
 
-### Give inline steps enough room
+Choose **Review →**: the form requests **21 rows**, up from **17**. Choose
+**Back** to shrink it again. The earlier output stays above the live region.
 
-The setup form requests 17 rows for editing and 21 for review. Its native host
-connects page changes to the terminal; the shared form only reports which step
-is active:
+<TerminalWorkflow flow="resize" />
 
-```dart
-ScopeBuilder<TerminalSession>(
-  builder: (_, session) => InlineSetup(
-    onComplete: (_) => requestExit(),
-    onStepChanged: (step) async {
-      if (session.isInline) await session.resizeInline(step.rows);
-    },
-  ),
-)
-```
+`runApp` provides the terminal session automatically. Read it from the build
+context, then request a new height from a callback:
 
-`InlineSetup` is the [sample form](https://github.com/danReynolds/fleury/blob/main/packages/samples/lib/src/inline_setup.dart),
-not a framework widget. In full-screen mode it simply uses the available space.
+<details>
+<summary>View resize.dart</summary>
+<TerminalModesCode file="resize.dart" />
+</details>
 
-Read the session while building, then resize from an interaction or lifecycle
-callback. Resizing erases the old allocation, reserves the new one, and repaints.
-Requests during a subprocess handoff or suspension take effect on return.
-Full-screen and remote sessions reject inline resize requests.
+The browser resizes the host element around the real form. In a terminal,
+`session.resizeInline(rows)` reallocates the live region and repaints it.
 
-Use `Expanded` and scrollable content so a short terminal can still reach every
-control. Keep primary actions visible while longer content scrolls. The setup
-showcase stacks its preview at narrow widths. [Layout](/fleury/guides/layout/) and
-[Lists & scrolling](/fleury/guides/lists-and-scrolling/) cover those widgets.
+<span id="go-from-ui-to-cli-and-back"></span>
 
-## Go from UI to CLI and back
+## Mix UI and CLI steps
 
-Use an inline UI for one step in a longer command, return control to ordinary
-CLI code, then open another UI. This native demo creates two configurations in
-one process: **setup → text prompt → fresh setup → shell**.
+Run setup, finish the form, then type **y** at the text prompt to open a fresh
+form. Complete that one and answer **n** to finish the command. Both summaries
+stay in the output.
 
-<InlineRecording recording="inline-repeat" label="Watch UI → CLI → UI in one command" duration="20 seconds" />
+<TerminalWorkflow flow="repeat" />
 
-After the first form closes, its summary stays in the terminal. The **Open setup
-again?** prompt reads `y` with ordinary `stdin.readLineSync()`. The second form
-starts with fresh widget state; completing it and answering `n` ends the command.
-Each summary remains available in the terminal's scrollback.
+Each form here is a separate Fleury browser mount. Between forms, the page owns
+the text prompt. The native equivalent awaits `runApp`, reads ordinary CLI input,
+then calls `runApp` again:
 
-Try the same flow from a Fleury checkout:
+<details>
+<summary>View repeat.dart</summary>
+<TerminalModesCode file="repeat.dart" />
+</details>
+
+Try the native flow from a Fleury checkout:
 
 ```sh
 dart run packages/samples/bin/samples.dart inline --repeat
 ```
 
-This recording runs the real native app; the shell context around it is a
-recording fixture. No project files are written. Add `--full-screen` to try
-successive alternate-screen sessions instead. Each `runApp` can choose its own
-mode, so a command can also combine inline and full-screen steps.
-
-The loop belongs in the command's host. Await `runApp` before printing, reading
-input, or opening the next UI:
-
-```dart
-Future<void> repeatSetup() async {
-  while (true) {
-    InlineSetupResult? result;
-    final outcome = await runApp(
-      FleuryApp(
-        title: 'Project setup',
-        home: InlineSetup(
-          onComplete: (value) {
-            result = value;
-            requestExit();
-          },
-        ),
-      ),
-      mode: const TerminalMode.inline(rows: 21, mouse: true),
-      enableHotReload: false,
-    );
-
-    if (outcome.signal case final signal?) {
-      exitCode = switch (signal) {
-        AppSignal.interrupt => 130,
-        AppSignal.terminate => 143,
-        AppSignal.hangup => 129,
-      };
-      return;
-    }
-    if (result == null) return;
-
-    stdout.writeln(result!.summary);
-    stdout.write('Open setup again? [y/N] ');
-    await stdout.flush();
-    if (stdin.readLineSync()?.trim().toLowerCase() != 'y') return;
-  }
-}
-```
-
-`InlineSetup` and `InlineSetupResult` are the sample's form and result type.
-The [complete native host](https://github.com/danReynolds/fleury/blob/main/packages/samples/bin/inline.dart)
-also adjusts the region height for each form step. A real command can do its
-ordinary work between sessions—write the chosen configuration, run a build, or
-print a report—then open the next UI when it needs interaction again.
-
-Finishing a `runApp` disposes that UI. Keep any data needed by the next step in
-the host. To lend the terminal to another program and return to the **same** UI
-with its state intact, use [handoff](#let-another-program-use-the-terminal).
-
-Await each invocation and let it create its default driver. Overlapping or
-nested calls are rejected; an explicitly supplied native driver is used only
-once. Handle signal outcomes before opening another UI: a hangup means the
-terminal disconnected. If cleanup fails, Fleury reports an error and blocks new
-sessions until ownership is safely returned.
-
-Sequential native sessions require macOS/Linux TTY input. Windows and redirected
-Dart stdin streams still permit one session per process. Another library must
-not read input concurrently; cancelling a Dart stdin subscription can close its
-descriptor, which Fleury cannot recover. Disable hot reload for a CLI with work
-between sessions: hot restart reruns the entrypoint, including earlier prompts
-and side effects.
+Await each UI before opening the next. Keep shared data in the command's host;
+each UI starts fresh. To return to the **same** UI after another program runs,
+use [handoff](#let-another-program-use-the-terminal).
 
 ## Output and subprocesses
 
@@ -275,7 +184,7 @@ await session.runWithHandoff(() async {
 });
 ```
 
-The native host reads `session` from `ScopeBuilder<TerminalSession>` and creates
+The native host reads `session` from `context.scope<TerminalSession>()` and creates
 `previewFile` before the handoff. The form itself needs no process or terminal
 code. This also works for an editor or an interactive Git command. In inline
 mode, child output can remain above the resumed UI; full-screen mode re-enters
@@ -301,9 +210,9 @@ input should work again. This recording captures the inline run on a native PTY:
 
 ## Current inline support
 
-Inline requires native macOS or Linux with terminal input/output and cursor
-position reporting. Entry fails after restoring modes if Fleury cannot obtain
-a valid cursor report. Windows inline mode and piped input/output are unsupported.
+Inline needs terminal input/output and cursor position reporting. If the
+terminal cannot report its cursor position, Fleury restores its modes and
+reports the error.
 
 Natural content height, permanent log insertion above a running region, and
 retaining the final frame are not implemented. Native image protocols fall back
