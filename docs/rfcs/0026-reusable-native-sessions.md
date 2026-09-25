@@ -3,8 +3,8 @@
 Status: implemented and locally qualified for native macOS/Linux TTY sessions.
 Windows and redirected input reuse remain explicitly unsupported.
 
-Date: 2026-09-24. Historical investigation baseline: `35d60473`. Production
-evidence below records the current implementation, including uncommitted work.
+Date: 2026-09-24; hardened and requalified 2026-09-25. Historical investigation
+baseline: `35d60473`. Production evidence below records the reviewed implementation.
 
 ## Decision
 
@@ -265,6 +265,24 @@ Clear quarantine only when all critical resources and outstanding borrows are
 released, not just when the particular operation that timed out finally returns.
 Keep second-signal/force-exit behavior effective while draining.
 
+Cleanup deadlines report a failure; they do not remove dependency ordering.
+The actual driver-restoration Future must settle before capture is stopped:
+an outstanding handoff still borrows capture's saved terminal handle and its
+pause/resume hooks. Capture shutdown, replay, and final reporting retain their
+own admission barriers. The outer startup-failure guard relinquishes capture
+cleanup once normal teardown owns that operation, including after a timeout.
+
+Record restoration authority before a native mode mutation or output write
+can partially succeed. Failed handoff preparation, raw-mode reacquisition,
+and suspend/resume transitions close driver admission and publish a fatal
+driver error. They must not be treated as recoverable widget errors in an
+already-mounted UI whose input or screen ownership has been released.
+
+Native mode acquisition errors are errors, not an indication to try another
+backend. Only unavailable native bindings permit the Dart mode fallback.
+Retire descriptor numbers exactly once and retain failed restoration/close
+results so a later call cannot turn uncertain ownership into apparent success.
+
 Worker failure must still allow the owning process to restore shared flags and
 modes. Recovery after killing the whole UI process requires a surviving
 supervisor with the saved restoration state. Uncatchable death of an
@@ -349,7 +367,7 @@ Additional production evidence:
   nonblocking modes, and exact 1 MiB delivery with timer progress. Descriptor
   accounting runs in an isolated process: 100 successful cycles interleaved with
   failed acquisitions leave descriptor counts and input flags unchanged.
-- The final runtime/terminal sweep passed: 768 tests passed and two were skipped.
+- The final runtime/terminal sweep passed: 804 tests passed and two were skipped.
   Real VM-service tests were also run separately with the service enabled.
 - Invocation regressions cover stale callbacks, overlapping/nested startup,
   failed-start retry, pending-enter fatal errors, closing admission, cleanup
@@ -377,6 +395,51 @@ The CI workflow now includes the sequential JIT/AOT and backpressure runners for
 macOS and Linux; its updated run is not yet part of this evidence. Windows,
 redirected-input reuse, and real terminal application visuals are not qualified
 by these checks.
+
+### Pre-merge hardening review (2026-09-25)
+
+The review retained the invocation/driver/input-lease boundaries and the public
+`await runApp` API. Fault injection and native reproductions exposed gaps that
+ordinary successful session sequences did not cover:
+
+- A child handoff lasting beyond teardown deadlines lost its still-borrowed
+  capture handle. Driver restoration, capture shutdown/replay, and reporting
+  now preserve their actual dependency order after the reporting timeout.
+  The native regression holds the child until the first call fails and a
+  second call is rejected, then verifies replay/reporting finish before retry.
+- Partial initial mode entry could lose restoration authority. Native errors
+  now preserve the original snapshot and owned handle until cleanup; failed
+  restoration or close remains a failure after the descriptor is retired.
+  Eleven deterministic syscall-fault tests cover these branches.
+- Failed handoff preparation could repaint an uncertain terminal. Failed
+  suspend/resume could enter the recoverable-widget-error path and leave an
+  invisible, frozen UI. These transitions now close driver admission and
+  notify the runtime to clean up; mounted-runtime tests cover Ctrl+Z failures.
+- Failed keyboard/pointer stack writes cannot safely be retried: a pop may
+  already have reached the terminal. Mode writes serialize their actual flush
+  and ownership bookkeeping; uncertainty permits only repeatable cleanup and
+  keeps admission quarantined. Successful writes commit ownership before
+  concurrent restoration proceeds, including during keyboard fallback.
+- The fd capture subscription ran outside the guarded zone. A throwing
+  `onStrayOutput` callback could terminate the process with the terminal raw.
+  Its native regression verifies containment, callback fencing, replay without
+  duplicate delivery, and exact terminal restoration on exit.
+- A reentrant `beforeSpawn` testing hook could stop acquisition, then lend freed
+  buffers to a newly spawned input worker. Startup now publishes its operation
+  first and checks cancellation before spawning. A subprocess regression
+  covers both reentrant start and stop. The production driver does not supply
+  that testing hook.
+
+The CI matrix also exercises native ownership faults on the minimum supported
+Dart SDK, alongside the existing macOS/Linux PTY and compiled-executable checks.
+Local minimum-SDK qualification passed 103 ownership/lifecycle/invocation tests
+on Dart 3.10.4. The JIT/AOT platform matrix above was rerun with the slow-child
+and throwing-output-hook scenarios, and the updated supervisor journal passed
+the macOS/Linux restart/crash lifecycle runners. Changed Dart files analyze
+without issues. The separate VM-service suite passed all four tests.
+The recovery journal is not an atomic transaction with the terminal. Exact
+keyboard/pointer stack recovery after death between a write and its journal
+update is not established by the termios and blocking-mode crash checks.
 
 ### Historical transport experiment
 

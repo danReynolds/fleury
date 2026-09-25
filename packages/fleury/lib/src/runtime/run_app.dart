@@ -296,8 +296,8 @@ const _maxPendingRemoteSemanticActions = 64;
 /// zone (and its cleanup) are established — the fd-level stray-output capture
 /// is stopped so fd 1/2 point back at the real terminal. Without it, an
 /// embedding caller that catches the throw and keeps running would find its
-/// process's stdout/stderr silently swallowed. `stop()` is idempotent, so the
-/// normal cleanup path double-stopping is harmless.
+/// process's stdout/stderr silently swallowed. Once normal cleanup takes
+/// ownership, only that operation stops capture, after terminal borrows settle.
 ///
 /// ## Own your shutdown
 ///
@@ -328,6 +328,11 @@ const _maxPendingRemoteSemanticActions = 64;
 /// grace deadline at delivery ([PosixTerminalDriver.signalGrace], default 5s)
 /// and force-terminates a hung app — a second same-signal forces immediately —
 /// so claiming a signal obliges finishing within the grace.
+///
+/// [onStrayOutput] takes ownership of captured output instead of replaying it
+/// after exit. A throwing hook is disabled and reported through the runtime
+/// error handler; its failed line and subsequent output return to normal replay.
+/// Earlier successfully handled lines are not replayed a second time.
 ///
 /// [root] is mounted exactly as supplied. The runtime owns terminal and
 /// framework host services, but it does not choose an application shell.
@@ -382,6 +387,7 @@ Future<AppExit> runApp(
     // no-op outside supervised sessions.
     DevBootstrap.maybeStartSupervisedChildHandshake();
     fd.Stdio? cap;
+    var captureCleanupOwned = false;
     try {
       return await runZoned(
         () => _runAppImpl(
@@ -398,13 +404,17 @@ Future<AppExit> runApp(
           debug: debug,
           frameInterval: frameInterval,
           onFdCaptureStarted: (c) => cap = c,
+          onFdCaptureCleanupOwned: () => captureCleanupOwned = true,
         ),
         zoneValues: {_invocationZoneKey: invocation},
       );
     } on Object {
       invocation.closing = true;
       final c = cap;
-      if (c != null && c.isActive) {
+      // Once normal cleanup owns capture, its actual operation can outlive a
+      // reporting timeout. Stopping it here would bypass the terminal/child
+      // barrier and close the saved output handle while it is still borrowed.
+      if (c != null && c.isActive && !captureCleanupOwned) {
         try {
           await invocation
               .restoreCritical('stdio capture', c.stop)
@@ -478,6 +488,7 @@ Future<AppExit> _runAppImpl(
   DebugConfig debug = const DebugConfig(),
   Duration frameInterval = Duration.zero,
   void Function(fd.Stdio capture)? onFdCaptureStarted,
+  void Function()? onFdCaptureCleanupOwned,
 }) async {
   final runtimeMarkers = _RuntimeMarkerRecorder.fromEnvironment();
   // Explicit drivers own their output surface, which need not be process
@@ -702,6 +713,10 @@ Future<AppExit> _runAppImpl(
   // Captures stray output (see below). The buffer powers replay-on-exit; the
   // optional hook lets the caller route lines live (e.g. to a file).
   final logBuffer = LogBuffer();
+  var strayOutputHook = onStrayOutput;
+  // A healthy hook owns disposition. If it fails, retain the failed line and
+  // later diagnostics for normal replay without duplicating earlier deliveries.
+  int? replayFromLine = onStrayOutput == null ? 0 : null;
   // Headless frame log for a remote debug consumer (agent bridge / browser
   // DevTools). Created only when a served session has debug enabled; its
   // subscription is what turns on per-frame timing capture, so it stays off
@@ -709,7 +724,22 @@ Future<AppExit> _runAppImpl(
   DebugFrameLog? debugFrameLog;
   final capture = OutputCapture(
     buffer: logBuffer,
-    onLine: onStrayOutput,
+    onLine: onStrayOutput == null
+        ? null
+        : (line) {
+            final hook = strayOutputHook;
+            if (hook == null) return;
+            try {
+              hook(line);
+            } catch (error, stack) {
+              // Disable before reporting: the reporter itself writes stderr,
+              // which re-enters capture. A broken hook must not form an error
+              // feedback loop or escape the runtime's terminal-restoring zone.
+              strayOutputHook = null;
+              replayFromLine = logBuffer.totalAdded - 1;
+              Zone.current.handleUncaughtError(error, stack);
+            }
+          },
     sanitizeForTerminal: true,
   );
 
@@ -718,8 +748,9 @@ Future<AppExit> _runAppImpl(
   // editor/pager handoff the capture pauses so the child inherits the real
   // descriptors.
   StreamSubscription<fd.CapturedLine>? fdCaptureSub;
-  final activeFdCapture = fdCapture;
-  if (activeFdCapture != null) {
+  void attachFdCapture() {
+    final activeFdCapture = fdCapture;
+    if (activeFdCapture == null) return;
     // (Remote sessions ALSO mirror raw bytes to the parent — but that happens
     // on stdio's reader isolate via mirrorToOriginal, not here; this consumer
     // only feeds the in-app LogBuffer.)
@@ -1027,117 +1058,174 @@ Future<AppExit> _runAppImpl(
       'terminal restore marker',
       () => runtimeMarkers?.mark('terminal.restore.start'),
     );
+    Future<void>? terminalRestoration;
     await captureAsync(
       'terminal restore',
-      usedDriver.restore,
+      () => terminalRestoration = Future<void>.sync(usedDriver.restore),
       terminalCritical: true,
     );
-    captureSync(
-      'terminal restored marker',
-      () => runtimeMarkers?.mark('terminal.restore.end'),
-    );
-
-    // The terminal is back on the normal screen now. Unless the caller took
-    // the lines live via onStrayOutput, replay everything captured during the
-    // session so nothing a stray print() produced is lost.
+    // Restore may still be pending after its reporting deadline. Keep capture
+    // and replay behind that actual operation so a stray print is not lost or
+    // replayed over a child that still owns the terminal.
+    Future<void>? captureRestoration;
     final fdCap = fdCapture;
     if (fdCap != null) {
-      // Drain + restore fd 1/2 (stop() delivers every in-flight line to our
-      // listener before closing the streams, and closes the driver's saved
-      // terminal handle) — then replay via the real, now-restored streams.
-      final captureRestored = await captureAsync(
+      // Transfer ownership to this tracked operation before its first await.
+      // A deadline can fail runApp while this operation still owns capture;
+      // only it may stop capture, cancel its subscription, replay, and flush.
+      onFdCaptureCleanupOwned?.call();
+      Future<void> restoreCapture() async {
+        // Restore can still be waiting for an inherited-stdio child after
+        // its reporting deadline. Capture's saved terminal handle and its
+        // pause/resume hooks must remain alive until that borrow settles.
+        // A failed restore still permits independent capture restoration;
+        // its own failed critical resource continues to quarantine entry.
+        try {
+          await terminalRestoration;
+        } catch (_) {}
+
+        Object? stopError;
+        StackTrace? stopStack;
+        try {
+          // Stop delivers in-flight lines before closing the streams and
+          // the driver's saved terminal handle. Replay must follow it.
+          await fdCap.stop();
+        } catch (error, stack) {
+          stopError = error;
+          stopStack = stack;
+        }
+        final activeFdCaptureSub = fdCaptureSub;
+        fdCaptureSub = null;
+        if (activeFdCaptureSub != null) {
+          await captureAsync(
+            'stdio capture subscription',
+            activeFdCaptureSub.cancel,
+          );
+        }
+        if (stopError != null) {
+          Error.throwWithStackTrace(stopError, stopStack!);
+        }
+
+        // The remote mirror already delivered everything to the parent.
+        final replayFrom = replayFromLine;
+        if (replayFrom != null && !remoteFdMirror && !logBuffer.isEmpty) {
+          // Do not enqueue new output to a detached terminal. Existing/
+          // pending writes still need to settle or retain admission.
+          final stdoutGone = outputHungUp(1);
+          final stderrGone = outputHungUp(2);
+          (Object, StackTrace)? outputFailure;
+          Future<void> deliver(
+            FutureOr<void> Function() action, {
+            int? descriptor,
+          }) async {
+            try {
+              await action();
+            } catch (error, stack) {
+              if (descriptor == null ||
+                  !isTerminalGoneError(error) ||
+                  !outputHungUp(descriptor)) {
+                outputFailure ??= (error, stack);
+              }
+            }
+          }
+
+          await deliver(() {
+            for (final (index, line) in logBuffer.lines.indexed) {
+              if (logBuffer.baseIndex + index < replayFrom) continue;
+              switch (line.source) {
+                case LogSource.stdout:
+                  if (!stdoutGone) stdout.writeln(line.text);
+                case LogSource.stderr:
+                  if (!stderrGone) stderr.writeln(line.text);
+              }
+            }
+          });
+          // Attempt both independent destinations and await their actual
+          // completion. The enclosing operation owns the reporting deadline;
+          // reporting cannot race a still-pending replay flush.
+          await Future.wait([
+            if (!stdoutGone) deliver(stdout.flush, descriptor: 1),
+            if (!stderrGone) deliver(stderr.flush, descriptor: 2),
+          ]);
+          final failed = outputFailure;
+          if (failed != null) Error.throwWithStackTrace(failed.$1, failed.$2);
+        }
+      }
+
+      await captureAsync(
         'stdio capture',
-        fdCap.stop,
+        () => captureRestoration = restoreCapture(),
         timeout: _stdioCleanupResourceTimeout,
         terminalCritical: true,
       );
-      final activeFdCaptureSub = fdCaptureSub;
-      fdCaptureSub = null;
-      if (activeFdCaptureSub != null) {
-        await captureAsync(
-          'stdio capture subscription',
-          activeFdCaptureSub.cancel,
-        );
-      }
-      // The remote mirror already delivered everything to the parent live;
-      // replaying here would duplicate it all on the pipe.
-      if (captureRestored &&
-          onStrayOutput == null &&
-          !remoteFdMirror &&
-          !logBuffer.isEmpty) {
-        // Do not enqueue new output to a detached terminal. Existing/pending
-        // writes still have to settle; a hangup never waives their deadline.
-        final stdoutGone = outputHungUp(1);
-        final stderrGone = outputHungUp(2);
-        await captureAsync('captured output replay', () {
-          for (final line in logBuffer.lines) {
-            switch (line.source) {
-              case LogSource.stdout:
-                if (!stdoutGone) stdout.writeln(line.text);
-              case LogSource.stderr:
-                if (!stderrGone) stderr.writeln(line.text);
-            }
+    }
+
+    // Reporting also waits for the actual operations, not their deadline
+    // wrappers. During handoff capture is paused, so early diagnostics would
+    // overwrite the child's screen. Keep admission through this final flush.
+    await captureAsync('teardown reporting', () async {
+      Future<void> settled(String resource, Future<void>? operation) async {
+        try {
+          await operation;
+        } catch (error, stack) {
+          // The reporting deadline may have elapsed before the real failure
+          // arrived. Retain it in the final report alongside the timeout.
+          if (!teardownErrors.any(
+            (failure) =>
+                failure.resource == resource && identical(failure.error, error),
+          )) {
+            teardownErrors.add((
+              resource: resource,
+              error: error,
+              stack: stack,
+            ));
           }
-        }, terminalCritical: true);
-        if (!stdoutGone) {
-          await captureAsync(
-            'stdout flush',
-            stdout.flush,
-            terminalCritical: true,
-            outputDescriptor: 1,
-          );
-        }
-        if (!stderrGone) {
-          await captureAsync(
-            'stderr flush',
-            stderr.flush,
-            terminalCritical: true,
-            outputDescriptor: 2,
-          );
         }
       }
-    }
 
-    // Byte telemetry summary, after the terminal is restored.
-    final diagnosticsGone = outputHungUp(2);
-    if (byteTelemetry != null && !diagnosticsGone) {
+      await settled('terminal restore', terminalRestoration);
+      await settled('stdio capture', captureRestoration);
       captureSync(
-        'byte telemetry',
-        () => stderr.write(_formatByteTelemetry(byteTelemetry)),
+        'terminal restored marker',
+        () => runtimeMarkers?.mark('terminal.restore.end'),
       );
-    }
-
-    captureSync(
-      'cleanup marker',
-      () => runtimeMarkers?.mark('runApp.cleanup.complete'),
-    );
-    captureSync('runtime marker output', () => runtimeMarkers?.write());
-
-    // Report only after terminal and stdio restoration attempts. Teardown
-    // Widget/subscription faults remain diagnostic. Terminal ownership faults
-    // fail the invocation; its admission is retained until every underlying
-    // critical operation succeeds, even if this reporting deadline elapsed.
-    for (final failure in teardownErrors) {
-      if (diagnosticsGone) break;
-      try {
-        stderr.writeln(
-          'fleury: error during teardown (${failure.resource}): '
-          '${failure.error}',
+      final diagnosticsGone = outputHungUp(2);
+      if (byteTelemetry != null && !diagnosticsGone) {
+        captureSync(
+          'byte telemetry',
+          () => stderr.write(_formatByteTelemetry(byteTelemetry)),
         );
-        stderr.writeln(failure.stack);
-      } catch (_) {
-        // There is no safer reporting channel left; teardown is still done.
       }
-    }
-    if (!diagnosticsGone &&
-        (teardownErrors.isNotEmpty || byteTelemetry != null)) {
-      await captureAsync(
-        'teardown diagnostics flush',
-        stderr.flush,
-        terminalCritical: true,
-        outputDescriptor: 2,
+      captureSync(
+        'cleanup marker',
+        () => runtimeMarkers?.mark('runApp.cleanup.complete'),
       );
-    }
+      captureSync('runtime marker output', () => runtimeMarkers?.write());
+
+      // Widget/subscription faults remain diagnostic. Failed terminal
+      // resources retain their own critical tokens after this report ends.
+      for (final failure in teardownErrors) {
+        if (diagnosticsGone) break;
+        try {
+          stderr.writeln(
+            'fleury: error during teardown (${failure.resource}): '
+            '${failure.error}',
+          );
+          stderr.writeln(failure.stack);
+        } catch (_) {
+          // There is no safer reporting channel left.
+        }
+      }
+      if (!diagnosticsGone &&
+          (teardownErrors.isNotEmpty || byteTelemetry != null)) {
+        await captureAsync(
+          'teardown diagnostics flush',
+          stderr.flush,
+          terminalCritical: true,
+          outputDescriptor: 2,
+        );
+      }
+    }, terminalCritical: true);
     final unresolved = invocation._criticalResources.values;
     if (criticalFailures.isNotEmpty || unresolved.isNotEmpty) {
       throw _terminalCleanupError({...criticalFailures, ...unresolved});
@@ -1161,6 +1249,10 @@ Future<AppExit> _runAppImpl(
   void runGuarded() {
     runZonedGuarded(
       () async {
+        // History replay and stream callbacks must run in this guarded zone,
+        // including failures in onStrayOutput and log-buffer listeners.
+        attachFdCapture();
+        if (disposed) return;
         // The binding and the error reporter were built before this zone
         // existed. Their timers — animation ticks, the banner's dismiss —
         // run here from now on, so an error in one reaches this guard even

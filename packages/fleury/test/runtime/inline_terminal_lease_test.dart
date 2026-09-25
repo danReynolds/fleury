@@ -63,6 +63,42 @@ void main() {
     },
   );
 
+  test('fullscreen recovery uses recorded modes instead of guessing a pop', () {
+    writeInlineTerminalLease(
+      path,
+      mode: const TerminalMode(keyboardProtocol: KeyboardProtocolMode.legacy),
+      active: true,
+    );
+    final recovery = inlineTerminalRecovery(path, terminal)!;
+    expect(recovery, contains('\x1b[?1049l'));
+    expect(recovery, isNot(contains('\x1b[<1u')));
+    writeInlineTerminalLease(
+      path,
+      mode: TerminalMode.interactive,
+      active: false,
+    );
+    expect(inlineTerminalRecovery(path, terminal), isEmpty);
+  });
+
+  for (final inline in [true, false]) {
+    test('known stack uncertainty never auto-pops (inline=$inline)', () {
+      writeInlineTerminalLease(
+        path,
+        mode: inline
+            ? const TerminalMode.inline(rows: 4)
+            : TerminalMode.interactive,
+        active: true,
+        pointerStackOwned: true,
+        stackStateUnknown: true,
+      );
+      final recovery = inlineTerminalRecovery(path, terminal)!;
+      expect(recovery, isNot(contains('\x1b[<1u')));
+      expect(recovery, isNot(contains('\x1b]22;<')));
+      expect(recovery, contains('\x1b[?25h'));
+      expect(recovery.contains('\x1b[?1049l'), !inline);
+    });
+  }
+
   test('resize after allocation never clears using a stale origin', () {
     writeInlineTerminalLease(
       path,

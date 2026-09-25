@@ -17,6 +17,8 @@ import 'dart:io';
 
 import 'package:fleury/fleury.dart';
 import 'package:fleury/src/terminal/capabilities.dart';
+import 'package:fleury/src/terminal/posix_driver.dart'
+    show NativePosixTerminalModeController;
 import 'package:test/test.dart';
 
 /// A stdout that reports a real terminal and records every write.
@@ -101,7 +103,15 @@ Future<String> _enterAndCapture(TerminalMode mode) async {
       }
     },
   );
-  final driver = PosixTerminalDriver(stdinOverride: input, stdoutOverride: out);
+  final driver = PosixTerminalDriver(
+    stdinOverride: input,
+    stdoutOverride: out,
+    // This test owns fake stdio; raw-mode changes must use its setters rather
+    // than inspecting or mutating the test runner's actual input descriptor.
+    terminalModeController: NativePosixTerminalModeController.withBindings(
+      null,
+    ),
+  );
   await driver.enter(mode);
   await driver.restore();
   await input.close();

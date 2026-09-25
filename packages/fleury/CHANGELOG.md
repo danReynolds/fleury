@@ -62,6 +62,17 @@
   height; mouse/caret offsets, resize, subprocess handoff, suspend/resume, and
   development restart/crash cleanup share the owned-region lifecycle. Existing
   full-screen sessions remain the default. See `doc/inline_terminal.md`.
+- Native macOS/Linux TTY applications can await successive `runApp` calls,
+  with ordinary prompts or inherited-stdio children between them. Each call
+  owns fresh input and runtime state; overlapping sessions are rejected.
+  A cleanup timeout keeps new sessions blocked until actual restoration,
+  capture shutdown, and output replay finish. Windows and redirected stdin
+  retain the one-session restriction.
+- Failed terminal entry, handoff, and suspend/resume retain restoration
+  ownership and close the affected session. A child that outlives a cleanup
+  deadline keeps its capture handles until the handoff finishes. A throwing
+  `onStrayOutput` hook is disabled and reported inside the runtime guard;
+  the failed line and later output are retained for replay after exit.
 
 - Wrapped `Text` keeps its lines through a resize. Widening a wrapped text
   until it fit one line and then narrowing it again showed only its first

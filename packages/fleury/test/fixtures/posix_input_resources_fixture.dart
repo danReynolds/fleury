@@ -1,5 +1,6 @@
 // Descriptor accounting runs in a dedicated process: other dart:test workers
 // share the process descriptor table and can invalidate a before/after count.
+import 'dart:async';
 import 'dart:ffi';
 import 'dart:io';
 
@@ -21,6 +22,51 @@ int count() {
 }
 
 Future<void> main(List<String> args) async {
+  if (args.contains('--reentrant-acquisition')) {
+    final initialFlags = fcntl(0, 3, 0);
+    final baseline = count();
+    late PosixInputLease stopped;
+    stopped = PosixInputLease(
+      onBytes: (_) => throw StateError('unexpected input'),
+      onDone: () => throw StateError('unexpected EOF'),
+      onError: (error, _) => throw error,
+      beforeSpawn: () => unawaited(stopped.stop()),
+    );
+    var rejected = false;
+    try {
+      await stopped.start();
+    } on StateError {
+      rejected = true;
+    }
+    await stopped.stop();
+    if (!rejected) throw StateError('stopped acquisition should fail');
+    if (count() != baseline || fcntl(0, 3, 0) != initialFlags) {
+      throw StateError('reentrant stop leaked descriptors or input flags');
+    }
+
+    late PosixInputLease repeated;
+    Future<void>? nested;
+    var acquisitions = 0;
+    repeated = PosixInputLease(
+      onBytes: (_) => throw StateError('unexpected input'),
+      onDone: () => throw StateError('unexpected EOF'),
+      onError: (error, _) => throw error,
+      beforeSpawn: () {
+        if (++acquisitions == 1) nested = repeated.start();
+      },
+    );
+    final starting = repeated.start();
+    if (!identical(starting, nested)) {
+      throw StateError('reentrant start did not join the same operation');
+    }
+    await starting;
+    await repeated.stop();
+    if (acquisitions != 1 || fcntl(0, 3, 0) != initialFlags) {
+      throw StateError('reentrant start reacquired input');
+    }
+    stdout.writeln('REENTRANT ACQUISITION PASS');
+    return;
+  }
   PosixInputLease lease({int source = 0, bool fail = false}) => PosixInputLease(
     source: source,
     onBytes: (_) => throw StateError('unexpected input'),

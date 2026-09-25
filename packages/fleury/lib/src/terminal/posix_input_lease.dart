@@ -51,7 +51,14 @@ final class PosixInputLease {
     if (_stopFuture != null) {
       return Future<void>.error(StateError('Input lease already stopped.'));
     }
-    return _startFuture ??= _start();
+    final starting = _startFuture;
+    if (starting != null) return starting;
+    // Publish the operation before acquisition can invoke a synchronous hook.
+    // A reentrant start must join this lease, not allocate a second worker.
+    final completion = Completer<void>();
+    _startFuture = completion.future;
+    _start().then(completion.complete, onError: completion.completeError);
+    return completion.future;
   }
 
   Future<void> _start() async {
@@ -62,6 +69,9 @@ final class PosixInputLease {
       // acquisition. The worker only borrows them until its actual exit.
       resources.acquire(source);
       beforeSpawn?.call();
+      // stop() may have released these resources synchronously while there
+      // was no worker to join. Never lend freed pointers to a new isolate.
+      if (_callerStopped) throw StateError('Input lease stopped during start.');
       final messages = _messages = ReceivePort();
       messages.listen(_receive);
       _accepting = true;

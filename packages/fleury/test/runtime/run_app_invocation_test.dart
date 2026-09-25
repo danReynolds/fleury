@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:isolate';
 
 import 'package:fleury/fleury.dart';
 import 'package:test/test.dart';
@@ -20,11 +21,13 @@ class _ControlledDriver implements TerminalDriver {
     this.enterGate,
     this.restoreGate,
     this.asyncStartupError = false,
+    this.failRestore = false,
   });
 
   final Future<void>? enterGate;
   final Future<void>? restoreGate;
   final bool asyncStartupError;
+  final bool failRestore;
   final entered = Completer<void>();
   final restoring = Completer<void>();
   final restored = Completer<void>();
@@ -60,10 +63,57 @@ class _ControlledDriver implements TerminalDriver {
     await restoreGate;
     await fake.restore();
     restored.complete();
+    if (failRestore) throw StateError('late restore failure');
   }
 }
 
 void main() {
+  test(
+    'a restoration that fails after its deadline stays quarantined',
+    () async {
+      final result = await Isolate.run(() async {
+        final gate = Completer<void>();
+        final driver = _ControlledDriver(
+          restoreGate: gate.future,
+          failRestore: true,
+        );
+        var firstFailed = false;
+        final first =
+            runApp(
+              const Text('first'),
+              driver: driver,
+              enableHotReload: false,
+            ).then(
+              (_) {},
+              onError: (Object error) {
+                firstFailed = error is FleuryError;
+              },
+            );
+        requestExit();
+        await first;
+        gate.complete();
+        await driver.restored.future;
+        await Future<void>.delayed(Duration.zero);
+        final nextDriver = FakeTerminalDriver();
+        var blocked = false;
+        try {
+          await runApp(
+            const Text('blocked'),
+            driver: nextDriver,
+            enableHotReload: false,
+          );
+        } on StateError catch (error) {
+          blocked = error.message.contains('terminal restore');
+        }
+        final secondEntered = nextDriver.enterCallCount;
+        await driver.fake.dispose();
+        await nextDriver.dispose();
+        return (firstFailed, blocked, secondEntered);
+      });
+      expect(result, (true, true, 0));
+    },
+  );
+
   test('fatal cleanup holds admission until late startup is fenced', () async {
     final gate = Completer<void>();
     final driver = _ControlledDriver(

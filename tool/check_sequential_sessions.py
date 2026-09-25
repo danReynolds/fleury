@@ -90,6 +90,74 @@ def hangup(dart, executable=None, inline=False):
             app.close()
 
 
+def slow_cleanup(dart, executable=None):
+    with tempfile.TemporaryDirectory(prefix='fleury-slow-cleanup-') as directory:
+        report = Path(directory) / 'result.json'
+        app = Session(dart, fixture='test/fixtures/sequential_native_sessions_fixture.dart',
+                      executable=executable, arguments=['--slow-cleanup-report', str(report)])
+        try:
+            app.wait(lambda: 'SLOW HANDOFF READY' in app.text(), 'slow handoff UI')
+            app.send(b'\x0f')
+            app.wait(lambda: 'SLOW CHILD READY' in app.text(), 'slow child')
+            # The child remains blocked until runApp reports its deadline and
+            # a new invocation proves admission is still held.
+            app.wait(report.exists, 'bounded cleanup error report', timeout=8)
+            first = json.loads(report.read_text())
+            assert 'terminal restore' in first['first'], first
+            assert first['blocked'] is True, first
+            assert 'handoff' not in first, first
+            assert b'fleury: error during teardown' not in app.raw, 'diagnostics corrupted child UI'
+            app.send(b'finish\n')
+            app.wait(lambda: 'RECOVERED READY' in app.text(), 'recovered session')
+            before = bytes(app.raw)
+            assert before.count(b'CAPTURE BEFORE SLOW CHILD') == 1, before[-4000:]
+            assert before.index(b'CAPTURE BEFORE SLOW CHILD') < before.index(b'RECOVERED READY'), before[-4000:]
+            assert b'fleury: error during teardown' in before, 'cleanup failure was not reported'
+            assert before.rindex(b'fleury: error during teardown') < before.index(b'RECOVERED READY'), before[-4000:]
+            diagnostic_count = before.count(b'fleury: error during teardown')
+            app.send(b'\r')
+            app.wait(lambda: app.child.poll() is not None, 'slow cleanup process exit')
+            for _ in range(3):
+                app.pump(0.05)
+            assert app.child.returncode == 0, app.text()
+            result = json.loads(report.read_text())
+            assert result['handoff'] == result['second'] == 'completed', result
+            assert b'capture is stopped' not in app.raw, app.text()
+            assert bytes(app.raw).count(b'CAPTURE BEFORE SLOW CHILD') == 1, app.text()
+            assert bytes(app.raw).count(b'fleury: error during teardown') == diagnostic_count, 'late diagnostics entered next UI'
+            assert b'PTY-TERMIOS-EXACT' in app.raw and b'PTY-BLOCKING-RESTORED' in app.raw, app.text()
+            print('PASS delayed handoff cleanup retains capture and replays before next session')
+        finally:
+            app.close()
+
+
+def throwing_hook(dart, executable=None):
+    with tempfile.TemporaryDirectory(prefix='fleury-throwing-hook-') as directory:
+        report = Path(directory) / 'result.json'
+        app = Session(dart, fixture='test/fixtures/sequential_native_sessions_fixture.dart',
+                      executable=executable, arguments=['--throwing-hook-report', str(report)])
+        try:
+            app.wait(lambda: 'HOOK READY' in app.text(), 'hook UI')
+            app.send(b'\r')
+            app.wait(lambda: 'stray hook failed' in app.text(), 'reported hook failure')
+            assert app.child.poll() is None, 'hook failure killed the native process'
+            assert b'HOOK FAILURE TRIGGER' not in app.raw, 'failed line corrupted live UI'
+            app.send(b'\x03')
+            app.wait(lambda: app.child.poll() is not None, 'hook cleanup')
+            for _ in range(3):
+                app.pump(0.05)
+            assert app.child.returncode == 0, app.text()
+            assert json.loads(report.read_text()) == {'signal': 'interrupt', 'calls': 2}, report.read_text()
+            raw = bytes(app.raw)
+            assert b'HOOKED BEFORE FAILURE' not in raw, 'already handled output replayed'
+            assert raw.count(b'HOOK FAILURE TRIGGER') == 1, app.text()
+            assert raw.index(b'\x1b[?1049l') < raw.index(b'HOOK FAILURE TRIGGER'), app.text()
+            assert b'PTY-TERMIOS-EXACT' in raw and b'PTY-BLOCKING-RESTORED' in raw, app.text()
+            print('PASS throwing output hook is reported, fenced, and restores the native terminal')
+        finally:
+            app.close()
+
+
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
     parser.add_argument('--dart', default='dart')
@@ -101,5 +169,7 @@ if __name__ == '__main__':
         showcase(args.showcase, full_screen=True)
     else:
         run(args.dart, args.executable)
+        slow_cleanup(args.dart, args.executable)
+        throwing_hook(args.dart, args.executable)
         hangup(args.dart, args.executable)
         hangup(args.dart, args.executable, inline=True)

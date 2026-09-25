@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'dart:io';
+import 'dart:isolate';
 
 import 'package:fleury/fleury.dart';
 import 'package:fleury/src/terminal/capabilities.dart'
@@ -56,6 +57,8 @@ class _FakeStdin implements Stdin {
 /// stays in flight for its full timeout, which is the window a concurrent
 /// `restore()` has to land in.
 class _SilentTerminalStdin implements Stdin {
+  _SilentTerminalStdin({this.rejectRaw = false});
+  final bool rejectRaw;
   final _controller = StreamController<List<int>>();
   bool _lineMode = true;
   bool _echoMode = true;
@@ -66,7 +69,10 @@ class _SilentTerminalStdin implements Stdin {
   @override
   bool get lineMode => _lineMode;
   @override
-  set lineMode(bool value) => _lineMode = value;
+  set lineMode(bool value) {
+    if (!value && rejectRaw) throw const StdinException('raw mode unavailable');
+    _lineMode = value;
+  }
 
   @override
   bool get echoMode => _echoMode;
@@ -93,11 +99,16 @@ class _SilentTerminalStdin implements Stdin {
 }
 
 class _RecordingStdout implements Stdout {
-  _RecordingStdout({this.terminal = false, this.onWrite, List<String>? trace})
-    : trace = trace ?? <String>[];
+  _RecordingStdout({
+    this.terminal = false,
+    this.onWrite,
+    this.onFlush,
+    List<String>? trace,
+  }) : trace = trace ?? <String>[];
 
   final bool terminal;
   final void Function(String bytes)? onWrite;
+  final Future<void> Function()? onFlush;
   final written = StringBuffer();
   final List<String> trace;
 
@@ -113,7 +124,10 @@ class _RecordingStdout implements Stdout {
   }
 
   @override
-  Future<void> flush() async => trace.add('flush');
+  Future<void> flush() async {
+    trace.add('flush');
+    await onFlush?.call();
+  }
 
   @override
   bool get supportsAnsiEscapes => terminal;
@@ -228,7 +242,316 @@ class _HangingFlushStdout extends _RecordingStdout {
 
 Future<void> _pump() => Future<void>.delayed(const Duration(milliseconds: 10));
 
+class _OnMount extends StatelessWidget {
+  const _OnMount(this.mounted);
+  final Completer<void> mounted;
+
+  @override
+  Widget build(BuildContext context) {
+    if (!mounted.isCompleted) mounted.complete();
+    return const Text('session');
+  }
+}
+
 void main() {
+  test(
+    'ambiguous protocol mutation quarantines later runApp admission',
+    () async {
+      final result = await Isolate.run(() async {
+        final input = _FakeStdin(terminal: true);
+        final output = _RecordingStdout(
+          terminal: true,
+          onWrite: (bytes) {
+            if (bytes.contains('\x1b[>31u')) {
+              throw StateError('uncertain keyboard push');
+            }
+          },
+        );
+        final driver = PosixTerminalDriver(
+          stdinOverride: input,
+          stdoutOverride: output,
+          terminalModeController: _FakeModeController([]),
+        );
+        var failed = false;
+        try {
+          await runApp(
+            const Text('first'),
+            driver: driver,
+            enableHotReload: false,
+          );
+        } on FleuryError {
+          failed = true;
+        }
+        final next = FakeTerminalDriver();
+        var blocked = false;
+        try {
+          await runApp(
+            const Text('second'),
+            driver: next,
+            enableHotReload: false,
+          );
+        } on StateError catch (error) {
+          blocked = error.message.contains('terminal restore');
+        }
+        final drain = input._controller.stream.drain<void>();
+        await input.close();
+        await drain;
+        await next.dispose();
+        return (
+          failed,
+          blocked,
+          next.enterCallCount,
+          output.written.toString().contains('\x1b[<1u'),
+        );
+      });
+      expect(result, (true, true, 0, false));
+    },
+  );
+
+  test('partial raw entry is restored after the controller throws', () async {
+    final input = _FakeStdin(terminal: true);
+    final modes = _FakeModeController([], throwOnRawCount: 1);
+    final driver = PosixTerminalDriver(
+      stdinOverride: input,
+      stdoutOverride: _RecordingStdout(),
+      terminalModeController: modes,
+    );
+    try {
+      await expectLater(
+        driver.enter(TerminalMode.interactive),
+        throwsStateError,
+      );
+      await driver.restore();
+      expect(modes.raw, isFalse);
+      expect(modes.restoreCount, 1);
+    } finally {
+      await driver.restore();
+      final drain = input._controller.stream.drain<void>();
+      await input.close();
+      await drain;
+    }
+  });
+
+  test('unavailable raw input fails entry before subscribing', () async {
+    final input = _SilentTerminalStdin(rejectRaw: true);
+    final driver = PosixTerminalDriver(
+      stdinOverride: input,
+      stdoutOverride: _RecordingStdout(),
+      terminalModeController: _FakeModeController([], failOnRawCount: 1),
+    );
+    try {
+      await expectLater(
+        driver.enter(TerminalMode.interactive),
+        throwsA(
+          isA<StateError>().having(
+            (e) => e.message,
+            'message',
+            contains('Cannot enter'),
+          ),
+        ),
+      );
+      expect(input._controller.hasListener, isFalse);
+      await driver.restore();
+      expect(input.lineMode, isTrue);
+      expect(input.echoMode, isTrue);
+    } finally {
+      await driver.restore();
+      final drain = input._controller.stream.drain<void>();
+      await input.close();
+      await drain;
+    }
+  });
+
+  test(
+    'partial stack entry resets modes without claiming successful restoration',
+    () async {
+      final input = _FakeStdin(terminal: true);
+      final failure = StateError('partial screen entry');
+      var failEntry = true;
+      final output = _RecordingStdout(
+        terminal: true,
+        onWrite: (bytes) {
+          if (failEntry && bytes.contains('\x1b[?1049h')) {
+            failEntry = false;
+            throw failure;
+          }
+        },
+      );
+      final modes = _FakeModeController([]);
+      final driver = PosixTerminalDriver(
+        stdinOverride: input,
+        stdoutOverride: output,
+        terminalModeController: modes,
+      );
+      try {
+        await expectLater(
+          driver.enter(TerminalMode.interactive),
+          throwsA(same(failure)),
+        );
+        await expectLater(driver.restore(), throwsA(same(failure)));
+        expect(modes.raw, isFalse);
+        expect(output.written.toString(), contains('\x1b[?1049l'));
+        expect(output.written.toString(), contains('\x1b[?25h'));
+        expect(output.written.toString(), isNot(contains('\x1b[<1u')));
+      } finally {
+        await expectLater(driver.restore(), throwsA(same(failure)));
+        final drain = input._controller.stream.drain<void>();
+        await input.close();
+        await drain;
+      }
+    },
+  );
+
+  for (final stage in ['output', 'capture']) {
+    test('failed handoff preparation closes the session ($stage)', () async {
+      final input = _FakeStdin(terminal: true);
+      final failure = StateError('handoff $stage release failed');
+      var failRelease = false;
+      final output = _RecordingStdout(
+        terminal: true,
+        onWrite: (bytes) {
+          if (failRelease && bytes.contains('\x1b[?1049l')) {
+            failRelease = false;
+            throw failure;
+          }
+        },
+      );
+      final modes = _FakeModeController([]);
+      final driver = PosixTerminalDriver(
+        stdinOverride: input,
+        stdoutOverride: output,
+        terminalModeController: modes,
+      );
+      final errors = <Object>[];
+      final events = <TuiEvent>[];
+      final sub = driver.events.listen(events.add, onError: errors.add);
+      try {
+        await driver.enter(TerminalMode.interactive);
+        var childRan = false;
+        var queuedRan = false;
+        if (stage == 'output') {
+          failRelease = true;
+        } else {
+          driver.onHandoffStart = () async => throw failure;
+        }
+        final first = driver.runWithTerminalHandoff(() => childRan = true);
+        final firstFailed = expectLater(first, throwsA(same(failure)));
+        final queued = driver.runWithTerminalHandoff(() => queuedRan = true);
+        final queuedFailed = expectLater(queued, throwsStateError);
+        await firstFailed;
+        await queuedFailed;
+        await _pump();
+        expect(childRan, isFalse);
+        expect(queuedRan, isFalse);
+        expect(errors, [same(failure)]);
+        expect(modes.rawCount, 1, reason: 'no reentry after uncertain release');
+        expect(
+          events.whereType<TerminalFocusEvent>().where((e) => e.focused),
+          isEmpty,
+        );
+        driver.write('FRAME-AFTER-FAILED-PREP');
+        expect(
+          output.written.toString(),
+          isNot(contains('FRAME-AFTER-FAILED-PREP')),
+        );
+      } finally {
+        await driver.restore();
+        await sub.cancel();
+        await input.close();
+      }
+    });
+  }
+
+  test('suspend cannot stop after terminal output restoration fails', () async {
+    final input = _FakeStdin(terminal: true);
+    final failure = StateError('suspend screen release failed');
+    var failRelease = false;
+    var stopped = false;
+    final output = _RecordingStdout(
+      terminal: true,
+      onWrite: (bytes) {
+        if (failRelease && bytes.contains('\x1b[?1049l')) {
+          failRelease = false;
+          throw failure;
+        }
+      },
+    );
+    final driver = PosixTerminalDriver(
+      stdinOverride: input,
+      stdoutOverride: output,
+      terminalModeController: _FakeModeController([]),
+      selfStopOverride: () => stopped = true,
+    );
+    final errors = <Object>[];
+    final sub = driver.events.listen((_) {}, onError: errors.add);
+    try {
+      await driver.enter(TerminalMode.interactive);
+      failRelease = true;
+      await expectLater(driver.debugSuspend(), throwsA(same(failure)));
+      await _pump();
+      expect(stopped, isFalse);
+      expect(errors, [same(failure)]);
+      expect(driver.isActive, isFalse);
+      await expectLater(driver.runWithTerminalHandoff(() {}), throwsStateError);
+      await driver.restore();
+    } finally {
+      await driver.restore();
+      await sub.cancel();
+      await input.close();
+    }
+  });
+
+  for (final stage in ['suspend', 'resume']) {
+    test('failed $stage exits a mounted runApp and restores it', () async {
+      final input = _FakeStdin(terminal: true);
+      var failRelease = false;
+      final output = _RecordingStdout(
+        terminal: true,
+        onWrite: (bytes) {
+          if (failRelease && bytes.contains('\x1b[?1049l')) {
+            failRelease = false;
+            throw StateError('injected suspend output failure');
+          }
+        },
+      );
+      final modes = _FakeModeController(
+        [],
+        throwOnRawCount: stage == 'resume' ? 2 : null,
+      );
+      final driver = PosixTerminalDriver(
+        stdinOverride: input,
+        stdoutOverride: output,
+        terminalModeController: modes,
+        // Exercise failed-stop recovery, which resumes from the Ctrl+Z path.
+        selfStopOverride: () => false,
+      );
+      final mounted = Completer<void>();
+      final app = runApp(
+        _OnMount(mounted),
+        driver: driver,
+        enableHotReload: false,
+      );
+      try {
+        await mounted.future;
+        failRelease = stage == 'suspend';
+        input.push([0x1a]);
+        await app.timeout(const Duration(seconds: 3));
+        expect(driver.isActive, isFalse);
+        expect(modes.raw, isFalse);
+        expect(output.written.toString(), contains('\x1b[?1049l'));
+        driver.write('FRAME-AFTER-FAILED-TRANSITION');
+        expect(
+          output.written.toString(),
+          isNot(contains('FRAME-AFTER-FAILED-TRANSITION')),
+        );
+      } finally {
+        requestExit();
+        await app;
+        await input.close();
+      }
+    });
+  }
+
   test(
     'force exit is bounded while a terminal handoff remains borrowed',
     () async {
@@ -1261,6 +1584,179 @@ void main() {
       found.sort((a, b) => a.$1.compareTo(b.$1));
       return found.map((f) => f.$2).join();
     }
+
+    for (final stage in ['entry', 'fallback', 'exit']) {
+      for (final delivery in ['before', 'after', 'flush']) {
+        test(
+          'uncertain $stage stack mutation ($delivery) is never retried',
+          () async {
+            final input = _FakeStdin(terminal: true);
+            final failure = StateError('$stage $delivery');
+            final delivered = StringBuffer();
+            var armed = stage != 'exit';
+            var failFlush = false;
+            var attempts = 0;
+            const keyboardPop = '\x1b[<1u';
+            const pointerPop = '\x1b]22;<\x1b\\';
+            final output = _RecordingStdout(
+              terminal: true,
+              onWrite: (bytes) {
+                final mutation = switch (stage) {
+                  'entry' => bytes.contains('\x1b[>31u'),
+                  'fallback' => bytes == keyboardPop,
+                  _ => bytes.contains(pointerPop),
+                };
+                if (mutation) attempts++;
+                final fail = armed && mutation;
+                if (fail) armed = false;
+                if (fail && delivery == 'before') throw failure;
+                delivered.write(bytes);
+                if (fail && delivery == 'after') throw failure;
+                if (fail && delivery == 'flush') failFlush = true;
+                var reply = answerEveryQuery(bytes);
+                if (stage == 'fallback') {
+                  reply = reply.replaceAll('[?31u', '[?0u');
+                }
+                if (bytes.contains('\x1b]22;?')) {
+                  reply = '\x1b]22;1,1,1,1,1\x1b\\$reply';
+                }
+                if (reply.isNotEmpty) input.push(reply.codeUnits);
+              },
+              onFlush: () async {
+                if (failFlush) {
+                  failFlush = false;
+                  throw failure;
+                }
+              },
+            );
+            final modes = _FakeModeController([]);
+            final driver = PosixTerminalDriver(
+              stdinOverride: input,
+              stdoutOverride: output,
+              terminalModeController: modes,
+            );
+            final errors = driver.events.listen((_) {}, onError: (Object _) {});
+            try {
+              final entry = driver.enter(
+                TerminalMode(
+                  mouseMotion: true,
+                  keyboardProtocol: stage == 'fallback'
+                      ? KeyboardProtocolMode.disambiguated
+                      : KeyboardProtocolMode.lifecycle,
+                ),
+              );
+              if (stage == 'exit') {
+                final profile = await entry;
+                expect(
+                  (profile.presentation as AnsiTerminalPresentation)
+                      .pointerShapes,
+                  isTrue,
+                );
+                armed = true;
+                var childRan = false;
+                await expectLater(
+                  driver.runWithTerminalHandoff(() => childRan = true),
+                  throwsA(same(failure)),
+                );
+                expect(childRan, isFalse);
+              } else {
+                await expectLater(entry, throwsA(same(failure)));
+              }
+              await expectLater(driver.restore(), throwsA(same(failure)));
+              expect(modes.raw, isFalse);
+              expect(attempts, 1);
+              final popCount = delivery == 'before' || stage == 'entry' ? 0 : 1;
+              expect(
+                keyboardPop.allMatches(delivered.toString()).length,
+                popCount,
+              );
+              expect(
+                pointerPop.allMatches(delivered.toString()).length,
+                stage == 'exit' ? popCount : 0,
+              );
+              expect(delivered.toString(), contains('\x1b[?25h'));
+            } finally {
+              await expectLater(driver.restore(), throwsA(same(failure)));
+              await errors.cancel();
+              final drain = stage == 'entry'
+                  ? input._controller.stream.drain<void>()
+                  : Future<void>.value();
+              await input.close();
+              await drain;
+            }
+          },
+        );
+      }
+    }
+
+    test(
+      'restore drains fallback flush and commits the successful pop once',
+      () async {
+        final input = _FakeStdin(terminal: true);
+        final popped = Completer<void>();
+        final flush = Completer<void>();
+        var holdFlush = false;
+        final output = _RecordingStdout(
+          terminal: true,
+          onWrite: (bytes) {
+            if (bytes == '\x1b[<1u') {
+              holdFlush = true;
+              if (!popped.isCompleted) popped.complete();
+            }
+            final reply = answerEveryQuery(bytes).replaceAll('[?31u', '[?0u');
+            if (reply.isNotEmpty) input.push(reply.codeUnits);
+          },
+          onFlush: () => holdFlush ? flush.future : Future<void>.value(),
+        );
+        final driver = PosixTerminalDriver(
+          stdinOverride: input,
+          stdoutOverride: output,
+          terminalModeController: _FakeModeController([]),
+        );
+        final entry = expectLater(
+          driver.enter(
+            const TerminalMode(
+              keyboardProtocol: KeyboardProtocolMode.disambiguated,
+            ),
+          ),
+          throwsStateError,
+        );
+        await popped.future;
+        var restored = false;
+        final restore = driver.restore().then((_) => restored = true);
+        await _pump();
+        expect(restored, isFalse);
+        flush.complete();
+        await entry;
+        await restore;
+        expect('\x1b[<1u'.allMatches(output.written.toString()).length, 1);
+        await input.close();
+      },
+    );
+
+    test(
+      'restore before queued entry does not claim an unpushed stack',
+      () async {
+        final input = _FakeStdin(terminal: true);
+        final output = _RecordingStdout(terminal: true);
+        final driver = PosixTerminalDriver(
+          stdinOverride: input,
+          stdoutOverride: output,
+          terminalModeController: _FakeModeController([]),
+        );
+        final entry = expectLater(
+          driver.enter(TerminalMode.interactive),
+          throwsStateError,
+        );
+        await driver.restore();
+        await entry;
+        expect(output.written.toString(), isNot(contains('\x1b[>')));
+        expect(output.written.toString(), isNot(contains('\x1b[<1u')));
+        final drain = input._controller.stream.drain<void>();
+        await input.close();
+        await drain;
+      },
+    );
 
     void Function(String bytes) slowTerminal(
       _FakeStdin input,

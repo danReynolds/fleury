@@ -1,11 +1,44 @@
 // Integrated native ownership proof, driven by tool/check_sequential_sessions.py.
 // Intentionally exits naturally: an orphaned input worker must fail the check.
 import 'dart:convert';
+import 'dart:async';
 import 'dart:io';
 
 import 'package:fleury/fleury.dart';
 
 Future<void> main(List<String> args) async {
+  if (args.contains('--throwing-hook-report')) {
+    final report = File(args[args.indexOf('--throwing-hook-report') + 1]);
+    var calls = 0;
+    final outcome = await runApp(
+      const Text('HOOK READY'),
+      enableHotReload: false,
+      debug: const DebugConfig(enabled: false),
+      onStrayOutput: (line) {
+        calls++;
+        if (line.text == 'HOOK FAILURE TRIGGER') {
+          throw StateError('stray hook failed');
+        }
+      },
+      onEvent: (event) {
+        if (event is KeyEvent && event.code == KeyCode.enter) {
+          stdout.writeln('HOOKED BEFORE FAILURE');
+          stdout.writeln('HOOK FAILURE TRIGGER');
+        }
+        return null;
+      },
+    );
+    report.writeAsStringSync(
+      jsonEncode({'signal': outcome.signal?.name, 'calls': calls}),
+    );
+    return;
+  }
+  if (args.contains('--slow-cleanup-report')) {
+    await slowHandoffCleanup(
+      File(args[args.indexOf('--slow-cleanup-report') + 1]),
+    );
+    return;
+  }
   if (args.contains('--hangup-report')) {
     final report = File(args[args.indexOf('--hangup-report') + 1]);
     Object result;
@@ -105,5 +138,97 @@ Future<void> main(List<String> args) async {
       .first;
   if (line != 'async') throw StateError('Dart stdin was consumed by Fleury');
   stdout.writeln('SEQUENTIAL PASS');
+  await stdout.flush();
+}
+
+// Keep the child alive beyond teardown reporting deadlines. Capture must
+// remain usable for handoff completion and replay, even after runApp has failed.
+Future<void> slowHandoffCleanup(File report) async {
+  final result = <String, Object?>{};
+  final childDone = Completer<void>();
+  var handoffStarted = false;
+  try {
+    await runApp(
+      ScopeBuilder<TerminalSession>(
+        builder: (_, session) => KeyBindings(
+          bindings: [
+            KeyBinding(
+              KeySequence.ctrl.o,
+              onTrigger: (_) async {
+                if (handoffStarted) return;
+                handoffStarted = true;
+                stdout.writeln('CAPTURE BEFORE SLOW CHILD');
+                await stdout.flush();
+                try {
+                  await session.runWithHandoff(() async {
+                    requestExit();
+                    final child = await Process.start('/bin/sh', [
+                      '-c',
+                      r'''printf 'SLOW CHILD READY\n'; IFS= read -r answer; test "$answer" = finish''',
+                    ], mode: ProcessStartMode.inheritStdio);
+                    if (await child.exitCode != 0) {
+                      throw StateError('Slow child input failed');
+                    }
+                  });
+                  result['handoff'] = 'completed';
+                } catch (error) {
+                  result['handoff'] = '$error';
+                } finally {
+                  childDone.complete();
+                }
+              },
+            ),
+          ],
+          child: const Text('SLOW HANDOFF READY'),
+        ),
+      ),
+      mode: const TerminalMode.inline(rows: 3),
+      enableHotReload: false,
+      debug: const DebugConfig(enabled: false),
+    );
+    result['first'] = 'unexpected success';
+  } on FleuryError catch (error) {
+    result['first'] = error.details;
+  }
+  try {
+    await runApp(
+      const Text('must not enter'),
+      enableHotReload: false,
+      debug: const DebugConfig(enabled: false),
+    );
+    result['blocked'] = false;
+  } on StateError {
+    result['blocked'] = true;
+  }
+  // The PTY harness releases the child only after reading this result.
+  final pendingReport = File('${report.path}.pending');
+  pendingReport.writeAsStringSync(jsonEncode(result));
+  pendingReport.renameSync(report.path);
+  await childDone.future;
+
+  // Handoff completion releases its borrow; driver/capture restoration still
+  // has to settle. Try fresh invocations until admission acknowledges that.
+  final deadline = DateTime.now().add(const Duration(seconds: 5));
+  while (true) {
+    try {
+      await runApp(
+        const Text('RECOVERED READY'),
+        mode: const TerminalMode.inline(rows: 3),
+        enableHotReload: false,
+        debug: const DebugConfig(enabled: false),
+        onEvent: (event) => event is KeyEvent && event.code == KeyCode.enter
+            ? const ExitRequested()
+            : null,
+      );
+      result['second'] = 'completed';
+      break;
+    } on StateError catch (error) {
+      if (DateTime.now().isAfter(deadline)) rethrow;
+      if (!error.message.contains('terminal cleanup')) rethrow;
+      await Future<void>.delayed(const Duration(milliseconds: 10));
+    }
+  }
+  report.writeAsStringSync(jsonEncode(result));
+  stdout.writeln('SLOW CLEANUP PASS');
   await stdout.flush();
 }

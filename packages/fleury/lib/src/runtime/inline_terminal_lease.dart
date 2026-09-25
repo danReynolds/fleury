@@ -19,13 +19,17 @@ void writeInlineTerminalLease(
   int? top,
   int? rows,
   bool pointerStackOwned = false,
+  bool stackStateUnknown = false,
 }) {
-  if (path == null || mode.inlineRows == null) return;
+  if (path == null) return;
   final pending = File('$path.pending');
   pending.writeAsStringSync(
     jsonEncode({
       'version': 1,
       'active': active,
+      'inline': mode.inlineRows != null,
+      'alternateScreen': mode.alternateScreen,
+      'stackStateUnknown': stackStateUnknown,
       'keyboard': mode.keyboardProtocol.name,
       'hideCursor': mode.hideCursor,
       'resetStyle': mode.resetStyleOnExit,
@@ -44,7 +48,7 @@ void writeInlineTerminalLease(
   pending.renameSync(path);
 }
 
-/// Null means this child never registered an inline session. An inactive
+/// Null means this child never registered terminal ownership. An inactive
 /// lease returns no bytes: the child has already handed the terminal back.
 String? inlineTerminalRecovery(String? path, CellSize terminal) {
   if (path == null || !File(path).existsSync()) return null;
@@ -57,21 +61,37 @@ String? inlineTerminalRecovery(String? path, CellSize terminal) {
     if (data['version'] != 1) throw const FormatException('unknown lease');
     if (data['active'] == false) return '';
     if (data['active'] != true) throw const FormatException('invalid lease');
-    final mode = TerminalMode.inline(
-      rows: 1,
-      keyboardProtocol: KeyboardProtocolMode.values.byName(
-        data['keyboard'] as String,
-      ),
-      hideCursor: data['hideCursor'] as bool,
-      resetStyleOnExit: data['resetStyle'] as bool,
-      bracketedPaste: data['paste'] as bool,
-      focusReporting: data['focus'] as bool,
-    );
+    // Older leases represented only inline sessions. Both native modes now
+    // record their actual ownership, so a handled uncertain stack operation
+    // cannot make the supervisor guess a second keyboard or pointer pop.
+    final inline = data['inline'] as bool? ?? true;
+    final stackStateUnknown = data['stackStateUnknown'] as bool? ?? false;
+    final keyboard = stackStateUnknown
+        ? KeyboardProtocolMode.legacy
+        : KeyboardProtocolMode.values.byName(data['keyboard'] as String);
+    final mode = inline
+        ? TerminalMode.inline(
+            rows: 1,
+            keyboardProtocol: keyboard,
+            hideCursor: data['hideCursor'] as bool,
+            resetStyleOnExit: data['resetStyle'] as bool,
+            bracketedPaste: data['paste'] as bool,
+            focusReporting: data['focus'] as bool,
+          )
+        : TerminalMode(
+            alternateScreen: data['alternateScreen'] as bool,
+            keyboardProtocol: keyboard,
+            hideCursor: data['hideCursor'] as bool,
+            resetStyleOnExit: data['resetStyle'] as bool,
+            bracketedPaste: data['paste'] as bool,
+            focusReporting: data['focus'] as bool,
+          );
     final bytes = StringBuffer();
     final region = data['region'];
     final top = region is Map ? region['top'] as Object? : null;
     final rows = region is Map ? region['rows'] as Object? : null;
-    if (region is Map &&
+    if (inline &&
+        region is Map &&
         region['cols'] == terminal.cols &&
         region['terminalRows'] == terminal.rows &&
         top is int &&
@@ -82,12 +102,14 @@ String? inlineTerminalRecovery(String? path, CellSize terminal) {
       final target = AnsiRenderTarget.inline(top: top);
       bytes.write(target.clearSequence(CellSize(terminal.cols, rows)));
       bytes.write('\x1B[${target.top + 1};1H');
-    } else if (region != null) {
+    } else if (inline && region != null) {
       // The terminal resized after the last committed allocation. Preserve
       // unknown content instead of clearing at a stale absolute origin.
       bytes.write('\r\n');
     }
-    if (data['pointer'] == true) bytes.write(popPointerShape);
+    if (!stackStateUnknown && data['pointer'] == true) {
+      bytes.write(popPointerShape);
+    }
     bytes.write(buildTerminalExitSequences(mode));
     return bytes.toString();
   } catch (_) {

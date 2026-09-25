@@ -82,6 +82,32 @@ void main() {
     expect(await errors, contains('intentional owner failure'));
   });
 
+  test('synchronous acquisition hooks can stop or rejoin safely', () async {
+    // Run the actual native worker in isolation: lending released pointers
+    // used to crash the VM before a Dart exception could reach this runner.
+    final process = await Process.start(Platform.resolvedExecutable, [
+      '--packages=.dart_tool/package_config.json',
+      'test/fixtures/posix_input_resources_fixture.dart',
+      '--reentrant-acquisition',
+    ]);
+    final output = process.stdout
+        .transform(const SystemEncoding().decoder)
+        .join();
+    final errors = process.stderr
+        .transform(const SystemEncoding().decoder)
+        .join();
+    final code = await process.exitCode.timeout(
+      const Duration(seconds: 5),
+      onTimeout: () {
+        process.kill(ProcessSignal.sigkill);
+        throw TimeoutException('Reentrant input acquisition did not exit');
+      },
+    );
+    await process.stdin.close();
+    expect(code, 0, reason: await errors);
+    expect(await output, contains('REENTRANT ACQUISITION PASS'));
+  });
+
   test('stop returns descriptor flags and permits synchronous reads', () async {
     final original = _sys.flags(pipe.reader);
     final first = Completer<void>();
