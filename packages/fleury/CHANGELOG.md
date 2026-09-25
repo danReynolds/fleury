@@ -1,5 +1,14 @@
 # Changelog
 
+- **Breaking:** `requestExit()` is now `exitApp()`, the counterpart to
+  `runApp()`. It starts orderly UI shutdown; await `runApp` for terminal
+  restoration to finish. It does not terminate the host process.
+- **Breaking:** Removed `TerminalMode(alternateScreen: ...)`. Choose
+  `TerminalMode.fullScreen()` or `TerminalMode.inline(rows: ...)` instead.
+  The unnamed constructor still defaults to full-screen. Screen choice is
+  reported by `isFullScreen` and `isInline`.
+- Added a shutdown-and-signals guide with an interactive browser illustration
+  and runnable native examples for ordinary exits and app-owned cleanup.
 - **Breaking:** Unhandled Ctrl+C now returns
   `AppExit.signal(AppSignal.interrupt)` from `runApp`, matching SIGINT, instead
   of `AppExit.requested`. CLI callers can preserve exit code 130. A widget

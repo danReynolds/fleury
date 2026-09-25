@@ -55,7 +55,7 @@ await runApp(
       onStepChanged: (step) => unawaited(session.resizeInline(step.rows)),
       onComplete: (value) {
         result = value;
-        requestExit();
+        exitApp();
       },
     )),
   ),

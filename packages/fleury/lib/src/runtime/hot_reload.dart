@@ -91,7 +91,7 @@ class HotReloadController {
 
   // Extensions are registered only once, in the first session's zone. Always
   // dispatch into the current controller's zone so session-bound operations
-  // (notably requestExit) cannot accidentally target the first, expired app.
+  // (notably exitApp) cannot accidentally target the first, expired app.
   // Guard synchronous callback failures too: letting them escape into the
   // registration zone can strand the RPC across distinct error-zone boundaries.
   void _reassemble() {

@@ -14,7 +14,7 @@ Future<void> repeatSetup() async {
         home: InlineSetup(
           onComplete: (value) {
             result = value;
-            requestExit();
+            exitApp();
           },
         ),
       ),

@@ -102,7 +102,7 @@ Future<void> main(List<String> args) async {
               await session.runWithHandoff(() async {
                 // Begin UI teardown while the child still owns the terminal.
                 // runApp must not return (or reopen another UI) until it exits.
-                requestExit();
+                exitApp();
                 final child = await Process.start('/bin/sh', [
                   '-c',
                   r'''printf 'BORROW READY\n'; IFS= read -r answer; test "$answer" = borrow''',
@@ -161,7 +161,7 @@ Future<void> slowHandoffCleanup(File report) async {
                 await stdout.flush();
                 try {
                   await session.runWithHandoff(() async {
-                    requestExit();
+                    exitApp();
                     final child = await Process.start('/bin/sh', [
                       '-c',
                       r'''printf 'SLOW CHILD READY\n'; IFS= read -r answer; test "$answer" = finish''',

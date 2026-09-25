@@ -99,6 +99,24 @@ void main() {
     });
   }
 
+  test('legacy main-buffer leases never pop a screen or guess rows', () {
+    writeInlineTerminalLease(
+      path,
+      mode: const TerminalMode.fullScreen(
+        keyboardProtocol: KeyboardProtocolMode.legacy,
+      ),
+      active: true,
+    );
+    final data = jsonDecode(File(path).readAsStringSync()) as Map;
+    data['alternateScreen'] = false;
+    File(path).writeAsStringSync(jsonEncode(data));
+    final recovery = inlineTerminalRecovery(path, terminal)!;
+    expect(recovery, isNot(contains('1049')));
+    expect(recovery, isNot(contains('\x1B[2K')));
+    expect(recovery, isNot(contains('\x1B[2J')));
+    expect(recovery, contains('\x1B[?25h'));
+  });
+
   test('resize after allocation never clears using a stale origin', () {
     writeInlineTerminalLease(
       path,

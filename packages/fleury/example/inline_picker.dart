@@ -20,7 +20,7 @@ Future<void> main() async {
                 autofocus: source == 'Local',
                 onPressed: () {
                   selected = source;
-                  requestExit();
+                  exitApp();
                 },
               ),
             const SizedBox(height: 1),

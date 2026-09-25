@@ -30,8 +30,11 @@ an orderly request from an unclaimed process signal or unhandled Ctrl+C so the
 caller can choose its own exit code. On startup `runApp` acquires the terminal and, by default, switches
 to raw input and the alternate screen with a hidden cursor. It mounts your
 tree, paints the first frame, and then renders again after every input event and
-every `setState`. On exit — `Ctrl-C`, or your handler asking to stop — it restores
+every `setState`. On exit — unhandled `Ctrl+C` or `exitApp()` — it restores
 terminal modes and returns control to the caller.
+
+[Shutdown and signals](/fleury/guides/shutdown-and-signals/) shows how to finish
+the UI, clean up resources, and preserve interrupt exit codes.
 
 The options you'll actually reach for:
 
@@ -39,15 +42,16 @@ The options you'll actually reach for:
 runApp(
   const FleuryApp(title: 'My app', home: MyHomeScreen()),
   onEvent: (event) {
-    // Inspect every input event before the framework re-renders.
-    // Return an ExitRequested to quit cleanly; null lets it through.
+    // Observe events after widget dispatch and default Ctrl+C handling.
+    // Return EventHandled to claim a signal, or ExitRequested to finish.
     return null;
   },
 )
 ```
 
-`mode` (a `TerminalMode`, default `TerminalMode.interactive`) controls the raw-
-mode/alt-screen/mouse setup; `enableHotReload` (default `true`) wires up state-
+`mode` chooses `TerminalMode.fullScreen()` (the default) or
+`TerminalMode.inline(rows: ...)`, with optional mouse input.
+`enableHotReload` (default `true`) wires up state-
 preserving hot reload under the Dart VM. Because `runApp` depends on `dart:io`,
 it's exported from `fleury.dart` — *not* from the web-safe `fleury_core`.
 

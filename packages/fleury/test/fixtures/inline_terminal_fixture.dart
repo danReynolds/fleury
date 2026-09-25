@@ -58,7 +58,7 @@ class _InlineFixtureState extends State<_InlineFixture> {
           KeySequence.ctrl.s,
           onTrigger: (_) => session.resizeInline(6),
         ),
-        KeyBinding(KeySequence.ctrl.q, onTrigger: (_) => requestExit()),
+        KeyBinding(KeySequence.ctrl.q, onTrigger: (_) => exitApp()),
         KeyBinding(
           KeySequence.ctrl.r,
           onTrigger: (_) => DevBootstrap.requestRestartFromApp(),

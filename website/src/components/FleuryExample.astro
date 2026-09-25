@@ -1,4 +1,5 @@
 ---
+import ExamplesBundle from './ExamplesBundle.astro';
 // Embeds a live, client-side Fleury widget. The widget identified by `id` is
 // mounted from the dart2js examples bundle (public/fleury-examples.js) into a
 // host sized to a cell grid (cols × rows). A header bar marks it as live; the
@@ -40,7 +41,6 @@ const badgeTitle = interactive
   ? 'The real widget, running live in your browser (dart2js) — click it and use your keyboard/mouse to interact.'
   : 'The real widget, running live in your browser, compiled with dart2js.';
 const servingGuide = '/fleury/architecture/serving-and-embedding/';
-const examplesBundle = '/fleury/fleury-examples.js';
 ---
 
 <figure class="fleury-example">
@@ -85,21 +85,11 @@ const examplesBundle = '/fleury/fleury-examples.js';
   </div>
 </figure>
 
-<script is:inline define:vars={{ examplesBundle }}>
+<ExamplesBundle />
+<script is:inline>
   (function () {
     if (window.__fleuryExamplesBoot) return;
     window.__fleuryExamplesBoot = true;
-
-    if (!document.getElementById('fleury-examples-bundle')) {
-      const s = document.createElement('script');
-      s.id = 'fleury-examples-bundle';
-      s.src = examplesBundle;
-      s.defer = true;
-      document.head.appendChild(s);
-    }
-    document.addEventListener('astro:page-load', () => {
-      if (window.fleuryMountExamples) window.fleuryMountExamples();
-    });
 
     function expand(id, cols, rows, theme) {
       const fc = Math.min(Math.round(cols * 1.5), 160);

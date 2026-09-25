@@ -68,6 +68,31 @@ class _ControlledDriver implements TerminalDriver {
 }
 
 void main() {
+  test('exitApp starts shutdown; runApp awaits terminal restoration', () async {
+    final gate = Completer<void>();
+    final driver = _ControlledDriver(restoreGate: gate.future);
+    addTearDown(driver.fake.dispose);
+    var completed = false;
+    final running =
+        runApp(
+          const Text('session'),
+          driver: driver,
+          enableHotReload: false,
+        ).then((result) {
+          completed = true;
+          return result;
+        });
+    await driver.entered.future;
+    expect(exitApp(), isTrue);
+    expect(exitApp(), isFalse);
+    await driver.restoring.future;
+    expect(completed, isFalse);
+    gate.complete();
+    expect((await running).signal, isNull);
+    expect(driver.restored.isCompleted, isTrue);
+    expect(exitApp(), isFalse);
+  });
+
   test(
     'a restoration that fails after its deadline stays quarantined',
     () async {
@@ -89,7 +114,7 @@ void main() {
                 firstFailed = error is FleuryError;
               },
             );
-        requestExit();
+        exitApp();
         await first;
         gate.complete();
         await driver.restored.future;
@@ -158,7 +183,7 @@ void main() {
       driver: nextDriver,
       enableHotReload: false,
     );
-    expect(requestExit(), isTrue);
+    expect(exitApp(), isTrue);
     await next;
     expect(nextDriver.restoreCallCount, 1);
   });
@@ -174,14 +199,14 @@ void main() {
     final first = runApp(
       _Mounted(() {
         if (mounted.isCompleted) return;
-        trigger.future.then((_) => staleResult.complete(requestExit()));
+        trigger.future.then((_) => staleResult.complete(exitApp()));
         mounted.complete();
       }),
       driver: firstDriver,
       enableHotReload: false,
     );
     await mounted.future;
-    expect(requestExit(), isTrue);
+    expect(exitApp(), isTrue);
     await first;
 
     final secondMounted = Completer<void>();
@@ -197,9 +222,9 @@ void main() {
     expect(await staleResult.future, isFalse);
     expect(secondDriver.restoreCallCount, 0);
     // Deliberately unscoped host calls still address the current app.
-    expect(requestExit(), isTrue);
+    expect(exitApp(), isTrue);
     await second;
-    expect(requestExit(), isFalse);
+    expect(exitApp(), isFalse);
   });
 
   test('admission precedes an asynchronous driver startup', () async {
@@ -225,7 +250,7 @@ void main() {
       ),
     );
     expect(overlapping.enterCallCount, 0);
-    expect(requestExit(), isTrue);
+    expect(exitApp(), isTrue);
     gate.complete();
     await first;
     expect(driver.fake.restoreCallCount, 1);
@@ -252,7 +277,7 @@ void main() {
     );
     expect(await result.future, isA<StateError>());
     expect(nestedDriver.enterCallCount, 0);
-    expect(requestExit(), isTrue);
+    expect(exitApp(), isTrue);
     await app;
   });
 
@@ -271,9 +296,9 @@ void main() {
       enableHotReload: false,
     );
     await mounted.future;
-    expect(requestExit(), isTrue);
+    expect(exitApp(), isTrue);
     await driver.restoring.future;
-    expect(requestExit(), isFalse);
+    expect(exitApp(), isFalse);
     await expectLater(
       runApp(const Text('too early'), driver: nextDriver),
       throwsStateError,
@@ -287,7 +312,7 @@ void main() {
       driver: nextDriver,
       enableHotReload: false,
     );
-    expect(requestExit(), isTrue);
+    expect(exitApp(), isTrue);
     await next;
     expect(nextDriver.restoreCallCount, 1);
   });
@@ -307,7 +332,7 @@ void main() {
       driver: valid,
       enableHotReload: false,
     );
-    expect(requestExit(), isTrue);
+    expect(exitApp(), isTrue);
     await app;
     expect(valid.restoreCallCount, 1);
   });
@@ -335,7 +360,7 @@ void main() {
           ),
         ),
       );
-      expect(requestExit(), isTrue);
+      expect(exitApp(), isTrue);
       await failed;
       await expectLater(
         runApp(const Text('too early'), driver: nextDriver),
@@ -351,7 +376,7 @@ void main() {
         driver: nextDriver,
         enableHotReload: false,
       );
-      expect(requestExit(), isTrue);
+      expect(exitApp(), isTrue);
       await next;
       expect(nextDriver.restoreCallCount, 1);
     },

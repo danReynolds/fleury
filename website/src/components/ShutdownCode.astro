@@ -1,0 +1,11 @@
+---
+import DemoSource from './DemoSource.astro';
+const sources = import.meta.glob<string>('../../examples/doc_snippets/shutdown/*.dart', {
+  query: '?raw', import: 'default', eager: true,
+});
+interface Props { file: string; }
+const { file } = Astro.props;
+const code = sources[`../../examples/doc_snippets/shutdown/${file}`];
+if (!code) throw new Error(`Shutdown source is missing: ${file}`);
+---
+<DemoSource code={code} />

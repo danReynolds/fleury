@@ -5,9 +5,9 @@ Future<void> main() async {
   await runApp(
     FleuryApp(
       title: 'Project setup',
-      home: InlineSetup(onComplete: (_) => requestExit()),
+      home: InlineSetup(onComplete: (_) => exitApp()),
     ),
-    mode: const TerminalMode(mouse: true),
+    mode: const TerminalMode.fullScreen(mouse: true),
     enableHotReload: false,
   );
 }

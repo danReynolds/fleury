@@ -5,7 +5,7 @@ Future<void> main() async {
   await runApp(
     FleuryApp(
       title: 'Project setup',
-      home: InlineSetup(onComplete: (_) => requestExit()),
+      home: InlineSetup(onComplete: (_) => exitApp()),
     ),
     mode: const TerminalMode.inline(rows: 21, mouse: true),
     enableHotReload: false,

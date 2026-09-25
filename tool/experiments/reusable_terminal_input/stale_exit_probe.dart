@@ -12,7 +12,7 @@ Future<void> main() async {
     onEvent: (event) {
       if (event is KeyEvent && event.code == KeyCode.enter) {
         Timer(const Duration(milliseconds: 100), () {
-          staleAccepted = requestExit();
+          staleAccepted = exitApp();
         });
         return const ExitRequested();
       }
@@ -30,7 +30,7 @@ Future<void> main() async {
     driver: secondDriver,
     enableHotReload: false,
   );
-  final backup = Timer(const Duration(milliseconds: 700), requestExit);
+  final backup = Timer(const Duration(milliseconds: 700), exitApp);
   await second;
   backup.cancel();
   await secondDriver.dispose();

@@ -79,7 +79,7 @@ final class ExitRequested extends EventResponse {
 /// Returned by an event handler to claim an event whose *unhandled*
 /// default would act — today that's [SignalEvent], whose unclaimed
 /// default is "terminate" ([AppExit.signal]). Claiming hands the
-/// shutdown to the app, which finishes by calling [requestExit] once
+/// shutdown to the app, which finishes by calling [exitApp] once
 /// its cleanup is done. Mind the driver's grace deadline: shutdown
 /// must complete within it or the process is force-terminated.
 final class EventHandled extends EventResponse {
@@ -91,7 +91,7 @@ final class EventHandled extends EventResponse {
 /// then `exit()` yourself).
 @immutable
 final class AppExit {
-  /// An orderly exit: [requestExit], an [ExitRequested] response, or the
+  /// An orderly exit: [exitApp], an [ExitRequested] response, or the
   /// input stream ending (stdin EOF / remote disconnect).
   const AppExit.requested() : signal = null;
 
@@ -158,7 +158,7 @@ final class _RunAppInvocation {
     });
   }
 
-  bool requestExit() {
+  bool exitApp() {
     if (closing || exit.isCompleted) return false;
     exit.complete(const AppExit.requested());
     return true;
@@ -203,9 +203,11 @@ FleuryError _terminalCleanupError(Iterable<String> resources) => FleuryError(
       'Fleury keeps new sessions blocked until ownership is proven released.',
 );
 
-/// Asks the running app to exit cleanly: the event loop stops, cleanup
-/// runs (terminal restored), and
-/// [runApp]'s future resolves with [AppExit.requested].
+/// Starts an orderly exit from the current [runApp] invocation.
+///
+/// Stops the UI and restores the terminal without ending the Dart process.
+/// Await [runApp]'s future for cleanup to finish; it resolves with
+/// [AppExit.requested]. There is no exit-veto callback.
 ///
 /// This is the programmatic quit for `q` keys, palette "Quit" commands,
 /// and app-owned signal shutdown (claim the [SignalEvent] with
@@ -214,11 +216,11 @@ FleuryError _terminalCleanupError(Iterable<String> resources) => FleuryError(
 /// Calls from an app callback remain bound to that invocation: a callback that
 /// outlives its app returns false and cannot exit a subsequent session. A host
 /// call outside an app's zone targets the currently running invocation.
-bool requestExit() {
+bool exitApp() {
   final invocation =
       Zone.current[_invocationZoneKey] as _RunAppInvocation? ??
       _activeInvocation;
-  return invocation?.requestExit() ?? false;
+  return invocation?.exitApp() ?? false;
 }
 
 /// Bounded replay for driver events that arrive while [TerminalDriver.enter]
@@ -307,27 +309,28 @@ const _maxPendingRemoteSemanticActions = 64;
 /// invocations are rejected, including while an earlier cleanup is unfinished.
 ///
 /// ```dart
-/// final exit = await runApp(app, onEvent: (event) {
-///   if (event is SignalEvent) {
-///     beginShutdown(event.signal);        // async teardown → requestExit()
-///     return const EventHandled();        // claim it: don't die yet
-///   }
-///   return null;
-/// });
-/// await host.shutdown();                  // your cleanup, terminal already sane
-/// io.exit(switch (exit.signal) {          // POSIX-conventional codes
-///   AppSignal.interrupt => 130,
-///   AppSignal.terminate => 143,
-///   AppSignal.hangup => 129,
-///   null => 0,
-/// });
+/// try {
+///   final result = await runApp(app);
+///   io.exitCode = switch (result.signal) {
+///     AppSignal.interrupt => 130,
+///     AppSignal.terminate => 143,
+///     AppSignal.hangup => 129,
+///     null => 0,
+///   };
+/// } finally {
+///   await host.shutdown(); // resources owned by your command
+/// }
 /// ```
 ///
-/// SIGINT/SIGTERM/SIGHUP arrive as [SignalEvent]s (never `exit()` inside the driver);
+/// SIGINT/SIGTERM/SIGHUP arrive as [SignalEvent]s;
 /// an unclaimed one terminates with [AppExit.signal]. The POSIX driver arms a
 /// grace deadline at delivery ([PosixTerminalDriver.signalGrace], default 5s)
 /// and force-terminates a hung app — a second same-signal forces immediately —
 /// so claiming a signal obliges finishing within the grace.
+/// To keep the UI visible during cleanup, claim the signal with [EventHandled]
+/// and call [exitApp] when finished. Preserve the original signal yourself:
+/// that later exit returns [AppExit.requested]. Raw Ctrl+C reaches widget key
+/// bindings first; if unhandled it exits before [onEvent] with an interrupt.
 ///
 /// [onStrayOutput] takes ownership of captured output instead of replaying it
 /// after exit. A throwing hook is disabled and reported through the runtime
@@ -447,7 +450,7 @@ Future<AppExit> runApp(
 ///      events. On each event, optionally consult
 ///      [onEvent]; if it returns [ExitRequested], or the event is an
 ///      unhandled Ctrl+C, or it is a [SignalEvent] the handler did not
-///      claim with [EventHandled], exit the loop. [requestExit] exits
+///      claim with [EventHandled], exit the loop. [exitApp] exits
 ///      programmatically from anywhere in the app.
 ///   7. Schedule a render frame after every event and after every
 ///      `setState` (via [BuildOwner.onScheduleBuild]).
@@ -1763,7 +1766,7 @@ Future<AppExit> _runAppImpl(
                   // through the normal exit path (terminal restore, capture
                   // stop, socket close); the supervisor respawns the process
                   // fresh.
-                  onShutdownRequested: requestExit,
+                  onShutdownRequested: exitApp,
                 );
                 if (disposed) {
                   await controller.dispose();

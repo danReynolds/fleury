@@ -328,7 +328,7 @@ _failedRestoreProbe({bool multipleFailures = false}) async {
     onError: (Object error) => error is FleuryError,
   );
   await _settle();
-  requestExit();
+  exitApp();
   final ownershipError = await outcome;
   final nextDriver = FakeTerminalDriver();
   final next = runApp(
@@ -340,7 +340,7 @@ _failedRestoreProbe({bool multipleFailures = false}) async {
     (_) => false,
     onError: (Object error) => error is StateError,
   );
-  requestExit(); // Allows a regressed, wrongly admitted session to finish.
+  exitApp(); // Allows a regressed, wrongly admitted session to finish.
   final blocked = await nextOutcome;
   await nextDriver.dispose();
   await driver.dispose();

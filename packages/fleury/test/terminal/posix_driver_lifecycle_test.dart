@@ -545,7 +545,7 @@ void main() {
           isNot(contains('FRAME-AFTER-FAILED-TRANSITION')),
         );
       } finally {
-        requestExit();
+        exitApp();
         await app;
         await input.close();
       }
@@ -1396,9 +1396,7 @@ void main() {
       final errors = <Object>[];
       final sub = driver.events.listen(events.add, onError: errors.add);
       try {
-        await driver.enter(
-          const TerminalMode(rawInput: true, alternateScreen: false),
-        );
+        await driver.enter(const TerminalMode.fullScreen());
         const invalidArgument = OSError('Invalid argument', 22);
         input.pushError(
           const SocketException('read', osError: invalidArgument),
@@ -1463,9 +1461,7 @@ void main() {
     final done = Completer<void>();
     final sub = driver.events.listen(events.add, onDone: done.complete);
     try {
-      await driver.enter(
-        const TerminalMode(rawInput: false, alternateScreen: false),
-      );
+      await driver.enter(const TerminalMode.fullScreen(rawInput: false));
       await input.close();
       await done.future.timeout(const Duration(seconds: 1));
       expect(events.whereType<SignalEvent>(), isEmpty);
@@ -1799,7 +1795,9 @@ void main() {
           const pop = '\x1b]22;<\x1b\\';
           try {
             final profile = await driver.enter(
-              TerminalMode(mouseMotion: true, alternateScreen: alternateScreen),
+              alternateScreen
+                  ? const TerminalMode.fullScreen(mouseMotion: true)
+                  : const TerminalMode.inline(rows: 10, mouseMotion: true),
             );
             expect(
               (profile.presentation as AnsiTerminalPresentation).pointerShapes,

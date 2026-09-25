@@ -788,7 +788,7 @@ class PosixTerminalDriver
     final negotiationClock = Stopwatch()..start();
     await _negotiateKeyboard(negotiationClock);
     final negotiated = _checkStillEntering(enterGeneration);
-    await _probeCapabilities(negotiated.alternateScreen, negotiationClock);
+    await _probeCapabilities(negotiated.isFullScreen, negotiationClock);
     _checkStillEntering(enterGeneration);
 
     if (_inline != null) {

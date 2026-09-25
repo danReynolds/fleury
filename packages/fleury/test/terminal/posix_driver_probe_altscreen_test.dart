@@ -1,16 +1,15 @@
 // F10: the startup ambiguous-width probe writes a visible glyph at the home
 // cell plus a Cursor Position Report query (ESC[6n), then erases it. On the
 // alternate screen that scratch paint is invisible and thrown away; under a
-// mode WITHOUT the alternate screen (alternateScreen: false) it would land on
-// the user's real screen and scrollback. The driver must therefore GATE the
+// bounded inline mode it would land on the user's real screen and scrollback.
+// The driver must therefore GATE the
 // probe on the alternate screen — safety enforced, not merely a consequence of
 // enter()'s call ordering.
 //
 // This drives enter() over terminal-reporting fake stdio (hasTerminal => true)
-// and inspects the bytes written to stdout. The fake returns only the DA
-// sentinel appended to each startup query: that models an unsupported but
-// responsive terminal and lets every serialized probe reach its write within
-// the aggregate startup budget.
+// and inspects the bytes written to stdout. The fake answers cursor queries
+// so inline can allocate a region, and returns the DA sentinel to close each
+// startup query within the aggregate budget.
 
 import 'dart:async';
 import 'dart:io';
@@ -99,7 +98,11 @@ Future<String> _enterAndCapture(TerminalMode mode) async {
   final out = _TerminalStdout(
     onWrite: (bytes) {
       if (bytes.contains('\x1B[c')) {
-        scheduleMicrotask(() => input.push('\x1B[?1;2c'));
+        scheduleMicrotask(
+          () => input.push(
+            '${bytes.contains('\x1B[6n') ? '\x1B[5;1R' : ''}\x1B[?1;2c',
+          ),
+        );
       }
     },
   );
@@ -118,26 +121,23 @@ Future<String> _enterAndCapture(TerminalMode mode) async {
   return out.written.toString();
 }
 
-// The ambiguous-width probe's distinctive bytes: the Cursor Position Report
-// query and the ambiguous box-drawing glyph it measures. The image-protocol
-// probe (which is NOT gated and runs in both cases) emits neither, and no
-// mode-entry/exit sequence contains them — so they uniquely mark the width
-// probe.
+// Both modes may query the cursor. Only the width probe paints this glyph;
+// inline's allocation queries must never paint scratch content.
 const _cprQuery = '\x1B[6n';
 const _probeGlyph = '─';
 
 void main() {
   group('PosixTerminalDriver ambiguous-width probe alt-screen gate (F10)', () {
-    test('alternateScreen:false does NOT emit the width probe', () async {
+    test('inline queries its anchor without painting a width probe', () async {
       // The gate short-circuits before any probe write, independent of the
       // ambient environment — so this holds unconditionally.
       final captured = await _enterAndCapture(
-        const TerminalMode(alternateScreen: false),
+        const TerminalMode.inline(rows: 10),
       );
       expect(
         captured,
-        isNot(contains(_cprQuery)),
-        reason: 'no ambiguous-width probe query without the alternate screen',
+        contains(_cprQuery),
+        reason: 'inline still queries its allocation anchor',
       );
       expect(
         captured,

@@ -90,7 +90,7 @@ not the current macOS/Linux TTY implementation:
    the process alive. A real PTY probe remained alive two seconds after main
    finished. Replacing it with `File('/dev/fd/0').openRead()` also failed: cancel
    waited on an outstanding idle read for the two-second probe deadline.
-3. `requestExit()` targeted one mutable global completer. A timer created by
+3. `exitApp()` targeted one mutable global completer. A timer created by
    session A successfully exited session B after 87 ms, although B was intended
    to run for 700 ms. Fresh fake drivers reproduced this without the stdin limit.
 4. The active completer was installed late and cleared before terminal/capture
@@ -117,7 +117,7 @@ lease, and lifecycle state. Acquire admission synchronously before the first
 startup await or fd-capture operation. Hold it through final restoration,
 capture shutdown, output replay, and flush.
 
-Register the identity in the existing guarded zone. A `requestExit()` made in
+Register the identity in the existing guarded zone. A `exitApp()` made in
 that zone targets that identity; after it expires the request returns false.
 It must never fall through to a newer session. Preserve the current active-app
 fallback for deliberately unscoped host calls; calls created outside the
@@ -458,7 +458,7 @@ Retained experiment:
 - Warm median duplicate acquisition was roughly 0.05–0.40 ms and release
   0.02–0.19 ms across these runs. This excludes UI startup and terminal probes;
   it just supports choosing fresh readers over a persistent pump.
-- The stale `requestExit` bug was independently reproduced against the original
+- The stale `exitApp` bug was independently reproduced against the original
   runtime before invocation isolation was implemented.
 
 These are transport experiments, not integrated `runApp` acceptance, Windows

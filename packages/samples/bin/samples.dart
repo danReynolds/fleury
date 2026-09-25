@@ -98,12 +98,12 @@ Future<void> main(List<String> args) async {
 /// routed through the dispatcher — an `onEvent` match on `KeyEvent.char`
 /// can never fire, and matching the raw [TextInputEvent] there would quit
 /// while the user types `q` into the agent sample's prompt. Bound this
-/// way, a focused text field claims the character first and [requestExit]
+/// way, a focused text field claims the character first and [exitApp]
 /// fires only when nothing does. (Ctrl+C keeps working via runApp's
 /// built-in unhandled-Ctrl+C escape hatch.)
 Widget withQuitKey(Widget app) => KeyBindings(
   bindings: [
-    KeyBinding(KeySequence.q, onTrigger: (_) => requestExit(), label: 'Quit'),
+    KeyBinding(KeySequence.q, onTrigger: (_) => exitApp(), label: 'Quit'),
   ],
   child: app,
 );

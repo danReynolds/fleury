@@ -15,6 +15,7 @@ import 'package:fleury_doc_examples/registry.dart';
 import 'package:fleury_web/fleury_web.dart';
 import 'package:web/web.dart' as web;
 import 'terminal_modes.dart';
+import 'shutdown.dart';
 
 // `window.fleuryMountExamples()` — re-scan the page after client-side
 // navigations (the dart2js `main` only runs once).
@@ -125,6 +126,7 @@ JSObject _mountInto(web.Element host, String id) {
 
 void _mountAll() {
   mountTerminalDemos(_docsFlush);
+  mountShutdownDemos(_docsFlush);
   final hosts = web.document.querySelectorAll('[data-fleury-example]');
   for (var i = 0; i < hosts.length; i++) {
     final node = hosts.item(i);

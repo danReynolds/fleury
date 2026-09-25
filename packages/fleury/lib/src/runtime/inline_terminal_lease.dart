@@ -28,7 +28,8 @@ void writeInlineTerminalLease(
       'version': 1,
       'active': active,
       'inline': mode.inlineRows != null,
-      'alternateScreen': mode.alternateScreen,
+      // Keep the private recovery wire format readable by older supervisors.
+      'alternateScreen': mode.isFullScreen,
       'stackStateUnknown': stackStateUnknown,
       'keyboard': mode.keyboardProtocol.name,
       'hideCursor': mode.hideCursor,
@@ -69,7 +70,12 @@ String? inlineTerminalRecovery(String? path, CellSize terminal) {
     final keyboard = stackStateUnknown
         ? KeyboardProtocolMode.legacy
         : KeyboardProtocolMode.values.byName(data['keyboard'] as String);
-    final mode = inline
+    // A pre-migration lease could describe an unbounded main-buffer session.
+    // Restore its input modes without guessing an alternate-screen exit.
+    if (!inline && data['alternateScreen'] is! bool) {
+      throw const FormatException('missing screen ownership');
+    }
+    final mode = inline || data['alternateScreen'] == false
         ? TerminalMode.inline(
             rows: 1,
             keyboardProtocol: keyboard,
@@ -78,8 +84,7 @@ String? inlineTerminalRecovery(String? path, CellSize terminal) {
             bracketedPaste: data['paste'] as bool,
             focusReporting: data['focus'] as bool,
           )
-        : TerminalMode(
-            alternateScreen: data['alternateScreen'] as bool,
+        : TerminalMode.fullScreen(
             keyboardProtocol: keyboard,
             hideCursor: data['hideCursor'] as bool,
             resetStyleOnExit: data['resetStyle'] as bool,
@@ -115,12 +120,11 @@ String? inlineTerminalRecovery(String? path, CellSize terminal) {
   } catch (_) {
     // Corrupt metadata must never become arbitrary output or a guessed
     // alternate-screen/keyboard-stack pop. Restore common input modes only.
-    final reset = buildTerminalExitSequences(
-      const TerminalMode(
-        alternateScreen: false,
+    return buildTerminalExitSequences(
+      const TerminalMode.inline(
+        rows: 1,
         keyboardProtocol: KeyboardProtocolMode.legacy,
       ),
     );
-    return '$reset\x1B[?7h';
   }
 }

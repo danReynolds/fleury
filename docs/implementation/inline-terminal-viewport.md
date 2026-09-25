@@ -65,8 +65,8 @@ never supplies raw executable escape bytes.
 
 The retained renderer continues to use absolute addressing within a known,
 owned region. The original RFC's relative-addressing and transcript proposals
-remain a broader future feature. Disabling `alternateScreen` alone is not an
-inline viewport.
+remain a broader future feature. The old `alternateScreen` switch is removed;
+use `TerminalMode.fullScreen()` or `TerminalMode.inline(rows: ...)`.
 
 ## Validation and evidence boundary
 

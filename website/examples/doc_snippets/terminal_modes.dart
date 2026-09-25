@@ -19,12 +19,12 @@ Future<void> main(List<String> args) async {
       home: InlineSetup(
         onComplete: (value) {
           result = value;
-          requestExit();
+          exitApp();
         },
       ),
     ),
     mode: args.contains('--full-screen')
-        ? const TerminalMode(mouse: true)
+        ? const TerminalMode.fullScreen(mouse: true)
         : const TerminalMode.inline(rows: 21, mouse: true),
     enableHotReload: false,
     debug: const DebugConfig(enabled: false),

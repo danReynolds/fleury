@@ -1,0 +1,109 @@
+---
+title: Shutdown and signals
+description: Finish a terminal UI, clean up your command, and handle interrupts without losing their exit status.
+---
+
+import ShutdownDemo from '../../../components/ShutdownDemo.astro';
+import ShutdownCode from '../../../components/ShutdownCode.astro';
+
+`runApp` starts the UI. `exitApp()` finishes it. After Fleury restores the
+terminal, your command continues with cleanup, output, or another UI.
+
+Choose **Finish**, then run again and simulate **Ctrl+C**. Both close the UI,
+but only the interrupt produces exit code **130**. Switch to **Finish work
+first** to keep the UI visible while the current item finishes.
+
+<ShutdownDemo />
+
+The widget and its disposal are real Fleury. The browser simulates signal
+delivery and command output; it does not send operating-system signals or own
+a terminal. The examples below run natively. All sample work stays in memory.
+
+## Finish the UI
+
+Call `exitApp()` from an action, then print after awaiting `runApp`:
+
+<ShutdownCode file="finish.dart" />
+
+`exitApp()` starts orderly shutdown in either screen mode, leaving the Dart
+process running. Await **`runApp`** for terminal restoration to finish before
+continuing your command. Calling `exitApp()` again while it is stopping is safe.
+
+## Clean up and preserve the exit status
+
+Most commands can use Fleury's default interrupt handling. Keep resources owned
+by the command in `try`/`finally`, and use `AppExit.signal` to choose the process
+exit code:
+
+<ShutdownCode file="signals.dart" />
+
+Fleury disposes its widget tree and restores the terminal before `runApp`
+completes. Your `finally` closes resources you created outside that tree. Set
+Dart's `exitCode` and let `main` return so this cleanup can finish.
+
+| Cause | `AppExit.signal` | Conventional exit code |
+|---|---|---|
+| `exitApp()` | `null` | `0` for successful completion |
+| Unhandled Ctrl+C or SIGINT | `AppSignal.interrupt` | `130` |
+| SIGTERM | `AppSignal.terminate` | `143` |
+| Terminal hangup / SIGHUP | `AppSignal.hangup` | `129` |
+
+`signalExitCode` in the sample implements this mapping. An orderly UI exit does
+not decide whether your command succeeded: validation errors or cancellation
+may need a different status. If `runApp` throws, the same `finally` still runs.
+
+<details>
+<summary>View the shared sample widget, work, and exit-code mapping</summary>
+<ShutdownCode file="demo_work.dart" />
+</details>
+
+## Finish work before closing
+
+Use this when the UI should show a final operation, such as finishing a pending
+write. Claim the interrupt, stop accepting new work, then call `exitApp()` when
+the operation finishes.
+
+There are two inputs to handle. In raw terminal mode, **Ctrl+C is a key event**;
+a widget's `KeyBinding` can claim it. An operating-system signal arrives as a
+**`SignalEvent`**; return `EventHandled` from `onEvent` to claim it. This example
+routes both through one shutdown operation:
+
+<ShutdownCode file="finish_work.dart" />
+
+The shared `stopping` future makes repeated actions reuse the same work. The
+button becomes unavailable while finishing. `interruptedBy` preserves the
+original signal because the later `exitApp()` produces an orderly `AppExit`,
+without a signal of its own.
+
+Keep signal cleanup bounded. The native POSIX driver allows **five seconds**
+from signal delivery by default; a repeated instance of the same pending OS
+signal forces an immediate exit. On that forced path, Fleury attempts terminal
+restoration, but application cleanup may not finish. A Ctrl+C binding you claim
+is application-owned input and does **not** start that OS-signal deadline.
+
+Put ordinary resource cleanup after `runApp` when you don't need a visible
+shutdown step. The signal deadline ends when the driver restores the terminal;
+it is not a timeout for the rest of your command. No shutdown hook can promise
+cleanup after SIGKILL or loss of power.
+
+## Try real signals
+
+From a Fleury checkout:
+
+```sh
+cd website/examples
+dart run doc_snippets/shutdown/signals.dart
+dart run doc_snippets/shutdown/finish_work.dart
+```
+
+Each command prints its PID before opening the UI. Press **Ctrl+C**, or send
+`kill -TERM <PID>` from another terminal. The first example closes immediately;
+the second displays **Finishing current item…** before closing. Both preserve
+the interrupt's exit status. Use `echo $status` in fish or `echo $?` in a POSIX
+shell to inspect it.
+
+## Next steps
+
+- [Full-screen and inline UIs](/fleury/guides/terminal-modes/) shows how each mode returns to the shell and how to open another UI.
+- [Key handling](/fleury/guides/focus-and-keyboard/) explains shortcut routing and focused controls.
+- [App entry points](/fleury/concepts/app-entry/) separates framework-owned services from your application's resources.

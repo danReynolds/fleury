@@ -91,9 +91,12 @@ so their startup and completion code run once.
 
 ### Finish back at the prompt
 
-The form calls `requestExit()` when it finishes. Fleury removes the UI, restores
+The form calls `exitApp()` when it finishes. Fleury removes the UI, restores
 terminal input, and completes `runApp`. Print the command's result after awaiting
 it so the summary stays in the terminal.
+
+[Shutdown and signals](/fleury/guides/shutdown-and-signals/) shows cleanup and
+interrupt handling, including how to preserve the command's exit status.
 
 ## Resize an inline UI
 

@@ -157,16 +157,34 @@ enum KeyboardProtocolMode {
 
 /// The set of terminal modes the driver should enable for a TUI session.
 ///
-/// Defaults to the standard interactive TUI configuration (raw input,
-/// alternate screen, hidden cursor, style reset on exit). Callers can
-/// opt out of individual modes. Use [TerminalMode.inline] for a bounded
-/// main-buffer UI: disabling [alternateScreen] alone does not reserve rows
-/// or constrain rendering.
+/// Choose a full-screen workspace or a bounded inline region.
+/// [TerminalMode] defaults to [TerminalMode.fullScreen]. Both constructors
+/// configure input and terminal cleanup; only [TerminalMode.inline] takes rows.
 @immutable
 final class TerminalMode {
   const TerminalMode({
+    bool rawInput = true,
+    bool hideCursor = true,
+    bool resetStyleOnExit = true,
+    bool bracketedPaste = true,
+    KeyboardProtocolMode keyboardProtocol = KeyboardProtocolMode.lifecycle,
+    bool focusReporting = true,
+    bool mouse = false,
+    bool mouseMotion = false,
+  }) : this.fullScreen(
+         rawInput: rawInput,
+         hideCursor: hideCursor,
+         resetStyleOnExit: resetStyleOnExit,
+         bracketedPaste: bracketedPaste,
+         keyboardProtocol: keyboardProtocol,
+         focusReporting: focusReporting,
+         mouse: mouse,
+         mouseMotion: mouseMotion,
+       );
+
+  /// Uses the terminal viewport and restores the previous screen on exit.
+  const TerminalMode.fullScreen({
     this.rawInput = true,
-    this.alternateScreen = true,
     this.hideCursor = true,
     this.resetStyleOnExit = true,
     this.bracketedPaste = true,
@@ -195,17 +213,18 @@ final class TerminalMode {
     this.mouseMotion = false,
   }) : assert(rows > 0, 'inline rows must be positive'),
        inlineRows = rows,
-       rawInput = true,
-       alternateScreen = false;
+       rawInput = true;
 
   /// Requested initial height, or null for an ordinary terminal session.
   final int? inlineRows;
 
+  bool get isInline => inlineRows != null;
+  bool get isFullScreen => !isInline;
+
   /// The standard interactive TUI mode.
-  static const TerminalMode interactive = TerminalMode();
+  static const TerminalMode interactive = TerminalMode.fullScreen();
 
   final bool rawInput;
-  final bool alternateScreen;
   final bool hideCursor;
   final bool resetStyleOnExit;
 
@@ -258,9 +277,8 @@ TerminalMode terminalModeWithKeyboardProtocol(
         mouse: mode.mouse,
         mouseMotion: mode.mouseMotion,
       )
-    : TerminalMode(
+    : TerminalMode.fullScreen(
         rawInput: mode.rawInput,
-        alternateScreen: mode.alternateScreen,
         hideCursor: mode.hideCursor,
         resetStyleOnExit: mode.resetStyleOnExit,
         bracketedPaste: mode.bracketedPaste,

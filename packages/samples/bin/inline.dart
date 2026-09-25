@@ -47,12 +47,12 @@ Future<bool> _showSetup(List<String> args) async {
         pager: args.contains('--handoff'),
         onComplete: (value) {
           result = value;
-          requestExit();
+          exitApp();
         },
       ),
     ),
     mode: fullScreen
-        ? const TerminalMode(mouse: true, mouseMotion: true)
+        ? const TerminalMode.fullScreen(mouse: true, mouseMotion: true)
         : TerminalMode.inline(
             rows: InlineSetupStep.configure.rows,
             mouse: true,

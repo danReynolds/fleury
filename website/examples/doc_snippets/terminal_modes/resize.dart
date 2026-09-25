@@ -16,7 +16,7 @@ class ResizingSetup extends StatelessWidget {
   Widget build(BuildContext context) {
     final session = context.scope<TerminalSession>();
     return InlineSetup(
-      onComplete: (_) => requestExit(),
+      onComplete: (_) => exitApp(),
       onStepChanged: (step) async {
         await session.resizeInline(step.rows);
       },
