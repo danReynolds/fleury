@@ -35,6 +35,11 @@ The recording captures the native app in a real PTY. Earlier output stays in
 the main terminal buffer, the live region grows for review, and completion
 clears that region before the command prints its result.
 
+Want to mix several UI steps with ordinary CLI work? The
+[UI → CLI → UI demo](/fleury/guides/terminal-modes/#go-from-ui-to-cli-and-back)
+shows two native sessions with a text prompt between them, plus the host loop
+that makes it work.
+
 ## One form. A small host boundary.
 
 The form returns an `InlineSetupResult` and announces when its page changes.

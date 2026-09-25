@@ -117,34 +117,6 @@ Ctrl+C returns `AppExit.signal(AppSignal.interrupt)`, conventionally exit code 1
 The sample disables hot reload so its startup and final
 output run once; both terminal modes support development sessions.
 
-### Open another UI in the same command
-
-Run the setup demo with an ordinary CLI prompt between sessions:
-
-```sh
-dart run packages/samples/bin/samples.dart inline --repeat
-```
-
-Finish setup, then answer `y` at **Open setup again?**. The command reads that
-answer with `stdin.readLineSync()` and starts a new `runApp`. Earlier summaries
-remain in the terminal. Add `--full-screen` to try the same flow in that mode.
-
-Await each invocation before starting the next. Overlapping or nested
-`runApp` calls are rejected, and an explicitly supplied native driver is used
-only once. Let each call create its default driver. After ordinary completion,
-Fleury has released input and restored the terminal. Handle signal outcomes
-before opening another UI: a hangup means the terminal disconnected. If cleanup
-fails, Fleury reports an error and blocks new sessions until ownership is safely
-returned.
-
-This reuse support is for native macOS/Linux TTY input. Windows and redirected
-Dart stdin streams still permit one session per process. This does not make
-Dart's own stdin stream reusable: another library must not read concurrently,
-and cancelling its subscription can close fd 0. Fleury cannot recover a closed
-input descriptor or silently reopen a different terminal.
-Disable hot reload for a CLI with work between sessions: hot restart reruns the
-entrypoint, including earlier prompts and side effects.
-
 ### Give inline steps enough room
 
 The setup form requests 17 rows for editing and 21 for review. Its native host
@@ -174,6 +146,92 @@ Use `Expanded` and scrollable content so a short terminal can still reach every
 control. Keep primary actions visible while longer content scrolls. The setup
 showcase stacks its preview at narrow widths. [Layout](/fleury/guides/layout/) and
 [Lists & scrolling](/fleury/guides/lists-and-scrolling/) cover those widgets.
+
+## Go from UI to CLI and back
+
+Use an inline UI for one step in a longer command, return control to ordinary
+CLI code, then open another UI. This native demo creates two configurations in
+one process: **setup → text prompt → fresh setup → shell**.
+
+<InlineRecording recording="inline-repeat" label="Watch UI → CLI → UI in one command" duration="20 seconds" />
+
+After the first form closes, its summary stays in the terminal. The **Open setup
+again?** prompt reads `y` with ordinary `stdin.readLineSync()`. The second form
+starts with fresh widget state; completing it and answering `n` ends the command.
+Each summary remains available in the terminal's scrollback.
+
+Try the same flow from a Fleury checkout:
+
+```sh
+dart run packages/samples/bin/samples.dart inline --repeat
+```
+
+This recording runs the real native app; the shell context around it is a
+recording fixture. No project files are written. Add `--full-screen` to try
+successive alternate-screen sessions instead. Each `runApp` can choose its own
+mode, so a command can also combine inline and full-screen steps.
+
+The loop belongs in the command's host. Await `runApp` before printing, reading
+input, or opening the next UI:
+
+```dart
+Future<void> repeatSetup() async {
+  while (true) {
+    InlineSetupResult? result;
+    final outcome = await runApp(
+      FleuryApp(
+        title: 'Project setup',
+        home: InlineSetup(
+          onComplete: (value) {
+            result = value;
+            requestExit();
+          },
+        ),
+      ),
+      mode: const TerminalMode.inline(rows: 21, mouse: true),
+      enableHotReload: false,
+    );
+
+    if (outcome.signal case final signal?) {
+      exitCode = switch (signal) {
+        AppSignal.interrupt => 130,
+        AppSignal.terminate => 143,
+        AppSignal.hangup => 129,
+      };
+      return;
+    }
+    if (result == null) return;
+
+    stdout.writeln(result!.summary);
+    stdout.write('Open setup again? [y/N] ');
+    await stdout.flush();
+    if (stdin.readLineSync()?.trim().toLowerCase() != 'y') return;
+  }
+}
+```
+
+`InlineSetup` and `InlineSetupResult` are the sample's form and result type.
+The [complete native host](https://github.com/danReynolds/fleury/blob/main/packages/samples/bin/inline.dart)
+also adjusts the region height for each form step. A real command can do its
+ordinary work between sessions—write the chosen configuration, run a build, or
+print a report—then open the next UI when it needs interaction again.
+
+Finishing a `runApp` disposes that UI. Keep any data needed by the next step in
+the host. To lend the terminal to another program and return to the **same** UI
+with its state intact, use [handoff](#let-another-program-use-the-terminal).
+
+Await each invocation and let it create its default driver. Overlapping or
+nested calls are rejected; an explicitly supplied native driver is used only
+once. Handle signal outcomes before opening another UI: a hangup means the
+terminal disconnected. If cleanup fails, Fleury reports an error and blocks new
+sessions until ownership is safely returned.
+
+Sequential native sessions require macOS/Linux TTY input. Windows and redirected
+Dart stdin streams still permit one session per process. Another library must
+not read input concurrently; cancelling a Dart stdin subscription can close its
+descriptor, which Fleury cannot recover. Disable hot reload for a CLI with work
+between sessions: hot restart reruns the entrypoint, including earlier prompts
+and side effects.
 
 ## Output and subprocesses
 
