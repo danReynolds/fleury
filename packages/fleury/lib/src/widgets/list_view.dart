@@ -1424,7 +1424,7 @@ CellBuffer? _paintListViewport(
   for (final entry in children.entries) {
     entry.key.paint(scratch, entry.value);
   }
-  buffer.copyFrom(scratch, offset);
+  buffer.compositeFrom(scratch, offset);
   return scratch;
 }
 

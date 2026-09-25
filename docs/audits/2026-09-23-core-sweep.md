@@ -16,11 +16,11 @@
 | A | medium | N events delivered in one event-loop turn (one stdin read, one socket chunk) render N full frames | Decision pending: coalesce events into one frame |
 | A | medium | On exit, mouse reports that arrive during teardown stay queued on the tty and the shell reads them as garbage | Decision pending: draining the tty before exit, Ctrl+Z, or handoff reads away typeahead; not draining leaves mouse reports for the shell |
 | A | low | Rebuilds requested during a LayoutBuilder's layout-time build wait for the next frame: a Scope fed from constraints paints the previous size on every resize | Fixed |
-| B | high | RenderText's layout cache goes stale after a single-line fast-path layout, so wrapped lines vanish after narrow→wide→narrow | Open |
-| B | high | Soft-wrap drops leading whitespace at the start of every paragraph: multi-line Text and all RichText lose indentation (JsonView tree and nested Markdown lists render flat) | Open |
-| B | medium | RenderFlex aligns children within the unconstrained content size instead of the final box, and on overflow spaceBetween/Around/Evenly produce negative gaps that overlap siblings | Open |
-| B | medium | RepaintBoundary cache blits and ListView's clip path copy empty cells over the parent's paint, punching holes in backgrounds (every ListView item is wrapped in a boundary by default) | Open |
-| B | low | RenderFlex's offscreen cull never fires for subtrees containing text, so a ScrollView paints its entire content every frame | Open |
+| B | high | RenderText's layout cache goes stale after a single-line fast-path layout, so wrapped lines vanish after narrow→wide→narrow | Fixed |
+| B | high | Soft-wrap drops leading whitespace at the start of every paragraph: multi-line Text and all RichText lose indentation (JsonView tree and nested Markdown lists render flat) | Fixed |
+| B | medium | RenderFlex aligns children within the unconstrained content size instead of the final box, and on overflow spaceBetween/Around/Evenly produce negative gaps that overlap siblings | Fixed |
+| B | medium | RepaintBoundary cache blits and ListView's clip path copy empty cells over the parent's paint, punching holes in backgrounds (every ListView item is wrapped in a boundary by default) | Fixed |
+| B | low | RenderFlex's offscreen cull never fires for subtrees containing text, so a ScrollView paints its entire content every frame | Fixed |
 | C | high | Holding Ctrl+C exits the app even when the press was handled, e.g. after copying a selection or an app's Interrupt binding | Open |
 | C | high | The numeric keypad does nothing on kitty-protocol terminals (the default setup): digits are dropped, and KP Enter and NumLock-off navigation keys are ignored | Open |
 | C | medium | Browser: printable keys reach detectors twice, and Shift+letter typeahead skips a match | Open |

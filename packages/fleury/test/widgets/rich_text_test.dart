@@ -14,6 +14,56 @@ String _row(CellBuffer buf, int row) {
 
 void main() {
   for (final softWrap in [false, true]) {
+    test('a leading indent span is kept, softWrap=$softWrap', () {
+      // JsonView rows and nested Markdown bullets indent with a leading span.
+      final render = RenderRichText(
+        span: const TextSpan(
+          children: [
+            TextSpan(text: '    '),
+            TextSpan(text: 'child item'),
+          ],
+        ),
+        base: CellStyle.none,
+        softWrap: softWrap,
+      )..layout(const CellConstraints(maxCols: 40));
+      final buffer = CellBuffer(const CellSize(40, 1));
+      render.paint(buffer, CellOffset.zero);
+      expect(_row(buffer, 0), '    child item');
+    });
+  }
+
+  test('an indent span with no room left for the first word gives way', () {
+    // Breaking after the indentation would leave a row of nothing but
+    // spaces; the word takes the row instead.
+    final render = RenderRichText(
+      span: const TextSpan(
+        children: [
+          TextSpan(text: '      '),
+          TextSpan(text: 'child item'),
+        ],
+      ),
+      base: CellStyle.none,
+    )..layout(const CellConstraints(maxCols: 10));
+    final buffer = CellBuffer(const CellSize(10, 2));
+    render.paint(buffer, CellOffset.zero);
+    expect(render.size.rows, 1);
+    expect(_row(buffer, 0), 'child item');
+  });
+
+  test('an indented paragraph keeps its indent across a wrap', () {
+    final render = RenderRichText(
+      span: const TextSpan(text: 'top\n   indented words here'),
+      base: CellStyle.none,
+    )..layout(const CellConstraints(maxCols: 12));
+    final buffer = CellBuffer(const CellSize(12, 3));
+    render.paint(buffer, CellOffset.zero);
+    expect(
+      [_row(buffer, 0), _row(buffer, 1), _row(buffer, 2)],
+      ['top', '   indented', 'words here'],
+    );
+  });
+
+  for (final softWrap in [false, true]) {
     test('ordinary spaces preserve their span style, softWrap=$softWrap', () {
       const first = CellStyle(inverse: true, background: AnsiColor(2));
       const second = CellStyle(underline: true, foreground: AnsiColor(3));
