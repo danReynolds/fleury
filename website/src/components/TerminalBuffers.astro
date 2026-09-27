@@ -1,0 +1,37 @@
+---
+const flows = [
+  { title: 'Full-screen', during: 'Alternate buffer', lines: ['Project setup', '[ Your interactive UI ]'], after: 'Main buffer restored' },
+  { title: 'Inline', during: 'Main buffer + owned region', lines: ['$ project-setup', '[ Your interactive UI ]'], after: 'Live region cleared' },
+];
+---
+
+<figure class="buffer-diagram" aria-label="Terminal buffer lifecycle for full-screen and inline apps">
+  {flows.map(flow => <div class="buffer-flow">
+    <strong>{flow.title}</strong>
+    <div class="buffer-stages">
+      <div class="buffer-stage"><span>Before · main buffer</span><code>Earlier output<br />$ project-setup</code></div>
+      <span class="buffer-arrow" aria-hidden="true">→</span>
+      <div class="buffer-stage active"><span>{flow.during}</span><code>{flow.title === 'Inline' && <>Earlier output<br /></>}{flow.lines[0]}<br />{flow.lines[1]}</code></div>
+      <span class="buffer-arrow" aria-hidden="true">→</span>
+      <div class="buffer-stage"><span>{flow.after}</span><code>Earlier output<br />$ project-setup<br />Setup complete.<br />$ ▌</code></div>
+    </div>
+  </div>)}
+  <figcaption>In both cases, the command prints “Setup complete.” after the UI exits.</figcaption>
+</figure>
+
+<style>
+  .buffer-diagram { margin-block: 1.5rem; }
+  .buffer-flow + .buffer-flow { margin-top: 1.25rem; }
+  .buffer-flow > strong { display: block; margin-bottom: .5rem; }
+  .buffer-stages { display: grid; grid-template-columns: 1fr auto 1fr auto 1fr; align-items: center; gap: .5rem; }
+  .buffer-stage { height: 100%; padding: .8rem; border: 1px solid var(--sl-color-gray-5); border-radius: .4rem; min-width: 0; }
+  .buffer-stage span { display: block; margin-bottom: .6rem; font-size: .75rem; color: var(--sl-color-gray-2); }
+  .buffer-stage code { display: block; padding: 0; background: none; font-size: .7rem; line-height: 1.8; overflow-wrap: anywhere; }
+  .buffer-stage.active { border-color: var(--sl-color-accent); background: var(--sl-color-accent-low); }
+  .buffer-arrow { color: var(--sl-color-gray-3); }
+  figcaption { color: var(--sl-color-gray-2); font-size: .85rem; margin-top: .75rem; }
+  @media (max-width: 50rem) {
+    .buffer-stages { grid-template-columns: 1fr; }
+    .buffer-arrow { transform: rotate(90deg); justify-self: center; }
+  }
+</style>

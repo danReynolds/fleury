@@ -36,6 +36,8 @@ AI agents can inspect and operate by meaning instead of terminal coordinates.
   Read shared state through builder widgets or directly from `BuildContext`.
 - **Terminal-native rendering.** Fleury paints grapheme-aware cells and sends
   diffed ANSI output instead of treating the terminal like a pixel canvas.
+- **Full-screen apps and inline commands.** Build a complete terminal app or
+  put a compact form below the shell prompt. [Try the inline setup showcase](https://danreynolds.github.io/fleury/showcases/inline/).
 - **Terminal and browser targets.** Share application UI while choosing a
   native terminal host, a client-side web mount, or a served browser session.
 - **A real widget library.** Forms, tables, trees, charts, document views, and

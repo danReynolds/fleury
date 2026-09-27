@@ -1,0 +1,238 @@
+---
+title: Full-screen and inline UIs
+description: Choose how your UI fits into a terminal session, understand the buffers it uses, and return cleanly to the shell.
+---
+
+import { Tabs, TabItem } from '@astrojs/starlight/components';
+import InlineShowcase from '../../../components/InlineShowcase.astro';
+import InlineRecording from '../../../components/InlineRecording.astro';
+import TerminalWorkflow from '../../../components/TerminalWorkflow.astro';
+import TerminalModesCode from '../../../components/TerminalModesCode.astro';
+import TerminalBuffers from '../../../components/TerminalBuffers.astro';
+
+A terminal UI can become the user's workspace or help them finish one step in a
+command. Fleury supports both: **full-screen** uses the terminal viewport;
+**inline** reserves a smaller region beneath the current cursor.
+
+The examples below run a real Fleury form inside illustrated terminal buffers.
+In the full-screen tab, run the command to watch the form take over. Finish or
+cancel to return to the shell; **Run again** resets the browser illustration.
+
+<Tabs>
+<TabItem label="Inline">
+<InlineShowcase />
+</TabItem>
+<TabItem label="Full-screen">
+<InlineShowcase fullScreen />
+</TabItem>
+</Tabs>
+
+The form uses the terminal's own text and background colors, with accents and
+focus highlights. Inline mode sets the UI's space; it doesn't require a
+background fill or a particular color theme.
+
+## Choose for the workflow
+
+| | Full-screen | Inline |
+|---|---|---|
+| Good fit | Editors, dashboards, file managers, multi-pane workspaces | Pickers, setup forms, confirmations, bounded progress displays |
+| Space | The terminal's width and height | Full width and an explicit number of rows, clamped to the terminal height |
+| Earlier shell output | Hidden while the app runs; restored on exit | Remains in the main buffer; reserving space can move it into scrollback |
+| When Fleury exits | Restores the previous screen | Clears the live region |
+| Lasting result | Print after awaiting `runApp` | Print after awaiting `runApp` |
+
+Choose full-screen when users need room to explore, navigate between views, or
+keep several things in view. Choose inline when the UI is one step in a shell
+workflow and the surrounding output provides useful context. Duration alone
+doesn't decide it: a compact status display can run for a long time.
+
+For ordinary command output, a report, or a single text prompt, plain CLI output
+may be enough. If your design needs a growing transcript above a live prompt,
+Fleury's current inline mode does not yet support that arrangement.
+
+## What the terminal does
+
+Most modern terminal emulators provide a **main screen buffer**, where your shell
+and command output live, and an **alternate screen buffer** for interactive apps.
+Entering the alternate screen hides the main screen; leaving it reveals the
+previous contents. This is the mechanism behind Fleury's default full-screen
+mode. It fills the terminal viewport, not the desktop display.
+
+Inline stays in the main buffer. Fleury asks the terminal for the cursor's
+position, reserves rows there, and confines painting and clearing to that region.
+It translates mouse and text-caret positions into the widget tree's coordinates.
+The widgets receive a smaller viewport and use the same layout and input APIs.
+
+<TerminalBuffers />
+
+Screen placement is separate from input handling. **Both modes use raw input**
+so Fleury can react to individual keys, manage focus, and edit text. The shell
+waits while the app runs. Mouse reporting is optional in both modes; enabling it
+affects native terminal selection throughout the window. Terminal-specific
+selection modifiers and scrollback behavior still apply.
+
+The alternate screen normally has no scrollback of its own. A `ScrollView` or
+`ListView` scrolls content inside your UI, independently of terminal scrollback.
+Redrawing frames does not create a durable history of the interaction, and
+Fleury's inline mode clears its final frame on exit.
+
+## Choose the mode at startup
+
+Use the same form in either mode. Inline asks for a row count; full-screen uses
+the terminal's size. Mouse input is optional in both.
+
+<Tabs>
+<TabItem label="inline.dart">
+<TerminalModesCode file="inline.dart" />
+</TabItem>
+<TabItem label="full_screen.dart">
+<TerminalModesCode file="full_screen.dart" />
+</TabItem>
+</Tabs>
+
+`InlineSetup` is the sample form used above. These commands disable hot reload
+so their startup and completion code run once.
+
+### Finish back at the prompt
+
+The form calls `exitApp()` when it finishes. Fleury removes the UI, restores
+terminal input, and completes `runApp`. Print the command's result after awaiting
+it so the summary stays in the terminal.
+
+[Shutdown and signals](/fleury/guides/shutdown-and-signals/) shows cleanup and
+interrupt handling, including how to preserve the command's exit status.
+
+## Resize an inline UI
+
+Choose **Review →**: the form requests **21 rows**, up from **17**. Choose
+**Back** to shrink it again. The earlier output stays above the live region.
+
+<TerminalWorkflow flow="resize" />
+
+`runApp` provides the terminal session automatically. Read it from the build
+context, then request a new height from a callback:
+
+<details>
+<summary>View resize.dart</summary>
+<TerminalModesCode file="resize.dart" />
+</details>
+
+The browser resizes the host element around the real form. In a terminal,
+`session.resizeInline(rows)` reallocates the live region and repaints it.
+
+<span id="go-from-ui-to-cli-and-back"></span>
+
+## Mix UI and CLI steps
+
+Run setup, finish the form, then type **y** at the text prompt to open a fresh
+form. Complete that one and answer **n** to finish the command. Both summaries
+stay in the output.
+
+<TerminalWorkflow flow="repeat" />
+
+Each form here is a separate Fleury browser mount. Between forms, the page owns
+the text prompt. The native equivalent awaits `runApp`, reads ordinary CLI input,
+then calls `runApp` again:
+
+<details>
+<summary>View repeat.dart</summary>
+<TerminalModesCode file="repeat.dart" />
+</details>
+
+Try the native flow from a Fleury checkout:
+
+```sh
+dart run packages/samples/bin/samples.dart inline --repeat
+```
+
+Await each UI before opening the next. Keep shared data in the command's host;
+each UI starts fresh. To return to the **same** UI after another program runs,
+use [handoff](#let-another-program-use-the-terminal).
+
+## Output and subprocesses
+
+By default, `runApp` captures stray output while it owns the terminal and replays
+the retained output after exit. Calling `print` during the UI is not a way to
+append permanent lines above it. Render live messages as widgets; print the
+command's final result after awaiting `runApp`.
+
+### Let another program use the terminal
+
+Suppose the setup form offers **View in pager**. Selecting it opens the generated
+configuration in `less`, a separate terminal pager. Pressing **q** closes it and
+brings you back to the same form, with your name, template, and review step preserved.
+
+<InlineRecording recording="inline-handoff" label="Watch setup open less and resume" duration="Native terminal recording" />
+
+This is a recording of the real native app launching `less`, not a browser
+simulation. Try it yourself from a Fleury checkout:
+
+```sh
+dart run packages/samples/bin/samples.dart inline --handoff
+```
+
+Choose **Review →**, then **View in pager**. The preview uses a temporary file
+and removes it when the pager closes; no project files are created. Add
+`--full-screen` to try the same handoff from the alternate screen.
+
+`runWithHandoff` makes this work by temporarily giving the child control of the
+terminal. Fleury pauses its painting and output capture, restores normal input,
+and releases its screen. Without the handoff, the two programs would compete
+for input and the child's output could disappear into Fleury's captured logs.
+When the child exits, Fleury reclaims the terminal and redraws the existing UI.
+
+```dart
+await session.runWithHandoff(() async {
+  final pager = await Process.start(
+    'less', ['--', previewFile.path],
+    mode: ProcessStartMode.inheritStdio,
+  );
+  await pager.exitCode;
+});
+```
+
+The native host reads `session` from `context.scope<TerminalSession>()` and creates
+`previewFile` before the handoff. The form itself needs no process or terminal
+code. This also works for an editor or an interactive Git command. In inline
+mode, child output can remain above the resumed UI; full-screen mode re-enters
+the alternate screen. On POSIX terminals, Ctrl+Z uses the same release-and-resume
+lifecycle.
+
+## Try the native behavior
+
+The browser examples illustrate the buffers around a real shared Fleury form.
+They cannot exercise a terminal emulator's cursor reports, scrollback, or raw
+input. From a Fleury checkout, compare the actual host modes:
+
+```sh
+dart run packages/samples/bin/samples.dart inline
+dart run packages/samples/bin/samples.dart inline --full-screen
+```
+
+Neither command writes project files. Resize the terminal during review, go
+back, and finish. Earlier output should remain available and ordinary shell
+input should work again. This recording captures the inline run on a native PTY:
+
+<InlineRecording />
+
+## Current inline support
+
+Inline needs terminal input/output and cursor position reporting. If the
+terminal cannot report its cursor position, Fleury restores its modes and
+reports the error.
+
+Natural content height, permanent log insertion above a running region, and
+retaining the final frame are not implemented. Native image protocols fall back
+to glyph rendering. Terminal emulators differ in how they reflow old lines on
+resize; if cleanup cannot establish which rows it owns, it leaves uncertain
+rows alone to protect earlier output.
+
+Browser embeds take their size from the containing element. A served native
+preview also has a host-controlled viewport; neither demonstrates a native
+inline allocation. See [Serving and embedding](/fleury/architecture/serving-and-embedding/).
+
+## Next steps
+
+- [App entry points](/fleury/concepts/app-entry/) covers `runApp` and the host services available to your widgets.
+- [Layout](/fleury/guides/layout/) and [Lists & scrolling](/fleury/guides/lists-and-scrolling/) help your UI adapt to the available space.
+- [Deployment & distribution](/fleury/guides/deployment/) covers shipping your command.

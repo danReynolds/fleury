@@ -2,6 +2,7 @@ import 'dart:io';
 
 import 'package:fleury/fleury.dart';
 import 'package:fleury_samples/samples.dart';
+import 'inline.dart' show runInlineSetup;
 
 /// Runnable showcase apps for Fleury, mirroring the storybook CLI:
 ///
@@ -9,7 +10,7 @@ import 'package:fleury_samples/samples.dart';
 ///   fleury dev samples <app>            (via tool/fleury_dev.dart)
 ///
 /// Apps: dashboard | files | editor | agent | agent-guide | finance | forms |
-/// state | themes | asteroids | sprite | commands | debug.
+/// state | themes | asteroids | sprite | commands | debug | inline.
 const Map<String, (String, Widget Function())>
 _apps = <String, (String, Widget Function())>{
   'dashboard': ('htop-style live system monitor', DashboardApp.new),
@@ -57,6 +58,10 @@ Future<void> main(List<String> args) async {
   }
 
   final name = positional.first;
+  if (name == 'inline') {
+    await runInlineSetup(args);
+    return;
+  }
   final entry = _apps[name];
   if (entry == null) {
     stderr.writeln('Unknown app: $name');
@@ -93,12 +98,12 @@ Future<void> main(List<String> args) async {
 /// routed through the dispatcher — an `onEvent` match on `KeyEvent.char`
 /// can never fire, and matching the raw [TextInputEvent] there would quit
 /// while the user types `q` into the agent sample's prompt. Bound this
-/// way, a focused text field claims the character first and [requestExit]
+/// way, a focused text field claims the character first and [exitApp]
 /// fires only when nothing does. (Ctrl+C keeps working via runApp's
 /// built-in unhandled-Ctrl+C escape hatch.)
 Widget withQuitKey(Widget app) => KeyBindings(
   bindings: [
-    KeyBinding(KeySequence.q, onTrigger: (_) => requestExit(), label: 'Quit'),
+    KeyBinding(KeySequence.q, onTrigger: (_) => exitApp(), label: 'Quit'),
   ],
   child: app,
 );
@@ -109,9 +114,14 @@ void _printUsage() {
   stdout.writeln('Usage: dart run bin/samples.dart <app>');
   stdout.writeln('');
   stdout.writeln('Apps:');
+  stdout.writeln(
+    '  inline      project setup in the shell, with review and a final result',
+  );
   for (final entry in _apps.entries) {
     stdout.writeln('  ${entry.key.padRight(11)} ${entry.value.$1}');
   }
   stdout.writeln('');
   stdout.writeln('Press q or Ctrl-C to quit a running app.');
+  stdout.writeln('Inline setup: Esc goes back or cancels; Ctrl-C exits.');
+  stdout.writeln('Compare modes with: inline --full-screen');
 }

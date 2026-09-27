@@ -50,7 +50,7 @@ void main() {
     }, (error, _) => escaped.add(error));
 
     await Future<void>.delayed(const Duration(milliseconds: 200));
-    requestExit();
+    exitApp();
     await app.timeout(const Duration(seconds: 8));
 
     expect(escaped, isEmpty, reason: 'the error escaped runApp to main()');

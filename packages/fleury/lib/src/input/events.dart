@@ -2390,7 +2390,7 @@ enum AppSignal {
 ///
 /// Delivered through the normal event stream so the app can run its own
 /// shutdown: `runApp`'s `onEvent` sees it first — returning `EventHandled`
-/// claims the signal (the app then finishes via `requestExit()`); any
+/// claims the signal (the app then finishes via `exitApp()`); any
 /// unclaimed [SignalEvent] keeps its POSIX meaning and terminates the app
 /// (`runApp` resolves with `AppExit.signal`). The driver arms a grace
 /// deadline at delivery, so a hung app still dies.

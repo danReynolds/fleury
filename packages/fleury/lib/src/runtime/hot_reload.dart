@@ -16,14 +16,12 @@ import 'package:vm_service/vm_service.dart';
 import 'package:vm_service/vm_service_io.dart';
 
 // The service extension can only be registered ONCE per isolate. This
-// mutable cell lets every controller's onReassemble be reachable via
-// the same registered handler: `attach()` swaps the cell on entry and
+// mutable cell lets each controller be reachable via the same registered
+// handler: `attach()` swaps the cell on entry and
 // `dispose()` clears it, so a long-lived process with multiple
 // successive runs (e.g. a test isolate) sees the right callback for
 // the currently-attached controller.
-void Function()? _activeOnReassemble;
-void Function(HotReloadReport report)? _activeOnReloadReport;
-void Function()? _activeOnShutdownRequested;
+HotReloadController? _activeController;
 bool _extensionRegistered = false;
 
 /// The `postEvent` kind that asks a listening dev supervisor for a hot
@@ -76,7 +74,39 @@ Future<VmService> connectVmServiceAt(Uri serverUri) {
 /// callback to assert the wiring without spinning up a real VM service
 /// connection.
 class HotReloadController {
-  HotReloadController._({required this.onReassemble, required this.dev});
+  HotReloadController._({
+    required this.onReassemble,
+    required this.dev,
+    void Function(HotReloadReport report)? onReloadReport,
+    void Function()? onShutdownRequested,
+  }) : _onReloadReport = onReloadReport,
+       _onShutdownRequested = onShutdownRequested,
+       _zone = Zone.current;
+
+  final Zone _zone;
+  final void Function(HotReloadReport report)? _onReloadReport;
+  final void Function()? _onShutdownRequested;
+  bool _disposed = false;
+  Future<void>? _disposeFuture;
+
+  // Extensions are registered only once, in the first session's zone. Always
+  // dispatch into the current controller's zone so session-bound operations
+  // (notably exitApp) cannot accidentally target the first, expired app.
+  // Guard synchronous callback failures too: letting them escape into the
+  // registration zone can strand the RPC across distinct error-zone boundaries.
+  void _reassemble() {
+    if (!_disposed) _zone.runGuarded(onReassemble);
+  }
+
+  void _report(HotReloadReport report) {
+    final callback = _onReloadReport;
+    if (!_disposed && callback != null) _zone.runUnaryGuarded(callback, report);
+  }
+
+  void _shutdown() {
+    final callback = _onShutdownRequested;
+    if (!_disposed && callback != null) _zone.runGuarded(callback);
+  }
 
   /// Called when a reassemble has been requested (either via the
   /// `ext.fleury.reassemble` service extension or via an
@@ -115,17 +145,17 @@ class HotReloadController {
     final controller = HotReloadController._(
       onReassemble: onReassemble,
       dev: dev,
+      onReloadReport: onReloadReport,
+      onShutdownRequested: onShutdownRequested,
     );
 
-    _activeOnReassemble = onReassemble;
-    _activeOnReloadReport = onReloadReport;
-    _activeOnShutdownRequested = onShutdownRequested;
+    _activeController = controller;
     if (!_extensionRegistered) {
       developer.registerExtension('ext.fleury.reassemble', (
         method,
         params,
       ) async {
-        _activeOnReassemble?.call();
+        _activeController?._reassemble();
         return developer.ServiceExtensionResponse.result(
           jsonEncode({'ok': true}),
         );
@@ -134,7 +164,7 @@ class HotReloadController {
         method,
         params,
       ) async {
-        _activeOnReloadReport?.call(
+        _activeController?._report(
           HotReloadReport(
             success: params['success'] == 'true',
             elapsed: Duration(
@@ -153,7 +183,7 @@ class HotReloadController {
         method,
         params,
       ) async {
-        _activeOnShutdownRequested?.call();
+        _activeController?._shutdown();
         return developer.ServiceExtensionResponse.result(
           jsonEncode({'ok': true}),
         );
@@ -189,7 +219,7 @@ class HotReloadController {
           // unchanged build methods) rather than a correctness issue.
           // When richer failure handling lands we can surface
           // event.reloadResult to the dev overlay.
-          onReassemble();
+          _reassemble();
         }
       });
     } catch (_) {
@@ -199,17 +229,22 @@ class HotReloadController {
   }
 
   /// Releases VM service resources. Safe to call multiple times.
-  Future<void> dispose() async {
-    await _isolateEventSubscription?.cancel();
-    _isolateEventSubscription = null;
-    await _vm?.dispose();
-    _vm = null;
-    // Clear only when this controller is the current owner — a later
-    // attach() may have already swapped the cells.
-    if (identical(_activeOnReassemble, onReassemble)) {
-      _activeOnReassemble = null;
-      _activeOnReloadReport = null;
-      _activeOnShutdownRequested = null;
+  Future<void> dispose() {
+    _disposed = true;
+    // Unpublish before any asynchronous cleanup; queued VM events also check
+    // _disposed. An older controller cannot clear a newer registration.
+    if (identical(_activeController, this)) _activeController = null;
+    return _disposeFuture ??= _disposeResources();
+  }
+
+  Future<void> _disposeResources() async {
+    try {
+      await _isolateEventSubscription?.cancel();
+    } finally {
+      _isolateEventSubscription = null;
+      final vm = _vm;
+      _vm = null;
+      await vm?.dispose();
     }
   }
 }

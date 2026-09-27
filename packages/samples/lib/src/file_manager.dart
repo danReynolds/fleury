@@ -255,11 +255,11 @@ import 'src/app.dart';
 Future<void> main() async {
   // Typed printables arrive as TextInputEvents, so a quit key is a
   // widget-level KeyBinding: a focused text field keeps claiming the
-  // character, and requestExit() ends the app cleanly otherwise.
+  // character, and exitApp() ends the app cleanly otherwise.
   await runApp(
     KeyBindings(
       bindings: [
-        KeyBinding(KeySequence.q, onTrigger: (_) => requestExit(), label: 'Quit'),
+        KeyBinding(KeySequence.q, onTrigger: (_) => exitApp(), label: 'Quit'),
       ],
       child: const CounterApp(),
     ),

@@ -92,8 +92,8 @@ void main() {
     });
 
     test('a session with no alt screen still brackets its flags', () {
-      const inline = TerminalMode(
-        alternateScreen: false,
+      const inline = TerminalMode.inline(
+        rows: 10,
         keyboardProtocol: KeyboardProtocolMode.disambiguated,
       );
       expect(buildTerminalEnterSequences(inline), contains('\x1B[>3u'));

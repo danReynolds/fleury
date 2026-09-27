@@ -311,6 +311,7 @@ export 'src/terminal/terminal_driver.dart'
         TerminalAttentionDriver,
         TerminalDriver,
         TerminalHandoffDriver,
+        InlineTerminalDriver,
         TerminalPresentation,
         TerminalSessionProfile,
         KeyboardProtocolMode,

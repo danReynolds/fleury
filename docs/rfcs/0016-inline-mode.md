@@ -1,8 +1,11 @@
 # RFC 0016: Inline Mode
 
-**Status:** Exploration — not scheduled; revisit post-launch (or sooner if a
-decision trigger below fires). The pre-freeze disposition of the
-`TerminalMode.inline` constant is DONE — it was removed (2026-07-12; see §5).
+**Status:** Bounded inline viewport implemented and locally PTY-qualified
+2026-09-24 for RK's command matrices; review and terminal-app acceptance remain.
+See the [implementation scope and evidence](../implementation/inline-terminal-viewport.md).
+The broader transcript/log-interleaving design below remains exploratory.
+The old misleading `TerminalMode.inline` constant was removed on 2026-07-12
+(§5). The new named constructor requires a row count and owns a real region.
 **Date:** 2026-07-05
 **Decision point for:** whether/when to build a real inline rendering mode,
 and what to do with the exported-but-unimplemented `TerminalMode.inline`

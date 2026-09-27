@@ -1,0 +1,25 @@
+---
+import FleuryExample from './FleuryExample.astro';
+interface Props { fullScreen?: boolean; }
+const { fullScreen = false } = Astro.props;
+---
+
+<div class="inline-showcase">
+  <FleuryExample id={fullScreen ? 'terminal-modes.fullscreen' : 'showcase.inline'} cols={84} rows={29} interactive expandable={false} surfaceTheme="site" />
+  <p class="inline-caption">{fullScreen
+    ? 'Notice how the form replaces the shell while it runs. Finish or cancel: the earlier output returns, with the command’s result underneath.'
+    : 'Notice how the earlier output stays above the form. Review grows the live region; finishing clears it and leaves a lasting summary.'}</p>
+</div>
+
+<style>
+  .inline-showcase { width: 100%; max-width: 60rem; margin-block: 1.5rem; }
+  .inline-showcase :global(.fleury-example) { margin: 0; }
+  .inline-showcase :global(.fleury-frame) { display: block; }
+  .inline-showcase :global(.fleury-host) { width: 100% !important; }
+  .inline-showcase :global(.fleury-host-wrap) { padding: .5rem; }
+  .inline-caption { margin-top: .65rem; max-width: 75ch; color: var(--sl-color-gray-2); font-size: .85rem; line-height: 1.65; }
+  @media (max-width: 40rem) {
+    .inline-showcase :global(.fleury-host) { font-size: 12px; }
+    .inline-showcase :global(.fleury-hint) { display: none; }
+  }
+</style>

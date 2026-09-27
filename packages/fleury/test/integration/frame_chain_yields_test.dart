@@ -98,7 +98,7 @@ Future<void> _expectChainYields(
 
   await done.future.timeout(const Duration(seconds: 20));
   beacon.cancel();
-  requestExit();
+  exitApp();
   await app.timeout(const Duration(seconds: 8));
 
   expect(
@@ -165,7 +165,7 @@ void main() {
 
       await done.future.timeout(const Duration(seconds: 20));
       beacon.cancel();
-      requestExit();
+      exitApp();
       await app.timeout(const Duration(seconds: 8));
 
       expect(controller.text, text, reason: 'the paste still lands intact');

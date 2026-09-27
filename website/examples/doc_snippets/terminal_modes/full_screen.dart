@@ -1,0 +1,13 @@
+import 'package:fleury/fleury.dart';
+import 'package:fleury_samples/samples.dart';
+
+Future<void> main() async {
+  await runApp(
+    FleuryApp(
+      title: 'Project setup',
+      home: InlineSetup(onComplete: (_) => exitApp()),
+    ),
+    mode: const TerminalMode.fullScreen(mouse: true),
+    enableHotReload: false,
+  );
+}

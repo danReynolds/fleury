@@ -204,7 +204,7 @@ void main() {
               'dropped, not sprayed onto the prompt',
         );
 
-        driver.debugResume();
+        await driver.debugResume();
         expect(driver.debugSuspended, isFalse);
         driver.write('FRAME-C');
         expect(

@@ -60,6 +60,9 @@ import 'dart:io';
 import 'package:vm_service/vm_service.dart' hide Isolate;
 
 import '../terminal/terminal_driver.dart' show TerminalMode;
+import '../terminal/posix_input_lease.dart' show PosixInputFlags;
+import '../foundation/geometry.dart';
+import 'inline_terminal_lease.dart';
 import '../terminal/terminal_sequences.dart';
 import 'dev_signal_ack.dart';
 import 'handle_discovery.dart';
@@ -228,6 +231,20 @@ final class DevBootstrap {
 
   VmService? _vm;
   Process? _child;
+  PosixInputFlags? _childInputFlags;
+  Directory? _terminalStateDirectory;
+  String? _inlineRecovery;
+  String? get _inlineLeasePath => _terminalStateDirectory == null
+      ? null
+      : '${_terminalStateDirectory!.path}/inline-terminal.json';
+
+  CellSize get _terminalSize {
+    try {
+      return CellSize(stdout.terminalColumns, stdout.terminalLines);
+    } catch (_) {
+      return CellSize.zero;
+    }
+  }
 
   /// When the current child was spawned and how many have been — the
   /// inputs of [devEarlyExitHint].
@@ -420,6 +437,7 @@ final class DevBootstrap {
             child.kill(ProcessSignal.sigkill);
             await child.exitCode;
           }
+          await supervisor._restoreChildInputFlags();
           await supervisor._emergencyTtyRestore();
           endWith(70);
         }
@@ -514,6 +532,7 @@ final class DevBootstrap {
             child.kill(ProcessSignal.sigkill);
             await child.exitCode;
           }
+          await supervisor._restoreChildInputFlags();
           await supervisor._emergencyTtyRestore();
           exit(70);
         }
@@ -650,6 +669,7 @@ final class DevBootstrap {
     while (true) {
       final child = _child!;
       final code = await child.exitCode;
+      await _restoreChildInputFlags();
       _debugLog('child exited code=$code restart=$_restartInFlight');
       await _disconnectVm();
       if (!_restartInFlight) {
@@ -667,16 +687,19 @@ final class DevBootstrap {
                 firstChild: _childCount == 1,
               );
         if (hint != null) stderr.writeln(hint);
-        if (code < 0) {
+        if (code < 0 || (_inlineRecovery?.isNotEmpty ?? false)) {
           await _emergencyTtyRestore();
-          exit(128 - code);
+          if (code < 0) exit(128 - code);
         }
         exit(code);
       }
       _restartInFlight = false;
-      if (code < 0) {
-        // Died by signal (the restart escalation's SIGKILL, or an external
-        // kill): raw mode and the alt screen died with it, unrestored.
+      final inlineRecovery = inlineTerminalRecovery(
+        _inlineLeasePath,
+        _terminalSize,
+      );
+      if (code < 0 || (inlineRecovery?.isNotEmpty ?? false)) {
+        // A signal or abrupt inline exit can leave terminal modes owned.
         // Restore before the respawn so the exit sequences land on the old
         // screen, never on top of the new child's.
         await _emergencyTtyRestore();
@@ -692,9 +715,15 @@ final class DevBootstrap {
 
   Future<bool> _spawnChild() async {
     _childReady = false;
+    try {
+      _terminalStateDirectory?.deleteSync(recursive: true);
+    } catch (_) {}
+    _terminalStateDirectory = null;
+    _inlineRecovery = null;
     final Directory infoDir;
     try {
       infoDir = Directory.systemTemp.createTempSync('fleury_dev_');
+      _terminalStateDirectory = infoDir;
     } catch (error) {
       // Disk full / unwritable tmp: a throw here in the respawn path would
       // kill the supervise loop and orphan the session — degrade instead.
@@ -713,6 +742,7 @@ final class DevBootstrap {
         if (child != null) {
           child.kill(ProcessSignal.sigkill);
           _lastChildExit = await child.exitCode;
+          await _restoreChildInputFlags();
           // It may have died owning raw mode / the alt screen; restore from
           // out here before whoever runs next (the classic fallback or a
           // respawn) touches the terminal.
@@ -726,7 +756,7 @@ final class DevBootstrap {
       // child's own fallback write may land after this; it is wrapped in a
       // best-effort catch on its side.
       try {
-        infoDir.deleteSync(recursive: true);
+        infoFile.deleteSync();
       } catch (_) {}
     }
   }
@@ -734,6 +764,12 @@ final class DevBootstrap {
   Future<bool> _spawnChildInto(File infoFile) async {
     final Process child;
     try {
+      // An inherited terminal shares its file-status flags with the child.
+      // Save before spawn, so even SIGKILL before child metadata publication
+      // cannot leave the supervisor/shell's descriptor nonblocking.
+      if ((Platform.isMacOS || Platform.isLinux) && stdin.hasTerminal) {
+        _childInputFlags = PosixInputFlags.capture(0);
+      }
       child = await Process.start(
         _dartExecutable,
         devRespawnArguments(
@@ -753,9 +789,11 @@ final class DevBootstrap {
           // (see maybeStartSupervisedChildHandshake), guarding against
           // --write-service-info behavior drift across SDKs.
           kDevSvcFileEnv: infoFile.path,
+          inlineTerminalLeaseEnvironment: _inlineLeasePath!,
         },
       );
     } catch (error) {
+      await _restoreChildInputFlags();
       _debugLog('spawn failed: $error');
       return false;
     }
@@ -1037,10 +1075,31 @@ final class DevBootstrap {
 
   // ── Emergency restore (POSIX) ────────────────────────────────────────────
 
+  Future<void> _restoreChildInputFlags() async {
+    final saved = _childInputFlags;
+    if (saved == null) return;
+    try {
+      saved.restore(0);
+      _childInputFlags = null;
+    } catch (error) {
+      // Still attempt independent screen/termios restoration. Do not respawn
+      // or report a clean exit when shared input ownership cannot be restored.
+      await _emergencyTtyRestore();
+      stderr.writeln('Fleury could not restore terminal input flags: $error');
+      exit(70);
+    }
+  }
+
   Future<void> _emergencyTtyRestore() async {
     try {
-      stdout.write(buildTerminalExitSequences(TerminalMode.interactive));
+      final inline =
+          _inlineRecovery ??
+          inlineTerminalRecovery(_inlineLeasePath, _terminalSize);
+      stdout.write(
+        inline ?? buildTerminalExitSequences(TerminalMode.interactive),
+      );
       await stdout.flush();
+      _inlineRecovery = '';
     } catch (_) {}
     try {
       final proc = await Process.start('stty', const [
@@ -1071,7 +1130,13 @@ final class DevBootstrap {
     if (child != null) {
       child.kill(ProcessSignal.sigkill);
       await child.exitCode;
+      await _restoreChildInputFlags();
     }
+    _inlineRecovery ??= inlineTerminalRecovery(_inlineLeasePath, _terminalSize);
+    try {
+      _terminalStateDirectory?.deleteSync(recursive: true);
+    } catch (_) {}
+    _terminalStateDirectory = null;
   }
 
   /// Appends to `FLEURY_DEV_BOOTSTRAP_LOG` when set — the supervisor can
@@ -1104,10 +1169,12 @@ final class DevBootstrap {
 /// docs/implementation/vm-reload-bug-report-draft.md). No reload beats a
 /// reload that wedges on first save.
 final class InAppDevReload {
-  InAppDevReload._(this._vm, this._watcher);
+  InAppDevReload._(this._vm);
 
   final VmService _vm;
-  final SourceWatcher _watcher;
+  late final SourceWatcher _watcher;
+  bool _disposed = false;
+  Future<void>? _disposeFuture;
 
   /// Synchronous pre-gate — see [DevBootstrap.shouldConsider] for why this
   /// must not suspend: ineligible runs (every test, every non-supervised
@@ -1159,9 +1226,11 @@ final class InAppDevReload {
       return null;
     }
 
+    final controller = InAppDevReload._(vm);
     var inFlight = false;
     var queued = false;
     Future<void> reload() async {
+      if (controller._disposed) return;
       if (inFlight) {
         queued = true;
         return;
@@ -1196,6 +1265,7 @@ final class InAppDevReload {
         stopwatch.stop();
         inFlight = false;
       }
+      if (controller._disposed) return;
       onReport(
         HotReloadReport(
           success: success,
@@ -1210,9 +1280,11 @@ final class InAppDevReload {
       }
     }
 
-    final watcher = SourceWatcher(roots: roots, onChanged: (_) => reload())
-      ..start();
-    return InAppDevReload._(vm, watcher);
+    controller._watcher = SourceWatcher(
+      roots: roots,
+      onChanged: (_) => reload(),
+    )..start();
+    return controller;
   }
 
   /// The current isolate's service id, via the service's own VM listing
@@ -1226,9 +1298,17 @@ final class InAppDevReload {
     return isolates.isEmpty ? null : isolates.first.id;
   }
 
-  Future<void> dispose() async {
-    await _watcher.dispose();
-    await _vm.dispose();
+  Future<void> dispose() {
+    _disposed = true;
+    return _disposeFuture ??= _disposeResources();
+  }
+
+  Future<void> _disposeResources() async {
+    try {
+      await _watcher.dispose();
+    } finally {
+      await _vm.dispose();
+    }
   }
 }
 

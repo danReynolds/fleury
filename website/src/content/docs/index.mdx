@@ -18,6 +18,7 @@ import { CardGrid, LinkCard } from '@astrojs/starlight/components';
 import FleuryExample from '../../components/FleuryExample.astro';
 import FeatureCard from '../../components/FeatureCard.astro';
 import HomeSplit from '../../components/HomeSplit.astro';
+import InlineShowcase from '../../components/InlineShowcase.astro';
 
 <HomeSplit files={[{ name: 'clock.dart' }, { name: 'table.dart' }, { name: 'bars.dart' }]}>
 <Fragment slot="code-0">
@@ -99,9 +100,18 @@ terminal. [How that works →](/fleury/architecture/serving-and-embedding/)
 
 <p class="home-more"><a href="/fleury/comparison/">Read the full case for Fleury — and how it compares →</a></p>
 
+## Full-screen apps. Interactive CLI commands.
+
+A small setup command can have a real UI, too. Choose a template, review the
+configuration, and finish back at the prompt.
+
+<InlineShowcase />
+
+[Explore inline mode and run it in your terminal →](/fleury/showcases/inline/)
+
 ## See it in action
 
-Three featured apps, each built only from Fleury widgets and **running live in
+Featured apps, each built only from Fleury widgets and **running live in
 your browser**. Open one and drive it with your keyboard and mouse.
 
 <CardGrid>
@@ -119,6 +129,11 @@ your browser**. Open one and drive it with your keyboard and mouse.
     title="File manager →"
     href="/fleury/showcases/files/"
     description="A two-pane file explorer over an in-memory project, with a preview that adapts to each file type — code, Markdown, JSON."
+  />
+  <LinkCard
+    title="Interactive CLI commands →"
+    href="/fleury/showcases/inline/"
+    description="Project setup below the shell prompt: an editable form, configuration review, and a clean return to the command line."
   />
   <LinkCard
     title="Browse the widget reference →"

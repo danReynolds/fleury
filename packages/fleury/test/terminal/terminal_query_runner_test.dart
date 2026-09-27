@@ -8,6 +8,49 @@ import 'package:test/test.dart';
 
 void main() {
   test(
+    'suspend drains an exchange and late reply before admitting a new owner',
+    () async {
+      final parser = InputParser();
+      final input = _InputSink();
+      final written = Completer<void>();
+      final runner = TerminalQueryRunner(
+        parser: parser,
+        inputSink: input,
+        write: (_) async {
+          if (!written.isCompleted) written.complete();
+        },
+        lateResponseGrace: const Duration(seconds: 1),
+      );
+      final query = runner.request(
+        '\x1b[6n\x1b[c',
+        timeout: const Duration(milliseconds: 15),
+      );
+      final timedOut = expectLater(query, throwsA(isA<TimeoutException>()));
+      await written.future;
+      var released = false;
+      final suspending = runner.suspend().then((_) => released = true);
+      await timedOut;
+      expect(released, isFalse);
+      await expectLater(
+        runner.request('\x1b[c', timeout: const Duration(seconds: 1)),
+        throwsStateError,
+      );
+      parser.feed('\x1b[4;5R\x1b[?1;2c'.codeUnits, input, responseSink: runner);
+      await suspending;
+      expect(input.events, isEmpty);
+      runner.resume();
+      final next = runner.request(
+        '\x1b[c',
+        timeout: const Duration(seconds: 1),
+      );
+      await Future<void>.delayed(Duration.zero);
+      parser.feed('\x1b[?1;2c'.codeUnits, input, responseSink: runner);
+      expect(await next, isNotEmpty);
+      runner.dispose();
+    },
+  );
+
+  test(
     'fragmented OSC 22 replies are consumed without losing typed input',
     () async {
       final parser = InputParser();

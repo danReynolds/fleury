@@ -1,0 +1,16 @@
+<script is:inline>
+  (() => {
+    if (window.__fleuryExamplesLoader) return;
+    window.__fleuryExamplesLoader = true;
+    if (!document.getElementById('fleury-examples-bundle')) {
+      const script = document.createElement('script');
+      script.id = 'fleury-examples-bundle';
+      script.src = '/fleury/fleury-examples.js';
+      script.defer = true;
+      document.head.appendChild(script);
+    }
+    document.addEventListener('astro:page-load', () => {
+      if (window.fleuryMountExamples) window.fleuryMountExamples();
+    });
+  })();
+</script>

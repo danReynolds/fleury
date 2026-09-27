@@ -1,5 +1,18 @@
 # Changelog
 
+- **Breaking:** `requestExit()` is now `exitApp()`, the counterpart to
+  `runApp()`. It starts orderly UI shutdown; await `runApp` for terminal
+  restoration to finish. It does not terminate the host process.
+- **Breaking:** Removed `TerminalMode(alternateScreen: ...)`. Choose
+  `TerminalMode.fullScreen()` or `TerminalMode.inline(rows: ...)` instead.
+  The unnamed constructor still defaults to full-screen. Screen choice is
+  reported by `isFullScreen` and `isInline`.
+- Added a shutdown-and-signals guide with an interactive browser illustration
+  and runnable native examples for ordinary exits and app-owned cleanup.
+- **Breaking:** Unhandled Ctrl+C now returns
+  `AppExit.signal(AppSignal.interrupt)` from `runApp`, matching SIGINT, instead
+  of `AppExit.requested`. CLI callers can preserve exit code 130. A widget
+  that handles Ctrl+C, such as copying selected text, still takes precedence.
 - **Breaking:** `BuildOwner.rethrowContainedRenderErrors` is now
   `rethrowContainedErrors`, and it covers build errors as well as layout and
   paint. Under `FleuryTester`, a widget whose `build`, `initState`, or
@@ -53,6 +66,23 @@
   the current size instead of the previous one.
 - `Animation.loop` keeps running through hot reload. Pulse, shimmer, and
   other repeating effects no longer freeze after the first reload.
+- `TerminalMode.inline(rows: ...)` runs a bounded command UI in the main
+  terminal buffer on macOS/Linux. `TerminalSession.resizeInline` changes its
+  height; mouse/caret offsets, resize, subprocess handoff, suspend/resume, and
+  development restart/crash cleanup share the owned-region lifecycle. Existing
+  full-screen sessions remain the default. See `doc/inline_terminal.md`.
+- Native macOS/Linux TTY applications can await successive `runApp` calls,
+  with ordinary prompts or inherited-stdio children between them. Each call
+  owns fresh input and runtime state; overlapping sessions are rejected.
+  A cleanup timeout keeps new sessions blocked until actual restoration,
+  capture shutdown, and output replay finish. Windows and redirected stdin
+  retain the one-session restriction.
+- Failed terminal entry, handoff, and suspend/resume retain restoration
+  ownership and close the affected session. A child that outlives a cleanup
+  deadline keeps its capture handles until the handoff finishes. A throwing
+  `onStrayOutput` hook is disabled and reported inside the runtime guard;
+  the failed line and later output are retained for replay after exit.
+
 - Wrapped `Text` keeps its lines through a resize. Widening a wrapped text
   until it fit one line and then narrowing it again showed only its first
   line.
