@@ -50,6 +50,9 @@ enum TraversalDirection { left, right, up, down }
 
 /// Catches arrow chords that bubble out of the focused widget and
 /// moves focus to the spatially nearest focusable in that direction.
+/// With no current focus, Right/Down enters at the first control in reading
+/// order; Left/Up enters at the last. Merely mounting the group does not focus
+/// or activate a control.
 ///
 /// The [Navigator] installs one around every screen and dialog, so a
 /// `FleuryApp(home: ...)` or explicit Navigator gives every route arrow/Tab
@@ -165,7 +168,15 @@ class FocusTraversalGroup extends StatelessWidget {
   KeyEventResult _navigate(BuildContext context, TraversalDirection direction) {
     final manager = FocusManager.of(context);
     final current = manager.focusedNode;
-    if (current == null) return KeyEventResult.ignored;
+    if (current == null) {
+      final forward =
+          direction == TraversalDirection.right ||
+          direction == TraversalDirection.down;
+      final moved = forward
+          ? manager.focusNext(scopeContext: context)
+          : manager.focusPrevious(scopeContext: context);
+      return moved ? KeyEventResult.handled : KeyEventResult.ignored;
+    }
     final currentRect = current.rect;
     if (currentRect == null) return KeyEventResult.ignored;
 

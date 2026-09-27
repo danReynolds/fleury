@@ -879,15 +879,19 @@ class FocusManager extends Notifier {
   /// follows the content, including what is scrolled out of view, and the
   /// node focus moves to is scrolled into view. When a trapping
   /// [FocusScope] is active, traversal is confined to nodes inside it.
-  bool focusNext() => _cycleFocus(forward: true);
+  /// If [scopeContext] is supplied, only nodes below it participate.
+  bool focusNext({BuildContext? scopeContext}) =>
+      _cycleFocus(forward: true, scopeContext: scopeContext);
 
   /// Moves focus to the previous focusable node in reading order,
   /// cycling at the start.
-  bool focusPrevious() => _cycleFocus(forward: false);
+  /// If [scopeContext] is supplied, only nodes below it participate.
+  bool focusPrevious({BuildContext? scopeContext}) =>
+      _cycleFocus(forward: false, scopeContext: scopeContext);
 
-  bool _cycleFocus({required bool forward}) {
+  bool _cycleFocus({required bool forward, BuildContext? scopeContext}) {
     _checkNotDisposed();
-    final order = _traversalOrder();
+    final order = _traversalOrder(scopeContext: scopeContext);
     if (order.isEmpty) return false;
     final current = _focusedNode;
     final i = current == null ? -1 : order.indexOf(current);
@@ -910,14 +914,16 @@ class FocusManager extends Notifier {
   /// its viewport's content, so the order does not depend on how far the
   /// user has scrolled. Filtered to the active focus trap when one is open —
   /// Tab inside a trapped dialog cannot escape it.
-  List<FocusNode> _traversalOrder() {
+  List<FocusNode> _traversalOrder({BuildContext? scopeContext}) {
     final attachIndex = <FocusNode, int>{};
     for (var i = 0; i < _attachedNodes.length; i++) {
       attachIndex[_attachedNodes[i]] = i;
     }
     final trap = _innermostFocusTrapElement(_focusedNode);
+    final scopeElement = scopeContext is Element ? scopeContext : null;
     final nodes = _attachedNodes
         .where(isTraversable)
+        .where((n) => scopeElement == null || _isUnderElement(n, scopeElement))
         .where((n) => trap == null || _isUnderScopeMarker(n, trap))
         .toList();
     // Geometry is derived on read; resolve each node's place once, not once
