@@ -10,6 +10,7 @@ import 'dart:convert';
 import 'dart:io' show Platform;
 import 'dart:typed_data';
 
+import '../foundation/fleury_error.dart';
 import '../foundation/geometry.dart';
 import '../input/keyboard_state.dart';
 import '../rendering/cell_buffer.dart';
@@ -463,7 +464,11 @@ final class RemoteTerminalDriver
   void presentSemantics(SemanticTree tree, {SemanticTreeUpdate? update}) {
     if (!_active || !wantsPresentationPlans) return;
     final bytes = _semanticsEncoder.encodeTree(tree, update: update);
-    if (bytes == null) return;
+    if (bytes == null) {
+      _reportRejectedSemantics(_semanticsEncoder.lastRejection);
+      return;
+    }
+    _reportedSemanticsRejection = null;
     // The encoder advances its retained mirror while producing [bytes]. If the
     // payload cannot pass the same cap the peer enforces, do not emit a frame
     // that will destroy its stream framing; reset so a later, smaller tree is a
@@ -502,6 +507,36 @@ final class RemoteTerminalDriver
   @override
   void presentDebugResponse(int seq, String kind, Uint8List json) {
     _transport.send(DebugResponseFrame(seq, kind, json));
+  }
+
+  void Function(FleuryError warning)? _onDeveloperWarning;
+  String? _reportedSemanticsRejection;
+
+  @override
+  set onDeveloperWarning(void Function(FleuryError warning)? handler) {
+    _onDeveloperWarning = handler;
+  }
+
+  // A tree that cannot be sent leaves the peer's accessibility tree and every
+  // agent without the app, silently. Say why, once for as long as it lasts:
+  // each semantically dirty frame is rejected again.
+  void _reportRejectedSemantics(String? problem) {
+    if (problem == null || problem == _reportedSemanticsRejection) return;
+    _reportedSemanticsRejection = problem;
+    _onDeveloperWarning?.call(
+      FleuryError(
+        summary: 'The semantic tree was not sent: $problem.',
+        details:
+            'Until it can be sent, the browser\'s accessibility tree and '
+            'agents over MCP see nothing of the app. A repeated id comes '
+            'from nodes that derive the same id: one Key used under '
+            'different unkeyed parents (two lists whose rows share a data '
+            'id), or a Semantics key or id repeated.',
+        hint:
+            'Give such rows keys that are unique across the lists, or key '
+            'one of their parents.',
+      ),
+    );
   }
 
   @override

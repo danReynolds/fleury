@@ -159,6 +159,7 @@ final class SemanticsWireEncoder {
   /// the ground truth, so any gap between the update and the wire form fails
   /// loudly in tests.
   Uint8List? encodeTree(SemanticTree tree, {SemanticTreeUpdate? update}) {
+    _rejection = null;
     final rootId = sanitizeForDisplay(tree.root.id.value);
     if (!_sentFull) {
       final flat = _flattenTree(tree);
@@ -252,6 +253,7 @@ final class SemanticsWireEncoder {
     SemanticInspectionSnapshot snapshot, {
     SemanticWireDelta? delta,
   }) {
+    _rejection = null;
     final rootId = snapshot.root.id;
     if (!_sentFull) {
       final flat = _flatten(snapshot.root);
@@ -325,13 +327,14 @@ final class SemanticsWireEncoder {
     required int flattenedNodes,
   }) {
     _lastFlattenedNodes = flattenedNodes;
-    if (!_semanticFlatGraphIsValid(flat, rootId)) {
-      _rejectCandidate(flattenedNodes);
+    final problem = _semanticFlatGraphProblem(flat, rootId);
+    if (problem != null) {
+      _rejectCandidate(flattenedNodes, problem);
       return null;
     }
     final bytes = _fullBytes(rootId, flat);
     if (bytes.length > maxWirePayloadLength) {
-      _rejectCandidate(flattenedNodes);
+      _rejectCandidate(flattenedNodes, _tooLarge);
       return null;
     }
 
@@ -417,15 +420,16 @@ final class SemanticsWireEncoder {
               nodeCount: candidateNodeCount,
             ) >
             maxWirePayloadLength) {
-      _rejectCandidate(flattenedNodes);
+      _rejectCandidate(flattenedNodes, _tooLarge);
       return null;
     }
 
     Map<String, Map<String, Object?>>? candidate;
     if (structureChanged) {
       candidate = _candidateAfter(staged, removed);
-      if (!_semanticFlatGraphIsValid(candidate, rootId)) {
-        _rejectCandidate(flattenedNodes);
+      final problem = _semanticFlatGraphProblem(candidate, rootId);
+      if (problem != null) {
+        _rejectCandidate(flattenedNodes, problem);
         return null;
       }
     }
@@ -447,7 +451,7 @@ final class SemanticsWireEncoder {
       candidate ??= _candidateAfter(staged, removed);
       bytes = _fullBytes(rootId, candidate);
       if (bytes.length > maxWirePayloadLength) {
-        _rejectCandidate(flattenedNodes);
+        _rejectCandidate(flattenedNodes, _tooLarge);
         return null;
       }
     }
@@ -477,10 +481,22 @@ final class SemanticsWireEncoder {
     return candidate;
   }
 
-  void _rejectCandidate(int flattenedNodes) {
+  void _rejectCandidate(int flattenedNodes, String problem) {
     reset();
     _lastFlattenedNodes = flattenedNodes;
+    _rejection = problem;
   }
+
+  static const _tooLarge =
+      'the tree is larger than a semantics frame can carry';
+
+  String? _rejection;
+
+  /// Why the last encode sent nothing although the tree changed — the tree
+  /// could not be sent — or null when it sent a frame or nothing changed. A
+  /// host reports it: the peer's accessibility tree and agents see nothing
+  /// until the tree can be sent again.
+  String? get lastRejection => _rejection;
 
   /// Forgets the peer's state so the next encode re-sends a full frame.
   ///
@@ -578,59 +594,71 @@ int _semanticFullPayloadLength(
   return emptyEnvelopeLength + nodeBytes + (nodeCount > 1 ? nodeCount - 1 : 0);
 }
 
-/// Whether one producer-side flat mirror is exactly reconstructable under the
-/// decoder's structural limits.
+/// Why one producer-side flat mirror is not exactly reconstructable under the
+/// decoder's structural limits, or null when it is.
 ///
 /// This runs for the initial FULL and only when a PATCH changes structure; a
 /// scalar-only steady PATCH retains the already-validated graph and stays
 /// O(changed). Duplicate leaves remain legal for ambiguity diagnostics, while a
 /// repeated internal node is rejected before it can form an expanding DAG.
-bool _semanticFlatGraphIsValid(
+String? _semanticFlatGraphProblem(
   Map<String, Map<String, Object?>> flat,
   String rootId,
 ) {
-  if (flat.isEmpty ||
-      flat.length > maxSemanticWireNodes ||
-      !_semanticWireIdIsValid(rootId)) {
-    return false;
+  if (flat.isEmpty) return 'the tree is empty';
+  if (flat.length > maxSemanticWireNodes) {
+    return 'the tree has more than $maxSemanticWireNodes nodes';
   }
+  if (!_semanticWireIdIsValid(rootId)) return 'the root id is not sendable';
   var edgeCount = 0;
   for (final entry in flat.entries) {
-    if (!_semanticWireIdIsValid(entry.key)) return false;
+    if (!_semanticWireIdIsValid(entry.key)) return 'a node id is not sendable';
     final node = entry.value;
     final childIds = node['childIds'];
     if (childIds is List<String>) {
       edgeCount += childIds.length;
-      if (edgeCount > maxSemanticWireEdges) return false;
-      if (childIds.any((id) => !_semanticWireIdIsValid(id))) return false;
+      if (edgeCount > maxSemanticWireEdges) {
+        return 'the tree has more than $maxSemanticWireEdges edges';
+      }
+      if (childIds.any((id) => !_semanticWireIdIsValid(id))) {
+        return 'a node id is not sendable';
+      }
     }
   }
 
   final visited = <String>{};
   var occurrenceCount = 0;
-  bool visit(String id, int depth) {
-    if (depth >= maxSemanticTreeDepth) return false;
+  String? visit(String id, int depth) {
+    if (depth >= maxSemanticTreeDepth) {
+      return 'the tree is deeper than $maxSemanticTreeDepth levels';
+    }
     final node = flat[id];
-    if (node == null) return false;
+    if (node == null) return 'a child names no node';
     occurrenceCount++;
-    if (occurrenceCount > maxSemanticWireNodes) return false;
+    if (occurrenceCount > maxSemanticWireNodes) {
+      return 'the tree has more than $maxSemanticWireNodes nodes';
+    }
     final childIds = node['childIds'];
     if (!visited.add(id)) {
-      return childIds is! List<String> || childIds.isEmpty;
+      return childIds is! List<String> || childIds.isEmpty
+          ? null
+          : '"$id" is on more than one node that has children';
     }
     if (childIds is List<String>) {
       for (final childId in childIds) {
-        if (!visit(childId, depth + 1)) return false;
+        final problem = visit(childId, depth + 1);
+        if (problem != null) return problem;
       }
     }
-    return true;
+    return null;
   }
 
-  if (!visit(rootId, 0)) return false;
+  final problem = visit(rootId, 0);
+  if (problem != null) return problem;
   // A legal producer tree has no orphaned flat nodes. Requiring exact reachability
   // also keeps its retained mirror identical to the decoder, which prunes raw
   // orphan nodes from hostile inputs.
-  return visited.length == flat.length;
+  return visited.length == flat.length ? null : 'a node has no parent';
 }
 
 /// Deep equality over JSON-shaped values (Map / List / scalars). Used to detect

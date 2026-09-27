@@ -1378,6 +1378,8 @@ Future<AppExit> _runAppImpl(
           // action against the live tree and re-render, completing the
           // semantics round trip (presentSemantics ships the tree out, this
           // brings activations back). Mirrors the in-browser host.
+          negotiatedSink.onDeveloperWarning = (warning) =>
+              errorReporter.report(warning, StackTrace.current);
           negotiatedSink.onSemanticAction = (id, action, value, {targetToken}) {
             if (pendingSemanticActions >= _maxPendingRemoteSemanticActions) {
               // Queue one marker behind every earlier admitted action. RESULT

@@ -5,6 +5,7 @@
 
 import 'dart:async';
 import 'dart:convert';
+import 'dart:io';
 import 'dart:typed_data';
 
 import 'package:fleury/fleury.dart';
@@ -440,6 +441,70 @@ void main() {
       expect(sessionEnded, isFalse, reason: 'ended with $sessionError');
       await transport.disconnect();
       await done;
+    });
+
+    test('a semantic tree that cannot be sent is reported once', () async {
+      // Two unkeyed lists whose rows share a data id derive the same semantic
+      // ids, which the wire cannot carry. The peer's accessibility tree goes
+      // empty; the developer is told why (runApp's developer warnings reach
+      // stderr), once, not on every frame.
+      final logged = _StderrCapture();
+      await IOOverrides.runZoned(() async {
+        final transport = _FakeTransport();
+        final driver = RemoteTerminalDriver(transport);
+        final shown = ValueNotifier(0);
+        scheduleMicrotask(() => transport.emit(_init));
+        final done = runApp(
+          NotifierBuilder(
+            notifier: shown,
+            builder: (_, shown) => Row(
+              children: [
+                for (final list in ['recent', 'all'])
+                  Expanded(
+                    child: Column(
+                      children: [
+                        Text('$list ${shown.value}'),
+                        for (final name in ['a.txt', 'b.txt'])
+                          Semantics(
+                            key: ValueKey('row-$name'),
+                            role: SemanticRole.listItem,
+                            label: name,
+                            child: Row(
+                              children: [
+                                Semantics(
+                                  role: SemanticRole.button,
+                                  label: 'Open $name',
+                                  actions: const {SemanticAction.activate},
+                                  onAction: (_) {},
+                                  child: Text(name),
+                                ),
+                              ],
+                            ),
+                          ),
+                      ],
+                    ),
+                  ),
+              ],
+            ),
+          ),
+          driver: driver,
+          requireInteractiveTerminal: false,
+        );
+        await Future<void>.delayed(const Duration(milliseconds: 20));
+        for (var i = 1; i <= 3; i++) {
+          shown.value = i;
+          await Future<void>.delayed(const Duration(milliseconds: 10));
+        }
+        await transport.disconnect();
+        await done;
+      }, stderr: () => logged);
+
+      final reports = 'The semantic tree was not sent'
+          .allMatches(logged.text)
+          .length;
+      expect(reports, 1, reason: logged.text);
+      expect(logged.text, contains('is on more than one node'));
+      expect(logged.text, contains('row-a.txt'));
     });
 
     test('a peer SEMANTIC_ACTION activates the live node', () async {
@@ -1951,3 +2016,27 @@ FramePresentationPlan _steadyStatePlan(CellSize size, TuiDirtyRows dirtyRows) =>
       metricsChanged: false,
       spanBuildTime: Duration.zero,
     );
+
+class _StderrCapture implements Stdout {
+  final StringBuffer _buffer = StringBuffer();
+  String get text => _buffer.toString();
+
+  @override
+  void writeln([Object? object = '']) => _buffer.writeln(object);
+  @override
+  void write(Object? object) => _buffer.write(object);
+  @override
+  void writeAll(Iterable<dynamic> objects, [String separator = '']) =>
+      _buffer.writeAll(objects, separator);
+  @override
+  void writeCharCode(int charCode) => _buffer.writeCharCode(charCode);
+  @override
+  Future<void> flush() async {}
+  @override
+  Future<void> close() async {}
+  @override
+  Future<void> get done => Future<void>.value();
+
+  @override
+  dynamic noSuchMethod(Invocation invocation) => null;
+}
