@@ -1,6 +1,7 @@
 import 'dart:async' show scheduleMicrotask, unawaited;
 
 import 'package:fleury/fleury_core.dart';
+import 'package:fleury/fleury_internal.dart' show readScope;
 
 import 'semantic_roles.dart';
 
@@ -316,7 +317,9 @@ class _FileMentionPickerState extends State<FileMentionPicker> {
   @override
   void didChangeDependencies() {
     super.didChangeDependencies();
-    final manager = FocusManager.maybeOf(context);
+    // Registered with, not depended on: the listener follows focus, and a
+    // dependency would rebuild this widget on every focus move anywhere.
+    final manager = readScope<FocusManager>(context);
     if (identical(manager, _focusManager)) return;
     _focusManager?.removeListener(_onFocusChange);
     _focusManager = manager;

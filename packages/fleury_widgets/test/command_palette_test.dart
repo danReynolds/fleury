@@ -622,6 +622,49 @@ void main() {
       expect(Navigator.of(ctx).depth, 2);
     });
 
+    testWidgets('opening the palette does not subscribe the opener to focus', (
+      tester,
+    ) async {
+      var openerBuilds = 0;
+      final first = FocusNode(debugLabel: 'first');
+      final second = FocusNode(debugLabel: 'second');
+      tester.pumpWidget(
+        FleuryApp(
+          title: 'App',
+          commands: [
+            AppCommand(
+              id: const CommandId('file.save'),
+              title: 'Save File',
+              run: (_) {},
+            ),
+          ],
+          child: Navigator(
+            home: Column(
+              children: [
+                _Capture((c) {
+                  openerBuilds++;
+                  ctx = c;
+                }),
+                Focus(focusNode: first, child: const Text('first')),
+                Focus(focusNode: second, child: const Text('second')),
+              ],
+            ),
+          ),
+        ),
+      );
+      _openRegistryPalette(tester, ctx);
+      tester.sendKey(const KeyEvent(KeyCode.escape));
+      await _settleClose(tester);
+      final before = openerBuilds;
+
+      first.requestFocus();
+      tester.pump();
+      second.requestFocus();
+      tester.pump();
+
+      expect(openerBuilds, before);
+    });
+
     testWidgets('filters by stable command id', (tester) async {
       final calls = <String>[];
       tester.pumpWidget(

@@ -146,7 +146,6 @@ class _SelectState<T> extends State<Select<T>> {
       _theme = theme;
       _entry?.markNeedsBuild();
     }
-    FocusManager.maybeOf(context); // rebuild on focus change (focus cue)
     final registration = FormControlScope.maybeOf(context);
     if (!identical(registration, _formRegistration)) {
       _formRegistration?.release(this);
@@ -297,12 +296,10 @@ class _SelectState<T> extends State<Select<T>> {
 
   @override
   Widget build(BuildContext context) {
-    FocusManager.maybeOf(
-      context,
-    ); // Rebuild trigger semantics when focus moves.
     final theme = Theme.of(context);
     final enabled = widget.onChanged != null;
-    final focused = _triggerFocus.hasFocus;
+    // Rebuilds when the trigger's own focus flips (cue and semantics).
+    final focused = context.listen(_triggerFocus).hasFocus;
     final validationError = _formRegistration?.error;
     final style = resolveCellStyle(
       cascade: [
@@ -510,7 +507,6 @@ class _MultiSelectState<T> extends State<MultiSelect<T>>
   @override
   void didChangeDependencies() {
     super.didChangeDependencies();
-    FocusManager.maybeOf(context);
     final registration = FormControlScope.maybeOf(context);
     if (!identical(registration, _formRegistration)) {
       _formRegistration?.release(this);
@@ -673,10 +669,9 @@ class _MultiSelectState<T> extends State<MultiSelect<T>>
 
   @override
   Widget build(BuildContext context) {
-    FocusManager.maybeOf(context);
     final theme = Theme.of(context);
     final enabled = _enabled;
-    final focused = enabled && _focusNode.hasFocus;
+    final focused = enabled && context.listen(_focusNode).hasFocus;
     final validationError = _formRegistration?.error;
     final rawChild = widget.options.isEmpty
         ? Text(

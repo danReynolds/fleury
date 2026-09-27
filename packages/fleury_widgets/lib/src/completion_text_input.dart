@@ -1,4 +1,5 @@
 import 'package:fleury/fleury_core.dart';
+import 'package:fleury/fleury_internal.dart' show readScope;
 
 import 'option_label.dart';
 
@@ -251,7 +252,9 @@ class _CompletionTextInputState extends State<CompletionTextInput> {
   @override
   void didChangeDependencies() {
     super.didChangeDependencies();
-    final manager = FocusManager.maybeOf(context);
+    // Registered with, not depended on: the listener follows focus, and a
+    // dependency would rebuild this widget on every focus move anywhere.
+    final manager = readScope<FocusManager>(context);
     if (!identical(manager, _manager)) {
       _manager?.removeListener(_syncCompletion);
       _manager = manager;

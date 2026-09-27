@@ -1,6 +1,7 @@
 import 'dart:async' show unawaited;
 
 import 'package:fleury/fleury_core.dart';
+import 'package:fleury/fleury_internal.dart' show readScope;
 
 /// One result rendered by [SearchPanel].
 final class SearchResult {
@@ -300,7 +301,9 @@ class _SearchPanelState extends State<SearchPanel> {
   @override
   void didChangeDependencies() {
     super.didChangeDependencies();
-    final manager = FocusManager.maybeOf(context);
+    // Registered with, not depended on: the listener follows focus, and a
+    // dependency would rebuild this widget on every focus move anywhere.
+    final manager = readScope<FocusManager>(context);
     if (identical(manager, _focusManager)) return;
     _focusManager?.removeListener(_onFocusChange);
     _focusManager = manager;

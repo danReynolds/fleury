@@ -169,7 +169,6 @@ class _ColorPickerState extends State<ColorPicker>
       _theme = theme;
       _hexEntry?.markNeedsBuild();
     }
-    FocusManager.maybeOf(context);
     final registration = FormControlScope.maybeOf(context);
     if (!identical(registration, _formRegistration)) {
       _formRegistration?.release(this);
@@ -345,7 +344,7 @@ class _ColorPickerState extends State<ColorPicker>
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final enabled = _enabled;
-    final focused = enabled && _node.hasFocus;
+    final focused = enabled && context.listen(_node).hasFocus;
     // Snapshot the committed colour at focus-in (so Esc can restore it) and
     // drop it on blur — tracked here since FocusNode exposes no listener.
     if (focused && !_wasFocused) _initial = widget.value;

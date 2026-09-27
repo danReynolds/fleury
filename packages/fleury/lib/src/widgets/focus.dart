@@ -150,7 +150,12 @@ abstract interface class TextCompositionClaimant {
 /// A long-lived focus identity. One per [Focus] widget; consumers can
 /// also create their own and pass it into a `Focus` to keep focus
 /// state stable across reparenting.
-class FocusNode {
+///
+/// A node notifies its listeners when [hasFocus] flips. A control that shows
+/// a focus cue listens to its own node — `context.listen(node)` in build —
+/// so a focus move rebuilds the two controls it concerns, not every control
+/// that depends on the [FocusManager].
+class FocusNode implements Listenable {
   FocusNode({
     /// Whether this node can receive focus through traversal, pointer input,
     /// or [requestFocus].
@@ -320,6 +325,24 @@ class FocusNode {
   /// Whether this node is currently the focused node in its manager.
   bool get hasFocus => _manager?.focusedNode == this;
 
+  List<VoidCallback>? _listeners;
+
+  /// Calls [listener] each time [hasFocus] flips.
+  @override
+  void addListener(VoidCallback listener) =>
+      (_listeners ??= <VoidCallback>[]).add(listener);
+
+  @override
+  void removeListener(VoidCallback listener) => _listeners?.remove(listener);
+
+  void _notifyFocusFlip() {
+    final listeners = _listeners;
+    if (listeners == null || listeners.isEmpty) return;
+    for (final listener in List<VoidCallback>.of(listeners)) {
+      listener();
+    }
+  }
+
   /// Whether the node's mounted subtree currently participates in input.
   ///
   /// A contained render failure keeps the element tree mounted so it can
@@ -367,6 +390,7 @@ class FocusNode {
     textCompositionClaimant = null;
     _boundsHost = null;
     _caretHost = null;
+    _listeners = null;
   }
 
   @override
@@ -576,6 +600,8 @@ class FocusManager extends Notifier {
       if (focused != null && _isExcludedFromFocus(focused)) {
         _focusedNode = null;
         _focusedAncestry = null;
+        // Mid-build, like the manager's own notification below.
+        scheduleMicrotask(focused._notifyFocusFlip);
       }
       _notifyManagerScopeChanged();
     }
@@ -822,6 +848,8 @@ class FocusManager extends Notifier {
       _focusedNode = fallback;
       if (fallback != null) _rememberFocusInScopes(fallback);
       notify();
+      // Not [node]: it is leaving, and its listeners are tearing it down.
+      fallback?._notifyFocusFlip();
     }
   }
 
@@ -859,6 +887,7 @@ class FocusManager extends Notifier {
     _checkNotDisposed();
     if (node != null && !isClickable(node)) return false;
     if (identical(_focusedNode, node)) return false;
+    final previous = _focusedNode;
     _focusedNode = node;
     if (node != null) {
       _rememberFocusInScopes(node);
@@ -866,6 +895,8 @@ class FocusManager extends Notifier {
       _focusedAncestry = null;
     }
     notify();
+    previous?._notifyFocusFlip();
+    node?._notifyFocusFlip();
     return true;
   }
 

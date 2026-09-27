@@ -104,7 +104,6 @@ class _FocusableControlState extends State<FocusableControl>
   @override
   void didChangeDependencies() {
     super.didChangeDependencies();
-    FocusManager.maybeOf(context); // rebuild on focus change (focus cue)
     final registration = FormControlScope.maybeOf(context);
     if (!identical(registration, _formRegistration)) {
       _formRegistration?.release(this);
@@ -173,7 +172,8 @@ class _FocusableControlState extends State<FocusableControl>
   @override
   Widget build(BuildContext context) {
     final validationError = _formRegistration?.error ?? widget.validationError;
-    final focused = _node.hasFocus;
+    // Rebuilds when this control's own focus flips (the focus cue).
+    final focused = context.listen(_node).hasFocus;
     final states = <CellStyleState>{
       if (_hovered) CellStyleState.hovered,
       if (focused) CellStyleState.focused,

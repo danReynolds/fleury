@@ -101,12 +101,6 @@ class _FilePickerState extends State<FilePicker> {
   }
 
   @override
-  void didChangeDependencies() {
-    super.didChangeDependencies();
-    FocusManager.maybeOf(context);
-  }
-
-  @override
   void dispose() {
     _list.dispose();
     if (_owns) _node.dispose();
@@ -298,7 +292,7 @@ class _FilePickerState extends State<FilePicker> {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    final focused = _node.hasFocus;
+    final focused = context.listen(_node).hasFocus;
     final safeCwd = _safeText(_cwd.path);
     final selected = _entries.isEmpty ? null : _entries[_cursor];
     final visible = _entries.isEmpty
