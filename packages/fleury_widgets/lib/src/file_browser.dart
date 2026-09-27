@@ -435,8 +435,28 @@ class _FileBrowserState extends State<FileBrowser> {
     }
   }
 
-  List<int> get _currentOrder =>
-      buildFileBrowserEntryOrder(_entries, filter: widget.filter);
+  // The display order, kept until the entries or the filter change. Every
+  // build, arrow key and row callback reads it, and with a query it is a
+  // match over every entry.
+  List<int>? _order;
+  List<FileBrowserEntry>? _orderEntries;
+  String? _orderQuery;
+  bool? _orderShowHidden;
+
+  List<int> get _currentOrder {
+    final filter = widget.filter;
+    final cached = _order;
+    if (cached != null &&
+        identical(_orderEntries, _entries) &&
+        _orderQuery == filter.query &&
+        _orderShowHidden == filter.showHidden) {
+      return cached;
+    }
+    _orderEntries = _entries;
+    _orderQuery = filter.query;
+    _orderShowHidden = filter.showHidden;
+    return _order = buildFileBrowserEntryOrder(_entries, filter: filter);
+  }
 
   _SelectedFileEntry? _selectedEntry(List<int> order) {
     if (order.isEmpty) return null;

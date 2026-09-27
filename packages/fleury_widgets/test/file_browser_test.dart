@@ -361,6 +361,60 @@ void main() {
     });
   });
 
+  group('the display order follows its inputs', () {
+    String screen(FleuryTester tester) =>
+        tester.renderToString(size: const CellSize(60, 8));
+
+    testWidgets('a new query re-filters, and clearing it restores all', (
+      tester,
+    ) {
+      final dir = _scratchDir();
+      Widget browser(String query) => FileBrowser(
+        initialDirectory: dir,
+        filter: FileBrowserFilterDescriptor(query: query),
+      );
+      tester.pumpWidget(browser(''));
+      expect(screen(tester), contains('alpha.txt'));
+
+      tester.pumpWidget(browser('deploy'));
+      expect(screen(tester), isNot(contains('alpha.txt')));
+      expect(screen(tester), contains('deploy.log'));
+
+      tester.pumpWidget(browser(''));
+      expect(screen(tester), contains('alpha.txt'));
+    });
+
+    testWidgets('a reload lists a file created since', (tester) {
+      final dir = _scratchDir();
+      final controller = FileBrowserController();
+      addTearDown(controller.dispose);
+      tester.pumpWidget(
+        FileBrowser(initialDirectory: dir, controller: controller),
+      );
+      expect(screen(tester), isNot(contains('zeta.md')));
+
+      File('$dir/zeta.md').writeAsStringSync('zeta');
+      controller.reload();
+      tester.pump();
+
+      expect(screen(tester), contains('zeta.md'));
+    });
+
+    testWidgets('showing hidden entries lists them', (tester) {
+      final dir = _scratchDir();
+      Widget browser(bool showHidden) => FileBrowser(
+        initialDirectory: dir,
+        filter: FileBrowserFilterDescriptor(showHidden: showHidden),
+      );
+      tester.pumpWidget(browser(false));
+      expect(screen(tester), isNot(contains('.secret')));
+
+      tester.pumpWidget(browser(true));
+
+      expect(screen(tester), contains('.secret'));
+    });
+  });
+
   testWidgets('hidden entries can be included explicitly', (tester) {
     final dir = _scratchDir();
     tester.pumpWidget(
