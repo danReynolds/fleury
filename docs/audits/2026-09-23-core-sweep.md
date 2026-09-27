@@ -37,24 +37,24 @@
 | D | medium | FleuryTester.lastCommandResult returns the app registry's stale result instead of the latest (scoped) invocation, so tests assert on the wrong command | Fixed |
 | D | low | renderToString(emptyMark: '') hangs the test process forever, and multi-code-unit marks throw RangeError | Fixed |
 | E | high | DataTable stops virtualizing under an unbounded height (e.g. as a Column child): every row is built each frame and the cursor moves off-screen | Decision pending: unbounded-height DataTable |
-| E | high | FileBrowser strands the keyboard in an empty or unreadable directory: Left/Backspace go dead and there is no way back up | Open |
-| E | high | Image re-decodes on every parent rebuild and resamples the full source on every paint (19–90 ms/frame); animated images restart and trip the one-ticker assert | Open |
+| E | high | FileBrowser strands the keyboard in an empty or unreadable directory: Left/Backspace go dead and there is no way back up | Fixed (a clickable parent row is a follow-up) |
+| E | high | Image re-decodes on every parent rebuild and resamples the full source on every paint (19–90 ms/frame); animated images restart and trip the one-ticker assert | Fixed |
 | E | high | Left/Right bubbling out of any control inside a Tabs body switches tabs and drops focus | Decision pending: Tabs arrows only from the strip |
-| E | high | Markdown inline parser treats intraword `_` and spaced `*` as emphasis, deleting characters from identifiers, filenames and math | Open |
-| E | medium | Every first-party collection wrapper forces a second full frame per scroll step, undoing ListView's metrics-only no-rebuild guarantee | Open |
-| E | medium | FileBrowser re-reads the directory from disk and resets the cursor to row 0 on every parent rebuild when entityFilter is an inline closure | Open |
-| E | medium | JsonView deep-copies and re-sanitizes the whole JSON document on every build, so each arrow key costs O(document), collapsed parts included | Open |
+| E | high | Markdown inline parser treats intraword `_` and spaced `*` as emphasis, deleting characters from identifiers, filenames and math | Fixed |
+| E | medium | Every first-party collection wrapper forces a second full frame per scroll step, undoing ListView's metrics-only no-rebuild guarantee | Decision pending: scroll-step rebuilds in collection widgets |
+| E | medium | FileBrowser re-reads the directory from disk and resets the cursor to row 0 on every parent rebuild when entityFilter is an inline closure | Fixed |
+| E | medium | JsonView deep-copies and re-sanitizes the whole JSON document on every build, so each arrow key costs O(document), collapsed parts included | Fixed |
 | E | medium | LogRegion filtered view goes stale (wrong rows shown and copied) when a stable entries list is mutated in place at the same length | Decision pending: in-place list mutation |
-| E | medium | SearchPanel reruns the full ranked search 2–4× per arrow key and re-indexes the old results on every update | Open |
+| E | medium | SearchPanel reruns the full ranked search 2–4× per arrow key and re-indexes the old results on every update | Fixed |
 | E | medium | Sparkline (also Heatmap, Canvas) skips repaint when handed the same data object, so a history list updated in place freezes inside Panel's default RepaintBoundary | Decision pending: in-place list mutation |
-| E | medium | Toaster, Tooltip, Autocomplete and CompletionTextInput overlays ignore the app Theme and paint the fallback dark surface | Open |
-| E | medium | Tree's top-level semantics (currentIndex, selectedKey, visibleRange) never update during keyboard navigation | Open |
-| E | medium | TreeTable selection is positional: expand, collapse, filter or new roots silently move the cursor to a different node, and Enter/Ctrl+C act on it | Open |
-| E | low | Any focus change rebuilds every focusable control in the tree, not just the two whose focus changed | Open |
-| E | low | Every paint pass re-derives geometry for every mounted Semantics element (every Text), even in terminal-only apps where the result is thrown away | Open |
-| E | low | FileBrowser, SearchPanel and DiffView recompute O(n) data on every build and every navigation call | Open |
-| E | low | LineChart sorts and dedupes every x value on each series update or parent rebuild, even when not interactive, and repaints all points when the data is unchanged | Open |
-| E | low | parseUnifiedDiff reads the `git format-patch` signature line (`-- `) as a deletion: phantom row, wrong counts, corrupt hunk copy | Open |
+| E | medium | Toaster, Tooltip, Autocomplete and CompletionTextInput overlays ignore the app Theme and paint the fallback dark surface | Fixed (also ColorPicker, Select, Menu, core Anchored) |
+| E | medium | Tree's top-level semantics (currentIndex, selectedKey, visibleRange) never update during keyboard navigation | Fixed |
+| E | medium | TreeTable selection is positional: expand, collapse, filter or new roots silently move the cursor to a different node, and Enter/Ctrl+C act on it | Fixed |
+| E | low | Any focus change rebuilds every focusable control in the tree, not just the two whose focus changed | Fixed |
+| E | low | Every paint pass re-derives geometry for every mounted Semantics element (every Text), even in terminal-only apps where the result is thrown away | Fixed |
+| E | low | FileBrowser, SearchPanel and DiffView recompute O(n) data on every build and every navigation call | Fixed |
+| E | low | LineChart sorts and dedupes every x value on each series update or parent rebuild, even when not interactive, and repaints all points when the data is unchanged | Fixed: cursor and palette; skipping a fresh series list over the same points waits on the in-place list mutation decision |
+| E | low | parseUnifiedDiff reads the `git format-patch` signature line (`-- `) as a deletion: phantom row, wrong counts, corrupt hunk copy | Fixed |
 | F | high | A legal duplicate semantic id on a node with children makes the wire encoder drop the whole semantic tree. Serve's a11y DOM goes empty and MCP reports that the app never rendered. | Open |
 | F | medium | A semantic action whose handler awaits UI (the `await context.present(Confirm())` idiom) blocks the served semantic-action queue, so the dialog can't be confirmed through a11y/MCP | Open |
 | F | medium | SemanticDomPresenter re-inserts the whole content of every aria-live region on any structural change, so screen readers re-read the entire log for each appended line | Open |

@@ -14,6 +14,40 @@
   command. A palette row asks whether its command can run when chosen, so a
   stale row leaves the palette open. `CommandPaletteItem.onInvoke` may throw
   `SemanticActionDeclined` to decline.
+- `FileBrowser` keeps its keys working in an empty or unreadable directory:
+  Left and Backspace climb to the parent again.
+- `FileBrowser` reads a directory when it opens it or on
+  `FileBrowserController.reload()`, not on every parent rebuild; an inline
+  `entityFilter` no longer re-reads the disk and resets the cursor. Toggling
+  `showHidden` or changing the query keeps the selected entry. The display
+  order is kept until the entries or the filter change.
+- `Image` no longer re-decodes when its parent rebuilds with the same
+  source, an animated image keeps playing across rebuilds, and a static
+  image is painted once rather than resampled every frame.
+- Markdown emphasis follows CommonMark's flanking rules: `snake_case`,
+  `__init__` and `a * b * c` stay text instead of losing characters.
+- `JsonView` builds its rows once per document and expansion, not on every
+  build, and `SearchPanel` ranks its results once per query.
+- Toasts, tooltips, autocomplete and completion lists, and the color
+  picker's hex entry paint the theme where their owner sits; under a light
+  app they painted the dark fallback. `Select` and `Menu` follow a theme
+  change while open.
+- `Tree`'s own semantic node follows the cursor (current index, selected
+  key, visible range) through arrow keys, typeahead and clicks.
+- `TreeTable`'s cursor stays on its node when an expand or collapse above
+  it, a filter, or new roots rebuild the rows; when the node leaves the
+  rows it moves to the nearest ancestor still shown. Enter and copy act on
+  the node the user picked.
+- The library's controls (`Select`, `MultiSelect`, `DatePicker`, `Stepper`,
+  `RangeSlider`, `FilePicker`, `ColorPicker`, `Autocomplete`,
+  `CompletionTextInput` and others) rebuild only when their own focus
+  changes, not on every focus move.
+- `DiffView` measures its line-number gutter once per document.
+- `LineChart` collects its cursor positions only when it is interactive,
+  and a chart behind a `RepaintBoundary` with an unchanged series list no
+  longer repaints for its default palette.
+- A `git format-patch` email signature (`-- `) after the last hunk no longer
+  parses as a deletion.
 
 - `LogRegion` no longer does work proportional to the whole log on every
   build: the unfiltered view order allocates nothing, and row-id validation
