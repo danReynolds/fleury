@@ -59,7 +59,7 @@ class PosixTerminalDriver
     )?
     signalWatcherOverride,
   }) : _stdin = stdinOverride ?? stdin,
-       _stdout = stdoutOverride ?? stdout,
+       _stdout = stdoutOverride ?? _nativeOutput(),
        _forceExitOverride = forceExitOverride,
        _selfStopOverride = selfStopOverride,
        _signalWatcherOverride = signalWatcherOverride,
@@ -91,6 +91,14 @@ class PosixTerminalDriver
       identical(_stdin, stdin) &&
       _stdinIsTerminal &&
       (Platform.isMacOS || Platform.isLinux);
+  // Native input temporarily sets O_NONBLOCK on a duplicated stdin. Shells
+  // may share that open-file description with stdout, so dart:io's synchronous
+  // terminal writes can fail with EAGAIN on a full queue. The same sink used
+  // by runApp's fd capture retries partial writes/EINTR and polls on EAGAIN.
+  // Borrow fd 1; the driver never closes it. Keep explicit/zone overrides intact.
+  static Stdout _nativeOutput() =>
+      IOOverrides.current == null ? fd.StdoutTerminalSink(1) : stdout;
+
   final Stdout _stdout;
 
   /// How long a delivered [SignalEvent] may remain unresolved before the

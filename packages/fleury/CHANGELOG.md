@@ -1,5 +1,8 @@
 # Changelog
 
+- Explicit native POSIX drivers now tolerate a full terminal output queue.
+  Large frames no longer crash when stdin and stdout share nonblocking flags.
+
 - **Breaking:** `requestExit()` is now `exitApp()`, the counterpart to
   `runApp()`. It starts orderly UI shutdown; await `runApp` for terminal
   restoration to finish. It does not terminate the host process.
