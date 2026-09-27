@@ -113,7 +113,8 @@ class _TerminalDemo {
     _resize(InlineSetupStep.configure);
     try {
       _mount = mountApp(
-        () => SampleScaffold(
+        () => Theme(
+          data: const ThemeData(),
           child: FocusTraversalGroup(
             child: InlineSetup(
               onStepChanged: _resize,

@@ -1,8 +1,6 @@
 import 'package:fleury/fleury_core.dart';
 import 'package:fleury_widgets/fleury_widgets_web.dart';
 
-import 'scaffold.dart';
-
 /// The host decides how to provide the space requested by each page.
 enum InlineSetupStep {
   configure(17),
@@ -157,19 +155,15 @@ class _InlineSetupState extends State<InlineSetup> {
     }
   }
 
+  // Inherit the host theme. With Fleury's defaults, unpainted cells use the
+  // terminal's own foreground/background instead of a rectangular demo fill.
   @override
-  Widget build(BuildContext context) => Theme(
-    data: fleurySampleTheme,
-    child: FocusTraversalGroup(
-      child: KeyBindings(
-        bindings: [KeyBinding(KeySequence.escape, onTrigger: (_) => _escape())],
-        child: Container(
-          color: fleurySampleTheme.colorScheme.background,
-          child: LayoutBuilder(
-            builder: (_, constraints) =>
-                _body(compact: (constraints.maxRows ?? 12) < 12),
-          ),
-        ),
+  Widget build(BuildContext context) => FocusTraversalGroup(
+    child: KeyBindings(
+      bindings: [KeyBinding(KeySequence.escape, onTrigger: (_) => _escape())],
+      child: LayoutBuilder(
+        builder: (_, constraints) =>
+            _body(compact: (constraints.maxRows ?? 12) < 12),
       ),
     ),
   );
@@ -244,7 +238,7 @@ class _InlineSetupState extends State<InlineSetup> {
       if (_error != null)
         Text(
           _error!,
-          style: const CellStyle(foreground: RgbColor(245, 194, 17)),
+          style: const CellStyle(foreground: AnsiColor(1), underline: true),
         ),
       const SizedBox(height: 1),
       const Text('Template'),
@@ -325,8 +319,8 @@ class _InlineSetupState extends State<InlineSetup> {
   }
 }
 
-const _accent = CellStyle(foreground: RgbColor(61, 220, 151), bold: true);
-const _muted = CellStyle(foreground: RgbColor(146, 161, 178));
+const _accent = CellStyle(bold: true);
+const _muted = CellStyle(dim: true);
 
 Widget _action(
   String label,
@@ -340,8 +334,8 @@ Widget _action(
   onPressed: action,
   style: CellStyle.interactive(
     base: primary ? _accent : const CellStyle(),
-    focused: const CellStyle(background: RgbColor(35, 62, 56), bold: true),
-    hovered: const CellStyle(background: RgbColor(35, 62, 56)),
+    focused: const CellStyle(inverse: true, bold: true),
+    hovered: const CellStyle(underline: true),
   ),
 );
 
@@ -374,7 +368,8 @@ class _InlineSetupPreviewState extends State<InlineSetupPreview> {
   });
 
   @override
-  Widget build(BuildContext context) => SampleScaffold(
+  Widget build(BuildContext context) => Theme(
+    data: const ThemeData(),
     child: FocusTraversalGroup(
       child: Padding(
         padding: const EdgeInsets.symmetric(horizontal: 1, vertical: 1),

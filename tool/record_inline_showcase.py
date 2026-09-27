@@ -151,8 +151,11 @@ def record(binary, destination, handoff=False, full_screen=False, repeat=False):
             assert 'Generate config' not in text(), 'Fleury painted over the child'
             pause(3.0)
             os.write(master, b'q')
-            wait_for(lambda: 'Back from less.' in text(), 'resumed setup state')
-            assert 'lib/orbit_tools.dart' in text(), text()
+            # A PTY read can split a repaint after its first updated row.
+            # Wait for the restored content as well as the status message.
+            wait_for(lambda: 'Back from less.' in text()
+                     and 'lib/orbit_tools.dart' in text()
+                     and 'name: orbit_tools' in text(), 'resumed setup state')
             if not full_screen:
                 assert 'notes/    sandbox/' in text(), 'handoff lost earlier output'
             pause(2.0)

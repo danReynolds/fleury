@@ -4,7 +4,6 @@ import 'dart:js_interop';
 
 import 'package:fleury/fleury_core.dart';
 import 'package:fleury/fleury_host.dart' show FrameFlushScheduler;
-import 'package:fleury_samples/samples.dart';
 import 'package:fleury_web/fleury_web.dart';
 import 'package:web/web.dart' as web;
 import '../doc_snippets/shutdown/demo_work.dart';
@@ -86,7 +85,8 @@ class _ShutdownDemo {
       surface.hidden = false.toJS;
       final work = _work = DemoWork();
       _mount = mountApp(
-        () => SampleScaffold(
+        () => Theme(
+          data: const ThemeData(),
           child: FocusTraversalGroup(
             child: ShutdownPanel(
               work: work,

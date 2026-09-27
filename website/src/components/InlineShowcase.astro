@@ -5,7 +5,7 @@ const { fullScreen = false } = Astro.props;
 ---
 
 <div class="inline-showcase">
-  <FleuryExample id={fullScreen ? 'terminal-modes.fullscreen' : 'showcase.inline'} cols={84} rows={29} interactive expandable={false} />
+  <FleuryExample id={fullScreen ? 'terminal-modes.fullscreen' : 'showcase.inline'} cols={84} rows={29} interactive expandable={false} surfaceTheme="site" />
   <p class="inline-caption">{fullScreen
     ? 'Notice how the form replaces the shell while it runs. Finish or cancel: the earlier output returns, with the command’s result underneath.'
     : 'Notice how the earlier output stays above the form. Review grows the live region; finishing clears it and leaves a lasting summary.'}</p>
