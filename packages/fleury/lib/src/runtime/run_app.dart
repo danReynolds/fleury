@@ -877,10 +877,12 @@ Future<AppExit> _runAppImpl(
       // Ctrl+C exits only when the app did not handle it first. Structured
       // browser sessions are exempt because browser Cmd+C maps to Ctrl+C.
       if (event is KeyEvent &&
-          // Once per physical press: a release always dispatches as
-          // `ignored` (the fence), so without this an app that handled the
-          // press would still exit on the up (RFC 0020 §6).
-          event.type != KeyEventType.up &&
+          // Once per physical press, on the press itself. A release always
+          // dispatches as `ignored` (the fence), and so does a repeat, which
+          // bindings skip: an app that handled the press would otherwise
+          // exit on its up, or on its auto-repeat when the key is held
+          // (RFC 0020 §6). An unhandled press exits on its down first.
+          event.type == KeyEventType.down &&
           event.code.character == 'c' &&
           event.hasCtrl &&
           dispatchResult != KeyEventResult.handled &&

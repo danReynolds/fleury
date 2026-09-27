@@ -10,4 +10,4 @@ export 'src/widgets/form_control.dart'
 export 'src/widgets/pointer.dart' show RenderPointerListener;
 export 'src/widgets/focusable_control.dart' show FocusableControl;
 export 'src/widgets/framework.dart' show dependOnScope, readScope;
-export 'src/widgets/scroll_view.dart' show revealInScrollViews;
+export 'src/rendering/scroll_reveal.dart' show revealInScrollViews;
