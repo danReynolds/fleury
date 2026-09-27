@@ -84,6 +84,7 @@ jobs:
           test/terminal/posix_input_lease_test.dart
           test/terminal/native_termios_ownership_test.dart
           test/terminal/posix_driver_lifecycle_test.dart
+          test/terminal/posix_driver_output_test.dart
           test/runtime/inline_terminal_lease_test.dart
       - name: Exercise inline rendering and lifecycle over a PTY
         run: python tool/check_inline_tui.py
