@@ -134,38 +134,49 @@
   (KP 4 with NumLock off, and Left) are tracked as two keys.
 - A letter typed after an abandoned key chord reaches `KeyDetector`s, such
   as a list's type-ahead, on kitty-protocol terminals and in the browser.
-- **Breaking:** `Dialog` no longer carries a semantic dismiss action of its
-  own. A presented dialog's route advertises dismiss when the dialog can be
-  dismissed, and honours `barrierDismissible` and `PopScope`; the Dialog's
-  own action bypassed both and could pop a page it was shown inline in.
 - A command's shortcut asks the command's `visible` and `enabled`
   predicates when its key is pressed, as the palette, semantics, and
   `invoke` do. A command that becomes enabled after its scope built fires on
   its shortcut, and one that becomes disabled lets its key through to an
-  outer binding. `KeyBindings.activeOf` asks them each frame, so a hint bar
-  shows the shortcut exactly while it works.
+  outer binding. A hint bar asks them too: the frame after an answer changes
+  shows the change, even when nothing rebuilt for it.
 - Esc at a navigator's root, where there is nothing to pop, reaches what
   binds Esc above the navigator: FleuryApp's own Esc commands, the Toaster's
   Esc dismiss, and an outer navigator. A blocking `PopScope` at the root
   still intercepts it.
-- Status a command reports through `context.status` survives the command's
-  completion, and status set with `status.update` survives later commands
-  and rebuilds. FleuryApp keeps what it derives from its `status` builder
-  and extensions apart from what `update` sets. `StatusController.put` and
-  `remove` set and clear one item, leaving the items others set; `update`
-  still replaces them all.
+- **Breaking:** `StatusController` keeps what FleuryApp derives from its
+  `status` builder and extensions apart from items an app or command sets.
+  Status a command reports through `context.status` survives the command's
+  completion, and a later command no longer wipes it. `put` and `remove` set
+  and clear one item beside the items others set. `update` replaces only the
+  set items, so `items` no longer equals what was last passed to it; don't
+  write `items` back through `update`, which would freeze the derived items
+  at their current values. Use `put`.
 - A command that throws is reported. From a shortcut, a button, or a palette
-  row it reaches runApp's error overlay, as a throwing key binding does, and
-  a semantic activation reports it `failed` rather than `completed`.
+  row it reaches runApp's error overlay, as a throwing key binding does.
   `CommandRegistry.invokeFromGesture` and `invokeCommandFromGesture` do the
   same for custom command surfaces.
+- A semantic action reports what it did. Activating a command that failed
+  reports `failed`; one that is disabled, hidden or gone reports
+  `unsupported` rather than `completed`, through a command node, a status
+  item, a button or a palette row alike, and so does a route dismissal a
+  `PopScope` refuses. A handler declines by throwing the new
+  `SemanticActionDeclined`. `CommandRegistry.invokeFromSemantics` and
+  `invokeCommandFromSemantics` run a command for a semantic action and
+  report its outcome. `Button.onPressed` and `FocusableControl.onActivate`
+  may return a future, which a semantic activation awaits.
 - runApp stops on a storm of uncaught errors only when they recur with no
   input between them. Holding a key whose command or async handler fails,
-  or typing fast into a field whose async handler fails, reported 24 errors
-  inside three seconds and ended the session.
-- `FleuryTester.lastCommandResult` is the latest command visible from the
-  focused context, scoped or app-level. It kept reporting the app's last
-  command after a screen command ran.
+  typing fast into a field whose async handler fails, or an agent repeating
+  such an action, reported 24 errors inside three seconds and ended the
+  session. Bare pointer motion doesn't count as input, so moving the mouse no
+  longer keeps a genuine error loop alive.
+- `FleuryTester.lastCommandResult` and the app node's `lastCommandId` are
+  the latest command visible from the focused context, scoped or app-level.
+  Both kept reporting the app's last command after a screen command ran.
+- `NavigatorState.topScreen` is the screen widget of the top route, so a
+  screen that closes itself can tell being presented from being shown
+  inline.
 - `FleuryTester.renderToString` trims each row's trailing empty cells rather
   than trailing copies of the mark. An empty mark no longer hangs the test,
   a mark of several characters works, and a glyph equal to the mark stays.

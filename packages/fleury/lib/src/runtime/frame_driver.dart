@@ -367,6 +367,9 @@ final class FrameDriver {
     // repaint at the new size.
     if (_lastSize != null && size != _lastSize) _resizePending = true;
     _lastSize = size;
+    // A command's enabled state can change with nothing rebuilding; a hint
+    // surface that showed the old answer makes this frame's work.
+    runtime.focusManager.recheckLiveAnswers();
     if (!_resizePending &&
         !snapshot.metricsChanged &&
         !_frameLoop.needsRender(size) &&

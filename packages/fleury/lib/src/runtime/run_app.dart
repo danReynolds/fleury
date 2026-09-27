@@ -860,7 +860,15 @@ Future<AppExit> _runAppImpl(
           event is PasteEvent ||
           event is MouseEvent ||
           event is InputBatch) {
-        errorReporter.noteInput();
+        // Bare pointer motion is not input the user stops to stop an error:
+        // counting it would keep a genuine error loop alive while the mouse
+        // moves.
+        if (!(event is MouseEvent &&
+            (event.kind == MouseEventKind.moved ||
+                event.kind == MouseEventKind.leave ||
+                event.kind == MouseEventKind.cancel))) {
+          errorReporter.noteInput();
+        }
         try {
           dispatchResult = dispatcher.dispatch(event);
         } catch (error, stack) {
@@ -1440,6 +1448,9 @@ Future<AppExit> _runAppImpl(
                     return;
                   }
                 }
+                // An agent's or assistive technology's action is input too:
+                // errors it causes stop when it stops.
+                errorReporter.noteInput();
                 final result = await invokeSemanticActionFromElement(
                   tree: liveTree,
                   id: id,

@@ -317,6 +317,14 @@ class NavigatorState extends State<Navigator> {
     return context != null && context.mounted ? context : null;
   }
 
+  /// The screen widget of the top route, as it was pushed or presented.
+  ///
+  /// Lets a screen that closes itself — a palette after running a command —
+  /// tell being the presented route (`identical(topScreen, widget)`) from
+  /// being shown inline inside another screen, where popping would close
+  /// that screen instead.
+  Widget? get topScreen => _topLive?.screen;
+
   /// The topmost live (non-leaving) route — the one that receives input.
   _Route? get _topLive {
     for (var i = _routes.length - 1; i >= 0; i--) {
@@ -1006,7 +1014,11 @@ class _RouteHost extends StatelessWidget {
               switch (action) {
                 case SemanticAction.close:
                 case SemanticAction.dismiss:
-                  navigator.maybePop();
+                  // A PopScope that refuses keeps the route; the action
+                  // reports that instead of completing.
+                  if (!navigator.maybePop()) {
+                    throw const SemanticActionDeclined();
+                  }
                   return;
                 case SemanticAction.navigate:
                   return;

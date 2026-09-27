@@ -771,6 +771,7 @@ class FleuryTester {
     // With a ticker registered this is a no-op; the tick publishes instead.
     _publishFrameLatch();
     final buffer = CellBuffer(viewportSize);
+    _focusManager.recheckLiveAnswers();
     _pointerRouter.beginFrame();
     _focusManager.beginFrame();
     try {

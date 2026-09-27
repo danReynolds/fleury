@@ -326,6 +326,49 @@ void main() {
       controller.dispose();
     });
 
+    test('derived items come first, then set items with ids of their own', () {
+      final controller = StatusController()
+        ..updateDerived([
+          StatusItem.text('Branch', id: 'branch', value: 'main'),
+          StatusItem.text('Mode', id: 'mode', value: 'dev'),
+        ])
+        ..update([
+          StatusItem.text('Deploy', id: 'deploy', value: 'ok'),
+          StatusItem.text('Mode', id: 'mode', value: 'prod'),
+        ]);
+
+      expect(
+        [for (final item in controller.items) item.displayText],
+        ['Branch: main', 'Mode: prod', 'Deploy: ok'],
+      );
+      controller.dispose();
+    });
+
+    test('put replaces an item where it stands', () {
+      final controller = StatusController()
+        ..update([
+          StatusItem.text('A', id: 'a', value: '1'),
+          StatusItem.text('B', id: 'b', value: '1'),
+          StatusItem.text('C', id: 'c', value: '1'),
+        ])
+        ..put(StatusItem.text('B', id: 'b', value: '2'));
+
+      expect(
+        [for (final item in controller.items) item.displayText],
+        ['A: 1', 'B: 2', 'C: 1'],
+      );
+      controller.dispose();
+    });
+
+    test('items passed to the constructor show before any write', () {
+      final controller = StatusController(
+        items: [StatusItem.text('Ready', id: 'ready', value: 'yes')],
+      );
+
+      expect(controller.items.single.displayText, 'Ready: yes');
+      controller.dispose();
+    });
+
     test('post-dispose status updates throw', () {
       final controller = StatusController();
 
@@ -1141,8 +1184,58 @@ void main() {
     ]) {
       tester.sendKey(KeyEvent(key, modifiers: const {KeyModifier.ctrl}));
       await Future<void>.delayed(Duration.zero);
+      tester.pump();
       expect(tester.lastCommandResult?.id, expected);
+      // Agents and the debug panel read the app node, not the tester.
+      final app = tester.semantics().single(
+        role: SemanticRole.app,
+        label: 'Editor',
+      );
+      expect(app.state['lastCommandId'], expected.value);
     }
+  });
+
+  testWidgets('the latest command is found through every registry above', (
+    tester,
+  ) async {
+    const palette = CommandId('app.palette');
+    const save = CommandId('editor.save');
+    const format = CommandId('editor.format');
+    tester.pumpWidget(
+      FleuryApp(
+        title: 'Editor',
+        commands: [
+          AppCommand(
+            id: palette,
+            title: 'Palette',
+            shortcuts: [KeySequence.ctrl.k],
+            run: (_) {},
+          ),
+        ],
+        home: CommandScope(
+          commands: [
+            AppCommand(
+              id: save,
+              title: 'Save',
+              shortcuts: [KeySequence.ctrl.s],
+              run: (_) {},
+            ),
+          ],
+          child: CommandScope(
+            commands: [AppCommand(id: format, title: 'Format', run: (_) {})],
+            child: const Focus(autofocus: true, child: Text('editor')),
+          ),
+        ),
+      ),
+    );
+    tester.pump();
+
+    tester.sendKey(const KeyEvent(KeyCode.s, modifiers: {KeyModifier.ctrl}));
+    await Future<void>.delayed(Duration.zero);
+    tester.sendKey(const KeyEvent(KeyCode.k, modifiers: {KeyModifier.ctrl}));
+    await Future<void>.delayed(Duration.zero);
+
+    expect(tester.lastCommandResult?.id, palette);
   });
 
   testWidgets('tester invokes commands by id and records results', (

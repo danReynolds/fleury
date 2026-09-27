@@ -125,13 +125,18 @@ void main() {
     );
     tester.pump(const Duration(milliseconds: 300));
 
-    await tester
-        .target(role: SemanticRole.route, label: 'Dialog')
-        .perform(SemanticAction.dismiss);
+    final result = await tester.invokeSemanticAction(
+      SemanticAction.dismiss,
+      role: SemanticRole.route,
+      label: 'Dialog',
+      allowFailure: true,
+    );
     tester.pump(const Duration(milliseconds: 300));
 
     expect(blocked, 1);
     expect(Navigator.of(ctx).depth, 2);
+    // Refused, and reported as not done rather than completed.
+    expect(result.status, SemanticActionInvocationStatus.unsupported);
   });
 
   testWidgets('a dialog shown inline offers no dismiss', (tester) async {

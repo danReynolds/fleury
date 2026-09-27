@@ -65,8 +65,11 @@ class CommandButton extends StatelessWidget {
       focusNode: focusNode,
       autofocus: autofocus,
       style: style,
+      // A key or click doesn't wait: a failure reaches runApp's error
+      // overlay. A semantic activation waits, so its result reports the
+      // command's outcome.
       onPressed: enabled
-          ? () => registry.invokeFromGesture(command, buildContext: context)
+          ? () => registry.invokeFromSemantics(command, buildContext: context)
           : null,
     );
   }

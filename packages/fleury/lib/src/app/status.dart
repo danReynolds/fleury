@@ -265,10 +265,12 @@ final class _StatusItemView extends StatelessWidget {
           ? null
           : (action) async {
               if (action != SemanticAction.activate) return;
-              final registry = CommandRegistryScope.maybeOf(context);
-              if (registry == null) return;
-              semanticOutcomeOf(
-                await registry.invoke(item.action!, buildContext: context),
+              // Read, not depended on: this is an action, not a build.
+              final registry = readScope<CommandRegistry>(context);
+              if (registry == null) throw const SemanticActionDeclined();
+              await registry.invokeFromSemantics(
+                item.action!,
+                buildContext: context,
               );
             },
       child: Text(

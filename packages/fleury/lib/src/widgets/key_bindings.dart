@@ -415,6 +415,12 @@ final class ActiveKeyBinding {
 /// The returned list is deepest-first and immutable. This is the canonical
 /// resolution API for hint bars, help overlays, and keymap inspection; those
 /// surfaces should not independently walk [FocusManager.activeChain].
+///
+/// A command's shortcut is enabled by predicates over app state that no
+/// rebuild tracks. Called from a widget's build, the resolution remembers
+/// what they answered for that widget, and the focus manager asks them again
+/// at the start of each frame: when one answers differently, the widget
+/// rebuilds. A resolution outside a build remembers nothing.
 List<ActiveKeyBinding> resolveActiveKeyBindings(FocusManager manager) {
   final result = <ActiveKeyBinding>[];
   // Canonical sequence identity mirrors dispatch. Differently spelled aliases
@@ -665,7 +671,9 @@ class _KeyBindingsState extends State<KeyBindings> implements KeyBindingSource {
       final x = a[i];
       final y = b[i];
       if (x.label != y.label ||
-          x.enabled != y.enabled ||
+          // Two live predicates read the same state and agree; the focus
+          // manager's recheck is what follows them.
+          (!(x.isLive && y.isLive) && x.enabled != y.enabled) ||
           x.hideFromHintBar != y.hideFromHintBar) {
         return true;
       }

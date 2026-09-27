@@ -329,6 +329,40 @@ class CommandRegistry extends Notifier {
     );
   }
 
+  /// [invoke] for a semantic action — an agent's or assistive technology's
+  /// activation — whose result carries the outcome. Completes when the
+  /// command did; throws the command's error when it failed, so the action
+  /// reports `failed`; and throws [SemanticActionDeclined] when the command
+  /// is disabled or gone, so it reports `unsupported` rather than
+  /// `completed`.
+  ///
+  /// ```dart
+  /// Semantics(
+  ///   role: SemanticRole.button,
+  ///   label: 'Save',
+  ///   actions: const {SemanticAction.activate},
+  ///   onAction: (_) => registry.invokeFromSemantics(save, buildContext: context),
+  ///   child: saveButton,
+  /// )
+  /// ```
+  Future<void> invokeFromSemantics(
+    CommandId id, {
+    BuildContext? buildContext,
+  }) async {
+    if (!semanticOutcomeOf(await invoke(id, buildContext: buildContext))) {
+      throw const SemanticActionDeclined();
+    }
+  }
+
+  /// [invokeCommand] for a semantic action, as [invokeFromSemantics].
+  Future<void> invokeCommandFromSemantics(
+    AppCommand command, {
+    BuildContext? buildContext,
+  }) async {
+    final result = await invokeCommand(command, buildContext: buildContext);
+    if (!semanticOutcomeOf(result)) throw const SemanticActionDeclined();
+  }
+
   static void _reportFailure(CommandInvocationResult result) {
     final error = result.error;
     if (result.status != CommandInvocationStatus.failed || error == null) {

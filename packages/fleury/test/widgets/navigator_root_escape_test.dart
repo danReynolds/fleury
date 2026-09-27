@@ -33,9 +33,7 @@ void main() {
     expect(hits, 1);
   });
 
-  testWidgets('a pushed route still pops on Esc, and keeps the key', (
-    tester,
-  ) {
+  testWidgets('a pushed route still pops on Esc, and keeps the key', (tester) {
     var hits = 0;
     tester.pumpWidget(
       _withEscBinding(() => hits++, Navigator(home: _screen('home'))),
@@ -72,6 +70,25 @@ void main() {
 
     expect(blocked, 1, reason: 'the guard intercepts a would-be exit');
     expect(hits, 0);
+  });
+
+  testWidgets('an allowing PopScope at the root lets Esc through', (tester) {
+    var hits = 0;
+    var blocked = 0;
+    tester.pumpWidget(
+      _withEscBinding(
+        () => hits++,
+        Navigator(
+          home: PopScope(onBlocked: () => blocked++, child: _screen('home')),
+        ),
+      ),
+    );
+    tester.pump();
+
+    tester.sendKey(_esc);
+
+    expect(blocked, 0);
+    expect(hits, 1, reason: 'nothing can pop, and nothing asked to keep Esc');
   });
 
   testWidgets('Esc at a nested navigator root pops the outer navigator', (

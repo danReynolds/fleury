@@ -766,7 +766,7 @@ class InputDispatcher {
       if (source == null) continue;
       if (!pending.sources.any((s) => identical(s, source))) continue;
       for (final binding in source.activeBindings) {
-        if (!binding.enabled || binding.isHold) continue;
+        if (binding.isHold) continue;
         for (final sequence in binding.sequences) {
           if (!sequence.isSequence) continue;
           if (sequence.stepCount <= pending.events.length) continue;
@@ -776,7 +776,9 @@ class InputDispatcher {
             pending.lanes,
             pending.texts,
           )) {
-            out.add(binding);
+            // Asked only of a binding whose sequence is still in play: a live
+            // binding's predicate runs per match, not per binding per step.
+            if (binding.enabled) out.add(binding);
             break;
           }
         }

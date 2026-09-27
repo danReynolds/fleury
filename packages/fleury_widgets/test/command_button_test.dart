@@ -140,6 +140,54 @@ void main() {
     expect(registry.lastResult?.status, CommandInvocationStatus.failed);
   });
 
+  testWidgets('activating a failing command by semantics reports failed', (
+    tester,
+  ) async {
+    final registry = _registry(
+      _command(run: (_) => throw StateError('registry offline')),
+    );
+    addTearDown(registry.dispose);
+    tester.pumpWidget(_host(registry));
+
+    final result = await tester.invokeSemanticAction(
+      SemanticAction.activate,
+      role: SemanticRole.button,
+      allowFailure: true,
+    );
+
+    expect(result.status, SemanticActionInvocationStatus.failed);
+    expect(result.error, isA<StateError>());
+  });
+
+  testWidgets('Enter on a command disabled since the build is a no-op', (
+    tester,
+  ) async {
+    var allowed = true;
+    var runs = 0;
+    final registry = CommandRegistry(
+      commands: [
+        AppCommand(
+          id: _inspect,
+          title: 'Inspect package',
+          enabled: (_) => allowed,
+          run: (_) => runs++,
+        ),
+      ],
+    );
+    addTearDown(registry.dispose);
+    final errors = <Object>[];
+
+    await runZonedGuarded(() async {
+      tester.pumpWidget(_host(registry, autofocus: true));
+      allowed = false; // nothing rebuilds the button
+      tester.sendKey(const KeyEvent(KeyCode.enter));
+      await Future<void>.delayed(Duration.zero);
+    }, (error, _) => errors.add(error));
+
+    expect(runs, 0);
+    expect(errors, isEmpty);
+  });
+
   testWidgets('rebuilds when the registry command changes', (tester) async {
     var calls = 0;
     final registry = _registry(_command(title: 'Waiting', enabled: false));

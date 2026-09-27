@@ -1,4 +1,4 @@
-import 'dart:async' show scheduleMicrotask;
+import 'dart:async' show FutureOr, scheduleMicrotask, unawaited;
 
 import 'package:fleury/fleury_core.dart';
 
@@ -39,8 +39,11 @@ class CommandPaletteItem {
   /// Whether this command can currently run.
   final bool enabled;
 
-  /// Run when the command is chosen.
-  final void Function() onInvoke;
+  /// Run when the command is chosen. A future it returns is awaited when an
+  /// agent or assistive technology chose it, so its error reports the action
+  /// `failed` and a [SemanticActionDeclined] reports it `unsupported`; Enter
+  /// and a click don't wait, and a failure still reaches the zone.
+  final FutureOr<void> Function() onInvoke;
 }
 
 bool _isSubsequence(String needle, String hay) {
@@ -220,6 +223,7 @@ class CommandPalette extends StatelessWidget {
     final fixedCommands = commands;
     if (fixedCommands != null) {
       return _CommandPaletteView(
+        screen: this,
         commands: fixedCommands,
         placeholder: placeholder,
         width: width,
@@ -253,6 +257,7 @@ class CommandPalette extends StatelessWidget {
           activeRegistry,
         );
         return _CommandPaletteView(
+          screen: this,
           commands: commands,
           placeholder: placeholder,
           width: width,
@@ -315,7 +320,7 @@ List<CommandPaletteItem> _activePaletteCommands(
         shortcut: command.primaryShortcutLabel,
         enabled: registry.isEnabled(command, buildContext: context),
         onInvoke: () =>
-            registry.invokeCommandFromGesture(command, buildContext: context),
+            registry.invokeCommandFromSemantics(command, buildContext: context),
       ),
     );
   }
@@ -329,12 +334,16 @@ List<CommandPaletteItem> _activePaletteCommands(
 
 class _CommandPaletteView extends StatefulWidget {
   const _CommandPaletteView({
+    required this.screen,
     required this.commands,
     required this.placeholder,
     required this.width,
     required this.maxVisible,
   });
 
+  /// The [CommandPalette] this view renders: a presented palette is its
+  /// route's screen.
+  final CommandPalette screen;
   final List<CommandPaletteItem> commands;
   final String placeholder;
   final int width;
@@ -441,20 +450,35 @@ class _CommandPaletteState extends State<_CommandPaletteView> {
     });
   }
 
-  void _invoke() {
+  CommandPaletteItem? get _selectedCommand {
     final i = _selectedIndex;
-    if (i == null || i < 0 || i >= _filtered.length) return;
-    _invokeCommand(_filtered[i].command);
+    if (i == null || i < 0 || i >= _filtered.length) return null;
+    return _filtered[i].command;
   }
 
+  // Enter, a click: nothing waits for the command. A failure reaches the
+  // zone (runApp's error overlay); one that declined is a no-op.
   void _invokeCommand(CommandPaletteItem command) {
-    if (!command.enabled) return;
-    Navigator.maybeOf(context)?.pop();
-    command.onInvoke();
+    unawaited(
+      _run(command).catchError(
+        (Object _) {},
+        test: (error) => error is SemanticActionDeclined,
+      ),
+    );
   }
 
-  void _dismiss() {
-    Navigator.maybeOf(context)?.pop();
+  // A semantic action awaits this, so its result carries the outcome.
+  Future<void> _run(CommandPaletteItem? command) async {
+    if (command == null || !command.enabled) {
+      throw const SemanticActionDeclined();
+    }
+    // Close the palette when it is the presented route; shown inline inside a
+    // page, popping would close the page.
+    final navigator = Navigator.maybeOf(context);
+    if (navigator != null && identical(navigator.topScreen, widget.screen)) {
+      navigator.pop();
+    }
+    await command.onInvoke();
   }
 
   @override
@@ -509,18 +533,17 @@ class _CommandPaletteState extends State<_CommandPaletteView> {
         label: 'Command palette',
         value: _query.text,
         focused: _queryFocus.hasFocus,
+        // No dismiss action of its own: a presented palette's route advertises
+        // dismiss and honours PopScope; one shown inline is not a route.
         actions: const <SemanticAction>{
           SemanticAction.focus,
           SemanticAction.submit,
-          SemanticAction.dismiss,
         },
-        onAction: (action) {
+        onAction: (action) async {
           if (action == SemanticAction.focus) {
             _queryFocus.requestFocus();
           } else if (action == SemanticAction.submit) {
-            _invoke();
-          } else if (action == SemanticAction.dismiss) {
-            _dismiss();
+            await _run(_selectedCommand);
           }
         },
         state: SemanticState({
@@ -553,7 +576,10 @@ class _CommandPaletteState extends State<_CommandPaletteView> {
                     focusNode: _queryFocus,
                     placeholder: widget.placeholder,
                     autofocus: true,
-                    onSubmit: (_) => _invoke(),
+                    onSubmit: (_) {
+                      final command = _selectedCommand;
+                      if (command != null) _invokeCommand(command);
+                    },
                   ),
                   const SizedBox(height: 1),
                   SizedBox(
@@ -575,6 +601,7 @@ class _CommandPaletteState extends State<_CommandPaletteView> {
                               selected: index == selIndex,
                               width: widget.width,
                               onActivate: _invokeCommand,
+                              onRun: _run,
                             ),
                           ),
                   ),
@@ -630,6 +657,7 @@ class _CommandRow extends StatelessWidget {
     required this.selected,
     required this.width,
     required this.onActivate,
+    required this.onRun,
   });
 
   final CommandPaletteItem command;
@@ -642,6 +670,9 @@ class _CommandRow extends StatelessWidget {
   /// cells it occupies, and the theme background is "terminal default").
   final int width;
   final void Function(CommandPaletteItem command) onActivate;
+
+  /// Runs [command] for a semantic activation, whose result waits on it.
+  final Future<void> Function(CommandPaletteItem command) onRun;
 
   @override
   Widget build(BuildContext context) {
@@ -688,10 +719,8 @@ class _CommandRow extends StatelessWidget {
       enabled: command.enabled,
       selected: selected,
       actions: const <SemanticAction>{SemanticAction.activate},
-      onAction: (action) {
-        if (action == SemanticAction.activate) {
-          onActivate(command);
-        }
+      onAction: (action) async {
+        if (action == SemanticAction.activate) await onRun(command);
       },
       state: SemanticState(state),
       // Click an enabled command to run it (same as Enter on the selection).

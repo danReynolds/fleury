@@ -29,7 +29,7 @@
 | C | medium | Tab in an overflowing ScrollView form skips hidden fields and never scrolls to them | Fixed |
 | C | medium | TextArea re-measures the whole document on every keystroke and caret move, then throws the result away | Fixed |
 | D | high | Command shortcuts freeze `enabled`/`visible` at build time: the shortcut is dead or swallows the key while every other surface says the command is enabled | Fixed |
-| D | high | Opening the debug panel (Ctrl+G -> docked, or Esc fullscreen -> docked) unmounts and re-creates the whole app: all State lost and navigation reset | Fixed: #273 keeps the app at one element path; this branch fixes the GlobalKey move into a LayoutBuilder underneath |
+| D | high | Opening the debug panel (Ctrl+G -> docked, or Esc fullscreen -> docked) unmounts and re-creates the whole app: all State lost and navigation reset | Fixed: #273 keeps the app at one element path; Batch A (#274) fixes the GlobalKey move into a LayoutBuilder underneath |
 | D | high | Root route consumes Esc even when nothing can pop, so FleuryApp Esc commands, the Toaster's Esc-dismiss and app-level Esc bindings never fire | Fixed |
 | D | medium | A status update made by a command is wiped when the command completes, and any later command wipes manual updates | Fixed |
 | D | medium | AppCommand.run exceptions are silently swallowed on every interactive path, and semantic activation reports `completed` for a failed command | Fixed |

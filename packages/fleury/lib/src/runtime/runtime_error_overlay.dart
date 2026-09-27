@@ -78,10 +78,11 @@ class RuntimeErrorReporter with Notifier {
   bool get isStorming => _window.length >= 24;
 
   /// Starts a fresh [isStorming] window; the runtime calls this for each
-  /// input event it dispatches. An error that follows input stops when the
-  /// input does — a held shortcut whose command fails, fast typing into a
-  /// field whose async handler fails — so it is reported, not counted
-  /// toward a loop.
+  /// input it dispatches — a key, text, a paste, a click, a scroll, a
+  /// semantic action — but not bare pointer motion. An error that follows
+  /// input stops when the input does — a held shortcut whose command fails,
+  /// fast typing into a field whose async handler fails — so it is reported,
+  /// not counted toward a loop.
   @internal
   void noteInput() => _window.clear();
 

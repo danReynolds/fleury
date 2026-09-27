@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import '../input/events.dart';
 import '../rendering/cell.dart';
 import '../semantics/semantics.dart';
@@ -35,7 +37,12 @@ class FocusableControl extends StatefulWidget {
     this.style,
   });
 
-  final void Function()? onActivate;
+  /// Activation — Enter, Space, a click, or a semantic `activate`. A future
+  /// it returns is awaited only by a semantic activation, whose result then
+  /// carries the outcome: its error reports `failed`, and a
+  /// [SemanticActionDeclined] reports `unsupported`. Nothing waits on a key
+  /// or click; its error still reaches the zone (runApp's error overlay).
+  final FutureOr<void> Function()? onActivate;
   final Widget Function(
     CellStyle style,
     bool enabled,
@@ -115,9 +122,25 @@ class _FocusableControlState extends State<FocusableControl>
     enabled: widget.enabled,
   );
 
+  // A key or a click: nothing waits. A failure the activation returns
+  // reaches the zone; one that declined (a command that turned out disabled)
+  // is a no-op.
   void _activate() {
-    widget.onActivate!();
+    final pending = _run();
+    if (pending != null) {
+      unawaited(
+        pending.catchError(
+          (Object _) {},
+          test: (error) => error is SemanticActionDeclined,
+        ),
+      );
+    }
+  }
+
+  Future<void>? _run() {
+    final result = widget.onActivate!();
     _formRegistration?.controlValueChanged(this);
+    return result is Future<void> ? result : null;
   }
 
   void _setValue(Object? payload) {
@@ -198,14 +221,15 @@ class _FocusableControlState extends State<FocusableControl>
               SemanticAction.activate,
               if (widget.onSetValue != null) SemanticAction.setValue,
             },
-            onAction: (action) {
+            onAction: (action) async {
               switch (action) {
                 case SemanticAction.focus:
                   _node.requestFocus();
                   return;
                 case SemanticAction.activate:
                   _node.requestFocus();
-                  _activate();
+                  // Waits, so the action's result carries the outcome.
+                  await _run();
                   return;
                 case _:
                   return;

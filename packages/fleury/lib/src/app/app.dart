@@ -375,12 +375,19 @@ class _FleuryAppState extends State<FleuryApp> {
     );
   }
 
+  // Reads, not dependencies: this runs from a shortcut's predicate, a key's
+  // dispatch and a command's invocation. A dependency would rebuild the app's
+  // bindings on every focus move, and subscribe every element that held focus
+  // to the app controller, which notifies on every command result and status
+  // change.
   BuildContext _commandSourceContext(BuildContext fallback) {
-    final focused = FocusManager.maybeOf(fallback)?.focusedNode?.context;
+    final focused = FocusManager.maybeOfWithoutDependency(
+      fallback,
+    )?.focusedNode?.context;
     if (_isCurrentAppContext(focused)) return focused!;
     final route = _navigatorKey.currentState?.activeRouteContext;
     if (_isCurrentAppContext(route)) return route!;
-    final rootRoute = TuiBinding.maybeOf(
+    final rootRoute = readScope<TuiBinding>(
       fallback,
     )?.rootNavigator?.activeRouteContext;
     if (_isCurrentAppContext(rootRoute)) return rootRoute!;
@@ -390,7 +397,7 @@ class _FleuryAppState extends State<FleuryApp> {
   bool _isCurrentAppContext(BuildContext? context) {
     return context != null &&
         context.mounted &&
-        identical(FleuryAppScope.maybeOf(context), _app);
+        identical(readScope<FleuryAppController>(context), _app);
   }
 
   @override
@@ -599,7 +606,12 @@ final class _FleuryAppSemanticsElement extends ComponentElement
       );
     }
 
-    final lastCommand = widget.controller.commands.lastResult;
+    // The latest command visible from where the app's commands run — a
+    // screen's scoped command included, as FleuryTester.lastCommandResult
+    // reports it. Read, not depended on: this runs on every semantic walk.
+    final lastCommand =
+        readScope<CommandRegistry>(buildContext)?.latestVisibleResult ??
+        widget.controller.commands.lastResult;
     final screenSummary = _screenSummary(children);
     return SemanticNode(
       id: const SemanticNodeId('app'),

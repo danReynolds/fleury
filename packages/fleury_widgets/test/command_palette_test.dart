@@ -190,7 +190,12 @@ void main() {
     expect(palette.label, 'Command palette');
     expect(palette.value, '');
     expect(palette.actions, contains(SemanticAction.submit));
-    expect(palette.actions, contains(SemanticAction.dismiss));
+    // Dismissal belongs to the route that presents the palette.
+    expect(palette.actions, isNot(contains(SemanticAction.dismiss)));
+    expect(
+      tree.single(role: SemanticRole.route, label: 'CommandPalette').actions,
+      contains(SemanticAction.dismiss),
+    );
     expect(palette.state.collectionRowCount, 3);
     expect(palette.state.selectedKey, 0);
 
@@ -268,12 +273,57 @@ void main() {
     ]);
 
     await tester
-        .target(role: WidgetRoles.commandPalette)
+        .target(role: SemanticRole.route, label: 'CommandPalette')
         .perform(SemanticAction.dismiss);
 
     await _settleClose(tester);
     expect(ran, isFalse);
     expect(Navigator.of(ctx).depth, 1);
+  });
+
+  group('shown inline on a page', () {
+    Future<(List<String>, NavigatorState)> openInline(
+      FleuryTester tester,
+    ) async {
+      final ran = <String>[];
+      tester.pumpWidget(Navigator(home: _Capture((c) => ctx = c)));
+      unawaited(
+        Navigator.of(ctx).push<void>(
+          Column(
+            children: [
+              const Text('settings'),
+              CommandPalette(commands: commands(ran.add)),
+            ],
+          ),
+        ),
+      );
+      tester.pump(const Duration(milliseconds: 300));
+      tester.render();
+      return (ran, Navigator.of(ctx));
+    }
+
+    testWidgets('running a row leaves the page open', (tester) async {
+      final (ran, navigator) = await openInline(tester);
+      expect(navigator.depth, 2);
+
+      tester.type('save');
+      tester.pump();
+      tester.sendKey(const KeyEvent(KeyCode.enter));
+      await _settleClose(tester);
+
+      expect(ran, ['save']);
+      expect(navigator.depth, 2, reason: 'the settings page is still open');
+    });
+
+    testWidgets('the palette offers no dismiss of the page', (tester) async {
+      await openInline(tester);
+
+      final palette = tester.semantics().single(
+        role: WidgetRoles.commandPalette,
+      );
+
+      expect(palette.actions, isNot(contains(SemanticAction.dismiss)));
+    });
   });
 
   group('edges', () {
@@ -439,6 +489,44 @@ void main() {
       }, (error, _) => errors.add(error));
 
       expect(errors, [isA<StateError>()]);
+    });
+
+    testWidgets('activating a failing row by semantics reports failed', (
+      tester,
+    ) async {
+      tester.pumpWidget(
+        FleuryApp(
+          title: 'App',
+          commands: [
+            AppCommand(
+              id: const CommandId('file.save'),
+              title: 'Save File',
+              run: (_) => throw StateError('disk full'),
+            ),
+          ],
+          child: Navigator(home: _Capture((c) => ctx = c)),
+        ),
+      );
+      _openRegistryPalette(tester, ctx);
+
+      // The app lists the same command; act on the palette's row.
+      final row = tester
+          .semantics()
+          .single(role: WidgetRoles.commandPalette)
+          .selfAndDescendants
+          .firstWhere(
+            (node) =>
+                node.role == SemanticRole.command && node.label == 'Save File',
+          );
+      final result = await tester.invokeSemanticAction(
+        SemanticAction.activate,
+        id: row.id,
+        allowFailure: true,
+      );
+      await _settleClose(tester);
+
+      expect(result.status, SemanticActionInvocationStatus.failed);
+      expect(result.error, isA<StateError>());
     });
 
     testWidgets('filters by stable command id', (tester) async {
@@ -662,7 +750,7 @@ void main() {
             tester.sendKey(const KeyEvent(KeyCode.escape));
           } else {
             await tester
-                .target(role: WidgetRoles.commandPalette)
+                .target(role: SemanticRole.route, label: 'CommandPalette')
                 .perform(SemanticAction.dismiss);
           }
           await _settleClose(tester);

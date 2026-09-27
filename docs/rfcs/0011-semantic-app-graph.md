@@ -353,7 +353,7 @@ Required for M1.1:
 | `TextArea` | `textArea`, label, value, focused, selection if available. |
 | `Button` | `button`, label, enabled, focused, activate action. |
 | `Checkbox` / `Toggle` / `Radio` | role, label, checked/selected, enabled, activate action. |
-| `Dialog` | `dialog`, label/title, dismiss action. |
+| `Dialog` | `dialog`, label/title; dismissal is on the route that presents it. |
 | `Navigator` / routes | `screen`/`route`, route name, active state. |
 | `CommandPalette` / commands | `commandPalette`, `command`, commandId, shortcut, enabled, activate action. |
 | `ProgressBar` / `Spinner` | `progress`, busy, value/total/label where determinate. |

@@ -1,5 +1,18 @@
 ## 0.1.0
 
+- **Breaking:** `Dialog` and `CommandPalette` no longer carry a semantic
+  dismiss action of their own. A presented dialog's or palette's route
+  advertises dismiss and honours `barrierDismissible` and `PopScope`; their
+  own action bypassed both and could pop a page they were shown inline in.
+  Dismiss through the route node (`role: SemanticRole.route`).
+- A `CommandPalette` shown inline on a page no longer pops the page after
+  running a command; a presented palette still closes.
+- A `CommandButton` or palette row whose command throws is reported to
+  runApp's error overlay, and activating one through semantics reports the
+  command's outcome: `failed`, or `unsupported` for a command that is
+  disabled or gone. `CommandPaletteItem.onInvoke` may return a future, which
+  a semantic activation awaits.
+
 - `LogRegion` no longer does work proportional to the whole log on every
   build: the unfiltered view order allocates nothing, and row-id validation
   re-checks the rows it already validated by equality and hashes only new
