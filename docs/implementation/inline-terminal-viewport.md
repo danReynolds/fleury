@@ -1,8 +1,9 @@
 # Bounded inline terminal viewport
 
-Status: implemented in `codex/inline-viewport`, 2026-09-24. Native macOS/Linux
-PTY qualification and a temporary RK consumer build pass. Ready for code review
-and terminal-app dogfooding; not yet merged or published.
+Status: implemented and reviewed for integration, 2026-09-27.
+[PR #277](https://github.com/danReynolds/fleury/pull/277) records the merge status
+and hosted checks. Native macOS/Linux PTY qualification passes; package
+publication and release-wide terminal-app qualification remain separate.
 
 RK's `use` and `init` matrices are the first consumer. They should occupy a
 small region below the command while earlier shell output remains available.
@@ -19,7 +20,7 @@ One full-width region with an explicit, changeable row count, clamped to the
 terminal height. Existing widgets see the region's logical size and keep
 ordinary layout, scrolling, focus, and keyboard behavior. Exit clears the live
 region; the caller prints the result. From an interaction/lifecycle callback,
-`TerminalSession.of(context).resizeInline(20)` requests another height. Requests
+`context.scope<TerminalSession>().resizeInline(20)` requests another height. Requests
 during handoff or suspend apply on return. `isInline` distinguishes this native
 operation from full-screen and remote sessions.
 
@@ -70,9 +71,9 @@ use `TerminalMode.fullScreen()` or `TerminalMode.inline(rows: ...)`.
 
 ## Validation and evidence boundary
 
-- Core regression suite: 3,718 tests passed, one existing ambient probe skipped;
-  the final focused rerun passes 32 tests, including resize-during-query,
-  unreportable terminal dimensions, and pointer crash recovery.
+- Integration review on 2026-09-27: 3,903 core tests passed, two skipped,
+  including resize-during-query, unreportable terminal dimensions, pointer
+  crash recovery, and the latest upstream input-handling changes.
   Existing full-screen ANSI byte golden remains unchanged.
 - Existing native full-screen and development-supervisor PTY suites: 19 passed.
 - `tool/check_inline_tui.py`: eight scenarios pass on macOS (Dart 3.12.2) and
@@ -89,8 +90,14 @@ use `TerminalMode.fullScreen()` or `TerminalMode.inline(rows: ...)`.
   and executes a disposable Local installation; `init` reviews before creating
   configuration. Both restore terminal modes without alternate-screen entry.
   RK's checked-in dependency and the user's installations are unchanged.
-- CI now runs the inline PTY harness on macOS and Linux with Dart 3.12.2.
-  These workflow changes have not yet run in hosted CI.
+- Hosted inline CI passes on macOS and Linux with Dart 3.12.2 and on Linux
+  with the minimum Dart 3.10.4. It exercises acquisition/restoration failures,
+  native output backpressure, and sequential JIT/AOT sessions as well as the
+  inline lifecycle harness.
+- The shutdown guide's compiled commands pass ten native macOS PTY cases:
+  ordinary completion, Ctrl+C, SIGINT, SIGTERM, and SIGHUP, each with default
+  shutdown and application-owned finishing work. Exit codes and exact termios
+  restoration are checked. Documentation accuracy tests and the site build pass.
 
 The automated harness uses a real PTY and a Python terminal emulator. It is not
 Apple Terminal/tmux visual acceptance: the emulator models resize by retaining
