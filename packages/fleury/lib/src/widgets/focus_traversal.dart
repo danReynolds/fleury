@@ -41,6 +41,7 @@
 //     when nothing deeper did).
 
 import '../foundation/geometry.dart';
+import 'package:meta/meta.dart';
 import 'focus.dart';
 import 'framework.dart';
 import 'key_bindings.dart';
@@ -177,24 +178,38 @@ class FocusTraversalGroup extends StatelessWidget {
           : manager.focusPrevious(scopeContext: context);
       return moved ? KeyEventResult.handled : KeyEventResult.ignored;
     }
-    final currentRect = current.rect;
-    if (currentRect == null) return KeyEventResult.ignored;
-
-    final target = nearestFocusableInDirection(
-      from: currentRect,
+    return moveFocusInDirection(
+      current: current,
       // Confine directional moves to this traversal group and the active
       // focus trap; without this, an arrow press in one pane can jump to
       // a visually-near control in a sibling chrome/header area.
       candidates: manager.traversalCandidates(scopeContext: context),
-      excluding: current,
       direction: direction,
     );
-    if (target == null) return KeyEventResult.ignored;
-    target.requestFocus();
-    // The nearest target in view may still be partly clipped.
-    target.reveal();
-    return KeyEventResult.handled;
   }
+}
+
+/// Shared directional movement for traversal groups and scroll boundaries.
+/// Callers provide their input-eligible candidate region; controls deeper in
+/// the input chain have already had first refusal of the arrow.
+@internal
+KeyEventResult moveFocusInDirection({
+  required FocusNode current,
+  required Iterable<FocusNode> candidates,
+  required TraversalDirection direction,
+}) {
+  final currentRect = current.directionalRectFrom(current);
+  if (currentRect == null) return KeyEventResult.ignored;
+  final target = nearestFocusableInDirection(
+    from: currentRect,
+    candidates: candidates,
+    excluding: current,
+    direction: direction,
+  );
+  if (target == null) return KeyEventResult.ignored;
+  target.requestFocus();
+  target.reveal();
+  return KeyEventResult.handled;
 }
 
 /// Picks the focusable node nearest to [from] in the given
@@ -202,7 +217,7 @@ class FocusTraversalGroup extends StatelessWidget {
 /// [FocusTraversalGroup].
 ///
 /// Candidates that are not focusable, are flagged `skipTraversal`,
-/// have no recorded `rect`, are identical to [excluding], or lie
+/// have no visible or revealable bounds, are identical to [excluding], or lie
 /// behind [from] in the pressed direction are filtered out.
 FocusNode? nearestFocusableInDirection({
   required CellRect from,
@@ -223,7 +238,7 @@ FocusNode? nearestFocusableInDirection({
     traversalOrder++;
     if (identical(node, excluding)) continue;
     if (!node.canRequestFocus || node.skipTraversal) continue;
-    final rect = node.rect;
+    final rect = node.directionalRectFrom(excluding);
     if (rect == null) continue;
 
     final cx = (rect.left + rect.right) ~/ 2;

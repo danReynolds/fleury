@@ -1265,7 +1265,7 @@ void main() {
       expect(
         node.rect,
         isNull,
-        reason: 'scrolled past the viewport — not a directional target',
+        reason: 'scrolled past the viewport — no visible pointer bounds',
       );
     });
   });

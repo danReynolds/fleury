@@ -198,10 +198,9 @@ class FocusNode {
   /// This node's rectangle on screen in absolute cells, derived from the
   /// layout of the `Focus` widget that carries it. Null when the node cannot
   /// take input, has no widget, or its widget is not presented or is fully
-  /// clipped out of view (scrolled past the viewport): you scroll to such a
-  /// widget, you don't arrow to it. Directional traversal and click-to-focus
-  /// read it; nothing writes it. Tab order reads the node's place in its
-  /// scroll viewports instead, which a scrolled-out node still has.
+  /// clipped out of view (scrolled past the viewport). Click-to-focus uses
+  /// these visible bounds. Traversal can also reveal a scrolled-out node:
+  /// Tab uses content order, while arrows stay within the same scroll viewport.
   CellRect? get rect {
     final host = _boundsHost;
     if (host == null) return null;
@@ -210,6 +209,44 @@ class FocusNode {
     final geometry = host.screenGeometry();
     if (geometry == null || geometry.visible == null) return null;
     return geometry.bounds;
+  }
+
+  /// Directional traversal may reveal another control in the same or an
+  /// enclosing viewport.
+  /// Keep unrelated clipped panes and non-scrolling clips out of navigation;
+  /// [rect] remains visibility-bound for pointer input and external geometry.
+  @internal
+  CellRect? directionalRectFrom(FocusNode from) {
+    final visible = rect;
+    if (visible != null) return visible;
+    final host = _boundsHost;
+    final source = from._boundsHost;
+    if (host is! RenderObject || source is! RenderObject) return null;
+    if (!acceptsInput) return null;
+    final geometry = host.screenGeometry();
+    if (geometry == null) return null;
+    // Explicit scrolling can hide the current control and its whole viewport.
+    // Its layout still provides the navigation origin; candidates below must
+    // independently prove that reveal can make them visible.
+    if (identical(this, from)) return geometry.bounds;
+    RenderScrollViewport? viewportOf(RenderObject object) {
+      for (var parent = object.parent; parent != null; parent = parent.parent) {
+        if (parent is RenderScrollViewport) return parent;
+      }
+      return null;
+    }
+
+    final viewport = viewportOf(host);
+    if (viewport == null) return null;
+    var shared = false;
+    for (var parent = source.parent; parent != null; parent = parent.parent) {
+      if (identical(parent, viewport)) {
+        shared = true;
+        break;
+      }
+    }
+    if (!shared) return null;
+    return canRevealInScrollViews(host) ? geometry.bounds : null;
   }
 
   /// Where Tab finds this node: the scroll viewports it sits in, outermost
