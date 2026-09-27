@@ -2,6 +2,7 @@ import 'package:meta/meta.dart';
 
 import '../foundation/geometry.dart';
 import 'key_dispatch.dart';
+import 'key_tables.dart';
 
 /// The non-character keys a terminal can report, as an enumerable set.
 ///
@@ -76,9 +77,11 @@ enum SpecialKey {
   pause,
   menu,
 
-  // Keypad. Distinct from the main-cluster keys with the same meanings —
-  // the protocol reports them separately and so does Fleury; nothing is
-  // silently folded.
+  // Keypad: the terminal protocols' identities for the keypad keys. The
+  // parser folds a keypad report to what it means, as the DOM does — KP_1
+  // types a 1, KP Enter is Enter (`keypadMeaning`) — and carries the keypad
+  // itself on the event's [KeyPosition]. Only [keypadBegin], which has no
+  // main-block meaning, reaches an event as a keypad code.
   keypad0,
   keypad1,
   keypad2,
@@ -655,7 +658,9 @@ enum KeyPosition implements KeySelector, KeySequence {
   /// positions with no US-101 twin ([intlBackslash]).
   KeyCode? get usTwin {
     final s = special;
-    if (s != null) return KeyCode.forSpecial(s);
+    // A keypad key produces what it means, as the parser reports it; the
+    // keypad itself is the position.
+    if (s != null) return keypadMeaning[s] ?? KeyCode.forSpecial(s);
     final c = usCharacter;
     if (c != null) return KeyCode.char(c);
     return null;
@@ -787,10 +792,11 @@ sealed class KeySequence {
   static const KeyCode f12 = KeyCode.f12;
 
   // RFC 0020 vocabulary forwards, so `.f13` / `.mediaPlay` resolve in a
-  // KeySequence context like every other atom. (Sided modifier *keys* and
-  // keypad keys are bindable via their KeyCode statics; they are omitted
-  // here because bare `.leftShift` in a binding position is more often the
-  // start of a mistyped chord than an intended lone-modifier binding.)
+  // KeySequence context like every other atom. (Sided modifier *keys* are
+  // bindable via their KeyCode statics; they are omitted here because bare
+  // `.leftShift` in a binding position is more often the start of a mistyped
+  // chord than an intended lone-modifier binding. A keypad key binds by its
+  // meaning, or by its [KeyPosition] for the keypad key itself.)
   static const KeyCode f13 = KeyCode.f13;
   static const KeyCode f14 = KeyCode.f14;
   static const KeyCode f15 = KeyCode.f15;
@@ -1480,10 +1486,15 @@ final class _KeyStep {
       // with the key the user actually has under that finger.
       final twin = position.usTwin;
       final twinChar = twin?.character;
+      // A keypad position is labelled as the keypad key (KP1), not as what
+      // it types, which the main block has too.
+      final keypad = position.special;
       // Same casing rule as a logical atom below: bare renders as the key
       // produces it, a chord uppercases. Otherwise one hint bar reads
       // `[q] Quit  [W] Thrust` and the inconsistency looks like a bug.
-      final base = twin == null
+      final base = keypad != null && keypadMeaning.containsKey(keypad)
+          ? _specialLabel(keypad)
+          : twin == null
           ? position.name
           : (twin.special != null
                 ? _specialLabel(twin.special!)

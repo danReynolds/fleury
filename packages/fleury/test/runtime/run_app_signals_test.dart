@@ -113,6 +113,54 @@ void main() {
       await driver.dispose();
     });
 
+    test('a handled Ctrl+C held into key repeat does not exit', () async {
+      // A kitty terminal reports a held key's auto-repeat as its own event
+      // type, and bindings skip repeats, so the repeat of a press the app
+      // handled came back unhandled and the guard quit: copying a selection
+      // or an Interrupt binding exited the app if the key stayed down.
+      final driver = FakeTerminalDriver(
+        keyboardCapabilities: KeyboardCapabilities.full,
+      );
+      var interrupts = 0;
+      final future = runApp(
+        KeyBindings(
+          bindings: [
+            KeyBinding(KeySequence.ctrl.c, onTrigger: (_) => interrupts++),
+          ],
+          child: const Focus(autofocus: true, child: Text('agent running')),
+        ),
+        driver: driver,
+        enableHotReload: false,
+      );
+      var exited = false;
+      unawaited(future.then((_) => exited = true));
+      await pump();
+
+      for (final type in [
+        KeyEventType.down,
+        KeyEventType.repeat,
+        KeyEventType.repeat,
+        KeyEventType.up,
+      ]) {
+        driver.enqueue(
+          KeyEvent(
+            KeyCode.char('c'),
+            modifiers: {KeyModifier.ctrl},
+            type: type,
+          ),
+        );
+        await pump();
+      }
+
+      expect(interrupts, 1);
+      expect(exited, isFalse, reason: 'the handled press keeps the app alive');
+      expect(driver.isActive, isTrue);
+
+      requestExit();
+      await future;
+      await driver.dispose();
+    });
+
     test("the documented quit pattern: a widget-level 'q' binding + "
         'requestExit exits on typed text', () async {
       // run_app.dart documents requestExit as "the programmatic quit for

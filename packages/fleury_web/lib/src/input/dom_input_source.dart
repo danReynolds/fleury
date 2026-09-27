@@ -1104,6 +1104,10 @@ KeyCode? _keyCodeFor(String key) => switch (key) {
   _ => null,
 };
 
+/// A printable key's identity: its character, with an ASCII capital lowered
+/// (Shift and Caps Lock ride the modifiers and the text). The dispatcher pairs
+/// a keydown with its `input` text by undoing exactly this lowering
+/// (`InputDispatcher._isTextOfKey`); change the two together.
 String _shortcutChar(String key) {
   if (key.length == 1 &&
       key.codeUnitAt(0) >= 0x41 &&

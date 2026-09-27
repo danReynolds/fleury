@@ -54,6 +54,27 @@ void main() {
       expect(snap.wasReleased(KeyPosition.w), isTrue);
     });
 
+    test('two keys with one meaning are held apart by position', () {
+      // Main ArrowLeft, and the keypad's 4 with NumLock off (ArrowLeft too).
+      const main = KeyEvent(KeyCode.arrowLeft, position: KeyPosition.arrowLeft);
+      const keypad = KeyEvent(KeyCode.arrowLeft, position: KeyPosition.numpad4);
+      final session = full();
+      session.ingest(main);
+
+      expect(session.ingest(keypad).events.single.type, KeyEventType.down);
+      session.ingest(
+        const KeyEvent(
+          KeyCode.arrowLeft,
+          type: KeyEventType.up,
+          position: KeyPosition.numpad4,
+        ),
+      );
+
+      final snap = session.publishLatch(KeyboardLatchClock.frame);
+      expect(snap.isHeld(KeyPosition.arrowLeft), isTrue);
+      expect(snap.isHeld(KeyPosition.numpad4), isFalse);
+    });
+
     test('duplicate down while held demotes to repeat', () {
       final session = full();
       session.ingest(_down('a'));

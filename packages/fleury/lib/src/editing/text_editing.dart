@@ -134,9 +134,19 @@ final class TextEditingValue {
     TextSelection? selection,
     TextRange? composing,
   }) {
-    final nextText = text ?? this.text;
+    // This value's own text is already canonical, or preserved on purpose:
+    // keeping it skips the whole-text sanitize scan a caret move would
+    // otherwise pay.
+    if (text == null || identical(text, this.text)) {
+      return TextEditingValue._(
+        this.text,
+        selection ?? this.selection,
+        composing ?? this.composing,
+        preserveText,
+      );
+    }
     return TextEditingValue(
-      text: nextText,
+      text: text,
       preserveText: preserveText,
       selection: selection ?? this.selection,
       composing: composing ?? this.composing,

@@ -156,6 +156,35 @@ const _selectionAndCommandKeys = <TextEditingKeyBinding>[
   ),
 ];
 
+// Shift, often still held from typing a capital, does not change what
+// Backspace or Delete do — nor Enter, whose bindings allow it too. A legacy
+// terminal cannot even report it; a kitty-protocol terminal and the browser
+// do. Ctrl+Backspace (kitty, the browser) and Alt+Backspace (ESC DEL on any
+// terminal) delete the word before the caret, as in any text field; a legacy
+// terminal sends Ctrl+Backspace as a plain BS, which deletes one character.
+const _deleteKeys = <TextEditingKeyBinding>[
+  TextEditingKeyBinding(
+    action: TextEditingKeyAction.killWordLeft,
+    keyCode: KeyCode.backspace,
+    modifiers: {KeyModifier.ctrl},
+  ),
+  TextEditingKeyBinding(
+    action: TextEditingKeyAction.killWordLeft,
+    keyCode: KeyCode.backspace,
+    modifiers: {KeyModifier.alt},
+  ),
+  TextEditingKeyBinding(
+    action: TextEditingKeyAction.backspace,
+    keyCode: KeyCode.backspace,
+    allowShift: true,
+  ),
+  TextEditingKeyBinding(
+    action: TextEditingKeyAction.deleteForward,
+    keyCode: KeyCode.delete,
+    allowShift: true,
+  ),
+];
+
 const _defaultSingleLine = <TextEditingKeyBinding>[
   ..._selectionAndCommandKeys,
   TextEditingKeyBinding(
@@ -183,14 +212,7 @@ const _defaultSingleLine = <TextEditingKeyBinding>[
     char: 'y',
     modifiers: {KeyModifier.ctrl},
   ),
-  TextEditingKeyBinding(
-    action: TextEditingKeyAction.backspace,
-    keyCode: KeyCode.backspace,
-  ),
-  TextEditingKeyBinding(
-    action: TextEditingKeyAction.deleteForward,
-    keyCode: KeyCode.delete,
-  ),
+  ..._deleteKeys,
   TextEditingKeyBinding(
     action: TextEditingKeyAction.moveWordLeft,
     keyCode: KeyCode.arrowLeft,
@@ -250,6 +272,7 @@ const _defaultSingleLine = <TextEditingKeyBinding>[
   TextEditingKeyBinding(
     action: TextEditingKeyAction.submit,
     keyCode: KeyCode.enter,
+    allowShift: true,
   ),
   TextEditingKeyBinding(
     action: TextEditingKeyAction.escape,
@@ -284,14 +307,7 @@ const _defaultMultiline = <TextEditingKeyBinding>[
     char: 'y',
     modifiers: {KeyModifier.ctrl},
   ),
-  TextEditingKeyBinding(
-    action: TextEditingKeyAction.backspace,
-    keyCode: KeyCode.backspace,
-  ),
-  TextEditingKeyBinding(
-    action: TextEditingKeyAction.deleteForward,
-    keyCode: KeyCode.delete,
-  ),
+  ..._deleteKeys,
   TextEditingKeyBinding(
     action: TextEditingKeyAction.moveWordLeft,
     keyCode: KeyCode.arrowLeft,
@@ -361,6 +377,7 @@ const _defaultMultiline = <TextEditingKeyBinding>[
   TextEditingKeyBinding(
     action: TextEditingKeyAction.insertNewline,
     keyCode: KeyCode.enter,
+    allowShift: true,
   ),
   TextEditingKeyBinding(
     action: TextEditingKeyAction.escape,

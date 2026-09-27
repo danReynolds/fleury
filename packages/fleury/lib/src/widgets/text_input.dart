@@ -1602,7 +1602,9 @@ class _TextInputState extends State<TextInput>
 
   final TextPointerSelection _pointerSelection = TextPointerSelection();
 
-  int? _offsetForPointer(PointerDetails details) {
+  /// The text offset under [details] — measured against the text laid out
+  /// last — and the render object that laid it out.
+  (int, RenderTextInput)? _offsetForPointer(PointerDetails details) {
     RenderTextInput? display;
     void visit(RenderObject object) {
       if (object is RenderTextInput) {
@@ -1618,7 +1620,10 @@ class _TextInputState extends State<TextInput>
     final object = display;
     final geometry = object?.screenGeometry();
     if (object == null || geometry == null) return null;
-    return object.textOffsetAt(details.globalPosition - geometry.bounds.offset);
+    final offset = object.textOffsetAt(
+      details.globalPosition - geometry.bounds.offset,
+    );
+    return (offset, object);
   }
 
   void _pointerDown(PointerDetails details) {
@@ -1626,11 +1631,12 @@ class _TextInputState extends State<TextInput>
         !(FocusManager.maybeOf(context)?.isClickable(_focusNode) ?? false)) {
       return;
     }
-    final offset = _offsetForPointer(details);
-    if (offset == null) return;
+    final hit = _offsetForPointer(details);
+    if (hit == null) return;
+    final at = _finishPasteAround(hit.$1, hit.$2);
     _controller.selection = _pointerSelection.down(
       _controller.value,
-      offset,
+      at,
       details,
       obscured: widget.obscureText,
     );
@@ -1642,14 +1648,33 @@ class _TextInputState extends State<TextInput>
         !(FocusManager.maybeOf(context)?.isClickable(_focusNode) ?? false)) {
       return;
     }
-    final offset = _offsetForPointer(details);
-    if (offset == null) return;
+    final hit = _offsetForPointer(details);
+    if (hit == null) return;
+    final at = _finishPasteAround(hit.$1, hit.$2);
     final selection = _pointerSelection.drag(
       _controller.value,
-      offset,
+      at,
       obscured: widget.obscureText,
     );
     if (selection != null) _controller.selection = selection;
+  }
+
+  /// Finishes a paste still being applied before a pointer moves the caret,
+  /// as every key does: otherwise its remaining text would land at the
+  /// click, after the part already applied.
+  ///
+  /// [offset] was measured against the text [display] laid out last, which
+  /// predates any part of the paste applied since (steps run after a frame
+  /// is drawn). All of that, and whatever finishing inserts, went in at the
+  /// caret [display] laid out, so an offset at or past it moves past it all.
+  int _finishPasteAround(int offset, RenderTextInput display) {
+    final pasting = _paste.isActive;
+    final pasteAt = display._selection.start;
+    final laidOut = display._text.length;
+    _paste.finish();
+    if (!pasting) return offset;
+    final grown = _controller.text.length - laidOut;
+    return grown > 0 && offset >= pasteAt ? offset + grown : offset;
   }
 
   @override

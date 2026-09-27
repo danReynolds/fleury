@@ -142,9 +142,11 @@ void main() {
       expect(KeyPosition.space.usTwin, KeyCode.space);
     });
 
-    test('functional positions twin to their specials, keypad distinctly', () {
+    test('functional positions twin to their specials, keypad to meaning', () {
       expect(KeyPosition.enter.usTwin, KeyCode.enter);
-      expect(KeyPosition.numpadEnter.usTwin, KeyCode.keypadEnter);
+      // A keypad key produces what it means, as the parser reports it.
+      expect(KeyPosition.numpadEnter.usTwin, KeyCode.enter);
+      expect(KeyPosition.numpad1.usTwin, const KeyCode.char('1'));
       expect(KeyPosition.f24.usTwin, KeyCode.f24);
       expect(KeyPosition.metaLeft.usTwin, KeyCode.leftSuper);
       expect(positionBySpecial[SpecialKey.arrowUp], KeyPosition.arrowUp);
