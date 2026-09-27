@@ -192,6 +192,26 @@ class ListController extends Notifier {
     notify();
   }
 
+  /// Sets [currentIndex] to [index] in a list about to show [itemCount]
+  /// items.
+  ///
+  /// For an owner that rebuilds the items and knows where the cursor's item
+  /// went: a tree that expanded above it, a list re-sorted or filtered.
+  /// [currentIndex] would clamp against the count the list showed last,
+  /// which that rebuild is about to change. (A list given an
+  /// `itemKeyBuilder` keeps the cursor on its item by itself.)
+  void moveCursor(int index, {required int itemCount}) {
+    _checkNotDisposed();
+    if (!_attached || itemCount == _itemCount) {
+      currentIndex = index;
+      return;
+    }
+    // Applied when the list reaches [itemCount]; dropped if it never does.
+    _pendingCursor = (index: index, itemCount: itemCount);
+  }
+
+  ({int index, int itemCount})? _pendingCursor;
+
   /// Places an item at the viewport start, clamped to the final full viewport. Does not
   /// change the cursor. The resulting position survives unrelated rebuilds.
   void jumpToIndex(int index) {
@@ -282,6 +302,18 @@ class ListController extends Notifier {
     final before = (_itemCount, _currentIndex, _unseenCount);
     final oldCount = _itemCount;
     _itemCount = newCount;
+    final moved = _pendingCursor;
+    _pendingCursor = null;
+    if (moved != null && moved.itemCount == newCount && _selectable) {
+      _cursorTracksTail = false;
+      _restoreCurrentWhenNonEmpty = true;
+      _currentIndex = _clampCurrentIndex(moved.index);
+      _clearRequests();
+      _pendingRevealIndex = _currentIndex;
+      _isFollowing = false;
+      notify();
+      return;
+    }
     if (newCount == 0) {
       if (oldCount > 0) _restoreCurrentWhenNonEmpty = _currentIndex != null;
       _currentIndex = null;
