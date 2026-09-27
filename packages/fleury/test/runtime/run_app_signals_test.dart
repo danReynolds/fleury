@@ -208,7 +208,7 @@ void main() {
       expect(exited, isFalse, reason: 'the handled press keeps the app alive');
       expect(driver.isActive, isTrue);
 
-      requestExit();
+      exitApp();
       await future;
       await driver.dispose();
     });
