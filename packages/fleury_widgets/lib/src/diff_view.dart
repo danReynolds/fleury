@@ -353,7 +353,11 @@ DiffDocument parseUnifiedDiff(String source, {int? maxLineLength = 1000}) {
       if (remainingNew > 0) remainingNew -= 1;
       continue;
     }
-    if (inHunkBody && line.startsWith('-')) {
+    // `git format-patch` ends a patch with an email signature: a `-- ` line,
+    // then the git version. Once the hunk's line counts are spent, that line
+    // ends the hunk below; it does not delete the old file's next line.
+    final signature = line == '-- ' && remainingOld == 0 && remainingNew == 0;
+    if (inHunkBody && line.startsWith('-') && !signature) {
       final currentOld = oldCursor;
       addRow(kind: DiffLineKind.deletion, text: line, oldLine: currentOld);
       if (oldCursor != null) oldCursor += 1;
