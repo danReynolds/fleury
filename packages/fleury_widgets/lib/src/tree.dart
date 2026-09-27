@@ -92,6 +92,10 @@ class _TreeState<T> extends State<Tree<T>> {
   final Set<TreeNode<T>> _expanded = Set<TreeNode<T>>.identity();
   final ListController _list = ListController(initialIndex: 0);
   List<_TreeRow<T>> _flat = const [];
+
+  /// Whether [_flat] needs rebuilding: the roots or the expansion changed.
+  /// A cursor move rebuilds the tree (for its semantic state) but not this.
+  bool _flatStale = true;
   late FocusNode _focusNode;
   bool _ownsFocusNode = false;
 
@@ -101,6 +105,18 @@ class _TreeState<T> extends State<Tree<T>> {
     _focusNode = widget.focusNode ?? FocusNode(debugLabel: 'Tree');
     _ownsFocusNode = widget.focusNode == null;
     _seedInitialExpansion(widget.roots, 0);
+    // The tree's semantic node reports the cursor and the visible range,
+    // which arrow keys, typeahead and clicks change inside the ListView.
+    _list.addListener(_onListChange);
+  }
+
+  void _onListChange() => setState(() {});
+
+  void _setExpanded(TreeNode<T> node, bool expanded) {
+    setState(() {
+      expanded ? _expanded.add(node) : _expanded.remove(node);
+      _flatStale = true;
+    });
   }
 
   // Expands every branch shallower than [Tree.initialExpandedDepth]. The
@@ -119,6 +135,7 @@ class _TreeState<T> extends State<Tree<T>> {
   @override
   void didUpdateWidget(covariant Tree<T> oldWidget) {
     super.didUpdateWidget(oldWidget);
+    _flatStale = true;
     if (widget.focusNode == oldWidget.focusNode) return;
     if (_ownsFocusNode) _focusNode.dispose();
     _focusNode = widget.focusNode ?? FocusNode(debugLabel: 'Tree');
@@ -155,7 +172,7 @@ class _TreeState<T> extends State<Tree<T>> {
     final node = sel.node;
     if (!node.isBranch) return KeyEventResult.ignored;
     if (!_expanded.contains(node)) {
-      setState(() => _expanded.add(node));
+      _setExpanded(node, true);
       return KeyEventResult.handled;
     }
     // Already expanded → step into the first child.
@@ -186,7 +203,7 @@ class _TreeState<T> extends State<Tree<T>> {
     final node = sel.node;
     final depth = sel.depth;
     if (node.isBranch && _expanded.contains(node)) {
-      setState(() => _expanded.remove(node));
+      _setExpanded(node, false);
       return KeyEventResult.handled;
     }
     for (var j = i - 1; j >= 0; j--) {
@@ -202,9 +219,7 @@ class _TreeState<T> extends State<Tree<T>> {
     if (index < 0 || index >= _flat.length) return;
     final node = _flat[index].node;
     if (node.isBranch) {
-      setState(() {
-        if (!_expanded.remove(node)) _expanded.add(node);
-      });
+      _setExpanded(node, !_expanded.contains(node));
     } else {
       widget.onSelect?.call(node);
     }
@@ -216,7 +231,7 @@ class _TreeState<T> extends State<Tree<T>> {
     _list.currentIndex = index;
     final node = _flat[index].node;
     if (!node.isBranch) return;
-    setState(() => _expanded.add(node));
+    _setExpanded(node, true);
   }
 
   void _closeRow(int index) {
@@ -225,7 +240,7 @@ class _TreeState<T> extends State<Tree<T>> {
     _list.currentIndex = index;
     final node = _flat[index].node;
     if (!node.isBranch) return;
-    setState(() => _expanded.remove(node));
+    _setExpanded(node, false);
   }
 
   void _activateRow(int index) {
@@ -254,6 +269,7 @@ class _TreeState<T> extends State<Tree<T>> {
 
   @override
   void dispose() {
+    _list.removeListener(_onListChange);
     _list.dispose();
     if (_ownsFocusNode) _focusNode.dispose();
     super.dispose();
@@ -261,7 +277,10 @@ class _TreeState<T> extends State<Tree<T>> {
 
   @override
   Widget build(BuildContext context) {
-    _flat = _flatten();
+    if (_flatStale) {
+      _flat = _flatten();
+      _flatStale = false;
+    }
     final selectedStyle =
         widget.selectedStyle ?? Theme.of(context).selectionStyle;
     // Use KeyDetector (not KeyBindings) so a no-op Left/Right returns
