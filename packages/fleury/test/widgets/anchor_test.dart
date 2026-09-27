@@ -236,6 +236,33 @@ void main() {
       expect(behind, 0, reason: 'absorbed, just inert');
     });
   });
+
+  testWidgets('an Anchored float paints the theme where it sits', (
+    tester,
+  ) async {
+    tester.pumpWidget(
+      Theme(
+        data: ThemeData.light(),
+        child: const Anchored(
+          visible: true,
+          overlay: Container.filled(child: Text('Tip')),
+          child: Text('Chip'),
+        ),
+      ),
+    );
+    await Future<void>.delayed(
+      Duration.zero,
+    ); // the entry mounts a microtask later
+    tester.pump();
+
+    final at = _find(tester, 'T', cols: 20, rows: 4)!;
+    final fill = tester
+        .render(size: const CellSize(20, 4))
+        .atColRow(at.col, at.row)
+        .style
+        .background;
+    expect(fill, const RgbColor(0xF2, 0xF2, 0xF4));
+  });
 }
 
 void _tap(FleuryTester tester, int col, int row) {

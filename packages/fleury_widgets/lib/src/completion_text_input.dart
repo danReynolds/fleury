@@ -197,6 +197,10 @@ class _CompletionTextInputState extends State<CompletionTextInput> {
   final ListController _list = ListController(initialIndex: 0);
   FocusManager? _manager;
   OverlayEntry? _entry;
+
+  // The overlay builds the suggestions above any Theme the app set, so they
+  // carry the theme where this field sits.
+  ThemeData? _theme;
   CellStyle _selectionStyle = const CellStyle(inverse: true);
   BorderStyle _borderStyle = BorderStyle.rounded;
 
@@ -253,6 +257,11 @@ class _CompletionTextInputState extends State<CompletionTextInput> {
       _manager = manager;
       _manager?.addListener(_syncCompletion);
     }
+    final theme = Theme.of(context);
+    if (theme != _theme) {
+      _theme = theme;
+      _entry?.markNeedsBuild();
+    }
   }
 
   void _onTextChange() {
@@ -305,10 +314,13 @@ class _CompletionTextInputState extends State<CompletionTextInput> {
     }
     if (_entry == null) {
       final entry = OverlayEntry(
-        builder: (context) => AnchoredFloat(
-          notifier: _bounds,
-          onTapOutside: _dismissOverlay,
-          child: _suggestions(context),
+        builder: (context) => Theme(
+          data: _theme!,
+          child: AnchoredFloat(
+            notifier: _bounds,
+            onTapOutside: _dismissOverlay,
+            child: _suggestions(context),
+          ),
         ),
       );
       _entry = entry;

@@ -126,6 +126,10 @@ class _AutocompleteState<T extends Object> extends State<Autocomplete<T>> {
   FocusManager? _manager;
   OverlayEntry? _entry;
   List<T> _filtered = const [];
+
+  // The overlay builds the suggestions above any Theme the app set, so they
+  // carry the theme where this field sits.
+  ThemeData? _theme;
   String _lastQuery = '';
 
   /// The text just filled in by a pick; suppresses suggestions until the
@@ -197,6 +201,11 @@ class _AutocompleteState<T extends Object> extends State<Autocomplete<T>> {
       _manager = manager;
       _manager?.addListener(_sync);
     }
+    final theme = Theme.of(context);
+    if (theme != _theme) {
+      _theme = theme;
+      _entry?.markNeedsBuild();
+    }
   }
 
   void _onChange() {
@@ -254,10 +263,13 @@ class _AutocompleteState<T extends Object> extends State<Autocomplete<T>> {
     }
     if (_entry == null) {
       final entry = OverlayEntry(
-        builder: (context) => AnchoredFloat(
-          notifier: _bounds,
-          onTapOutside: _dismiss,
-          child: _suggestions(context),
+        builder: (context) => Theme(
+          data: _theme!,
+          child: AnchoredFloat(
+            notifier: _bounds,
+            onTapOutside: _dismiss,
+            child: _suggestions(context),
+          ),
         ),
       );
       _entry = entry;

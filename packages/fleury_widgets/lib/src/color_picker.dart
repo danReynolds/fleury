@@ -106,6 +106,10 @@ class _ColorPickerState extends State<ColorPicker>
   final BoundsNotifier _bounds = BoundsNotifier();
   OverlayEntry? _hexEntry;
 
+  // The overlay builds the popover above any Theme the app set, so it
+  // carries the theme where this picker sits.
+  ThemeData? _theme;
+
   bool get _enabled => widget.onChanged != null;
 
   // The 16 standard ANSI colors. Indices 0..15 match the terminal's
@@ -160,6 +164,11 @@ class _ColorPickerState extends State<ColorPicker>
   @override
   void didChangeDependencies() {
     super.didChangeDependencies();
+    final theme = Theme.of(context);
+    if (theme != _theme) {
+      _theme = theme;
+      _hexEntry?.markNeedsBuild();
+    }
     FocusManager.maybeOf(context);
     final registration = FormControlScope.maybeOf(context);
     if (!identical(registration, _formRegistration)) {
@@ -303,19 +312,21 @@ class _ColorPickerState extends State<ColorPicker>
     if (_hexEntry != null) return;
     final manager = FocusManager.of(context);
     final overlay = Overlay.of(context);
-    final theme = Theme.of(context);
     final entry = OverlayEntry(
-      builder: (_) => AnchoredFloat(
-        notifier: _bounds,
-        onTapOutside: _closeHex,
-        child: _HexEntry(
-          initial: widget.value.toRgb(),
-          borderStyle: theme.borderStyle,
-          onSubmit: (color) {
-            _closeHex();
-            if (_enabled && color != widget.value) _emit(color);
-          },
-          onDismiss: _closeHex,
+      builder: (_) => Theme(
+        data: _theme!,
+        child: AnchoredFloat(
+          notifier: _bounds,
+          onTapOutside: _closeHex,
+          child: _HexEntry(
+            initial: widget.value.toRgb(),
+            borderStyle: _theme!.borderStyle,
+            onSubmit: (color) {
+              _closeHex();
+              if (_enabled && color != widget.value) _emit(color);
+            },
+            onDismiss: _closeHex,
+          ),
         ),
       ),
     );

@@ -104,7 +104,21 @@ class _MenuState extends State<Menu> {
   OverlayEntry? _entry;
   FocusNode? _priorFocus;
 
+  // The overlay builds the panel above any Theme the app set, so it carries
+  // the theme where this Menu sits.
+  ThemeData? _theme;
+
   bool get _isOpen => _entry != null;
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    final theme = Theme.of(context);
+    if (theme != _theme) {
+      _theme = theme;
+      _entry?.markNeedsBuild();
+    }
+  }
 
   KeyEventResult _onTriggerKey(KeyEvent event) {
     if (!_isOpen && event.code == KeyCode.enter) {
@@ -119,16 +133,13 @@ class _MenuState extends State<Menu> {
     final manager = FocusManager.of(context);
     final overlay = Overlay.of(context);
     _priorFocus = manager.focusedNode;
-    final theme = Theme.of(
-      context,
-    ); // resolved in-tree, threaded into the overlay
     final entry = OverlayEntry(
       // The root panel owns the whole slot for input: without the barrier a
       // click on the menu's backdrop fires whatever the app painted there.
       // Submenu entries deliberately do NOT add one — they paint above this
       // barrier, and a second barrier would shadow the root panel's own rows.
       builder: (_) => Theme(
-        data: theme,
+        data: _theme!,
         child: AnchoredFloat(
           notifier: _bounds,
           onTapOutside: _close,
@@ -138,9 +149,9 @@ class _MenuState extends State<Menu> {
             entries: widget.items,
             semanticLabel: widget.semanticLabel,
             depth: 0,
-            selectionStyle: theme.selectionStyle,
-            mutedStyle: theme.mutedStyle,
-            borderStyle: theme.borderStyle,
+            selectionStyle: _theme!.selectionStyle,
+            mutedStyle: _theme!.mutedStyle,
+            borderStyle: _theme!.borderStyle,
             onLeafSelected: (action) {
               _close();
               action();
@@ -182,7 +193,9 @@ class _MenuState extends State<Menu> {
 
   @override
   Widget build(BuildContext context) {
-    FocusManager.maybeOf(context); // Rebuild trigger semantics when focus moves.
+    FocusManager.maybeOf(
+      context,
+    ); // Rebuild trigger semantics when focus moves.
     return BoundsObserver(
       notifier: _bounds,
       child: Semantics(
@@ -309,6 +322,10 @@ class _MenuBodyState extends State<_MenuBody> {
       _rowBounds.putIfAbsent(index, BoundsNotifier.new);
   OverlayEntry? _childEntry;
 
+  // A submenu's panel builds under the overlay too; it carries the theme
+  // this panel was given.
+  ThemeData? _theme;
+
   /// Reaches the open child panel's state, so a close driven from above can
   /// retire the chain's focus traps deepest-first (see [releaseChainFocusTraps]).
   GlobalKey<_MenuBodyState>? _childKey;
@@ -426,13 +443,12 @@ class _MenuBodyState extends State<_MenuBody> {
     final manager = FocusManager.of(context);
     final childKey = GlobalKey<_MenuBodyState>();
     final anchor = _boundsForRow(index);
-    final theme = Theme.of(context);
     final entry = OverlayEntry(
       // A bare BoundsAnchor, deliberately: this panel paints ABOVE the root
       // panel's barrier, so its own rows already win, and a second barrier
       // would shadow the root panel's rows instead.
       builder: (_) => Theme(
-        data: theme,
+        data: _theme!,
         child: BoundsAnchor(
           notifier: anchor,
           alignment: Alignment.topRight,
@@ -518,6 +534,16 @@ class _MenuBodyState extends State<_MenuBody> {
   }
 
   @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    final theme = Theme.of(context);
+    if (theme != _theme) {
+      _theme = theme;
+      _childEntry?.markNeedsBuild();
+    }
+  }
+
+  @override
   void dispose() {
     _childEntry?.remove();
     _list.dispose();
@@ -527,7 +553,9 @@ class _MenuBodyState extends State<_MenuBody> {
 
   @override
   Widget build(BuildContext context) {
-    FocusManager.maybeOf(context); // Rebuild menu/item semantics when focus moves.
+    FocusManager.maybeOf(
+      context,
+    ); // Rebuild menu/item semantics when focus moves.
     final hasSubmenu = widget.entries.any((e) => e is SubMenu);
     // Row layout: a 2-cell leading marker (`› ` selected / blank), the label,
     // the cascade `▸` indicator right-aligned in its own column, and a trailing
