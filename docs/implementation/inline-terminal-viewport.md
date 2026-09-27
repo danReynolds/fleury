@@ -98,6 +98,11 @@ use `TerminalMode.fullScreen()` or `TerminalMode.inline(rows: ...)`.
   ordinary completion, Ctrl+C, SIGINT, SIGTERM, and SIGHUP, each with default
   shutdown and application-owned finishing work. Exit codes and exact termios
   restoration are checked. Documentation accuracy tests and the site build pass.
+- Final review found a discarded-frame race when a queued resize resolves to
+  unchanged geometry. The driver now requests a repaint if it suppressed output,
+  including same-height requests, cancelled height changes, and a window resize
+  that returns to the original size. All three regression cases failed before
+  the fix and pass afterward; a no-op without suppressed output stays idle.
 
 The automated harness uses a real PTY and a Python terminal emulator. It is not
 Apple Terminal/tmux visual acceptance: the emulator models resize by retaining

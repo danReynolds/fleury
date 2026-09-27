@@ -1866,8 +1866,16 @@ class PosixTerminalDriver
     if (!_active || _restoring || _handoffActive || _suspended) return;
     final inline = _inline;
     if (inline != null) {
-      if (_inlineChanges > 0 || !inline.isAllocated) return;
+      if (_inlineChanges > 0) {
+        // The renderer still commits its frame when output is gated. Even a
+        // resize that coalesces back to the original geometry must repaint
+        // those discarded bytes before normal frame diffs resume.
+        _inlineNeedsRepaint = true;
+        return;
+      }
+      if (!inline.isAllocated) return;
       if (_physicalSize != inline.terminalSize) {
+        _inlineNeedsRepaint = true;
         _scheduleInlineResize();
         return;
       }

@@ -180,6 +180,50 @@ void main() {
     expect(events.whereType<ResizeEvent>().length, 1);
   });
 
+  for (final change in [
+    'same height',
+    'cancelled height change',
+    'window bounce',
+  ]) {
+    test('$change repaints a frame suppressed during the resize', () async {
+      await driver.enter(mode);
+      events.clear();
+      output.bytes.clear();
+      final pending = <Future<void>>[];
+      switch (change) {
+        case 'same height':
+          pending.add(driver.resizeInline(4));
+        case 'cancelled height change':
+          pending.addAll([driver.resizeInline(6), driver.resizeInline(4)]);
+        case 'window bounce':
+          output.terminalColumns = 60;
+      }
+      // The renderer can commit a frame while the driver's resize gate is up.
+      // Even if geometry ends up unchanged, those discarded bytes need replay.
+      driver.write('UPDATED-FRAME');
+      output.terminalColumns = 80;
+      expect(output.bytes.toString(), isEmpty);
+      await Future.wait(pending);
+      await _settle();
+      expect(driver.size, const CellSize(80, 4));
+      expect(events.whereType<ResizeEvent>().length, 1);
+      expect(cursorQueries, 1, reason: 'unchanged geometry needs no new query');
+      driver.write('REPAINTED-FRAME');
+      expect(output.bytes.toString(), contains('REPAINTED-FRAME'));
+    });
+  }
+
+  test(
+    'unchanged height without a suppressed frame needs no repaint',
+    () async {
+      await driver.enter(mode);
+      events.clear();
+      await driver.resizeInline(4);
+      await _settle();
+      expect(events.whereType<ResizeEvent>(), isEmpty);
+    },
+  );
+
   test('physical resize gates writes and reanchors using the caret', () async {
     await driver.enter(mode);
     driver.recordInlineCursor(const CellOffset(3, 1));
