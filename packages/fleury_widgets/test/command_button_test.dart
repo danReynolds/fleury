@@ -1,4 +1,4 @@
-import 'dart:async' show FutureOr;
+import 'dart:async' show FutureOr, runZonedGuarded;
 
 import 'package:fleury/fleury.dart';
 import 'package:fleury_test/fleury_test.dart';
@@ -121,6 +121,23 @@ void main() {
     expect(CommandRegistryScope.of(buildContext!), same(registry));
     expect(registry.lastResult?.status, CommandInvocationStatus.completed);
     expect(registry.lastResult?.command?.id, _inspect);
+  });
+
+  testWidgets('a command that throws when pressed is reported', (tester) async {
+    final registry = _registry(
+      _command(run: (_) => throw StateError('registry offline')),
+    );
+    addTearDown(registry.dispose);
+    final errors = <Object>[];
+
+    await runZonedGuarded(() async {
+      tester.pumpWidget(_host(registry, autofocus: true));
+      tester.sendKey(const KeyEvent(KeyCode.enter));
+      await Future<void>.delayed(Duration.zero);
+    }, (error, _) => errors.add(error));
+
+    expect(errors, [isA<StateError>()]);
+    expect(registry.lastResult?.status, CommandInvocationStatus.failed);
   });
 
   testWidgets('rebuilds when the registry command changes', (tester) async {

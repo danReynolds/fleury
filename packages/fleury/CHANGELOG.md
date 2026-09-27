@@ -142,7 +142,8 @@
   predicates when its key is pressed, as the palette, semantics, and
   `invoke` do. A command that becomes enabled after its scope built fires on
   its shortcut, and one that becomes disabled lets its key through to an
-  outer binding.
+  outer binding. `KeyBindings.activeOf` asks them each frame, so a hint bar
+  shows the shortcut exactly while it works.
 - Esc at a navigator's root, where there is nothing to pop, reaches what
   binds Esc above the navigator: FleuryApp's own Esc commands, the Toaster's
   Esc dismiss, and an outer navigator. A blocking `PopScope` at the root
@@ -150,12 +151,18 @@
 - Status a command reports through `context.status` survives the command's
   completion, and status set with `status.update` survives later commands
   and rebuilds. FleuryApp keeps what it derives from its `status` builder
-  and extensions apart from what `update` sets.
+  and extensions apart from what `update` sets. `StatusController.put` and
+  `remove` set and clear one item, leaving the items others set; `update`
+  still replaces them all.
 - A command that throws is reported. From a shortcut, a button, or a palette
   row it reaches runApp's error overlay, as a throwing key binding does, and
   a semantic activation reports it `failed` rather than `completed`.
   `CommandRegistry.invokeFromGesture` and `invokeCommandFromGesture` do the
   same for custom command surfaces.
+- runApp stops on a storm of uncaught errors only when they recur with no
+  input between them. Holding a key whose command or async handler fails,
+  or typing fast into a field whose async handler fails, reported 24 errors
+  inside three seconds and ended the session.
 - `FleuryTester.lastCommandResult` is the latest command visible from the
   focused context, scoped or app-level. It kept reporting the app's last
   command after a screen command ran.

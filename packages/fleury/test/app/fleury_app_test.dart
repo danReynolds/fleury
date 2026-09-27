@@ -285,6 +285,47 @@ void main() {
       controller.dispose();
     });
 
+    test('put sets one item and remove clears it, leaving the others', () {
+      final controller = StatusController(
+        items: [StatusItem.success('Build', id: 'build', value: 'ok')],
+      );
+      var fires = 0;
+      controller.addListener(() => fires += 1);
+      List<String> shown() => [
+        for (final item in controller.items) item.displayText,
+      ];
+
+      controller.put(StatusItem.text('Deploy', id: 'deploy', value: 'running'));
+      expect(shown(), ['Build: ok', 'Deploy: running']);
+      controller.put(StatusItem.error('Deploy', id: 'deploy', value: 'FAILED'));
+      expect(shown(), ['Build: ok', 'Deploy: FAILED']);
+      controller.put(StatusItem.error('Deploy', id: 'deploy', value: 'FAILED'));
+      controller.remove('deploy');
+      expect(shown(), ['Build: ok']);
+      controller.remove('deploy');
+
+      expect(fires, 3, reason: 'an equal put and an absent remove are no-ops');
+      controller.dispose();
+    });
+
+    test('a put item overrides the derived item with its id', () {
+      final controller = StatusController()
+        ..updateDerived([
+          StatusItem.text('Branch', id: 'branch', value: 'main'),
+          StatusItem.text('Mode', id: 'mode', value: 'dev'),
+        ]);
+
+      controller.put(StatusItem.text('Branch', id: 'branch', value: 'feature'));
+      expect(
+        [for (final item in controller.items) item.displayText],
+        ['Branch: feature', 'Mode: dev'],
+      );
+
+      controller.remove('branch');
+      expect(controller.items.first.displayText, 'Branch: main');
+      controller.dispose();
+    });
+
     test('post-dispose status updates throw', () {
       final controller = StatusController();
 
@@ -1020,6 +1061,46 @@ void main() {
     tester.pump();
 
     expect(tester.exists(text('Build: ok')), isTrue);
+  });
+
+  testWidgets('a command puts its status beside a status set elsewhere', (
+    tester,
+  ) async {
+    late BuildContext context;
+    tester.pumpWidget(
+      FleuryApp(
+        title: 'Ops Console',
+        commands: [
+          AppCommand(
+            id: _refresh,
+            title: 'Deploy',
+            run: (context) => context.status!.put(
+              StatusItem.text('Deploy', value: 'running'),
+            ),
+          ),
+        ],
+        child: Column(
+          children: [
+            Expanded(
+              child: _CaptureContext(
+                onBuild: (c) => context = c,
+                child: const Focus(autofocus: true, child: Text('Body')),
+              ),
+            ),
+            const AppStatusBar(),
+          ],
+        ),
+      ),
+    );
+    FleuryApp.of(
+      context,
+    ).status.update([StatusItem.success('Build', value: 'ok')]);
+
+    await tester.invokeCommand(_refresh);
+    tester.pump();
+
+    expect(tester.exists(text('Build: ok')), isTrue);
+    expect(tester.exists(text('Deploy: running')), isTrue);
   });
 
   testWidgets('lastCommandResult is the latest command, scoped or not', (

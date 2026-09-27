@@ -103,12 +103,20 @@ final class StatusItem {
 
 /// Mutable status model installed by [FleuryApp].
 ///
-/// Two sources feed it. [update] sets the items an app or command reports
-/// itself — a task's progress, a command's result. [FleuryApp] also derives
-/// items from its `status` builder and extensions, and re-derives them after
-/// every command and rebuild; those never replace what [update] set. [items]
-/// shows the derived items, each replaced by a set item with the same id,
-/// then the set items with ids of their own.
+/// Two sources feed it. An app or command sets the items it reports itself —
+/// a task's progress, a command's result — with [put], [remove] and
+/// [update]. [FleuryApp] also derives items from its `status` builder and
+/// extensions, and re-derives them after every command and rebuild; those
+/// never replace a set item. [items] shows the derived items, each replaced
+/// by a set item with the same id, then the set items with ids of their own.
+///
+/// ```dart
+/// run: (context) async {
+///   context.status!.put(StatusItem.text('Deploy', value: 'running'));
+///   await deploy();
+///   context.status!.put(StatusItem.success('Deploy', value: 'done'));
+/// },
+/// ```
 class StatusController extends Notifier {
   StatusController({List<StatusItem> items = const <StatusItem>[]})
     : _set = List<StatusItem>.of(items),
@@ -124,8 +132,28 @@ class StatusController extends Notifier {
   bool get isNotEmpty => _items.isNotEmpty;
   int get length => _items.length;
 
-  /// Replaces the items this controller was given by earlier [update]
-  /// calls. Pass the items you own: [items] includes the derived ones too.
+  /// Sets [item], replacing the set item with its id and leaving the others:
+  /// for a writer that owns one item beside items others set.
+  void put(StatusItem item) {
+    _checkNotDisposed();
+    final index = _set.indexWhere((existing) => existing.id == item.id);
+    _set = index < 0 ? [..._set, item] : ([..._set]..[index] = item);
+    _merge();
+  }
+
+  /// Removes the set item with [id], if there is one.
+  void remove(String id) {
+    _checkNotDisposed();
+    _set = [
+      for (final item in _set)
+        if (item.id != id) item,
+    ];
+    _merge();
+  }
+
+  /// Replaces every set item with [items]. Pass only items you set: [items]
+  /// also holds the derived items, and one written back here overrides the
+  /// builder's later values for its id.
   void update(List<StatusItem> items) {
     _checkNotDisposed();
     if (listEquals(_set, items)) return;

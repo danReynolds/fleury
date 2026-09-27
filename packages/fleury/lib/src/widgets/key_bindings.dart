@@ -343,6 +343,11 @@ final class KeyBinding {
   final bool _enabled;
   final bool Function()? _isEnabled;
 
+  /// Framework-internal: whether [enabled] is asked each time rather than
+  /// fixed (see [KeyBinding.live]).
+  @internal
+  bool get isLive => _isEnabled != null;
+
   /// When true, the binding still fires but is hidden from `KeyHintBar`.
   /// Useful for ubiquitous bindings like Ctrl+C.
   final bool hideFromHintBar;
@@ -416,11 +421,14 @@ List<ActiveKeyBinding> resolveActiveKeyBindings(FocusManager manager) {
   // for the same firing event must not evade deeper-binding precedence.
   final seenSequences = <KeySequence>{};
   final textFocused = manager.focusedNodeClaimsText;
+  List<(KeyBinding, bool)>? liveAnswers;
 
   void consider(KeyBinding binding) {
     if (binding.label == null) return;
     if (binding.hideFromHintBar) return;
-    if (!binding.enabled) return;
+    final enabled = binding.enabled;
+    if (binding.isLive) (liveAnswers ??= []).add((binding, enabled));
+    if (!enabled) return;
 
     final firable = [
       for (final sequence in binding.sequences)
@@ -448,6 +456,7 @@ List<ActiveKeyBinding> resolveActiveKeyBindings(FocusManager manager) {
       consider(binding);
     }
   }
+  manager.recordLiveAnswers(liveAnswers);
   return List<ActiveKeyBinding>.unmodifiable(result);
 }
 

@@ -772,6 +772,7 @@ class FleuryTester {
     _publishFrameLatch();
     final buffer = CellBuffer(viewportSize);
     _pointerRouter.beginFrame();
+    _focusManager.beginFrame();
     try {
       _owner.renderFrame(_root!, buffer);
     } catch (_) {
@@ -779,6 +780,7 @@ class FleuryTester {
       rethrow;
     }
     _pointerRouter.endFrame();
+    _focusManager.endFrame();
     _closeFrame();
     return buffer;
   }

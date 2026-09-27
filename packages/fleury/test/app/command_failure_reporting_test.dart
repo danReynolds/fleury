@@ -44,9 +44,7 @@ void main() {
     await runZonedGuarded(() async {
       tester.pumpWidget(_app());
       tester.pump();
-      tester.sendKey(
-        const KeyEvent(KeyCode.s, modifiers: {KeyModifier.ctrl}),
-      );
+      tester.sendKey(const KeyEvent(KeyCode.s, modifiers: {KeyModifier.ctrl}));
       await Future<void>.delayed(Duration.zero);
     }, (error, _) => errors.add(error));
 
@@ -74,4 +72,75 @@ void main() {
       expect(result.error, error);
     });
   }
+
+  testWidgets('a command disabled since the tree was read is not completed', (
+    tester,
+  ) async {
+    var allowed = true;
+    var saves = 0;
+    tester.pumpWidget(
+      FleuryApp(
+        title: 'Editor',
+        commands: [
+          AppCommand(
+            id: _save,
+            title: 'Save',
+            enabled: (_) => allowed,
+            run: (_) => saves++,
+          ),
+        ],
+        home: const Focus(autofocus: true, child: Text('doc')),
+      ),
+    );
+    tester.pump();
+    // An agent acts on the tree it read; the app disabled Save since.
+    final tree = tester.semantics();
+    final save = tree.single(role: SemanticRole.command, label: 'Save');
+    allowed = false;
+
+    final result = await invokeSemanticActionFromElement(
+      tree: tree,
+      id: save.id,
+      action: SemanticAction.activate,
+    );
+
+    expect(saves, 0);
+    expect(result.status, SemanticActionInvocationStatus.unsupported);
+  });
+
+  testWidgets('activating a status item whose command fails reports it', (
+    tester,
+  ) async {
+    tester.pumpWidget(
+      FleuryApp(
+        title: 'Editor',
+        status: (_) => [
+          StatusItem.error('Build', value: 'broken', action: _save),
+        ],
+        commands: [
+          AppCommand(
+            id: _save,
+            title: 'Rebuild',
+            run: (_) => throw StateError('disk full'),
+          ),
+        ],
+        child: const Column(
+          children: [
+            Expanded(child: Focus(autofocus: true, child: Text('doc'))),
+            AppStatusBar(),
+          ],
+        ),
+      ),
+    );
+    tester.pump();
+
+    final result = await tester.invokeSemanticAction(
+      SemanticAction.activate,
+      role: SemanticRole.status,
+      label: 'Build',
+    );
+
+    expect(result.status, SemanticActionInvocationStatus.failed);
+    expect(result.error, isA<StateError>());
+  });
 }

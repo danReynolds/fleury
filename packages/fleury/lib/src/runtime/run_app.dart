@@ -860,6 +860,7 @@ Future<AppExit> _runAppImpl(
           event is PasteEvent ||
           event is MouseEvent ||
           event is InputBatch) {
+        errorReporter.noteInput();
         try {
           dispatchResult = dispatcher.dispatch(event);
         } catch (error, stack) {

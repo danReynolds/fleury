@@ -1,4 +1,4 @@
-import 'dart:async' show unawaited;
+import 'dart:async' show runZonedGuarded, unawaited;
 
 import 'package:fleury/fleury.dart';
 import 'package:fleury_test/fleury_test.dart';
@@ -410,6 +410,35 @@ void main() {
       expect(calls, ['save']);
       await _settleClose(tester);
       expect(Navigator.of(ctx).depth, 1);
+    });
+
+    testWidgets('a registry command that throws from its row is reported', (
+      tester,
+    ) async {
+      final errors = <Object>[];
+      await runZonedGuarded(() async {
+        tester.pumpWidget(
+          FleuryApp(
+            title: 'App',
+            commands: [
+              AppCommand(
+                id: const CommandId('file.save'),
+                title: 'Save File',
+                run: (_) => throw StateError('disk full'),
+              ),
+            ],
+            child: Navigator(home: _Capture((c) => ctx = c)),
+          ),
+        );
+        _openRegistryPalette(tester, ctx);
+        tester.type('save');
+        tester.pump();
+        tester.sendKey(const KeyEvent(KeyCode.enter));
+        await Future<void>.delayed(Duration.zero);
+        await _settleClose(tester);
+      }, (error, _) => errors.add(error));
+
+      expect(errors, [isA<StateError>()]);
     });
 
     testWidgets('filters by stable command id', (tester) async {

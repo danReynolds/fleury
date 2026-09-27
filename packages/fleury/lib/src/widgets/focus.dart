@@ -483,6 +483,40 @@ class FocusManager extends Notifier {
   void beginFrame() {
     if (_disposed) return;
     _frameInputAborted = false;
+    _recheckLiveAnswers();
+  }
+
+  /// What the live bindings ([KeyBinding.isLive]) answered when
+  /// `resolveActiveKeyBindings` last asked them.
+  List<(KeyBinding, bool)>? _liveAnswers;
+
+  /// Framework-internal: records what the live bindings answered a
+  /// resolution of the active bindings, for [beginFrame] to ask again.
+  @internal
+  void recordLiveAnswers(List<(KeyBinding, bool)>? answers) {
+    _liveAnswers = answers;
+  }
+
+  // A live binding's predicate reads app state that nothing rebuilds its
+  // scope for, so a hint surface would keep showing its old answer. Each
+  // frame asks again; a changed answer notifies before the build, and the
+  // surfaces rebuild in this frame.
+  void _recheckLiveAnswers() {
+    final answers = _liveAnswers;
+    if (answers == null) return;
+    for (final (binding, answer) in answers) {
+      bool now;
+      try {
+        now = binding.enabled;
+      } catch (_) {
+        // The surfaces' own resolution reports it.
+        now = !answer;
+      }
+      if (now == answer) continue;
+      _liveAnswers = null;
+      notify();
+      return;
+    }
   }
 
   /// Commits the current focus paint transaction.
