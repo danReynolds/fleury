@@ -8,10 +8,10 @@
 - A `CommandPalette` shown inline on a page no longer pops the page after
   running a command; a presented palette still closes.
 - A `CommandButton` or palette row whose command throws is reported to
-  runApp's error overlay, and activating one through semantics reports the
-  command's outcome: `failed`, or `unsupported` for a command that is
-  disabled or gone. `CommandPaletteItem.onInvoke` may return a future, which
-  a semantic activation awaits.
+  runApp's error overlay. Activating one through semantics is a press: it
+  reports `unsupported` for a command that turned disabled, hidden or gone
+  since it built, and doesn't wait on the command. `CommandPaletteItem.onInvoke`
+  may throw `SemanticActionDeclined` to decline.
 
 - `LogRegion` no longer does work proportional to the whole log on every
   build: the unfiltered view order allocates nothing, and row-id validation

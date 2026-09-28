@@ -1,5 +1,3 @@
-import 'dart:async';
-
 import '../foundation/geometry.dart';
 import '../rendering/cell.dart';
 import '../rendering/cell_buffer.dart';
@@ -78,10 +76,9 @@ class Button extends StatelessWidget {
   /// An explicit name replaces descendant semantics, not visible content.
   final String? semanticLabel;
 
-  /// Pressed handler, or null to disable the button. A future it returns is
-  /// awaited by a semantic activation, as [FocusableControl.onActivate]
-  /// describes.
-  final FutureOr<void> Function()? onPressed;
+  /// Pressed handler, or null to disable the button. Nothing waits on work it
+  /// starts; see [FocusableControl.onActivate] for how a press declines.
+  final void Function()? onPressed;
 
   /// Accent applied to the label, resolved from the theme's [ColorScheme].
   final ButtonVariant variant;

@@ -1,5 +1,3 @@
-import 'dart:async';
-
 import '../input/events.dart';
 import '../rendering/cell.dart';
 import '../semantics/semantics.dart';
@@ -37,12 +35,13 @@ class FocusableControl extends StatefulWidget {
     this.style,
   });
 
-  /// Activation — Enter, Space, a click, or a semantic `activate`. A future
-  /// it returns is awaited only by a semantic activation, whose result then
-  /// carries the outcome: its error reports `failed`, and a
-  /// [SemanticActionDeclined] reports `unsupported`. Nothing waits on a key
-  /// or click; its error still reaches the zone (runApp's error overlay).
-  final FutureOr<void> Function()? onActivate;
+  /// Activation — Enter, Space, a click, or a semantic `activate`. Nothing
+  /// waits on work it starts, a semantic activation included: an error from
+  /// that work reaches the zone (runApp's error overlay), as a key's does.
+  /// Throwing [SemanticActionDeclined] declines the activation: a key or a
+  /// click then does nothing, and a semantic activation reports it
+  /// `unsupported`. Anything else it throws reports that activation `failed`.
+  final void Function()? onActivate;
   final Widget Function(
     CellStyle style,
     bool enabled,
@@ -122,25 +121,19 @@ class _FocusableControlState extends State<FocusableControl>
     enabled: widget.enabled,
   );
 
-  // A key or a click: nothing waits. A failure the activation returns
-  // reaches the zone; one that declined (a command that turned out disabled)
-  // is a no-op.
+  // A key or a click. One that declined (a command that turned out
+  // disabled) does nothing.
   void _activate() {
-    final pending = _run();
-    if (pending != null) {
-      unawaited(
-        pending.catchError(
-          (Object _) {},
-          test: (error) => error is SemanticActionDeclined,
-        ),
-      );
+    try {
+      _run();
+    } on SemanticActionDeclined {
+      return;
     }
   }
 
-  Future<void>? _run() {
-    final result = widget.onActivate!();
+  void _run() {
+    widget.onActivate!();
     _formRegistration?.controlValueChanged(this);
-    return result is Future<void> ? result : null;
   }
 
   void _setValue(Object? payload) {
@@ -221,15 +214,15 @@ class _FocusableControlState extends State<FocusableControl>
               SemanticAction.activate,
               if (widget.onSetValue != null) SemanticAction.setValue,
             },
-            onAction: (action) async {
+            onAction: (action) {
               switch (action) {
                 case SemanticAction.focus:
                   _node.requestFocus();
                   return;
                 case SemanticAction.activate:
                   _node.requestFocus();
-                  // Waits, so the action's result carries the outcome.
-                  await _run();
+                  // A decline or a throw reaches the action's result.
+                  _run();
                   return;
                 case _:
                   return;

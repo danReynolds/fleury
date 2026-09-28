@@ -156,6 +156,22 @@ void main() {
     expect(result.status, SemanticActionInvocationStatus.notFound);
   });
 
+  testWidgets('submit with no command to run is declined', (tester) async {
+    tester.pumpWidget(Navigator(home: _Capture((c) => ctx = c)));
+    _open(tester, ctx, commands((_) {}));
+    tester.type('zzz'); // matches nothing
+    tester.pump();
+
+    final result = await tester.invokeSemanticAction(
+      SemanticAction.submit,
+      role: WidgetRoles.commandPalette,
+      allowFailure: true,
+    );
+
+    expect(result.status, SemanticActionInvocationStatus.unsupported);
+    expect(Navigator.of(ctx).depth, 2, reason: 'the palette stays open');
+  });
+
   testWidgets('repeated palette cycles do not retain stale modal semantics', (
     tester,
   ) async {
@@ -491,9 +507,56 @@ void main() {
       expect(errors, [isA<StateError>()]);
     });
 
-    testWidgets('activating a failing row by semantics reports failed', (
+    SemanticNode paletteRow(FleuryTester tester, String label) => tester
+        .semantics()
+        .single(role: WidgetRoles.commandPalette)
+        .selfAndDescendants
+        .firstWhere(
+          (node) => node.role == SemanticRole.command && node.label == label,
+        );
+
+    testWidgets('a semantic press on a failing row reports the press', (
       tester,
     ) async {
+      final errors = <Object>[];
+      SemanticActionInvocationResult? result;
+      await runZonedGuarded(() async {
+        tester.pumpWidget(
+          FleuryApp(
+            title: 'App',
+            commands: [
+              AppCommand(
+                id: const CommandId('file.save'),
+                title: 'Save File',
+                run: (_) => throw StateError('disk full'),
+              ),
+            ],
+            child: Navigator(home: _Capture((c) => ctx = c)),
+          ),
+        );
+        _openRegistryPalette(tester, ctx);
+
+        // The app lists the same command; act on the palette's row.
+        result = await tester.invokeSemanticAction(
+          SemanticAction.activate,
+          id: paletteRow(tester, 'Save File').id,
+          allowFailure: true,
+        );
+        await Future<void>.delayed(Duration.zero);
+        await _settleClose(tester);
+      }, (error, _) => errors.add(error));
+
+      // Nothing waits on the command, as with Enter: its failure reaches the
+      // zone (runApp's error overlay).
+      expect(result?.status, SemanticActionInvocationStatus.completed);
+      expect(errors, [isA<StateError>()]);
+      expect(Navigator.of(ctx).depth, 1);
+    });
+
+    testWidgets('a semantic press on a row whose command turned disabled is '
+        'declined', (tester) async {
+      var allowed = true;
+      var runs = 0;
       tester.pumpWidget(
         FleuryApp(
           title: 'App',
@@ -501,32 +564,59 @@ void main() {
             AppCommand(
               id: const CommandId('file.save'),
               title: 'Save File',
-              run: (_) => throw StateError('disk full'),
+              enabled: (_) => allowed,
+              run: (_) => runs++,
             ),
           ],
           child: Navigator(home: _Capture((c) => ctx = c)),
         ),
       );
       _openRegistryPalette(tester, ctx);
+      allowed = false; // nothing rebuilds the palette
 
-      // The app lists the same command; act on the palette's row.
-      final row = tester
-          .semantics()
-          .single(role: WidgetRoles.commandPalette)
-          .selfAndDescendants
-          .firstWhere(
-            (node) =>
-                node.role == SemanticRole.command && node.label == 'Save File',
-          );
       final result = await tester.invokeSemanticAction(
         SemanticAction.activate,
-        id: row.id,
+        id: paletteRow(tester, 'Save File').id,
         allowFailure: true,
       );
       await _settleClose(tester);
 
-      expect(result.status, SemanticActionInvocationStatus.failed);
-      expect(result.error, isA<StateError>());
+      expect(result.status, SemanticActionInvocationStatus.unsupported);
+      expect(runs, 0);
+    });
+
+    testWidgets('Enter on a row whose command turned disabled does nothing', (
+      tester,
+    ) async {
+      var allowed = true;
+      var runs = 0;
+      final errors = <Object>[];
+      await runZonedGuarded(() async {
+        tester.pumpWidget(
+          FleuryApp(
+            title: 'App',
+            commands: [
+              AppCommand(
+                id: const CommandId('file.save'),
+                title: 'Save File',
+                enabled: (_) => allowed,
+                run: (_) => runs++,
+              ),
+            ],
+            child: Navigator(home: _Capture((c) => ctx = c)),
+          ),
+        );
+        _openRegistryPalette(tester, ctx);
+        allowed = false; // nothing rebuilds the palette
+        tester.type('save');
+        tester.pump();
+        tester.sendKey(const KeyEvent(KeyCode.enter));
+        await Future<void>.delayed(Duration.zero);
+        await _settleClose(tester);
+      }, (error, _) => errors.add(error));
+
+      expect(runs, 0);
+      expect(errors, isEmpty);
     });
 
     testWidgets('filters by stable command id', (tester) async {

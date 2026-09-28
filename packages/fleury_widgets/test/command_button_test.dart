@@ -140,14 +140,50 @@ void main() {
     expect(registry.lastResult?.status, CommandInvocationStatus.failed);
   });
 
-  testWidgets('activating a failing command by semantics reports failed', (
+  testWidgets('a semantic press reports the press, not the command', (
     tester,
   ) async {
     final registry = _registry(
       _command(run: (_) => throw StateError('registry offline')),
     );
     addTearDown(registry.dispose);
+    final errors = <Object>[];
+    SemanticActionInvocationResult? result;
+
+    await runZonedGuarded(() async {
+      tester.pumpWidget(_host(registry));
+      result = await tester.invokeSemanticAction(
+        SemanticAction.activate,
+        role: SemanticRole.button,
+        allowFailure: true,
+      );
+      await Future<void>.delayed(Duration.zero);
+    }, (error, _) => errors.add(error));
+
+    // Nothing waits on the command, as with a key: its failure reaches the
+    // zone (runApp's error overlay).
+    expect(result?.status, SemanticActionInvocationStatus.completed);
+    expect(errors, [isA<StateError>()]);
+    expect(registry.lastResult?.status, CommandInvocationStatus.failed);
+  });
+
+  testWidgets('a semantic press on a command disabled since the build is '
+      'declined', (tester) async {
+    var allowed = true;
+    var runs = 0;
+    final registry = CommandRegistry(
+      commands: [
+        AppCommand(
+          id: _inspect,
+          title: 'Inspect package',
+          enabled: (_) => allowed,
+          run: (_) => runs++,
+        ),
+      ],
+    );
+    addTearDown(registry.dispose);
     tester.pumpWidget(_host(registry));
+    allowed = false; // nothing rebuilds the button
 
     final result = await tester.invokeSemanticAction(
       SemanticAction.activate,
@@ -155,8 +191,36 @@ void main() {
       allowFailure: true,
     );
 
-    expect(result.status, SemanticActionInvocationStatus.failed);
-    expect(result.error, isA<StateError>());
+    expect(result.status, SemanticActionInvocationStatus.unsupported);
+    expect(runs, 0);
+  });
+
+  testWidgets('a semantic press on a command hidden since the build is '
+      'declined', (tester) async {
+    var shown = true;
+    var runs = 0;
+    final registry = CommandRegistry(
+      commands: [
+        AppCommand(
+          id: _inspect,
+          title: 'Inspect package',
+          visible: (_) => shown,
+          run: (_) => runs++,
+        ),
+      ],
+    );
+    addTearDown(registry.dispose);
+    tester.pumpWidget(_host(registry));
+    shown = false; // nothing rebuilds the button
+
+    final result = await tester.invokeSemanticAction(
+      SemanticAction.activate,
+      role: SemanticRole.button,
+      allowFailure: true,
+    );
+
+    expect(result.status, SemanticActionInvocationStatus.unsupported);
+    expect(runs, 0);
   });
 
   testWidgets('Enter on a command disabled since the build is a no-op', (

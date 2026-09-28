@@ -154,17 +154,20 @@
   at their current values. Use `put`.
 - A command that throws is reported. From a shortcut, a button, or a palette
   row it reaches runApp's error overlay, as a throwing key binding does.
-  `CommandRegistry.invokeFromGesture` and `invokeCommandFromGesture` do the
-  same for custom command surfaces.
-- A semantic action reports what it did. Activating a command that failed
-  reports `failed`; one that is disabled, hidden or gone reports
-  `unsupported` rather than `completed`, through a command node, a status
-  item, a button or a palette row alike, and so does a route dismissal a
-  `PopScope` refuses. A handler declines by throwing the new
-  `SemanticActionDeclined`. `CommandRegistry.invokeFromSemantics` and
-  `invokeCommandFromSemantics` run a command for a semantic action and
-  report its outcome. `Button.onPressed` and `FocusableControl.onActivate`
-  may return a future, which a semantic activation awaits.
+  `CommandRegistry.dispatch` and `dispatchCommand` start a command this way
+  for custom command surfaces.
+- A semantic action reports what it did. A handler declines by throwing the
+  new `SemanticActionDeclined`, which reports `unsupported` rather than
+  `completed`.
+  - A command node or a status item runs its command: one that failed
+    reports `failed`, and one that is disabled, hidden or gone reports
+    `unsupported`. `CommandRegistry.invokeFromSemantics` and
+    `invokeCommandFromSemantics` do the same for custom semantic handlers.
+  - A control's `activate` is a press, as Enter or a click is: nothing waits
+    on the work it starts, whose failure reaches the error overlay. A
+    `CommandButton` or palette row whose command turned disabled, hidden or
+    gone since it built reports `unsupported`.
+  - A route dismissal a `PopScope` refuses reports `unsupported`.
 - runApp stops on a storm of uncaught errors only when they recur with no
   input between them. Holding a key whose command or async handler fails,
   typing fast into a field whose async handler fails, or an agent repeating

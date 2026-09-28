@@ -352,7 +352,7 @@ class _FleuryAppState extends State<FleuryApp> {
                 _commandEnabled(command, source);
           },
           onTrigger: (_) {
-            _commands.invokeFromGesture(
+            _commands.dispatch(
               command.id,
               buildContext: _commandSourceContext(context),
             );

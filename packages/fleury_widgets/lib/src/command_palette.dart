@@ -1,4 +1,4 @@
-import 'dart:async' show FutureOr, scheduleMicrotask, unawaited;
+import 'dart:async' show scheduleMicrotask;
 
 import 'package:fleury/fleury_core.dart';
 
@@ -39,11 +39,11 @@ class CommandPaletteItem {
   /// Whether this command can currently run.
   final bool enabled;
 
-  /// Run when the command is chosen. A future it returns is awaited when an
-  /// agent or assistive technology chose it, so its error reports the action
-  /// `failed` and a [SemanticActionDeclined] reports it `unsupported`; Enter
-  /// and a click don't wait, and a failure still reaches the zone.
-  final FutureOr<void> Function() onInvoke;
+  /// Run when the command is chosen. Nothing waits on work it starts: an
+  /// error from that work reaches the zone (runApp's error overlay). Throwing
+  /// [SemanticActionDeclined] declines: Enter or a click then does nothing,
+  /// and a semantic activation reports it `unsupported`.
+  final void Function() onInvoke;
 }
 
 bool _isSubsequence(String needle, String hay) {
@@ -320,7 +320,7 @@ List<CommandPaletteItem> _activePaletteCommands(
         shortcut: command.primaryShortcutLabel,
         enabled: registry.isEnabled(command, buildContext: context),
         onInvoke: () =>
-            registry.invokeCommandFromSemantics(command, buildContext: context),
+            registry.dispatchCommand(command, buildContext: context),
       ),
     );
   }
@@ -456,19 +456,17 @@ class _CommandPaletteState extends State<_CommandPaletteView> {
     return _filtered[i].command;
   }
 
-  // Enter, a click: nothing waits for the command. A failure reaches the
-  // zone (runApp's error overlay); one that declined is a no-op.
+  // Enter, a click. One that declined does nothing.
   void _invokeCommand(CommandPaletteItem command) {
-    unawaited(
-      _run(command).catchError(
-        (Object _) {},
-        test: (error) => error is SemanticActionDeclined,
-      ),
-    );
+    try {
+      _run(command);
+    } on SemanticActionDeclined {
+      return;
+    }
   }
 
-  // A semantic action awaits this, so its result carries the outcome.
-  Future<void> _run(CommandPaletteItem? command) async {
+  // A semantic action's result reports a decline or a throw from here.
+  void _run(CommandPaletteItem? command) {
     if (command == null || !command.enabled) {
       throw const SemanticActionDeclined();
     }
@@ -478,7 +476,7 @@ class _CommandPaletteState extends State<_CommandPaletteView> {
     if (navigator != null && identical(navigator.topScreen, widget.screen)) {
       navigator.pop();
     }
-    await command.onInvoke();
+    command.onInvoke();
   }
 
   @override
@@ -539,11 +537,11 @@ class _CommandPaletteState extends State<_CommandPaletteView> {
           SemanticAction.focus,
           SemanticAction.submit,
         },
-        onAction: (action) async {
+        onAction: (action) {
           if (action == SemanticAction.focus) {
             _queryFocus.requestFocus();
           } else if (action == SemanticAction.submit) {
-            await _run(_selectedCommand);
+            _run(_selectedCommand);
           }
         },
         state: SemanticState({
@@ -671,8 +669,9 @@ class _CommandRow extends StatelessWidget {
   final int width;
   final void Function(CommandPaletteItem command) onActivate;
 
-  /// Runs [command] for a semantic activation, whose result waits on it.
-  final Future<void> Function(CommandPaletteItem command) onRun;
+  /// Runs [command] for a semantic activation, whose result reports a
+  /// decline or a throw.
+  final void Function(CommandPaletteItem command) onRun;
 
   @override
   Widget build(BuildContext context) {
@@ -719,8 +718,8 @@ class _CommandRow extends StatelessWidget {
       enabled: command.enabled,
       selected: selected,
       actions: const <SemanticAction>{SemanticAction.activate},
-      onAction: (action) async {
-        if (action == SemanticAction.activate) await onRun(command);
+      onAction: (action) {
+        if (action == SemanticAction.activate) onRun(command);
       },
       state: SemanticState(state),
       // Click an enabled command to run it (same as Enter on the selection).

@@ -283,50 +283,35 @@ class CommandRegistry extends Notifier {
   }) async {
     _checkNotDisposed();
     final context = _context(buildContext);
-    if (!command.visible(context)) {
-      return _record(CommandInvocationResult.notFound(command.id));
-    }
-
-    if (!command.enabled(context)) {
-      return _record(
-        CommandInvocationResult.disabled(command.id, command: command),
-      );
-    }
-
-    try {
-      await command.run(context);
-      return _record(
-        CommandInvocationResult.completed(command.id, command: command),
-      );
-    } catch (error, stackTrace) {
-      return _record(
-        CommandInvocationResult.failed(
-          command.id,
-          command: command,
-          error: error,
-          stackTrace: stackTrace,
-        ),
-      );
-    }
+    return _decline(command, context) ?? await _run(command, context);
   }
 
-  /// [invoke] for a gesture that does not wait on the result — a shortcut, a
-  /// button, a palette row. A command that throws is reported as an
-  /// uncaught error of the calling zone (runApp shows it in its error
-  /// overlay, as it does a throwing key binding) rather than only being
-  /// recorded in [lastResult], where no gesture looks.
-  void invokeFromGesture(CommandId id, {BuildContext? buildContext}) {
-    unawaited(invoke(id, buildContext: buildContext).then(_reportFailure));
+  /// Starts [id] for a press — a shortcut, a button, a palette row, a
+  /// semantic activation of one — without waiting on it. A command that is
+  /// hidden, disabled or gone declines at once by throwing
+  /// [SemanticActionDeclined]: a control's key or click ignores that, and a
+  /// semantic activation reports it `unsupported`. A command that throws is
+  /// reported as an uncaught error of the calling zone (runApp shows it in
+  /// its error overlay, as it does a throwing key binding) rather than only
+  /// being recorded in [lastResult], where no press looks.
+  void dispatch(CommandId id, {BuildContext? buildContext}) {
+    _checkNotDisposed();
+    final command = this.command(id, buildContext: buildContext);
+    if (command == null) {
+      _record(CommandInvocationResult.notFound(id));
+      throw const SemanticActionDeclined();
+    }
+    dispatchCommand(command, buildContext: buildContext);
   }
 
-  /// [invokeCommand] for a gesture, as [invokeFromGesture].
-  void invokeCommandFromGesture(
-    AppCommand command, {
-    BuildContext? buildContext,
-  }) {
-    unawaited(
-      invokeCommand(command, buildContext: buildContext).then(_reportFailure),
-    );
+  /// [invokeCommand] for a press, as [dispatch].
+  void dispatchCommand(AppCommand command, {BuildContext? buildContext}) {
+    _checkNotDisposed();
+    final context = _context(buildContext);
+    if (_decline(command, context) != null) {
+      throw const SemanticActionDeclined();
+    }
+    unawaited(_run(command, context).then(_reportFailure));
   }
 
   /// [invoke] for a semantic action — an agent's or assistive technology's
@@ -361,6 +346,43 @@ class CommandRegistry extends Notifier {
   }) async {
     final result = await invokeCommand(command, buildContext: buildContext);
     if (!semanticOutcomeOf(result)) throw const SemanticActionDeclined();
+  }
+
+  // The result of a command that cannot run now, recorded; null when it can.
+  CommandInvocationResult? _decline(
+    AppCommand command,
+    _CommandInvocationContext context,
+  ) {
+    if (!command.visible(context)) {
+      return _record(CommandInvocationResult.notFound(command.id));
+    }
+    if (!command.enabled(context)) {
+      return _record(
+        CommandInvocationResult.disabled(command.id, command: command),
+      );
+    }
+    return null;
+  }
+
+  Future<CommandInvocationResult> _run(
+    AppCommand command,
+    _CommandInvocationContext context,
+  ) async {
+    try {
+      await command.run(context);
+      return _record(
+        CommandInvocationResult.completed(command.id, command: command),
+      );
+    } catch (error, stackTrace) {
+      return _record(
+        CommandInvocationResult.failed(
+          command.id,
+          command: command,
+          error: error,
+          stackTrace: stackTrace,
+        ),
+      );
+    }
   }
 
   static void _reportFailure(CommandInvocationResult result) {
@@ -512,7 +534,7 @@ class _CommandScopeState extends State<CommandScope> {
           label: command.title,
           isEnabled: () => command.visible(context) && command.enabled(context),
           onTrigger: (_) {
-            registry.invokeFromGesture(command.id, buildContext: this.context);
+            registry.dispatchCommand(command, buildContext: this.context);
           },
         ),
       );
