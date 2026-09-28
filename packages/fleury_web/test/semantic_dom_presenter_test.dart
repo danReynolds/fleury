@@ -1,6 +1,8 @@
 @TestOn('browser')
 library;
 
+import 'dart:js_interop';
+
 import 'package:fleury/fleury_host.dart';
 import 'package:fleury_web/src/semantics/semantic_dom_presenter.dart';
 import 'package:test/test.dart';
@@ -759,6 +761,121 @@ void main() {
         same(second),
       );
       expect(semanticRoot.textContent, 'SecondFirst');
+    });
+
+    group('a structural change touches only what changed', () {
+      // A screen reader announces a live region's re-inserted content as new,
+      // so a stable node must never be detached and re-inserted.
+      SemanticTree tree({required int lines, required int items}) =>
+          SemanticTree(
+            root: SemanticNode(
+              id: const SemanticNodeId('root'),
+              role: SemanticRole.app,
+              children: [
+                const SemanticNode(
+                  id: SemanticNodeId('status'),
+                  role: SemanticRole.status,
+                  label: 'Build: passing',
+                ),
+                SemanticNode(
+                  id: const SemanticNodeId('log'),
+                  role: SemanticRole.log,
+                  label: 'Output',
+                  children: [
+                    for (var i = 0; i < lines; i++)
+                      SemanticNode(
+                        id: SemanticNodeId('line-$i'),
+                        role: SemanticRole.text,
+                        label: 'line $i',
+                      ),
+                  ],
+                ),
+                SemanticNode(
+                  id: const SemanticNodeId('list'),
+                  role: SemanticRole.list,
+                  children: [
+                    for (var i = 0; i < items; i++)
+                      SemanticNode(
+                        id: SemanticNodeId('item-$i'),
+                        role: SemanticRole.listItem,
+                        label: 'item $i',
+                      ),
+                  ],
+                ),
+              ],
+            ),
+          );
+
+      late web.Element root;
+      late SemanticDomPresenter presenter;
+      late SemanticsOwner owner;
+      late web.MutationObserver observer;
+
+      void present(SemanticTree next) =>
+          presenter.present(next, update: owner.update(next));
+
+      // The childList mutations under [element] since the last call.
+      ({int added, int removed}) mutationsUnder(web.Element element) {
+        var added = 0;
+        var removed = 0;
+        for (final record in observer.takeRecords().toDart) {
+          if (record.type != 'childList') continue;
+          if (!element.contains(record.target)) continue;
+          added += record.addedNodes.length;
+          removed += record.removedNodes.length;
+        }
+        return (added: added, removed: removed);
+      }
+
+      web.Element byId(String id) =>
+          root.querySelector('[data-fleury-semantic-id="$id"]')!;
+
+      setUp(() {
+        root = web.document.createElement('div');
+        presenter = SemanticDomPresenter(root: root);
+        owner = SemanticsOwner();
+        present(tree(lines: 50, items: 2));
+        observer =
+            web.MutationObserver(
+              ((JSArray<web.MutationRecord> _, web.MutationObserver _) {}).toJS,
+            )..observe(
+              root,
+              web.MutationObserverInit(childList: true, subtree: true),
+            );
+      });
+      tearDown(() => observer.disconnect());
+
+      test('an item added elsewhere leaves the live regions alone', () {
+        final status = byId('status');
+        final log = byId('log');
+        final statusText = status.firstChild;
+
+        present(tree(lines: 50, items: 3));
+
+        expect(mutationsUnder(log), (added: 0, removed: 0));
+        expect(mutationsUnder(status), (added: 0, removed: 0));
+        expect(status.firstChild, same(statusText));
+        expect(byId('list').children.length, 3);
+      });
+
+      test('an appended log line is the one insertion', () {
+        final log = byId('log');
+
+        present(tree(lines: 51, items: 2));
+
+        expect(mutationsUnder(log), (added: 1, removed: 0));
+        expect(log.lastElementChild!.textContent, 'line 50');
+      });
+
+      test('a removed line is the one removal', () {
+        final log = byId('log');
+
+        present(tree(lines: 49, items: 2));
+
+        expect(mutationsUnder(log), (added: 0, removed: 1));
+        expect(log.textContent, startsWith('Outputline 0'));
+        expect(log.lastElementChild!.textContent, 'line 48');
+      });
     });
 
     test('retains same-id elements and removes stale attributes', () {
