@@ -181,6 +181,10 @@ class _ToasterState extends State<Toaster> {
   TuiBinding? _binding;
   var _nextToastId = 0;
 
+  // The overlay builds the toast layer above any Theme the app set, so it
+  // carries the theme where this Toaster sits.
+  ThemeData? _theme;
+
   // Created once (layer state survives), mounted lazily: the entry is only
   // inserted while toasts exist. An idle Toaster must not keep the host
   // overlay multi-entry — that would keep the overlay's adaptive repaint
@@ -199,6 +203,11 @@ class _ToasterState extends State<Toaster> {
   void didChangeDependencies() {
     super.didChangeDependencies();
     _binding ??= TuiBinding.maybeOf(context);
+    final theme = Theme.of(context);
+    if (theme != _theme) {
+      _theme = theme;
+      _entry.markNeedsBuild();
+    }
   }
 
   @override
@@ -350,7 +359,10 @@ class _ToasterState extends State<Toaster> {
     // user's clipboard via the app's ambient selection. Stated here rather
     // than inherited from the fact that an overlay entry happens to mount
     // outside DefaultRootSelection.
-    return SelectionArea.disabled(child: layer);
+    return Theme(
+      data: _theme!,
+      child: SelectionArea.disabled(child: layer),
+    );
   }
 
   SemanticState _toastSemanticState(_Toast toast) {

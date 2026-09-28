@@ -1433,6 +1433,11 @@ final class SemanticDirtyTracker {
   /// how a scroll or a relayout reaches the wire as a retained leaf update.
   /// Runs when a paint pass ends; safe to call at any time.
   void refreshGeometry() {
+    // A pending full rebuild re-derives every node's bounds, so refreshing
+    // them first is wasted. In a terminal-only app nothing takes the
+    // snapshot and the rebuild stays pending: without this, every paint pass
+    // walked every mounted Semantics node (every Text) to no effect.
+    if (_requiresFullRebuild) return;
     for (final element in _geometryElements) {
       element.refreshBounds();
     }

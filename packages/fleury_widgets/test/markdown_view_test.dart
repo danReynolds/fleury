@@ -292,4 +292,17 @@ void main() {
       expect(exported, isNot(contains('\x1b]52')));
     });
   });
+
+  testWidgets('a block\'s semantic label reads what it renders', (tester) {
+    const prose = 'Edit __init__.py and user_id or group_id';
+    tester.pumpWidget(const MarkdownView(markdown: prose));
+    final output = tester.renderToString(
+      size: const CellSize(60, 3),
+      emptyMark: ' ',
+    );
+
+    expect(output, contains(prose));
+    final block = tester.semantics().single(role: SemanticRole.markdownBlock);
+    expect(block.label, prose);
+  });
 }

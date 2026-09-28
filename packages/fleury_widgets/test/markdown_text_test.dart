@@ -211,6 +211,71 @@ void main() {
     });
   });
 
+  group('MarkdownText — emphasis delimiters in prose', () {
+    // Agent prose is full of snake_case, dunder names and arithmetic. Only
+    // CommonMark emphasis is emphasis; everything else is text.
+    String rendered(FleuryTester tester, String markdown) {
+      tester.pumpWidget(MarkdownText(markdown));
+      return tester
+          .renderToString(size: const CellSize(60, 1), emptyMark: ' ')
+          .trimRight();
+    }
+
+    for (final prose in [
+      'Edit __init__.py to export it',
+      'Rename user_id and group_id',
+      'Compute 2 * 3 * 4 now',
+      'See snake_case_name and MAX_RETRY_COUNT',
+      'Raise a ** b to c',
+    ]) {
+      testWidgets('"$prose" renders as written', (tester) {
+        expect(rendered(tester, prose), prose);
+      });
+    }
+
+    testWidgets('real emphasis still renders', (tester) {
+      expect(
+        rendered(tester, 'Use *emphasis*, _this_ and **bold** here'),
+        'Use emphasis, this and bold here',
+      );
+    });
+
+    testWidgets('bold inside italic renders both', (tester) {
+      expect(
+        rendered(tester, '*Note: use **only** this*'),
+        'Note: use only this',
+      );
+      final buf = tester.render(size: const CellSize(60, 1));
+      expect(
+        _anyCellMatches(buf, {'o', 'n', 'l', 'y'}, (s) => s.bold && s.italic),
+        isTrue,
+      );
+      expect(_anyCellMatches(buf, {'N'}, (s) => s.italic && !s.bold), isTrue);
+    });
+
+    testWidgets('a run of three stars is bold and italic', (tester) {
+      expect(rendered(tester, 'Say ***both*** now'), 'Say both now');
+      final buf = tester.render(size: const CellSize(60, 1));
+      expect(
+        _anyCellMatches(buf, {'b', 'o', 't', 'h'}, (s) => s.bold && s.italic),
+        isTrue,
+      );
+    });
+
+    test('unclosed delimiters cost linear time', () {
+      // Every `_field` opens a run nothing closes. Each used to rescan the
+      // rest of the paragraph for a closer.
+      final paragraph = [for (var i = 0; i < 20000; i++) '_field$i'].join(' ');
+      final watch = Stopwatch()..start();
+      final document = MarkdownDocument.parse(paragraph, maxLineLength: null);
+      watch.stop();
+
+      expect(document.blocks.single.plainText, paragraph);
+      // About 50 ms linear; the rescans took several seconds.
+      expect(watch.elapsed, lessThan(const Duration(seconds: 1)));
+    });
+  });
+
   group('MarkdownText — hyperlinks (OSC 8)', () {
     testWidgets(
       'supporting surface + safe scheme: link run carries linkUri, url suffix '

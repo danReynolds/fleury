@@ -44,6 +44,60 @@ void main() {
     });
   });
 
+  group('a git format-patch email signature', () {
+    // `git format-patch` output ends each patch with `-- ` and the git
+    // version, after the last hunk.
+    const patch =
+        'From 1234 Mon Sep 17 00:00:00 2001\n'
+        'Subject: [PATCH] add c\n'
+        '---\n'
+        'diff --git a/f.txt b/f.txt\n'
+        '--- a/f.txt\n'
+        '+++ b/f.txt\n'
+        '@@ -1,2 +1,3 @@\n'
+        ' a\n'
+        ' b\n'
+        '+c\n'
+        '-- \n'
+        '2.50.1\n';
+
+    test('is not a deletion', () {
+      final document = parseUnifiedDiff(patch);
+
+      expect(document.additionCount, 1);
+      expect(document.deletionCount, 0);
+      final signature = document.rows.firstWhere((row) => row.text == '-- ');
+      expect(signature.kind, DiffLineKind.metadata);
+      expect(signature.oldLine, isNull);
+    });
+
+    test('is not copied with the hunk', () {
+      final document = parseUnifiedDiff(patch);
+      final added = document.rows.indexWhere((row) => row.text == '+c');
+
+      expect(
+        exportDiffSelection(
+          document,
+          rowIndex: added,
+          options: const DiffViewCopyOptions(mode: DiffViewCopyMode.hunk),
+        ),
+        '@@ -1,2 +1,3 @@\n a\n b\n+c',
+      );
+    });
+
+    test('inside a hunk with lines left, `-- ` is still a deletion', () {
+      final document = parseUnifiedDiff(
+        '--- a/f.txt\n+++ b/f.txt\n@@ -1,2 +1,1 @@\n-- \n x\n',
+      );
+
+      expect(document.deletionCount, 1);
+      expect(
+        document.rows.firstWhere((row) => row.text == '-- ').kind,
+        DiffLineKind.deletion,
+      );
+    });
+  });
+
   test('parseUnifiedDiff tracks files, hunks, line numbers, and stats', () {
     final document = parseUnifiedDiff(_sampleDiff);
 

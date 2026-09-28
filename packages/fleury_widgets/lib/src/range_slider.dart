@@ -127,7 +127,6 @@ class _RangeSliderState extends State<RangeSlider> {
   @override
   void didChangeDependencies() {
     super.didChangeDependencies();
-    FocusManager.maybeOf(context); // rebuild on focus change
     final registration = FormControlScope.maybeOf(context);
     if (!identical(registration, _formRegistration)) {
       _formRegistration?.release(this);
@@ -303,6 +302,7 @@ class _RangeSliderState extends State<RangeSlider> {
 
   @override
   Widget build(BuildContext context) {
+    context.listen(_node); // the focus cue follows this slider's own focus
     final theme = Theme.of(context);
     final enabled = _enabled;
     final (lo, hi) = _normalized;

@@ -131,6 +131,7 @@ class ListController extends Notifier {
     _followTail = value;
     _isFollowing = value;
     _cursorTracksTail = value && _selectable;
+    if (_cursorTracksTail) _pendingCursor = null;
     if (_cursorTracksTail && _attached && _itemCount > 0) {
       _currentIndex = _itemCount - 1;
     }
@@ -179,7 +180,9 @@ class ListController extends Notifier {
   set currentIndex(int? value) {
     _checkNotDisposed();
     if (!_selectable) return;
-    // An explicit placement anchors the cursor; following no longer moves it.
+    // An explicit placement anchors the cursor; following no longer moves it,
+    // and a [moveCursor] still waiting for its rebuild is superseded.
+    _pendingCursor = null;
     _cursorTracksTail = false;
     _restoreCurrentWhenNonEmpty = value != null;
     final next = _clampCurrentIndex(value);
@@ -190,6 +193,37 @@ class ListController extends Notifier {
     // The completed viewport, not the current index, decides whether to resume.
     _isFollowing = false;
     notify();
+  }
+
+  /// Sets [currentIndex] to [index] in a list about to show [itemCount]
+  /// items.
+  ///
+  /// For an owner that rebuilds the items and knows where the cursor's item
+  /// went: a tree that expanded above it, a list re-sorted or filtered.
+  /// [currentIndex] would clamp against the count the list showed last,
+  /// which that rebuild is about to change. (A list given an
+  /// `itemKeyBuilder` keeps the cursor on its item by itself.)
+  void moveCursor(int index, {required int itemCount}) {
+    _checkNotDisposed();
+    if (!_attached || itemCount == _itemCount) {
+      currentIndex = index;
+      return;
+    }
+    // Applied when the list reaches [itemCount]; dropped if it never does.
+    _pendingCursor = (index: index, itemCount: itemCount);
+  }
+
+  ({int index, int itemCount})? _pendingCursor;
+
+  /// The cursor's index in the list of [itemCount] items: the one
+  /// [moveCursor] placed for that count while the list has yet to show it,
+  /// else [currentIndex]. An owner that rebuilds its items twice before a
+  /// frame reads where the first rebuild put the cursor.
+  int? cursorFor({required int itemCount}) {
+    final pending = _pendingCursor;
+    return pending != null && pending.itemCount == itemCount
+        ? pending.index
+        : _currentIndex;
   }
 
   /// Places an item at the viewport start, clamped to the final full viewport. Does not
@@ -251,6 +285,7 @@ class ListController extends Notifier {
     _isFollowing = _followTail;
     if (_followTail && _selectable) {
       _cursorTracksTail = true;
+      _pendingCursor = null;
       if (_attached && _itemCount > 0) _currentIndex = _itemCount - 1;
     }
     _unseenCount = 0;
@@ -282,6 +317,18 @@ class ListController extends Notifier {
     final before = (_itemCount, _currentIndex, _unseenCount);
     final oldCount = _itemCount;
     _itemCount = newCount;
+    final moved = _pendingCursor;
+    _pendingCursor = null;
+    if (moved != null && moved.itemCount == newCount && _selectable) {
+      _cursorTracksTail = false;
+      _restoreCurrentWhenNonEmpty = true;
+      _currentIndex = _clampCurrentIndex(moved.index);
+      _clearRequests();
+      _pendingRevealIndex = _currentIndex;
+      _isFollowing = false;
+      notify();
+      return;
+    }
     if (newCount == 0) {
       if (oldCount > 0) _restoreCurrentWhenNonEmpty = _currentIndex != null;
       _currentIndex = null;

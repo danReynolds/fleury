@@ -436,4 +436,36 @@ void main() {
     expect(panel.state.collectionRowCount, 0);
     expect(panel.state['currentIndex'], isNull);
   });
+
+  testWidgets('arrow keys move through the ranked results without re-ranking', (
+    tester,
+  ) {
+    // The ranked order is kept until the results, query or matcher change;
+    // each arrow key used to rank every result twice.
+    var matches = 0;
+    final many = [
+      for (var i = 0; i < 200; i++)
+        SearchResult(id: 'item$i', title: 'Item $i'),
+    ];
+    tester.pumpWidget(
+      SearchPanel(
+        results: many,
+        autofocus: true,
+        matcher: (result, query) {
+          matches++;
+          return result.title.toLowerCase().contains(query);
+        },
+      ),
+    );
+    tester.type('item');
+    tester.pump();
+    matches = 0;
+
+    for (var i = 0; i < 3; i++) {
+      tester.sendKey(const KeyEvent(KeyCode.arrowDown));
+      tester.pump();
+    }
+
+    expect(matches, 0);
+  });
 }

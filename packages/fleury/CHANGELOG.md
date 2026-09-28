@@ -186,6 +186,22 @@
 - `FleuryTester.renderToString` trims each row's trailing empty cells rather
   than trailing copies of the mark. An empty mark no longer hangs the test,
   a mark of several characters works, and a glyph equal to the mark stays.
+- A focus move rebuilds the controls whose focus changed, not every
+  `TextInput`, `TextArea` and button in the tree (41 elements per Tab in a
+  20-row form). `FocusNode` is a `Listenable` that notifies when its own
+  focus flips, including when its `Focus` unmounts while focused; a control
+  shows a focus cue with `context.listen(node)`. `Focus.of` read in a build
+  rebuilds its caller for that node's focus only. A click in a text field
+  no longer subscribes it to every focus move.
+- `ListController.moveCursor(index, itemCount:)` places the cursor in a list
+  its owner is rebuilding to a new number of items, where `currentIndex`
+  would clamp against the old count; a later `currentIndex` supersedes it,
+  and `cursorFor(itemCount:)` reads it back before the list shows it.
+- An `Anchored` float paints the theme where it sits, not the fallback theme
+  of the overlay above the app's `Theme`.
+- A terminal-only app no longer re-derives the screen geometry of every
+  mounted `Semantics` node (every `Text`) on every paint pass; nothing reads
+  it until a semantics consumer takes a full rebuild.
 - Debugger mode changes preserve application state and layout. Opening the
   shell starts a bounded 60-frame recording that continues while hidden;
   Rebuilds shows the worst frame's phase costs. Inspector reports scroll with

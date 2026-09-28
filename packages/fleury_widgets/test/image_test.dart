@@ -1478,6 +1478,34 @@ void main() {
       );
     });
 
+    testWidgets('a parent rebuilding with the same bytes keeps it playing', (
+      tester,
+    ) {
+      // Image.bytes builds a new source on every parent build. Compared by
+      // identity, each rebuild decoded again, restarted the animation at
+      // frame 0, and re-created the ticker (tripping the one-ticker assert).
+      final apng = img.encodePng(twoFrameAnim(100));
+      Widget frame() => SizedBox(
+        width: 1,
+        height: 1,
+        child: Image.bytes(apng, fit: ImageFit.fill),
+      );
+      tester.pumpWidget(frame());
+      tester.render(size: const CellSize(1, 1));
+
+      for (var i = 0; i < 3; i++) {
+        tester.pump(const Duration(milliseconds: 50));
+        tester.pumpWidget(frame());
+      }
+
+      final cell = tester.render(size: const CellSize(1, 1)).atColRow(0, 0);
+      expect(
+        cell.style.foreground,
+        const RgbColor(0, 0, 255),
+        reason: 'past 100 ms of rebuilds, frame 1 is showing',
+      );
+    });
+
     testWidgets('loops back to frame 0 after the last frame', (tester) {
       tester.pumpWidget(
         SizedBox(
@@ -1572,5 +1600,71 @@ void main() {
         }
       }
     });
+  });
+
+  group('Image — rebuild and repaint cost', () {
+    test('built-in sources compare by what they decode from', () {
+      final bytes = Uint8List.fromList(
+        img.encodePng(img.Image(width: 1, height: 1)),
+      );
+      expect(ImageSource.bytes(bytes), ImageSource.bytes(bytes));
+      expect(
+        ImageSource.bytes(bytes),
+        isNot(ImageSource.bytes(Uint8List.fromList(bytes))),
+      );
+      final decoded = img.Image(width: 1, height: 1);
+      expect(ImageSource.decoded(decoded), ImageSource.decoded(decoded));
+      expect(ImageSource.file('logo.png'), ImageSource.file('logo.png'));
+      expect(ImageSource.file('logo.png'), isNot(ImageSource.file('icon.png')));
+    });
+
+    testWidgets('a static image paints once, not on every frame', (tester) {
+      addTearDown(() => RepaintBoundaryDebugStats.beginFrame(enabled: false));
+      final solid = img.Image(width: 4, height: 4);
+      img.fill(solid, color: img.ColorRgb8(10, 200, 30));
+      tester.pumpWidget(
+        SizedBox(
+          width: 4,
+          height: 2,
+          child: Image(source: ImageSource.decoded(solid)),
+        ),
+      );
+      tester.render(size: const CellSize(4, 2));
+
+      RepaintBoundaryDebugStats.beginFrame(enabled: true);
+      tester.render(size: const CellSize(4, 2));
+      final stats = RepaintBoundaryDebugStats.takeFrameStats();
+
+      expect(stats.cachedCount, 1, reason: 'the image was not sampled again');
+    });
+  });
+
+  testWidgets('an evicted file reloads when the image rebuilds', (tester) {
+    final dir = Directory.systemTemp.createTempSync('fleury_image_evict_');
+    addTearDown(() {
+      ImageSource.evictAll();
+      dir.deleteSync(recursive: true);
+    });
+    final path = '${dir.path}/live.png';
+    img.Image solid(int r, int g, int b) =>
+        img.fill(img.Image(width: 2, height: 2), color: img.ColorRgb8(r, g, b));
+    Widget view() => SizedBox(
+      width: 2,
+      height: 1,
+      child: Image.file(path, fit: ImageFit.fill),
+    );
+    CellStyle cell() =>
+        tester.render(size: const CellSize(4, 2)).atColRow(0, 0).style;
+
+    File(path).writeAsBytesSync(img.encodePng(solid(200, 0, 0)));
+    tester.pumpWidget(view());
+    final red = cell();
+
+    // The documented refresh: write the file, evict it, rebuild.
+    File(path).writeAsBytesSync(img.encodePng(solid(0, 0, 200)));
+    ImageSource.evictFile(path);
+    tester.pumpWidget(view());
+
+    expect(cell(), isNot(red));
   });
 }

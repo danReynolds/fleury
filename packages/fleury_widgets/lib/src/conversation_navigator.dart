@@ -317,7 +317,6 @@ class _ConversationNavigatorState extends State<ConversationNavigator> {
   bool _ownsController = false;
   bool _ownsQueryFocusNode = false;
   bool _ownsListFocusNode = false;
-  FocusManager? _focusManager;
   Object? _pendingSelectedConversationId;
   int _selectionSyncGeneration = 0;
 
@@ -339,16 +338,6 @@ class _ConversationNavigatorState extends State<ConversationNavigator> {
         FocusNode(debugLabel: 'ConversationNavigator list');
     _ownsListFocusNode = widget.listFocusNode == null;
     _resetSelection(_currentOrder, preserveCurrent: true);
-  }
-
-  @override
-  void didChangeDependencies() {
-    super.didChangeDependencies();
-    final manager = FocusManager.maybeOf(context);
-    if (identical(manager, _focusManager)) return;
-    _focusManager?.removeListener(_onFocusChange);
-    _focusManager = manager;
-    _focusManager?.addListener(_onFocusChange);
   }
 
   @override
@@ -408,8 +397,6 @@ class _ConversationNavigatorState extends State<ConversationNavigator> {
   }
 
   void _onControllerChange() => setState(() {});
-
-  void _onFocusChange() => setState(() {});
 
   void _resetSelection(List<int> order, {bool preserveCurrent = false}) {
     _selectionSyncGeneration++;
@@ -599,7 +586,6 @@ class _ConversationNavigatorState extends State<ConversationNavigator> {
     if (_ownsQuery) _query.dispose();
     _controller.removeListener(_onControllerChange);
     if (_ownsController) _controller.dispose();
-    _focusManager?.removeListener(_onFocusChange);
     if (_ownsQueryFocusNode) _queryFocusNode.dispose();
     if (_ownsListFocusNode) _listFocusNode.dispose();
     super.dispose();
@@ -700,7 +686,10 @@ class _ConversationNavigatorState extends State<ConversationNavigator> {
         role: WidgetRoles.conversationNavigator,
         label: widget.semanticLabel,
         value: _query.text,
-        focused: _queryFocusNode.hasFocus || _listFocusNode.hasFocus,
+        // `|`, not `||`: each read subscribes to its node.
+        focused:
+            context.listen(_queryFocusNode).hasFocus |
+            context.listen(_listFocusNode).hasFocus,
         actions: {
           SemanticAction.focus,
           SemanticAction.navigate,

@@ -1,6 +1,7 @@
 import 'dart:async' show scheduleMicrotask;
 
 import 'package:fleury/fleury_core.dart';
+import 'package:fleury/fleury_internal.dart' show readScope;
 
 import 'semantic_roles.dart';
 
@@ -269,7 +270,9 @@ class CommandPalette extends StatelessWidget {
 }
 
 BuildContext _defaultCommandSourceContext(BuildContext context) {
-  final focused = FocusManager.maybeOf(context)?.focusedNode?.context;
+  // Read, not depended on: opening the palette is an action, and a dependency
+  // would rebuild the opener on every later focus move.
+  final focused = readScope<FocusManager>(context)?.focusedNode?.context;
   if (focused != null &&
       focused.mounted &&
       CommandRegistryScope.maybeOf(focused) != null) {
