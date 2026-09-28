@@ -395,16 +395,22 @@ void main() {
         expect(bridge.protocolError, isNull);
         expect(transport.sent.whereType<SemanticActionFrame>(), isEmpty);
 
-        const validId = SemanticNodeId('save');
-        final valid = bridge.invokeAction(validId, SemanticAction.activate);
+        // The same action goes out again: its slot was released, not left
+        // busy.
+        const id = SemanticNodeId('element-7');
+        final retry = bridge.invokeAction(
+          id,
+          SemanticAction.activate,
+          targetToken: 'token',
+        );
         transport.addIncoming(
           const SemanticActionResultFrame(
-            validId,
+            id,
             SemanticAction.activate,
             SemanticActionInvocationStatus.completed,
           ),
         );
-        expect(await valid, SemanticActionInvocationStatus.completed);
+        expect(await retry, SemanticActionInvocationStatus.completed);
       },
     );
 
@@ -417,24 +423,24 @@ void main() {
         transport.addIncoming(_appInit(remoteProtocolVersion));
         await _pump();
 
+        const field = SemanticNodeId('field');
         expect(
-          () => bridge.setValue(const SemanticNodeId('field'), Object()),
+          () => bridge.setValue(field, Object()),
           throwsA(isA<JsonUnsupportedObjectError>()),
         );
         expect(bridge.isRunning, isTrue);
         expect(bridge.protocolError, isNull);
         expect(transport.sent.whereType<SemanticActionFrame>(), isEmpty);
 
-        const validId = SemanticNodeId('save');
-        final valid = bridge.invokeAction(validId, SemanticAction.activate);
+        final retry = bridge.setValue(field, 'text');
         transport.addIncoming(
           const SemanticActionResultFrame(
-            validId,
-            SemanticAction.activate,
+            field,
+            SemanticAction.setValue,
             SemanticActionInvocationStatus.completed,
           ),
         );
-        expect(await valid, SemanticActionInvocationStatus.completed);
+        expect(await retry, SemanticActionInvocationStatus.completed);
       },
     );
 
@@ -466,40 +472,102 @@ void main() {
   });
 
   group('SEMANTIC_ACTION_RESULT is correlated to its request', () {
-    test(
-      'a second action cannot supersede one whose result is pending',
-      () async {
-        final transport = _EncodingTransport();
-        final bridge = FleuryAppBridge(transport)..start();
-        addTearDown(bridge.close);
-        transport.addIncoming(_appInit(remoteProtocolVersion));
-        await _pump();
+    test('an action on another node goes ahead while one is pending', () async {
+      final transport = _EncodingTransport();
+      final bridge = FleuryAppBridge(transport)..start();
+      addTearDown(bridge.close);
+      transport.addIncoming(_appInit(remoteProtocolVersion));
+      await _pump();
 
-        const a = SemanticNodeId('nodeA');
-        const b = SemanticNodeId('nodeB');
+      const a = SemanticNodeId('nodeA');
+      const b = SemanticNodeId('nodeB');
 
-        // The MCP server serializes mutations, but the bridge is public. Reject
-        // direct concurrent use rather than replacing the only correlation slot.
-        final aResult = bridge.invokeAction(a, SemanticAction.activate);
-        expect(
-          () => bridge.invokeAction(b, SemanticAction.activate),
-          throwsA(
-            predicate<Object>(
-              (error) => error.toString().contains('still awaiting its result'),
-            ),
+      // A handler that awaits a dialog finishes only once another node
+      // answers it, so a pending action must not hold up the others. Each
+      // result still reaches its own request.
+      final aResult = bridge.invokeAction(a, SemanticAction.activate);
+      final bResult = bridge.invokeAction(b, SemanticAction.activate);
+      expect(transport.sent.whereType<SemanticActionFrame>(), hasLength(2));
+      expect(
+        () => bridge.invokeAction(a, SemanticAction.activate),
+        throwsA(
+          predicate<Object>(
+            (error) => error.toString().contains('still awaiting its result'),
           ),
-        );
+        ),
+        reason: 'a repeat could take the pending one\'s result',
+      );
 
-        transport.addIncoming(
-          SemanticActionResultFrame(
-            a,
+      transport.addIncoming(
+        SemanticActionResultFrame(
+          b,
+          SemanticAction.activate,
+          SemanticActionInvocationStatus.completed,
+        ),
+      );
+      transport.addIncoming(
+        SemanticActionResultFrame(
+          a,
+          SemanticAction.activate,
+          SemanticActionInvocationStatus.disabled,
+        ),
+      );
+      expect(await bResult, SemanticActionInvocationStatus.completed);
+      expect(await aResult, SemanticActionInvocationStatus.disabled);
+    });
+
+    test('another action on a node with one pending goes ahead', () async {
+      final transport = _EncodingTransport();
+      final bridge = FleuryAppBridge(transport)..start();
+      addTearDown(bridge.close);
+      transport.addIncoming(_appInit(remoteProtocolVersion));
+      await _pump();
+
+      const id = SemanticNodeId('row');
+      final activate = bridge.invokeAction(id, SemanticAction.activate);
+      final focus = bridge.invokeAction(id, SemanticAction.focus);
+      expect(transport.sent.whereType<SemanticActionFrame>(), hasLength(2));
+
+      transport
+        ..addIncoming(
+          const SemanticActionResultFrame(
+            id,
+            SemanticAction.focus,
+            SemanticActionInvocationStatus.completed,
+          ),
+        )
+        ..addIncoming(
+          const SemanticActionResultFrame(
+            id,
             SemanticAction.activate,
             SemanticActionInvocationStatus.completed,
           ),
         );
-        expect(await aResult, SemanticActionInvocationStatus.completed);
-      },
-    );
+      expect(await focus, SemanticActionInvocationStatus.completed);
+      expect(await activate, SemanticActionInvocationStatus.completed);
+    });
+
+    test('an app that exits releases every pending action at once', () async {
+      final transport = _EncodingTransport();
+      final bridge = FleuryAppBridge(transport)..start();
+      addTearDown(bridge.close);
+      transport.addIncoming(_appInit(remoteProtocolVersion));
+      await _pump();
+
+      final watch = Stopwatch()..start();
+      final pending = [
+        bridge.invokeAction(const SemanticNodeId('a'), SemanticAction.activate),
+        bridge.invokeAction(const SemanticNodeId('b'), SemanticAction.activate),
+      ];
+      transport.addIncoming(const ByeFrame());
+
+      expect(await Future.wait(pending), [null, null]);
+      expect(
+        watch.elapsed,
+        lessThan(const Duration(seconds: 1)),
+        reason: 'not left to their two-second result wait',
+      );
+    });
 
     test(
       'a timed-out action blocks same-target retry until its late result',
@@ -517,7 +585,7 @@ void main() {
           throwsA(
             predicate<Object>(
               (error) =>
-                  error.toString().contains('did not acknowledge "activate"') &&
+                  error.toString().contains('has not finished "activate"') &&
                   error.toString().contains('late result'),
             ),
           ),
@@ -529,8 +597,8 @@ void main() {
           throwsA(
             predicate<Object>(
               (error) =>
-                  error.toString().contains('timed-out "activate"') &&
-                  error.toString().contains('late result'),
+                  error.toString().contains('earlier "activate"') &&
+                  error.toString().contains('still running'),
             ),
           ),
           reason: 'the late first result must have no retry slot to satisfy',

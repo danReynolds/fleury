@@ -4,6 +4,12 @@
 
 Initial public release.
 
+- The semantic DOM updates in place: a structural change moves, inserts or
+  removes only the nodes it changed, and text keeps its node. A screen
+  reader no longer re-announces a live region (a log, a status) whenever a
+  node is added or removed anywhere; an appended log line is one insertion.
+  A patch that changes only content skips the full-tree semantic diff.
+
 - Pixel images respect later popup paint and preserve the underlying cell
   background through transparent and letterboxed areas. Outer-edge corner
   glyphs U+1FB7C–U+1FB7F render as connected cell-edge rectangles.

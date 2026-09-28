@@ -202,6 +202,37 @@
 - A terminal-only app no longer re-derives the screen geometry of every
   mounted `Semantics` node (every `Text`) on every paint pass; nothing reads
   it until a semantics consumer takes a full rebuild.
+- **Breaking:** a served app says why it could not send its semantic tree.
+  The encoder rejects a tree it cannot carry, most often two nodes that
+  derive the same id from one `Key` used under different unkeyed parents,
+  and the serve driver dropped it silently: the browser's accessibility tree
+  and agents over MCP saw nothing, or a tree frozen at the last one sent.
+  runApp now reports it as a developer warning, once per episode.
+  `RemoteSurfaceSink` gained `onDeveloperWarning`, which an implementation
+  must provide.
+- A served semantic action whose handler awaits UI no longer holds up the
+  actions behind it. The `await context.present(Confirm())` idiom in a
+  `Semantics` handler or an `AppCommand` finishes only once a later action
+  answers the dialog, and that action queued behind it forever. The queue
+  now waits for a handler for at most 500 ms, and the handler's RESULT goes
+  out when it finishes. Actions still apply in order when each finishes
+  within that; one slower than it can be overtaken by the next.
+- A framed app no longer floods its served accessibility tree and MCP with
+  its frame. The coverage fallback, which exposes painted text that has no
+  semantics, counted drawing glyphs (box drawing, block elements, braille,
+  sextants, octants) as text: a panel's frame became dozens of `│` nodes,
+  and every framed app kept the semantics pipeline off its fast paths,
+  walking the whole tree and scanning the whole screen every frame. Text
+  inside a frame still falls back, without the frame; an ASCII frame (`+`,
+  `-`, `|`) still reads as text.
+- A semantic patch that only changes content (labels, values, state; no
+  node added or removed, no child list changed) costs its peer about what it
+  changed. `SemanticsWireDecoder` rebuilds only those nodes and their
+  ancestors, reusing the rest of the tree, and names them in
+  `contentReplacements`; `SemanticTreeUpdate` no longer copies the node
+  maps. A one-label patch on a 2,253-node tree now decodes and updates its
+  owner in about 0.2 ms rather than 5.7 ms. A structural patch still
+  rebuilds the tree.
 - Debugger mode changes preserve application state and layout. Opening the
   shell starts a bounded 60-frame recording that continues while hidden;
   Rebuilds shows the worst frame's phase costs. Inspector reports scroll with

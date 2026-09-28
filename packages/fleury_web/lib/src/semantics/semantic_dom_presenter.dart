@@ -7,7 +7,10 @@ import 'package:web/web.dart' as web;
 ///
 /// This is the browser accessibility backstop for the retained DOM renderer.
 /// It consumes a full [SemanticTree] snapshot today, while retaining DOM
-/// elements by semantic id so stable nodes do not churn every frame. Retained
+/// elements and their text nodes by semantic id, and leaving each in place
+/// unless its position changes: a stable node is never detached, so a screen
+/// reader never re-announces a live region's unchanged content. (A node
+/// whose id repeats under two parents is the exception: it has one element.) Retained
 /// semantic ownership remains separate Phase 4 work behind the same
 /// [SemanticFramePresenter] boundary.
 final class SemanticDomPresenter
@@ -58,8 +61,7 @@ final class SemanticDomPresenter
     final stats = _SemanticDomMutationStats();
     final liveIds = <String>{};
     final rootElement = _nodeElement(tree.root, liveIds, stats);
-    _root.textContent = '';
-    _root.appendChild(rootElement);
+    _placeChildren(_root, [rootElement]);
     _sweepDetached(liveIds);
     return stats.toPresentationStats(update);
   }
@@ -154,22 +156,42 @@ final class SemanticDomPresenter
     _applyNativeControlAttributes(element, core, valueText);
     _syncActionListener(node, element);
 
-    final hostsContent = !_isNativeTextControl(core);
-    if (hostsContent) {
-      element.textContent = '';
-      _ownTextById[id] = '';
-      _textNodesById.remove(id);
-    }
-    final ownText = hostsContent ? _ownText(node, core, valueText) : null;
-    if (ownText != null && ownText.isNotEmpty) {
-      _setOwnText(id, element, ownText);
-    }
-    if (hostsContent) {
-      for (final child in node.children) {
-        element.appendChild(_nodeElement(child, liveIds, stats));
-      }
+    if (!_isNativeTextControl(core)) {
+      _setOwnText(id, element, _ownText(node, core, valueText) ?? '');
+      _placeChildren(element, [
+        ?_textNodesById[id],
+        for (final child in node.children) _nodeElement(child, liveIds, stats),
+      ]);
     }
     return element;
+  }
+
+  /// Makes [parent]'s children exactly [children], in order, moving only the
+  /// nodes out of place and removing the rest. Clearing and re-appending
+  /// would detach and re-insert every node, and a screen reader announces a
+  /// live region's re-inserted content as new.
+  void _placeChildren(web.Node parent, List<web.Node> children) {
+    final wanted = Set<web.Node>.identity()..addAll(children);
+    var cursor = parent.firstChild;
+    for (final child in children) {
+      // A node that leaves is removed where it stands. Inserting in front of
+      // it would move every wanted node after it.
+      while (cursor != null && !wanted.contains(cursor)) {
+        final stale = cursor;
+        cursor = cursor.nextSibling;
+        parent.removeChild(stale);
+      }
+      if (identical(child, cursor)) {
+        cursor = cursor!.nextSibling;
+      } else {
+        parent.insertBefore(child, cursor);
+      }
+    }
+    while (cursor != null) {
+      final stale = cursor;
+      cursor = cursor.nextSibling;
+      parent.removeChild(stale);
+    }
   }
 
   bool _canPresentIncrementally(SemanticTree tree, SemanticTreeUpdate update) {
@@ -641,12 +663,8 @@ final class SemanticDomPresenter
     final previousText = _ownTextById[id];
     final textNode = _textNodesById[id];
     if (nextText.isEmpty) {
-      if (textNode != null) {
-        textNode.remove();
-        _textNodesById.remove(id);
-      } else if (previousText != null && previousText.isNotEmpty) {
-        element.textContent = '';
-      }
+      textNode?.remove();
+      _textNodesById.remove(id);
       _ownTextById[id] = '';
       return;
     }
@@ -657,8 +675,9 @@ final class SemanticDomPresenter
       _ownTextById[id] = nextText;
       return;
     }
+    // Own text leads the node's children.
     final created = _document.createTextNode(nextText);
-    element.appendChild(created);
+    element.insertBefore(created, element.firstChild);
     _textNodesById[id] = created;
     _ownTextById[id] = nextText;
   }

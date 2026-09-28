@@ -260,4 +260,107 @@ void main() {
       'raw',
     );
   });
+
+  group('drawing glyphs are not text', () {
+    // A panel's frame, a gauge's bar, a plot's dots: read aloud, each is a
+    // run of glyph names, and counting them as uncovered text kept every
+    // framed app on the semantics pipeline's slow path.
+    SemanticTree regionAround(List<SemanticNode> children) => SemanticTree(
+      root: SemanticNode(
+        id: const SemanticNodeId('root'),
+        role: SemanticRole.app,
+        children: [
+          SemanticNode(
+            id: const SemanticNodeId('panel'),
+            role: SemanticRole.region,
+            label: 'Services',
+            bounds: CellRect.fromLTWH(0, 0, 9, 3),
+            children: children,
+          ),
+        ],
+      ),
+    );
+
+    CellBuffer framed(String inside) => CellBuffer(const CellSize(9, 3))
+      ..writeText(const CellOffset(0, 0), '╭───────╮')
+      ..writeText(const CellOffset(0, 1), '│$inside│')
+      ..writeText(const CellOffset(0, 2), '╰───────╯');
+
+    test('a frame around covered text leaves nothing uncovered', () {
+      final tree = regionAround([
+        SemanticNode(
+          id: const SemanticNodeId('text'),
+          role: SemanticRole.text,
+          label: 'hello',
+          value: 'hello',
+          bounds: CellRect.fromLTWH(1, 1, 5, 1),
+        ),
+      ]);
+
+      final result = applySemanticTextFallback(
+        tree: tree,
+        buffer: framed('hello  '),
+      );
+
+      expect(result.audit.hasUncoveredText, isFalse);
+      expect(result.audit.fallbackNodeCount, 0);
+    });
+
+    test('text inside a frame falls back without the frame', () {
+      final result = applySemanticTextFallback(
+        tree: regionAround(const []),
+        buffer: framed('hello  '),
+      );
+
+      final fallback = result.tree.nodes
+          .where((node) => node.state['semanticFallback'] == true)
+          .toList();
+      expect(fallback.map((node) => node.label), ['hello']);
+      expect(fallback.single.bounds, CellRect.fromLTWH(1, 1, 5, 1));
+      expect(result.audit.uncoveredCellCount, 5);
+    });
+
+    test('bars, braille plots and sextants are not text', () {
+      // Each range's first and last glyph included.
+      final buffer = CellBuffer(const CellSize(8, 3))
+        ..writeText(const CellOffset(0, 0), '─╿▀▁█░▒▟')
+        ..writeText(const CellOffset(0, 1), '\u2800⣤⣶⣿⡇⢸⠉⣿')
+        ..writeText(const CellOffset(0, 2), '🬀🬁🬂🬃🬄🬅\u{1FBEE}\u{1FBEF}');
+
+      final result = applySemanticTextFallback(
+        tree: const SemanticTree(
+          root: SemanticNode(
+            id: SemanticNodeId('root'),
+            role: SemanticRole.app,
+          ),
+        ),
+        buffer: buffer,
+      );
+
+      expect(result.audit.hasUncoveredText, isFalse);
+      expect(result.audit.fallbackNodeCount, 0);
+    });
+
+    test('octants are not text, and segmented digits are', () {
+      final buffer = CellBuffer(const CellSize(8, 2))
+        ..writeText(const CellOffset(0, 0), '\u{1CD00}\u{1CD01}\u{1CDE5}')
+        ..writeText(const CellOffset(0, 1), '\u{1FBF0}\u{1FBF9}');
+
+      final result = applySemanticTextFallback(
+        tree: const SemanticTree(
+          root: SemanticNode(
+            id: SemanticNodeId('root'),
+            role: SemanticRole.app,
+          ),
+        ),
+        buffer: buffer,
+      );
+
+      final fallback = result.tree.nodes
+          .where((node) => node.state['semanticFallback'] == true)
+          .toList();
+      expect(fallback.map((node) => node.bounds?.top), [1]);
+      expect(result.audit.uncoveredCellCount, 2);
+    });
+  });
 }

@@ -1,3 +1,5 @@
+import 'dart:collection' show UnmodifiableMapView, UnmodifiableSetView;
+
 import 'semantics.dart';
 
 /// Retains the last semantic snapshot and reports node-level changes.
@@ -91,6 +93,9 @@ final class SemanticsOwner {
 
 /// Node-level delta between two semantic tree snapshots.
 final class SemanticTreeUpdate {
+  // Views, not copies: every map and set handed in is built for this update
+  // or already immutable, and nothing writes it afterwards. Copying the node
+  // maps made even a one-node update O(tree).
   SemanticTreeUpdate._({
     required this.previous,
     required this.next,
@@ -99,15 +104,11 @@ final class SemanticTreeUpdate {
     required Set<SemanticNodeId> added,
     required Set<SemanticNodeId> removed,
     required Set<SemanticNodeId> updated,
-  }) : previousNodesById = Map<SemanticNodeId, SemanticNode>.unmodifiable(
-         previousNodesById,
-       ),
-       nextNodesById = Map<SemanticNodeId, SemanticNode>.unmodifiable(
-         nextNodesById,
-       ),
-       added = Set<SemanticNodeId>.unmodifiable(added),
-       removed = Set<SemanticNodeId>.unmodifiable(removed),
-       updated = Set<SemanticNodeId>.unmodifiable(updated);
+  }) : previousNodesById = UnmodifiableMapView(previousNodesById),
+       nextNodesById = UnmodifiableMapView(nextNodesById),
+       added = UnmodifiableSetView(added),
+       removed = UnmodifiableSetView(removed),
+       updated = UnmodifiableSetView(updated);
 
   factory SemanticTreeUpdate.diff({
     required SemanticTree? previous,
