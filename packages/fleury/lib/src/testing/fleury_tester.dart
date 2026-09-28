@@ -771,7 +771,9 @@ class FleuryTester {
     // With a ticker registered this is a no-op; the tick publishes instead.
     _publishFrameLatch();
     final buffer = CellBuffer(viewportSize);
+    _focusManager.recheckLiveAnswers();
     _pointerRouter.beginFrame();
+    _focusManager.beginFrame();
     try {
       _owner.renderFrame(_root!, buffer);
     } catch (_) {
@@ -779,6 +781,7 @@ class FleuryTester {
       rethrow;
     }
     _pointerRouter.endFrame();
+    _focusManager.endFrame();
     _closeFrame();
     return buffer;
   }
@@ -811,8 +814,14 @@ class FleuryTester {
     final buffer = render(size: size);
     final out = StringBuffer();
     for (var row = 0; row < buffer.size.rows; row++) {
+      // Trim by cell, not by text: a glyph that happens to equal the mark
+      // is content, and a mark of any length (even empty) trims the same.
+      var end = buffer.size.cols;
+      while (end > 0 && buffer.atColRow(end - 1, row).role == CellRole.empty) {
+        end--;
+      }
       final line = StringBuffer();
-      for (var col = 0; col < buffer.size.cols; col++) {
+      for (var col = 0; col < end; col++) {
         final cell = buffer.atColRow(col, row);
         switch (cell.role) {
           case CellRole.empty:
@@ -829,7 +838,7 @@ class FleuryTester {
             break;
         }
       }
-      out.writeln(_rstrip(line.toString(), emptyMark));
+      out.writeln(line.toString());
     }
     return out.toString();
   }
@@ -982,13 +991,14 @@ class FleuryTester {
     return registry;
   }
 
-  /// Latest command invocation result for the active command registry, if any.
+  /// The latest command invocation result visible from the focused context:
+  /// from its nearest command registry or any registry above it, the app's
+  /// included, whichever recorded last.
   CommandInvocationResult? get lastCommandResult {
     _assertNotDisposed('lastCommandResult');
     final buildContext = _defaultCommandContext(null);
     if (buildContext == null) return null;
-    return FleuryApp.maybeOf(buildContext)?.commands.lastResult ??
-        CommandRegistryScope.maybeOf(buildContext)?.lastResult;
+    return CommandRegistryScope.maybeOf(buildContext)?.latestVisibleResult;
   }
 
   /// Invokes a command by stable ID and flushes builds triggered by it.
@@ -1227,12 +1237,4 @@ final class _CommandResolution {
 
   final AppCommand command;
   final CommandRegistry registry;
-}
-
-String _rstrip(String s, String mark) {
-  var end = s.length;
-  while (end > 0 && s.substring(end - mark.length, end) == mark) {
-    end -= mark.length;
-  }
-  return s.substring(0, end);
 }

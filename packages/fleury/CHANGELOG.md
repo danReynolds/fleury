@@ -134,6 +134,58 @@
   (KP 4 with NumLock off, and Left) are tracked as two keys.
 - A letter typed after an abandoned key chord reaches `KeyDetector`s, such
   as a list's type-ahead, on kitty-protocol terminals and in the browser.
+- A command's shortcut asks the command's `visible` and `enabled`
+  predicates when its key is pressed, as the palette, semantics, and
+  `invoke` do. A command that becomes enabled after its scope built fires on
+  its shortcut, and one that becomes disabled lets its key through to an
+  outer binding. A hint bar asks them too: the frame after an answer changes
+  shows the change, even when nothing rebuilt for it.
+- Esc at a navigator's root, where there is nothing to pop, reaches what
+  binds Esc above the navigator: FleuryApp's own Esc commands, the Toaster's
+  Esc dismiss, and an outer navigator. A blocking `PopScope` at the root
+  still intercepts it.
+- **Breaking:** `StatusController` keeps what FleuryApp derives from its
+  `status` builder and extensions apart from items an app or command sets.
+  Status a command reports through `context.status` survives the command's
+  completion, and a later command no longer wipes it. `put` and `remove` set
+  and clear one item beside the items others set. `update` replaces only the
+  set items, so `items` no longer equals what was last passed to it; don't
+  write `items` back through `update`, which would freeze the derived items
+  at their current values. Use `put`.
+- A command that throws is reported. From a shortcut, a button, or a palette
+  row it reaches runApp's error overlay, as a throwing key binding does.
+  `CommandRegistry.dispatch` and `dispatchCommand` start a command this way
+  for custom command surfaces and return whether it started; one that
+  throws before it returns throws from them, and a later failure of its
+  future reaches the zone.
+- A semantic action reports what it did. A handler declines by throwing the
+  new `SemanticActionDeclined`, which reports `unsupported` rather than
+  `completed`.
+  - A command node or a status item runs its command: one that failed
+    reports `failed`, and one that is disabled, hidden or gone reports
+    `unsupported`. `CommandRegistry.invokeFromSemantics` and
+    `invokeCommandFromSemantics` do the same for custom semantic handlers.
+  - A control's `activate` is a press, as Enter or a click is: nothing waits
+    on the work it starts, whose failure reaches the error overlay. A press
+    that throws reports `failed`, a `CommandButton` or palette row whose
+    command throws included; one whose command turned disabled, hidden or
+    gone since it built reports `unsupported`, and a palette stays open.
+  - A route dismissal a `PopScope` refuses reports `unsupported`.
+- runApp stops on a storm of uncaught errors only when they recur with no
+  input between them. Holding a key whose command or async handler fails,
+  typing fast into a field whose async handler fails, or an agent repeating
+  such an action, reported 24 errors inside three seconds and ended the
+  session. Bare pointer motion doesn't count as input, so moving the mouse no
+  longer keeps a genuine error loop alive.
+- `FleuryTester.lastCommandResult` and the app node's `lastCommandId` are
+  the latest command visible from the focused context, scoped or app-level.
+  Both kept reporting the app's last command after a screen command ran.
+- `NavigatorState.topScreen` is the screen widget of the top route, so a
+  screen that closes itself can tell being presented from being shown
+  inline.
+- `FleuryTester.renderToString` trims each row's trailing empty cells rather
+  than trailing copies of the mark. An empty mark no longer hangs the test,
+  a mark of several characters works, and a glyph equal to the mark stays.
 - Debugger mode changes preserve application state and layout. Opening the
   shell starts a bounded 60-frame recording that continues while hidden;
   Rebuilds shows the worst frame's phase costs. Inspector reports scroll with

@@ -393,6 +393,55 @@ void main() {
       },
     );
 
+    test('repeated peer actions whose work fails keep the session', () async {
+      // An agent or assistive technology activating a control whose work
+      // fails asynchronously, faster than runApp's error-storm limit (24 in
+      // three seconds). Each action is input, like a key: the errors stop
+      // when the actions do, so they are reported and the session survives.
+      final transport = _FakeTransport();
+      final driver = RemoteTerminalDriver(transport);
+      Object? sessionError;
+      var sessionEnded = false;
+      scheduleMicrotask(() => transport.emit(_init));
+      final done =
+          runApp(
+            Semantics(
+              id: const SemanticNodeId('btn:save'),
+              role: SemanticRole.button,
+              label: 'Save',
+              actions: const {SemanticAction.activate},
+              onAction: (_) {
+                unawaited(Future<void>(() => throw StateError('disk full')));
+              },
+              child: const Text('Save'),
+            ),
+            driver: driver,
+            requireInteractiveTerminal: false,
+          ).then<void>(
+            (_) => sessionEnded = true,
+            onError: (Object error) {
+              sessionError = error;
+              sessionEnded = true;
+            },
+          );
+      await Future<void>.delayed(const Duration(milliseconds: 10));
+
+      for (var i = 0; i < 30; i++) {
+        transport.emit(
+          const SemanticActionFrame(
+            SemanticNodeId('btn:save'),
+            SemanticAction.activate,
+          ),
+        );
+        await Future<void>.delayed(const Duration(milliseconds: 2));
+      }
+      await Future<void>.delayed(const Duration(milliseconds: 20));
+
+      expect(sessionEnded, isFalse, reason: 'ended with $sessionError');
+      await transport.disconnect();
+      await done;
+    });
+
     test('a peer SEMANTIC_ACTION activates the live node', () async {
       final transport = _FakeTransport();
       final driver = RemoteTerminalDriver(transport);

@@ -1,5 +1,3 @@
-import 'dart:async' show unawaited;
-
 import 'package:fleury/fleury_core.dart';
 
 /// A [Button] backed by an [AppCommand] in the active command registry.
@@ -67,9 +65,15 @@ class CommandButton extends StatelessWidget {
       focusNode: focusNode,
       autofocus: autofocus,
       style: style,
+      // Nothing waits on the command: a failure reaches runApp's error
+      // overlay. One that turned disabled or hidden since this built
+      // declines, which a semantic activation reports `unsupported` and a
+      // key or click ignores.
       onPressed: enabled
           ? () {
-              unawaited(registry.invoke(command, buildContext: context));
+              if (!registry.dispatch(command, buildContext: context)) {
+                throw const SemanticActionDeclined();
+              }
             }
           : null,
     );

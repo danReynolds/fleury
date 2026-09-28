@@ -1,4 +1,4 @@
-import 'dart:async' show unawaited;
+import 'dart:async' show Completer, runZonedGuarded, unawaited;
 
 import 'package:fleury/fleury.dart';
 import 'package:fleury_test/fleury_test.dart';
@@ -59,6 +59,17 @@ List<SemanticNode> _paletteCommandRows(FleuryTester tester) {
 }
 
 /// Pumps out a dismissal transition so the route is fully removed.
+/// The errors [body] leaves uncaught. A throw from the body itself fails the
+/// test instead of hanging it.
+Future<List<Object>> _uncaught(Future<void> Function() body) {
+  final errors = <Object>[];
+  final done = Completer<List<Object>>();
+  runZonedGuarded(() {
+    body().then((_) => done.complete(errors), onError: done.completeError);
+  }, (error, _) => errors.add(error));
+  return done.future;
+}
+
 Future<void> _settleClose(FleuryTester tester) async {
   tester.pump(const Duration(milliseconds: 300));
   await Future<void>.delayed(Duration.zero);
@@ -156,6 +167,22 @@ void main() {
     expect(result.status, SemanticActionInvocationStatus.notFound);
   });
 
+  testWidgets('submit with no command to run is declined', (tester) async {
+    tester.pumpWidget(Navigator(home: _Capture((c) => ctx = c)));
+    _open(tester, ctx, commands((_) {}));
+    tester.type('zzz'); // matches nothing
+    tester.pump();
+
+    final result = await tester.invokeSemanticAction(
+      SemanticAction.submit,
+      role: WidgetRoles.commandPalette,
+      allowFailure: true,
+    );
+
+    expect(result.status, SemanticActionInvocationStatus.unsupported);
+    expect(Navigator.of(ctx).depth, 2, reason: 'the palette stays open');
+  });
+
   testWidgets('repeated palette cycles do not retain stale modal semantics', (
     tester,
   ) async {
@@ -190,7 +217,12 @@ void main() {
     expect(palette.label, 'Command palette');
     expect(palette.value, '');
     expect(palette.actions, contains(SemanticAction.submit));
-    expect(palette.actions, contains(SemanticAction.dismiss));
+    // Dismissal belongs to the route that presents the palette.
+    expect(palette.actions, isNot(contains(SemanticAction.dismiss)));
+    expect(
+      tree.single(role: SemanticRole.route, label: 'CommandPalette').actions,
+      contains(SemanticAction.dismiss),
+    );
     expect(palette.state.collectionRowCount, 3);
     expect(palette.state.selectedKey, 0);
 
@@ -268,12 +300,57 @@ void main() {
     ]);
 
     await tester
-        .target(role: WidgetRoles.commandPalette)
+        .target(role: SemanticRole.route, label: 'CommandPalette')
         .perform(SemanticAction.dismiss);
 
     await _settleClose(tester);
     expect(ran, isFalse);
     expect(Navigator.of(ctx).depth, 1);
+  });
+
+  group('shown inline on a page', () {
+    Future<(List<String>, NavigatorState)> openInline(
+      FleuryTester tester,
+    ) async {
+      final ran = <String>[];
+      tester.pumpWidget(Navigator(home: _Capture((c) => ctx = c)));
+      unawaited(
+        Navigator.of(ctx).push<void>(
+          Column(
+            children: [
+              const Text('settings'),
+              CommandPalette(commands: commands(ran.add)),
+            ],
+          ),
+        ),
+      );
+      tester.pump(const Duration(milliseconds: 300));
+      tester.render();
+      return (ran, Navigator.of(ctx));
+    }
+
+    testWidgets('running a row leaves the page open', (tester) async {
+      final (ran, navigator) = await openInline(tester);
+      expect(navigator.depth, 2);
+
+      tester.type('save');
+      tester.pump();
+      tester.sendKey(const KeyEvent(KeyCode.enter));
+      await _settleClose(tester);
+
+      expect(ran, ['save']);
+      expect(navigator.depth, 2, reason: 'the settings page is still open');
+    });
+
+    testWidgets('the palette offers no dismiss of the page', (tester) async {
+      await openInline(tester);
+
+      final palette = tester.semantics().single(
+        role: WidgetRoles.commandPalette,
+      );
+
+      expect(palette.actions, isNot(contains(SemanticAction.dismiss)));
+    });
   });
 
   group('edges', () {
@@ -410,6 +487,139 @@ void main() {
       expect(calls, ['save']);
       await _settleClose(tester);
       expect(Navigator.of(ctx).depth, 1);
+    });
+
+    // The app's Save command, with the palette open over its page.
+    void openSave(FleuryTester tester, AppCommand save) {
+      tester.pumpWidget(
+        FleuryApp(
+          title: 'App',
+          commands: [save],
+          child: Navigator(home: _Capture((c) => ctx = c)),
+        ),
+      );
+      _openRegistryPalette(tester, ctx);
+    }
+
+    AppCommand save(
+      void Function() run, {
+      bool Function()? enabled,
+      bool fails = false,
+    }) => AppCommand(
+      id: const CommandId('file.save'),
+      title: 'Save File',
+      enabled: (_) => enabled?.call() ?? true,
+      run: (_) {
+        run();
+        return fails ? Future<void>.error(StateError('disk full')) : null;
+      },
+    );
+
+    // The app lists the same command; act on the palette's row.
+    SemanticNode paletteRow(FleuryTester tester, String label) => tester
+        .semantics()
+        .single(role: WidgetRoles.commandPalette)
+        .selfAndDescendants
+        .firstWhere(
+          (node) => node.role == SemanticRole.command && node.label == label,
+        );
+
+    Future<SemanticActionInvocationResult> pressRow(FleuryTester tester) =>
+        tester.invokeSemanticAction(
+          SemanticAction.activate,
+          id: paletteRow(tester, 'Save File').id,
+          allowFailure: true,
+        );
+
+    testWidgets('Enter on a row whose command throws throws there', (
+      tester,
+    ) async {
+      openSave(tester, save(() => throw StateError('disk full')));
+      tester.type('save');
+      tester.pump();
+
+      // As any throwing key handler does; runApp shows it in its overlay.
+      expect(
+        () => tester.sendKey(const KeyEvent(KeyCode.enter)),
+        throwsStateError,
+      );
+    });
+
+    testWidgets('a row whose command fails later is reported', (tester) async {
+      final errors = await _uncaught(() async {
+        openSave(tester, save(() {}, fails: true));
+        tester.type('save');
+        tester.pump();
+        tester.sendKey(const KeyEvent(KeyCode.enter));
+        await Future<void>.delayed(Duration.zero);
+        await _settleClose(tester);
+      });
+
+      expect(errors, [isA<StateError>()]);
+      expect(Navigator.of(ctx).depth, 1);
+    });
+
+    testWidgets('a semantic press on a row whose command throws fails', (
+      tester,
+    ) async {
+      openSave(tester, save(() => throw StateError('disk full')));
+
+      final result = await pressRow(tester);
+
+      expect(result.status, SemanticActionInvocationStatus.failed);
+      expect(result.error, isA<StateError>());
+    });
+
+    testWidgets('a semantic press on a row does not wait on its command', (
+      tester,
+    ) async {
+      SemanticActionInvocationResult? result;
+      final errors = await _uncaught(() async {
+        openSave(tester, save(() {}, fails: true));
+        result = await pressRow(tester);
+        await Future<void>.delayed(Duration.zero);
+        await _settleClose(tester);
+      });
+
+      // As with Enter, its later failure reaches the zone (runApp's error
+      // overlay).
+      expect(result?.status, SemanticActionInvocationStatus.completed);
+      expect(errors, [isA<StateError>()]);
+      expect(Navigator.of(ctx).depth, 1);
+    });
+
+    testWidgets('a semantic press on a row whose command turned disabled is '
+        'declined, and the palette stays open', (tester) async {
+      var allowed = true;
+      var runs = 0;
+      openSave(tester, save(() => runs++, enabled: () => allowed));
+      allowed = false; // nothing rebuilds the palette
+
+      final result = await pressRow(tester);
+      await _settleClose(tester);
+
+      expect(result.status, SemanticActionInvocationStatus.unsupported);
+      expect(runs, 0);
+      expect(Navigator.of(ctx).depth, 2);
+    });
+
+    testWidgets('Enter on a row whose command turned disabled does nothing, '
+        'and the palette stays open', (tester) async {
+      var allowed = true;
+      var runs = 0;
+      final errors = await _uncaught(() async {
+        openSave(tester, save(() => runs++, enabled: () => allowed));
+        allowed = false; // nothing rebuilds the palette
+        tester.type('save');
+        tester.pump();
+        tester.sendKey(const KeyEvent(KeyCode.enter));
+        await Future<void>.delayed(Duration.zero);
+        await _settleClose(tester);
+      });
+
+      expect(runs, 0);
+      expect(errors, isEmpty);
+      expect(Navigator.of(ctx).depth, 2);
     });
 
     testWidgets('filters by stable command id', (tester) async {
@@ -633,7 +843,7 @@ void main() {
             tester.sendKey(const KeyEvent(KeyCode.escape));
           } else {
             await tester
-                .target(role: WidgetRoles.commandPalette)
+                .target(role: SemanticRole.route, label: 'CommandPalette')
                 .perform(SemanticAction.dismiss);
           }
           await _settleClose(tester);

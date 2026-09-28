@@ -2104,9 +2104,11 @@ Future<_OverlayCommandPaletteJourneySample> _runOverlayCommandPaletteJourney(
       } else if (cycle % 5 == 3) {
         tester.sendKey(const KeyEvent(KeyCode.escape));
       } else {
+        // Dismissal belongs to the route that presents the palette.
         final result = await tester.invokeSemanticAction(
           SemanticAction.dismiss,
-          role: WidgetRoles.commandPalette,
+          role: SemanticRole.route,
+          label: 'CommandPalette',
         );
         if (!result.completed) {
           actionFailureCount += 1;
@@ -2300,7 +2302,8 @@ Future<_DisabledOverlayProbe> _runDisabledOverlayProbe(
 
   await tester.invokeSemanticAction(
     SemanticAction.dismiss,
-    role: WidgetRoles.commandPalette,
+    role: SemanticRole.route,
+    label: 'CommandPalette',
   );
   await Future<void>.delayed(Duration.zero);
   tester.pump(const Duration(milliseconds: 300));

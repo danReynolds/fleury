@@ -28,14 +28,14 @@
 | C | medium | Shift+Backspace (also Shift+Delete, Shift+Enter, Ctrl+Backspace) does nothing in TextInput/TextArea on kitty-protocol terminals and in the browser | Fixed |
 | C | medium | Tab in an overflowing ScrollView form skips hidden fields and never scrolls to them | Fixed |
 | C | medium | TextArea re-measures the whole document on every keystroke and caret move, then throws the result away | Fixed |
-| D | high | Command shortcuts freeze `enabled`/`visible` at build time: the shortcut is dead or swallows the key while every other surface says the command is enabled | Open |
-| D | high | Opening the debug panel (Ctrl+G -> docked, or Esc fullscreen -> docked) unmounts and re-creates the whole app: all State lost and navigation reset | Fixed: #273 keeps the app at one element path; this branch fixes the GlobalKey move into a LayoutBuilder underneath |
-| D | high | Root route consumes Esc even when nothing can pop, so FleuryApp Esc commands, the Toaster's Esc-dismiss and app-level Esc bindings never fire | Open |
-| D | medium | A status update made by a command is wiped when the command completes, and any later command wipes manual updates | Open |
-| D | medium | AppCommand.run exceptions are silently swallowed on every interactive path, and semantic activation reports `completed` for a failed command | Open |
-| D | medium | Dialog's semantic dismiss calls pop() unconditionally, bypassing barrierDismissible:false and PopScope guards | Open |
-| D | medium | FleuryTester.lastCommandResult returns the app registry's stale result instead of the latest (scoped) invocation, so tests assert on the wrong command | Open |
-| D | low | renderToString(emptyMark: '') hangs the test process forever, and multi-code-unit marks throw RangeError | Open |
+| D | high | Command shortcuts freeze `enabled`/`visible` at build time: the shortcut is dead or swallows the key while every other surface says the command is enabled | Fixed |
+| D | high | Opening the debug panel (Ctrl+G -> docked, or Esc fullscreen -> docked) unmounts and re-creates the whole app: all State lost and navigation reset | Fixed: #273 keeps the app at one element path; Batch A (#274) fixes the GlobalKey move into a LayoutBuilder underneath |
+| D | high | Root route consumes Esc even when nothing can pop, so FleuryApp Esc commands, the Toaster's Esc-dismiss and app-level Esc bindings never fire | Fixed |
+| D | medium | A status update made by a command is wiped when the command completes, and any later command wipes manual updates | Fixed |
+| D | medium | AppCommand.run exceptions are silently swallowed on every interactive path, and semantic activation reports `completed` for a failed command | Fixed |
+| D | medium | Dialog's semantic dismiss calls pop() unconditionally, bypassing barrierDismissible:false and PopScope guards | Fixed |
+| D | medium | FleuryTester.lastCommandResult returns the app registry's stale result instead of the latest (scoped) invocation, so tests assert on the wrong command | Fixed |
+| D | low | renderToString(emptyMark: '') hangs the test process forever, and multi-code-unit marks throw RangeError | Fixed |
 | E | high | DataTable stops virtualizing under an unbounded height (e.g. as a Column child): every row is built each frame and the cursor moves off-screen | Decision pending: unbounded-height DataTable |
 | E | high | FileBrowser strands the keyboard in an empty or unreadable directory: Left/Backspace go dead and there is no way back up | Open |
 | E | high | Image re-decodes on every parent rebuild and resamples the full source on every paint (19–90 ms/frame); animated images restart and trip the one-ticker assert | Open |

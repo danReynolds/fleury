@@ -1,4 +1,4 @@
-import 'dart:async' show FutureOr;
+import 'dart:async' show Completer, FutureOr, runZonedGuarded;
 
 import 'package:fleury/fleury.dart';
 import 'package:fleury_test/fleury_test.dart';
@@ -35,6 +35,17 @@ Widget _host(
     registry: registry,
     child: CommandButton(command: _inspect, label: label, autofocus: autofocus),
   );
+}
+
+/// The errors [body] leaves uncaught. A throw from the body itself fails the
+/// test instead of hanging it.
+Future<List<Object>> _uncaught(Future<void> Function() body) {
+  final errors = <Object>[];
+  final done = Completer<List<Object>>();
+  runZonedGuarded(() {
+    body().then((_) => done.complete(errors), onError: done.completeError);
+  }, (error, _) => errors.add(error));
+  return done.future;
 }
 
 String _text(FleuryTester tester) => tester
@@ -121,6 +132,209 @@ void main() {
     expect(CommandRegistryScope.of(buildContext!), same(registry));
     expect(registry.lastResult?.status, CommandInvocationStatus.completed);
     expect(registry.lastResult?.command?.id, _inspect);
+  });
+
+  testWidgets('a command that throws when pressed throws there', (tester) {
+    final registry = _registry(
+      _command(run: (_) => throw StateError('registry offline')),
+    );
+    addTearDown(registry.dispose);
+    tester.pumpWidget(_host(registry, autofocus: true));
+
+    // As any throwing key handler does; runApp shows it in its overlay.
+    expect(
+      () => tester.sendKey(const KeyEvent(KeyCode.enter)),
+      throwsStateError,
+    );
+    expect(registry.lastResult?.status, CommandInvocationStatus.failed);
+  });
+
+  testWidgets('a command that fails after the press is reported', (
+    tester,
+  ) async {
+    final registry = _registry(
+      _command(run: (_) async => throw StateError('registry offline')),
+    );
+    addTearDown(registry.dispose);
+
+    final errors = await _uncaught(() async {
+      tester.pumpWidget(_host(registry, autofocus: true));
+      tester.sendKey(const KeyEvent(KeyCode.enter));
+      await Future<void>.delayed(Duration.zero);
+    });
+
+    expect(errors, [isA<StateError>()]);
+    expect(registry.lastResult?.status, CommandInvocationStatus.failed);
+  });
+
+  testWidgets('a semantic press on a command that throws fails', (
+    tester,
+  ) async {
+    final registry = _registry(
+      _command(run: (_) => throw StateError('registry offline')),
+    );
+    addTearDown(registry.dispose);
+    tester.pumpWidget(_host(registry));
+
+    final result = await tester.invokeSemanticAction(
+      SemanticAction.activate,
+      role: SemanticRole.button,
+      allowFailure: true,
+    );
+
+    expect(result.status, SemanticActionInvocationStatus.failed);
+    expect(result.error, isA<StateError>());
+  });
+
+  testWidgets('a semantic press does not wait on the command', (tester) async {
+    final registry = _registry(
+      _command(run: (_) async => throw StateError('registry offline')),
+    );
+    addTearDown(registry.dispose);
+    SemanticActionInvocationResult? result;
+
+    final errors = await _uncaught(() async {
+      tester.pumpWidget(_host(registry));
+      result = await tester.invokeSemanticAction(
+        SemanticAction.activate,
+        role: SemanticRole.button,
+        allowFailure: true,
+      );
+      await Future<void>.delayed(Duration.zero);
+    });
+
+    // As with a key, its later failure reaches the zone (runApp's error
+    // overlay).
+    expect(result?.status, SemanticActionInvocationStatus.completed);
+    expect(errors, [isA<StateError>()]);
+    expect(registry.lastResult?.status, CommandInvocationStatus.failed);
+  });
+
+  testWidgets('a semantic press on a command disabled since the build is '
+      'declined', (tester) async {
+    var allowed = true;
+    var runs = 0;
+    final registry = CommandRegistry(
+      commands: [
+        AppCommand(
+          id: _inspect,
+          title: 'Inspect package',
+          enabled: (_) => allowed,
+          run: (_) => runs++,
+        ),
+      ],
+    );
+    addTearDown(registry.dispose);
+    tester.pumpWidget(_host(registry));
+    allowed = false; // nothing rebuilds the button
+
+    final result = await tester.invokeSemanticAction(
+      SemanticAction.activate,
+      role: SemanticRole.button,
+      allowFailure: true,
+    );
+
+    expect(result.status, SemanticActionInvocationStatus.unsupported);
+    expect(runs, 0);
+  });
+
+  testWidgets('a semantic press on a command hidden since the build is '
+      'declined', (tester) async {
+    var shown = true;
+    var runs = 0;
+    final registry = CommandRegistry(
+      commands: [
+        AppCommand(
+          id: _inspect,
+          title: 'Inspect package',
+          visible: (_) => shown,
+          run: (_) => runs++,
+        ),
+      ],
+    );
+    addTearDown(registry.dispose);
+    tester.pumpWidget(_host(registry));
+    shown = false; // nothing rebuilds the button
+
+    final result = await tester.invokeSemanticAction(
+      SemanticAction.activate,
+      role: SemanticRole.button,
+      allowFailure: true,
+    );
+
+    expect(result.status, SemanticActionInvocationStatus.unsupported);
+    expect(runs, 0);
+  });
+
+  testWidgets('Enter on a command disabled since the build is a no-op', (
+    tester,
+  ) async {
+    var allowed = true;
+    var runs = 0;
+    final registry = CommandRegistry(
+      commands: [
+        AppCommand(
+          id: _inspect,
+          title: 'Inspect package',
+          enabled: (_) => allowed,
+          run: (_) => runs++,
+        ),
+      ],
+    );
+    addTearDown(registry.dispose);
+
+    final errors = await _uncaught(() async {
+      tester.pumpWidget(_host(registry, autofocus: true));
+      allowed = false; // nothing rebuilds the button
+      tester.sendKey(const KeyEvent(KeyCode.enter));
+      await Future<void>.delayed(Duration.zero);
+    });
+
+    expect(runs, 0);
+    expect(errors, isEmpty);
+  });
+
+  testWidgets('dispatch reports a command that cannot run instead of '
+      'throwing', (tester) async {
+    // A custom command surface (a key binding, a click handler) can call
+    // dispatch without guarding it.
+    var allowed = false;
+    var runs = 0;
+    final registry = CommandRegistry(
+      commands: [
+        AppCommand(
+          id: _inspect,
+          title: 'Inspect package',
+          enabled: (_) => allowed,
+          run: (_) => runs++,
+        ),
+      ],
+    );
+    addTearDown(registry.dispose);
+    final started = <bool>[];
+    tester.pumpWidget(
+      CommandRegistryScope(
+        registry: registry,
+        child: KeyBindings(
+          bindings: [
+            KeyBinding(
+              KeySequence.ctrl.i,
+              onTrigger: (_) => started.add(registry.dispatch(_inspect)),
+            ),
+          ],
+          child: const Focus(autofocus: true, child: Text('packages')),
+        ),
+      ),
+    );
+    const ctrlI = KeyEvent(KeyCode.i, modifiers: {KeyModifier.ctrl});
+
+    tester.sendKey(ctrlI);
+    allowed = true;
+    tester.sendKey(ctrlI);
+
+    expect(started, [false, true]);
+    expect(runs, 1);
+    expect(registry.dispatch(const CommandId('packages.missing')), isFalse);
   });
 
   testWidgets('rebuilds when the registry command changes', (tester) async {

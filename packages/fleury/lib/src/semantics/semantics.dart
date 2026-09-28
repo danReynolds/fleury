@@ -334,7 +334,24 @@ enum SemanticAction {
   setValue,
 }
 
+/// Carries out a [SemanticAction] on a node.
+///
+/// Returning reports the action `completed` and throwing reports it
+/// `failed`. A handler that did not carry the action out — a command that is
+/// disabled or gone, a dismissal a `PopScope` refused — throws
+/// [SemanticActionDeclined], which reports it `unsupported`.
 typedef SemanticActionCallback = FutureOr<void> Function(SemanticAction action);
+
+/// Thrown by a [SemanticActionCallback] that did not carry out its action,
+/// so the invocation reports `unsupported` instead of `completed`: an agent
+/// or assistive technology is not told that a disabled command ran or that a
+/// refused dismissal happened.
+final class SemanticActionDeclined implements Exception {
+  const SemanticActionDeclined();
+
+  @override
+  String toString() => 'SemanticActionDeclined';
+}
 
 /// Carries a [SemanticAction.setValue] payload to the node it targets. The
 /// payload is a JSON-friendly scalar (string, num, bool, or null); a widget
@@ -1820,7 +1837,11 @@ final class SemanticsElement extends ComponentElement
     final callback = widget.onAction;
     if (callback == null || target.id != _nodeId) return false;
     if (!widget.enabled || !widget.actions.contains(action)) return false;
-    await callback(action);
+    try {
+      await callback(action);
+    } on SemanticActionDeclined {
+      return false;
+    }
     return true;
   }
 

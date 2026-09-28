@@ -485,6 +485,54 @@ class FocusManager extends Notifier {
     _frameInputAborted = false;
   }
 
+  /// What each hint surface — an element that resolved the active bindings
+  /// in its build — saw the live bindings ([KeyBinding.isLive]) answer.
+  final Map<Element, List<(KeyBinding, bool)>> _liveAnswers =
+      Map<Element, List<(KeyBinding, bool)>>.identity();
+
+  /// Framework-internal: records what the live bindings answered a
+  /// resolution made in [Element.current]'s build. A resolution outside a
+  /// build — a key's dispatch, a test reading the bindings — records
+  /// nothing: no surface shows its answers.
+  @internal
+  void recordLiveAnswers(List<(KeyBinding, bool)>? answers) {
+    final surface = Element.current;
+    if (surface == null) return;
+    if (answers == null || answers.isEmpty) {
+      _liveAnswers.remove(surface);
+    } else {
+      _liveAnswers[surface] = answers;
+    }
+  }
+
+  /// Framework-internal: asks the live bindings again, and notifies when one
+  /// answers differently from what a hint surface showed, so the surfaces
+  /// rebuild. A live binding's predicate reads app state that nothing
+  /// rebuilds its scope for. The frame driver calls this at the start of
+  /// every frame, before deciding the frame has nothing to do. A surface
+  /// that left the tree is forgotten, and with it the predicates it asked.
+  @internal
+  void recheckLiveAnswers() {
+    if (_disposed || _liveAnswers.isEmpty) return;
+    var changed = false;
+    _liveAnswers.removeWhere((surface, answers) {
+      if (!surface.mounted) return true;
+      for (final (binding, answer) in answers) {
+        bool now;
+        try {
+          now = binding.enabled;
+        } catch (_) {
+          // The surface's own resolution reports it when it rebuilds.
+          now = !answer;
+        }
+        // The surface records afresh when it rebuilds.
+        if (now != answer) return changed = true;
+      }
+      return false;
+    });
+    if (changed) notify();
+  }
+
   /// Commits the current focus paint transaction.
   @internal
   void endFrame() {
