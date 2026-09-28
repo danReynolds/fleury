@@ -25,6 +25,6 @@ its semantic tree.
   disconnect/SIGINT/SIGTERM.
 - A handler still running past the two-second result wait, most often one
   that presented a dialog and awaits its answer, reports `status: pending`
-  with the UI the action opened. Only a repeat of that action on that node
-  waits for its late result; every other action goes ahead, so an agent can
-  answer the dialog.
+  with the UI the action opened. A repeat of that action on that node is
+  refused (`action_busy`) until the earlier one finishes; every other action
+  goes ahead, so an agent can answer the dialog.

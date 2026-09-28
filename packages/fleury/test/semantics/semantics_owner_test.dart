@@ -2,6 +2,28 @@ import 'package:fleury/fleury_host.dart';
 import 'package:test/test.dart';
 
 void main() {
+  test('an update is read-only, for retained and full diffs alike', () {
+    final owner = SemanticsOwner();
+    owner.update(_tree(label: 'Save'));
+    final full = owner.update(_tree(label: 'Saved'));
+    final retained = owner.updateRetainedNodes(
+      next: _tree(label: 'Save'),
+      replacements: {
+        const SemanticNodeId('button'): _tree(
+          label: 'Save',
+        ).nodeById(const SemanticNodeId('button'))!,
+      },
+    )!;
+
+    for (final update in [full, retained]) {
+      expect(() => update.nextNodesById.clear(), throwsUnsupportedError);
+      expect(() => update.previousNodesById.clear(), throwsUnsupportedError);
+      expect(() => update.updated.clear(), throwsUnsupportedError);
+      expect(() => update.added.clear(), throwsUnsupportedError);
+      expect(() => update.removed.clear(), throwsUnsupportedError);
+    }
+  });
+
   test('SemanticsOwner reports first snapshot as added nodes', () {
     final owner = SemanticsOwner();
     final update = owner.update(_tree(label: 'Save'));

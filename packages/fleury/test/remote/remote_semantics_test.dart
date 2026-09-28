@@ -222,6 +222,214 @@ void main() {
         expect(rerooted.nodeById(const SemanticNodeId('status')), isNull);
       });
 
+      List<int> rawFrame(Map<String, Object?> body) =>
+          utf8.encode(jsonEncode({'v': semanticsWireVersion, ...body}));
+
+      Map<String, Object?> node(
+        String id, {
+        String role = 'text',
+        String? label,
+        List<String>? childIds,
+      }) => {'id': id, 'role': role, 'label': ?label, 'childIds': ?childIds};
+
+      // The tree a decoder primed with [full] and fed [patches] must equal
+      // the one a fresh decoder builds from [expected] as one full frame.
+      void expectLikeFull(
+        Map<String, Object?> full,
+        List<Map<String, Object?>> patches,
+        Map<String, Object?> expected,
+      ) {
+        final decoder = SemanticsWireDecoder()..apply(rawFrame(full));
+        SemanticTree? tree;
+        for (final patch in patches) {
+          tree = decoder.apply(rawFrame(patch));
+        }
+        expect(
+          _canonical(tree!),
+          _canonical(SemanticsWireDecoder().apply(rawFrame(expected))!),
+        );
+      }
+
+      test('a child swapped between two parents, then relabeled, lands under '
+          'its new parent', () {
+        Map<String, Object?> tree(String xLabel, {bool swapped = false}) => {
+          'mode': 'full',
+          'root': 'root',
+          'nodes': [
+            node('root', role: 'app', childIds: ['a', 'b']),
+            node('a', role: 'region', childIds: [swapped ? 'y' : 'x']),
+            node('b', role: 'region', childIds: [swapped ? 'x' : 'y']),
+            node('x', label: xLabel),
+            node('y', label: 'Y'),
+          ],
+        };
+
+        expectLikeFull(tree('X'), [
+          {
+            'mode': 'patch',
+            'set': [
+              node('a', role: 'region', childIds: ['y']),
+              node('b', role: 'region', childIds: ['x']),
+            ],
+          },
+          {
+            'mode': 'patch',
+            'set': [node('x', label: 'X2')],
+          },
+        ], tree('X2', swapped: true));
+      });
+
+      test('a repeated leaf changes under every parent that lists it', () {
+        Map<String, Object?> tree(String label) => {
+          'mode': 'full',
+          'root': 'root',
+          'nodes': [
+            node('root', role: 'app', childIds: ['a', 'b']),
+            node('a', role: 'region', childIds: ['leaf']),
+            node('b', role: 'region', childIds: ['leaf']),
+            node('leaf', label: label),
+          ],
+        };
+
+        expectLikeFull(tree('one'), [
+          {
+            'mode': 'patch',
+            'set': [node('leaf', label: 'two')],
+          },
+        ], tree('two'));
+      });
+
+      test('reports no removals after a structural patch that had some', () {
+        final encoder = SemanticsWireEncoder();
+        final decoder = SemanticsWireDecoder()
+          ..apply(encoder.encode(_snap(messages: 5, tick: 0))!)
+          ..apply(encoder.encode(_snap(messages: 4, tick: 1))!);
+        expect(decoder.removedIds, isNotEmpty);
+
+        decoder.apply(encoder.encode(_snap(messages: 4, tick: 2))!);
+
+        expect(decoder.contentReplacements, isNotNull);
+        expect(decoder.removedIds, isEmpty);
+      });
+
+      group('on a tree the full reconstruction pruned', () {
+        // A producer other than Fleury's encoder can send a graph the full
+        // path accepts only by pruning it. A content patch on such a tree
+        // takes the full path, and matches what it would build.
+        List<int> frame(Map<String, Object?> body) =>
+            utf8.encode(jsonEncode({'v': semanticsWireVersion, ...body}));
+
+        String canonical(SemanticNode node) => node.children.isEmpty
+            ? '${node.id.value}|${node.label}'
+            : '${node.id.value}|${node.label}'
+                  '[${node.children.map(canonical).join(',')}]';
+
+        const last = maxSemanticTreeDepth - 1;
+        // root -> n1 -> ... -> n[last], the last at the deepest kept level.
+        Map<String, Object?> chain({
+          required List<String> lastChildren,
+          String lastLabel = 'deep',
+          List<Map<String, Object?>> rootExtras = const [],
+        }) => {
+          'mode': 'full',
+          'root': 'root',
+          'nodes': [
+            {
+              'id': 'root',
+              'role': 'app',
+              'childIds': ['n1', for (final extra in rootExtras) extra['id']],
+            },
+            for (var i = 1; i < last; i++)
+              {
+                'id': 'n$i',
+                'role': 'region',
+                'childIds': ['n${i + 1}'],
+              },
+            {
+              'id': 'n$last',
+              'role': 'region',
+              'label': lastLabel,
+              if (lastChildren.isNotEmpty) 'childIds': lastChildren,
+            },
+            ...rootExtras,
+          ],
+        };
+
+        List<int> relabel(String id, List<String> childIds) => frame({
+          'mode': 'patch',
+          'set': [
+            {
+              'id': id,
+              'role': 'region',
+              'label': 'deep2',
+              'childIds': childIds,
+            },
+          ],
+        });
+
+        test('a child past the depth limit stays dropped', () {
+          const leaf = {'id': 'x', 'role': 'text', 'label': 'X'};
+          final decoder = SemanticsWireDecoder()
+            ..apply(frame(chain(lastChildren: ['x'], rootExtras: [leaf])));
+
+          final patched = decoder.apply(relabel('n$last', ['x']))!;
+
+          final reference = SemanticsWireDecoder().apply(
+            frame(
+              chain(
+                lastChildren: ['x'],
+                lastLabel: 'deep2',
+                rootExtras: [leaf],
+              ),
+            ),
+          )!;
+          expect(canonical(patched.root), canonical(reference.root));
+        });
+
+        test('a cycle cut at the depth limit neither recurses nor throws', () {
+          final decoder = SemanticsWireDecoder()
+            ..apply(frame(chain(lastChildren: ['n1'])));
+
+          final patched = decoder.apply(relabel('n$last', ['n1']));
+
+          final reference = SemanticsWireDecoder().apply(
+            frame(chain(lastChildren: ['n1'], lastLabel: 'deep2')),
+          );
+          expect(canonical(patched!.root), canonical(reference!.root));
+        });
+
+        test('an id the node parser rewrites keeps its node', () {
+          final decoder = SemanticsWireDecoder()
+            ..apply(
+              frame({
+                'mode': 'full',
+                'root': 'root',
+                'nodes': [
+                  {
+                    'id': 'root',
+                    'role': 'app',
+                    'childIds': ['a\u0007', 'y'],
+                  },
+                  {'id': 'a\u0007', 'role': 'text', 'label': 'A'},
+                  {'id': 'y', 'role': 'text', 'label': 'Y'},
+                ],
+              }),
+            );
+
+          final patched = decoder.apply(
+            frame({
+              'mode': 'patch',
+              'set': [
+                {'id': 'y', 'role': 'text', 'label': 'Y2'},
+              ],
+            }),
+          )!;
+
+          expect(patched.root.children, hasLength(2));
+          expect(patched.root.children.last.label, 'Y2');
+        });
+      });
+
       test('one that would outgrow the frame cap is rejected', () {
         final encoder = SemanticsWireEncoder();
         final full = encoder.encode(_snap(messages: 5, tick: 0))!;
@@ -247,6 +455,36 @@ void main() {
           _canonical(_snap(messages: 5, tick: 1).toSemanticTree()),
         );
       });
+    });
+
+    test('says why it rejected a tree, and only for that tree', () {
+      SemanticTree tree({required bool duplicate}) => SemanticTree(
+        root: SemanticNode(
+          id: const SemanticNodeId('root'),
+          role: SemanticRole.app,
+          children: [
+            for (final id in duplicate ? ['row', 'row'] : ['row', 'other'])
+              SemanticNode(
+                id: SemanticNodeId(id),
+                role: SemanticRole.listItem,
+                children: [
+                  SemanticNode(
+                    id: SemanticNodeId('$id.label'),
+                    role: SemanticRole.text,
+                    label: id,
+                  ),
+                ],
+              ),
+          ],
+        ),
+      );
+      final encoder = SemanticsWireEncoder();
+
+      expect(encoder.encodeTree(tree(duplicate: true)), isNull);
+      expect(encoder.lastRejection, isNotNull);
+
+      expect(encoder.encodeTree(tree(duplicate: false)), isNotNull);
+      expect(encoder.lastRejection, isNull);
     });
 
     test('a steady patch is a tiny fraction of the full frame', () {

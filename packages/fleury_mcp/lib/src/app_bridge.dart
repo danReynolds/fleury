@@ -244,9 +244,9 @@ final class FleuryAppBridge {
   /// Invokes [action] on the live node [id]. The app dispatches it against its
   /// real element tree and re-renders; observe the visual result with
   /// [settle]. The returned future carries the app-reported invocation
-  /// status (SEMANTIC_ACTION_RESULT). If the peer does not answer in time the
-  /// correlation slot stays reserved rather than allowing a retry to consume
-  /// the late result. It resolves to null only when the bridge disconnects
+  /// status (SEMANTIC_ACTION_RESULT). If the handler has not finished in time,
+  /// this (id, action)'s result slot stays reserved rather than letting a
+  /// retry consume the late result; other actions go ahead. It resolves to null only when the bridge disconnects
   /// after the frame was sent but before its result arrives; callers must then
   /// inspect [isRunning] and [protocolError]. A positional id must include the
   /// [targetToken] observed in the semantic snapshot; the app verifies it.
@@ -368,10 +368,9 @@ final class FleuryAppBridge {
     );
   }
 
-  /// Aborts the in-flight mutation wait because its frame could not be sent or
-  /// the peer exited. Resolving it promptly lets the MCP layer re-check bridge
-  /// state and return `app_exited` / `protocol_mismatch` instead of waiting for
-  /// the result timeout.
+  /// Aborts the wait for (id, action) because its frame could not be sent,
+  /// releasing its slot for a retry. (An exited peer releases every slot: see
+  /// [_abortPendingActions].)
   void _abortPendingAction(SemanticNodeId id, SemanticAction action) {
     final pending = _pendingActions.remove((id, action));
     if (pending != null && !pending.completer.isCompleted) {
@@ -379,6 +378,10 @@ final class FleuryAppBridge {
     }
   }
 
+  /// Aborts every pending wait because the peer exited. Resolving them
+  /// promptly lets the MCP layer re-check bridge state and return
+  /// `app_exited` / `protocol_mismatch` instead of waiting out each result
+  /// timeout.
   void _abortPendingActions() {
     final pending = _pendingActions.values.toList();
     _pendingActions.clear();

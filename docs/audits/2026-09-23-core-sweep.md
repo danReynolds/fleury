@@ -59,7 +59,7 @@
 | F | medium | A semantic action whose handler awaits UI (the `await context.present(Confirm())` idiom) blocks the served semantic-action queue, so the dialog can't be confirmed through a11y/MCP | Fixed |
 | F | medium | SemanticDomPresenter re-inserts the whole content of every aria-live region on any structural change, so screen readers re-read the entire log for each appended line | Fixed |
 | F | medium | The coverage fallback turns border glyphs (Panel, Dialog, Menu…) into hundreds of junk text nodes and keeps the semantics pipeline on its slow path | Fixed (an explicit ASCII border is a follow-up) |
-| F | medium | The semantic wire decoder (browser client and MCP bridge) rebuilds the whole tree for every one-node patch; the wire diff saves bytes but not peer CPU | Fixed |
+| F | medium | The semantic wire decoder (browser client and MCP bridge) rebuilds the whole tree for every one-node patch; the wire diff saves bytes but not peer CPU | Fixed for content-only patches (a structural patch still rebuilds) |
 
 A multi-agent sweep of `main` plus #270, run twice. An independent verifier reproduced every finding with a probe, and none were refuted. Findings are grouped into proposed fix batches, most severe first.
 

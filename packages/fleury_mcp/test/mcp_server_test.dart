@@ -319,6 +319,59 @@ void main() {
     },
   );
 
+  test('a pending action reports the UI it opened', () async {
+    pushCount(0);
+    await bridge.ready;
+    transport.autoCompleteSemanticActions = false;
+
+    final call = server.handleLine(
+      _rpc(1010, 'tools/call', <String, Object?>{
+        'name': 'invoke_action',
+        'arguments': <String, Object?>{'id': 'increment', 'action': 'activate'},
+      }),
+    );
+    // The handler changes the UI (it opens a dialog, say) and keeps running.
+    await Future<void>.delayed(const Duration(milliseconds: 50));
+    pushCount(7);
+    await call;
+
+    final content = lastResult()['structuredContent'] as Map<String, Object?>;
+    expect(content['status'], 'pending');
+    expect(content['changed'], isTrue);
+    expect(jsonEncode(content['ui']), contains('"value":7'));
+  });
+
+  test('a set_value still running past its wait is pending', () async {
+    pushRoot(<String, Object?>{
+      'id': 'root',
+      'role': 'app',
+      'children': <Object?>[
+        <String, Object?>{
+          'id': 'field',
+          'role': 'textField',
+          'label': 'Name',
+          'actions': <String>['setValue'],
+        },
+      ],
+    });
+    await bridge.ready;
+    transport.autoCompleteSemanticActions = false;
+
+    await server.handleLine(
+      _rpc(1011, 'tools/call', <String, Object?>{
+        'name': 'set_value',
+        'arguments': <String, Object?>{'id': 'field', 'value': 'Ada'},
+      }),
+    );
+
+    final result = lastResult();
+    expect(result['isError'], isNot(true));
+    final content = result['structuredContent'] as Map<String, Object?>;
+    expect(content['status'], 'pending');
+    expect(content['note'], contains('still running'));
+    expect(content['ui'], isNotNull);
+  });
+
   test(
     'initialize identifies the server and constrains the protocol version',
     () async {

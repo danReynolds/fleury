@@ -773,6 +773,12 @@ final class SemanticsWireDecoder {
   final Map<String, Set<String>> _parentIds = {};
   Map<SemanticNodeId, SemanticNode>? _contentReplacements;
 
+  // Whether the last full reconstruction kept the wire's graph as sent: it
+  // dropped nothing past the depth limit, and every id indexes as sent. Only
+  // then does rebuilding a node from its wire children match what that
+  // reconstruction would build; a tree it pruned stays on the full path.
+  bool _contentPatchesSafe = false;
+
   /// Whether a full frame has been applied (so patches have a base to land on).
   bool get isPrimed => _hasState;
 
@@ -895,9 +901,13 @@ final class SemanticsWireDecoder {
     // count below keeps even a very wide repeated-leaf fan-out bounded.
     final visited = <String>{};
     var invalidGraph = false;
+    var depthLimited = false;
     var nestedNodeCount = 0;
     Map<String, Object?>? nest(String id, int depth) {
-      if (depth >= maxSemanticTreeDepth) return null;
+      if (depth >= maxSemanticTreeDepth) {
+        depthLimited = true;
+        return null;
+      }
       final flat = candidate[id];
       if (flat == null) return null;
       nestedNodeCount++;
@@ -979,6 +989,7 @@ final class SemanticsWireDecoder {
       ..addAll(reachableNodeByteLengths);
     _flatBytes = reachableNodeBytes;
     _index(tree);
+    _contentPatchesSafe = !depthLimited && _flat.keys.every(_nodes.containsKey);
     _contentReplacements = null;
     final rootChanged = candidateRootId != _rootId;
     _rootId = candidateRootId;
@@ -1008,6 +1019,7 @@ final class SemanticsWireDecoder {
   /// Anything else is left to the full reconstruction, which validates the
   /// graph.
   _ContentPatch _applyContentPatch(Map<Object?, Object?> patch) {
+    if (!_contentPatchesSafe) return const _NotAContentPatch();
     final removed = patch['removed'];
     if (removed != null && (removed is! List || removed.isNotEmpty)) {
       return const _NotAContentPatch();

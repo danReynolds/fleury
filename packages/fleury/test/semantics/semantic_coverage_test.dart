@@ -321,10 +321,11 @@ void main() {
     });
 
     test('bars, braille plots and sextants are not text', () {
+      // Each range's first and last glyph included.
       final buffer = CellBuffer(const CellSize(8, 3))
-        ..writeText(const CellOffset(0, 0), '▁▂▃▅▇█░▒')
-        ..writeText(const CellOffset(0, 1), '⣀⣤⣶⣿⡇⢸⠉⠒')
-        ..writeText(const CellOffset(0, 2), '🬀🬁🬂🬃🬄🬅🬆🬇');
+        ..writeText(const CellOffset(0, 0), '─╿▀▁█░▒▟')
+        ..writeText(const CellOffset(0, 1), '\u2800⣤⣶⣿⡇⢸⠉⣿')
+        ..writeText(const CellOffset(0, 2), '🬀🬁🬂🬃🬄🬅\u{1FBEE}\u{1FBEF}');
 
       final result = applySemanticTextFallback(
         tree: const SemanticTree(
@@ -338,6 +339,28 @@ void main() {
 
       expect(result.audit.hasUncoveredText, isFalse);
       expect(result.audit.fallbackNodeCount, 0);
+    });
+
+    test('octants are not text, and segmented digits are', () {
+      final buffer = CellBuffer(const CellSize(8, 2))
+        ..writeText(const CellOffset(0, 0), '\u{1CD00}\u{1CD01}\u{1CDE5}')
+        ..writeText(const CellOffset(0, 1), '\u{1FBF0}\u{1FBF9}');
+
+      final result = applySemanticTextFallback(
+        tree: const SemanticTree(
+          root: SemanticNode(
+            id: SemanticNodeId('root'),
+            role: SemanticRole.app,
+          ),
+        ),
+        buffer: buffer,
+      );
+
+      final fallback = result.tree.nodes
+          .where((node) => node.state['semanticFallback'] == true)
+          .toList();
+      expect(fallback.map((node) => node.bounds?.top), [1]);
+      expect(result.audit.uncoveredCellCount, 2);
     });
   });
 }

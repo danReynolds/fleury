@@ -518,7 +518,8 @@ final class RemoteTerminalDriver
   }
 
   // A tree that cannot be sent leaves the peer's accessibility tree and every
-  // agent without the app, silently. Say why, once for as long as it lasts:
+  // agent without the app (or frozen at the last tree it could send),
+  // silently. Say why, once for as long as it lasts:
   // each semantically dirty frame is rejected again.
   void _reportRejectedSemantics(String? problem) {
     if (problem == null || problem == _reportedSemanticsRejection) return;
@@ -528,7 +529,8 @@ final class RemoteTerminalDriver
         summary: 'The semantic tree was not sent: $problem.',
         details:
             'Until it can be sent, the browser\'s accessibility tree and '
-            'agents over MCP see nothing of the app. A repeated id comes '
+            'agents over MCP see the last tree that was sent, or nothing '
+            'if none was. A repeated id comes '
             'from nodes that derive the same id: one Key used under '
             'different unkeyed parents (two lists whose rows share a data '
             'id), or a Semantics key or id repeated.',

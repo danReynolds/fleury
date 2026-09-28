@@ -395,16 +395,22 @@ void main() {
         expect(bridge.protocolError, isNull);
         expect(transport.sent.whereType<SemanticActionFrame>(), isEmpty);
 
-        const validId = SemanticNodeId('save');
-        final valid = bridge.invokeAction(validId, SemanticAction.activate);
+        // The same action goes out again: its slot was released, not left
+        // busy.
+        const id = SemanticNodeId('element-7');
+        final retry = bridge.invokeAction(
+          id,
+          SemanticAction.activate,
+          targetToken: 'token',
+        );
         transport.addIncoming(
           const SemanticActionResultFrame(
-            validId,
+            id,
             SemanticAction.activate,
             SemanticActionInvocationStatus.completed,
           ),
         );
-        expect(await valid, SemanticActionInvocationStatus.completed);
+        expect(await retry, SemanticActionInvocationStatus.completed);
       },
     );
 
@@ -417,24 +423,24 @@ void main() {
         transport.addIncoming(_appInit(remoteProtocolVersion));
         await _pump();
 
+        const field = SemanticNodeId('field');
         expect(
-          () => bridge.setValue(const SemanticNodeId('field'), Object()),
+          () => bridge.setValue(field, Object()),
           throwsA(isA<JsonUnsupportedObjectError>()),
         );
         expect(bridge.isRunning, isTrue);
         expect(bridge.protocolError, isNull);
         expect(transport.sent.whereType<SemanticActionFrame>(), isEmpty);
 
-        const validId = SemanticNodeId('save');
-        final valid = bridge.invokeAction(validId, SemanticAction.activate);
+        final retry = bridge.setValue(field, 'text');
         transport.addIncoming(
           const SemanticActionResultFrame(
-            validId,
-            SemanticAction.activate,
+            field,
+            SemanticAction.setValue,
             SemanticActionInvocationStatus.completed,
           ),
         );
-        expect(await valid, SemanticActionInvocationStatus.completed);
+        expect(await retry, SemanticActionInvocationStatus.completed);
       },
     );
 
@@ -508,6 +514,59 @@ void main() {
       );
       expect(await bResult, SemanticActionInvocationStatus.completed);
       expect(await aResult, SemanticActionInvocationStatus.disabled);
+    });
+
+    test('another action on a node with one pending goes ahead', () async {
+      final transport = _EncodingTransport();
+      final bridge = FleuryAppBridge(transport)..start();
+      addTearDown(bridge.close);
+      transport.addIncoming(_appInit(remoteProtocolVersion));
+      await _pump();
+
+      const id = SemanticNodeId('row');
+      final activate = bridge.invokeAction(id, SemanticAction.activate);
+      final focus = bridge.invokeAction(id, SemanticAction.focus);
+      expect(transport.sent.whereType<SemanticActionFrame>(), hasLength(2));
+
+      transport
+        ..addIncoming(
+          const SemanticActionResultFrame(
+            id,
+            SemanticAction.focus,
+            SemanticActionInvocationStatus.completed,
+          ),
+        )
+        ..addIncoming(
+          const SemanticActionResultFrame(
+            id,
+            SemanticAction.activate,
+            SemanticActionInvocationStatus.completed,
+          ),
+        );
+      expect(await focus, SemanticActionInvocationStatus.completed);
+      expect(await activate, SemanticActionInvocationStatus.completed);
+    });
+
+    test('an app that exits releases every pending action at once', () async {
+      final transport = _EncodingTransport();
+      final bridge = FleuryAppBridge(transport)..start();
+      addTearDown(bridge.close);
+      transport.addIncoming(_appInit(remoteProtocolVersion));
+      await _pump();
+
+      final watch = Stopwatch()..start();
+      final pending = [
+        bridge.invokeAction(const SemanticNodeId('a'), SemanticAction.activate),
+        bridge.invokeAction(const SemanticNodeId('b'), SemanticAction.activate),
+      ];
+      transport.addIncoming(const ByeFrame());
+
+      expect(await Future.wait(pending), [null, null]);
+      expect(
+        watch.elapsed,
+        lessThan(const Duration(seconds: 1)),
+        reason: 'not left to their two-second result wait',
+      );
     });
 
     test(

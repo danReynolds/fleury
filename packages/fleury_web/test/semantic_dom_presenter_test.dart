@@ -766,45 +766,50 @@ void main() {
     group('a structural change touches only what changed', () {
       // A screen reader announces a live region's re-inserted content as new,
       // so a stable node must never be detached and re-inserted.
-      SemanticTree tree({required int lines, required int items}) =>
-          SemanticTree(
-            root: SemanticNode(
-              id: const SemanticNodeId('root'),
-              role: SemanticRole.app,
+      SemanticTree tree({
+        required int lines,
+        required int items,
+        int from = 0,
+        Set<int> skip = const {},
+      }) => SemanticTree(
+        root: SemanticNode(
+          id: const SemanticNodeId('root'),
+          role: SemanticRole.app,
+          children: [
+            const SemanticNode(
+              id: SemanticNodeId('status'),
+              role: SemanticRole.status,
+              label: 'Build: passing',
+            ),
+            SemanticNode(
+              id: const SemanticNodeId('log'),
+              role: SemanticRole.log,
+              label: 'Output',
               children: [
-                const SemanticNode(
-                  id: SemanticNodeId('status'),
-                  role: SemanticRole.status,
-                  label: 'Build: passing',
-                ),
-                SemanticNode(
-                  id: const SemanticNodeId('log'),
-                  role: SemanticRole.log,
-                  label: 'Output',
-                  children: [
-                    for (var i = 0; i < lines; i++)
-                      SemanticNode(
-                        id: SemanticNodeId('line-$i'),
-                        role: SemanticRole.text,
-                        label: 'line $i',
-                      ),
-                  ],
-                ),
-                SemanticNode(
-                  id: const SemanticNodeId('list'),
-                  role: SemanticRole.list,
-                  children: [
-                    for (var i = 0; i < items; i++)
-                      SemanticNode(
-                        id: SemanticNodeId('item-$i'),
-                        role: SemanticRole.listItem,
-                        label: 'item $i',
-                      ),
-                  ],
-                ),
+                for (var i = from; i < from + lines; i++)
+                  if (!skip.contains(i))
+                    SemanticNode(
+                      id: SemanticNodeId('line-$i'),
+                      role: SemanticRole.text,
+                      label: 'line $i',
+                    ),
               ],
             ),
-          );
+            SemanticNode(
+              id: const SemanticNodeId('list'),
+              role: SemanticRole.list,
+              children: [
+                for (var i = 0; i < items; i++)
+                  SemanticNode(
+                    id: SemanticNodeId('item-$i'),
+                    role: SemanticRole.listItem,
+                    label: 'item $i',
+                  ),
+              ],
+            ),
+          ],
+        ),
+      );
 
       late web.Element root;
       late SemanticDomPresenter presenter;
@@ -814,17 +819,26 @@ void main() {
       void present(SemanticTree next) =>
           presenter.present(next, update: owner.update(next));
 
-      // The childList mutations under [element] since the last call.
-      ({int added, int removed}) mutationsUnder(web.Element element) {
-        var added = 0;
-        var removed = 0;
-        for (final record in observer.takeRecords().toDart) {
-          if (record.type != 'childList') continue;
-          if (!element.contains(record.target)) continue;
-          added += record.addedNodes.length;
-          removed += record.removedNodes.length;
-        }
-        return (added: added, removed: removed);
+      // The childList mutations since the last call, under each element.
+      List<({int added, int removed})> mutationsUnder(
+        List<web.Element> elements,
+      ) {
+        final records = observer.takeRecords().toDart;
+        return [
+          for (final element in elements)
+            (
+              added: records
+                  .where(
+                    (r) => r.type == 'childList' && element.contains(r.target),
+                  )
+                  .fold(0, (sum, r) => sum + r.addedNodes.length),
+              removed: records
+                  .where(
+                    (r) => r.type == 'childList' && element.contains(r.target),
+                  )
+                  .fold(0, (sum, r) => sum + r.removedNodes.length),
+            ),
+        ];
       }
 
       web.Element byId(String id) =>
@@ -852,8 +866,11 @@ void main() {
 
         present(tree(lines: 50, items: 3));
 
-        expect(mutationsUnder(log), (added: 0, removed: 0));
-        expect(mutationsUnder(status), (added: 0, removed: 0));
+        expect(mutationsUnder([log, status, root]), [
+          (added: 0, removed: 0),
+          (added: 0, removed: 0),
+          (added: 1, removed: 0), // the new item, and nothing else
+        ]);
         expect(status.firstChild, same(statusText));
         expect(byId('list').children.length, 3);
       });
@@ -863,7 +880,46 @@ void main() {
 
         present(tree(lines: 51, items: 2));
 
-        expect(mutationsUnder(log), (added: 1, removed: 0));
+        expect(mutationsUnder([log]), [(added: 1, removed: 0)]);
+        expect(log.lastElementChild!.textContent, 'line 50');
+      });
+
+      test('text a node no longer has is removed', () {
+        final status = byId('status');
+        expect(status.textContent, 'Build: passing');
+
+        final next = SemanticTree(
+          root: SemanticNode(
+            id: const SemanticNodeId('root'),
+            role: SemanticRole.app,
+            children: [
+              const SemanticNode(
+                id: SemanticNodeId('status'),
+                role: SemanticRole.status,
+              ),
+              ...tree(lines: 50, items: 2).root.children.skip(1),
+            ],
+          ),
+        );
+        present(next);
+
+        expect(status.textContent, '');
+      });
+
+      test('a line removed from the middle moves no other line', () {
+        final log = byId('log');
+
+        present(tree(lines: 50, items: 2, skip: {25}));
+
+        expect(mutationsUnder([log]), [(added: 0, removed: 1)]);
+      });
+
+      test('a capped log drops its oldest line and appends one', () {
+        final log = byId('log');
+
+        present(tree(lines: 50, from: 1, items: 2));
+
+        expect(mutationsUnder([log]), [(added: 1, removed: 1)]);
         expect(log.lastElementChild!.textContent, 'line 50');
       });
 
@@ -872,7 +928,7 @@ void main() {
 
         present(tree(lines: 49, items: 2));
 
-        expect(mutationsUnder(log), (added: 0, removed: 1));
+        expect(mutationsUnder([log]), [(added: 0, removed: 1)]);
         expect(log.textContent, startsWith('Outputline 0'));
         expect(log.lastElementChild!.textContent, 'line 48');
       });

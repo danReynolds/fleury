@@ -9,7 +9,8 @@ import 'package:web/web.dart' as web;
 /// It consumes a full [SemanticTree] snapshot today, while retaining DOM
 /// elements and their text nodes by semantic id, and leaving each in place
 /// unless its position changes: a stable node is never detached, so a screen
-/// reader never re-announces a live region's unchanged content. Retained
+/// reader never re-announces a live region's unchanged content. (A node
+/// whose id repeats under two parents is the exception: it has one element.) Retained
 /// semantic ownership remains separate Phase 4 work behind the same
 /// [SemanticFramePresenter] boundary.
 final class SemanticDomPresenter
@@ -170,8 +171,16 @@ final class SemanticDomPresenter
   /// would detach and re-insert every node, and a screen reader announces a
   /// live region's re-inserted content as new.
   void _placeChildren(web.Node parent, List<web.Node> children) {
+    final wanted = Set<web.Node>.identity()..addAll(children);
     var cursor = parent.firstChild;
     for (final child in children) {
+      // A node that leaves is removed where it stands. Inserting in front of
+      // it would move every wanted node after it.
+      while (cursor != null && !wanted.contains(cursor)) {
+        final stale = cursor;
+        cursor = cursor.nextSibling;
+        parent.removeChild(stale);
+      }
       if (identical(child, cursor)) {
         cursor = cursor!.nextSibling;
       } else {

@@ -507,6 +507,63 @@ void main() {
       expect(logged.text, contains('row-a.txt'));
     });
 
+    test('a tree that cannot be sent again, after one that could, is '
+        'reported again', () async {
+      final logged = _StderrCapture();
+      await IOOverrides.runZoned(() async {
+        final transport = _FakeTransport();
+        final driver = RemoteTerminalDriver(transport);
+        final duplicated = ValueNotifier(true);
+        Widget rows(String list) => Column(
+          children: [
+            for (final name in ['a.txt', 'b.txt'])
+              Semantics(
+                key: ValueKey('row-$name'),
+                role: SemanticRole.listItem,
+                label: '$list $name',
+                child: Row(
+                  children: [
+                    Semantics(
+                      role: SemanticRole.button,
+                      label: 'Open $name',
+                      actions: const {SemanticAction.activate},
+                      onAction: (_) {},
+                      child: Text(name),
+                    ),
+                  ],
+                ),
+              ),
+          ],
+        );
+        scheduleMicrotask(() => transport.emit(_init));
+        final done = runApp(
+          NotifierBuilder(
+            notifier: duplicated,
+            builder: (_, duplicated) => Row(
+              children: [
+                Expanded(child: rows('recent')),
+                if (duplicated.value) Expanded(child: rows('all')),
+              ],
+            ),
+          ),
+          driver: driver,
+          requireInteractiveTerminal: false,
+        );
+        await Future<void>.delayed(const Duration(milliseconds: 20));
+        for (final value in [false, true]) {
+          duplicated.value = value;
+          await Future<void>.delayed(const Duration(milliseconds: 20));
+        }
+        await transport.disconnect();
+        await done;
+      }, stderr: () => logged);
+
+      final reports = 'The semantic tree was not sent'
+          .allMatches(logged.text)
+          .length;
+      expect(reports, 2, reason: logged.text);
+    });
+
     test('a peer SEMANTIC_ACTION activates the live node', () async {
       final transport = _FakeTransport();
       final driver = RemoteTerminalDriver(transport);
@@ -1052,11 +1109,6 @@ void main() {
     );
   });
 
-  // F16: the raw serve-wire path must serialize inbound semantic actions the
-  // way the MCP path does. Fire-and-forget let action N+1 snapshot the tree +
-  // invoke while action N's async invocation was still in flight, so an agent
-  // that sent setValue(field) then activate(submit) back-to-back could submit
-  // the pre-mutation value and get its RESULT frames out of order.
   group('a semantic action that awaits a dialog', () {
     // The `await context.present(Confirm())` idiom on the semantic channel:
     // the handler settles only when the dialog is answered, and over the
@@ -1226,6 +1278,11 @@ void main() {
     );
   });
 
+  // F16: the raw serve-wire path must serialize inbound semantic actions the
+  // way the MCP path does. Fire-and-forget let action N+1 snapshot the tree +
+  // invoke while action N's async invocation was still in flight, so an agent
+  // that sent setValue(field) then activate(submit) back-to-back could submit
+  // the pre-mutation value and get its RESULT frames out of order.
   group('semantic action serialization (F16)', () {
     test('a following activate observes the value a preceding setValue set '
         '(not the pre-mutation tree)', () async {
@@ -2058,11 +2115,7 @@ void main() {
   });
 }
 
-/// A minimal server-side producer that mirrors MarkdownText's OSC 8 gate
-/// (markdown_text.dart): it attaches a real [CellStyle.linkUri] ONLY when the
-/// surface reports it can render links. Used to exercise capability propagation
-/// end-to-end through a real runApp + driver + MediaQuery, without reaching
-/// across the package boundary into fleury_widgets.
+/// Hands its build context to [sink], for a test that acts on the tree.
 final class _ContextProbe extends StatelessWidget {
   const _ContextProbe(this.sink, this.child);
 
@@ -2094,6 +2147,11 @@ final class _KeyCounterState extends State<_KeyCounter> {
   );
 }
 
+/// A minimal server-side producer that mirrors MarkdownText's OSC 8 gate
+/// (markdown_text.dart): it attaches a real [CellStyle.linkUri] ONLY when the
+/// surface reports it can render links. Used to exercise capability propagation
+/// end-to-end through a real runApp + driver + MediaQuery, without reaching
+/// across the package boundary into fleury_widgets.
 final class _LinkProbe extends StatelessWidget {
   const _LinkProbe(this.url);
 

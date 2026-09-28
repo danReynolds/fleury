@@ -1752,8 +1752,6 @@ final class McpServer {
         'smaller value.',
         code: _ErrorCode.tooLarge,
       );
-    } on FleurySemanticActionTimeoutException catch (error) {
-      return _toolError(error.message, code: _ErrorCode.actionTimedOut);
     } on FleurySemanticActionBusyException catch (error) {
       return _toolError(error.message, code: _ErrorCode.actionBusy);
     } on FleuryAppBridgeException catch (error) {
@@ -2720,7 +2718,6 @@ abstract final class _ErrorCode {
   static const ambiguous = 'ambiguous';
   static const actionUnsupported = 'action_unsupported';
   static const actionFailed = 'action_failed';
-  static const actionTimedOut = 'action_timed_out';
   static const actionBusy = 'action_busy';
   static const staleReference = 'stale_reference';
   static const outOfDomain = 'out_of_domain';

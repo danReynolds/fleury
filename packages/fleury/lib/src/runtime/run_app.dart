@@ -1391,9 +1391,13 @@ Future<AppExit> _runAppImpl(
               // Queue one marker behind every earlier admitted action. RESULT
               // has no sequence number, so sending this immediately would put
               // a rejection ahead of results for indistinguishable earlier
-              // id/action requests. Keep the epoch set until the marker itself
-              // runs: there can be at most 64 action closures plus one marker,
-              // even if the source keeps flooding while the queue drains.
+              // id/action requests. (A handler still running past the queue's
+              // hold sends its RESULT later still: RESULTs for one repeated
+              // id/action can arrive out of order, which is why the MCP bridge
+              // refuses a repeat until the earlier one's RESULT is in.) Keep
+              // the epoch set until the marker itself runs: there can be at
+              // most 64 action closures plus one marker, even if the source
+              // keeps flooding while the queue drains.
               if (!semanticActionOverflowReported) {
                 semanticActionOverflowReported = true;
                 semanticActionTail = semanticActionTail.then((_) {
