@@ -67,9 +67,14 @@ class CommandButton extends StatelessWidget {
       style: style,
       // Nothing waits on the command: a failure reaches runApp's error
       // overlay. One that turned disabled or hidden since this built
-      // declines, which a semantic activation reports `unsupported`.
+      // declines, which a semantic activation reports `unsupported` and a
+      // key or click ignores.
       onPressed: enabled
-          ? () => registry.dispatch(command, buildContext: context)
+          ? () {
+              if (!registry.dispatch(command, buildContext: context)) {
+                throw const SemanticActionDeclined();
+              }
+            }
           : null,
     );
   }

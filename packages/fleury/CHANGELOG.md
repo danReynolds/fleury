@@ -155,7 +155,9 @@
 - A command that throws is reported. From a shortcut, a button, or a palette
   row it reaches runApp's error overlay, as a throwing key binding does.
   `CommandRegistry.dispatch` and `dispatchCommand` start a command this way
-  for custom command surfaces.
+  for custom command surfaces and return whether it started; one that
+  throws before it returns throws from them, and a later failure of its
+  future reaches the zone.
 - A semantic action reports what it did. A handler declines by throwing the
   new `SemanticActionDeclined`, which reports `unsupported` rather than
   `completed`.
@@ -164,9 +166,10 @@
     `unsupported`. `CommandRegistry.invokeFromSemantics` and
     `invokeCommandFromSemantics` do the same for custom semantic handlers.
   - A control's `activate` is a press, as Enter or a click is: nothing waits
-    on the work it starts, whose failure reaches the error overlay. A
-    `CommandButton` or palette row whose command turned disabled, hidden or
-    gone since it built reports `unsupported`.
+    on the work it starts, whose failure reaches the error overlay. A press
+    that throws reports `failed`, a `CommandButton` or palette row whose
+    command throws included; one whose command turned disabled, hidden or
+    gone since it built reports `unsupported`, and a palette stays open.
   - A route dismissal a `PopScope` refuses reports `unsupported`.
 - runApp stops on a storm of uncaught errors only when they recur with no
   input between them. Holding a key whose command or async handler fails,

@@ -9,9 +9,11 @@
   running a command; a presented palette still closes.
 - A `CommandButton` or palette row whose command throws is reported to
   runApp's error overlay. Activating one through semantics is a press: it
-  reports `unsupported` for a command that turned disabled, hidden or gone
-  since it built, and doesn't wait on the command. `CommandPaletteItem.onInvoke`
-  may throw `SemanticActionDeclined` to decline.
+  reports `failed` for a command that throws, `unsupported` for one that
+  turned disabled, hidden or gone since it built, and doesn't wait on the
+  command. A palette row asks whether its command can run when chosen, so a
+  stale row leaves the palette open. `CommandPaletteItem.onInvoke` may throw
+  `SemanticActionDeclined` to decline.
 
 - `LogRegion` no longer does work proportional to the whole log on every
   build: the unfiltered view order allocates nothing, and row-id validation

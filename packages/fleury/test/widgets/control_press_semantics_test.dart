@@ -24,6 +24,17 @@ final class _Capture extends StatelessWidget {
   }
 }
 
+/// The errors [body] leaves uncaught. A throw from the body itself fails the
+/// test instead of hanging it.
+Future<List<Object>> _uncaught(Future<void> Function() body) {
+  final errors = <Object>[];
+  final done = Completer<List<Object>>();
+  runZonedGuarded(() {
+    body().then((_) => done.complete(errors), onError: done.completeError);
+  }, (error, _) => errors.add(error));
+  return done.future;
+}
+
 // A press that waits would hang; fail fast instead.
 Future<SemanticActionInvocationResult> _press(
   FleuryTester tester,
@@ -85,9 +96,8 @@ void main() {
   testWidgets('work that fails after the press reaches the zone', (
     tester,
   ) async {
-    final errors = <Object>[];
     SemanticActionInvocationResult? result;
-    await runZonedGuarded(() async {
+    final errors = await _uncaught(() async {
       tester.pumpWidget(
         Button(
           text: 'Sync',
@@ -99,7 +109,7 @@ void main() {
       );
       result = await _press(tester, 'Sync');
       await Future<void>.delayed(const Duration(milliseconds: 5));
-    }, (error, _) => errors.add(error));
+    });
 
     expect(result?.status, SemanticActionInvocationStatus.completed);
     expect(errors, [isA<StateError>()]);
@@ -116,25 +126,44 @@ void main() {
     expect(result.error, isA<StateError>());
   });
 
-  testWidgets('a press that declines is unsupported, and Enter ignores it', (
-    tester,
-  ) async {
-    final errors = <Object>[];
+  testWidgets('a press that declines is unsupported, and a key or click '
+      'ignores it', (tester) async {
+    var presses = 0;
     SemanticActionInvocationResult? result;
-    await runZonedGuarded(() async {
+    final errors = await _uncaught(() async {
       tester.pumpWidget(
         Button(
           text: 'Undo',
           autofocus: true,
-          onPressed: () => throw const SemanticActionDeclined(),
+          onPressed: () {
+            presses++;
+            throw const SemanticActionDeclined();
+          },
         ),
       );
       result = await _press(tester, 'Undo');
       tester.sendKey(const KeyEvent(KeyCode.enter));
+      tester.sendMouse(
+        const MouseEvent(
+          kind: MouseEventKind.down,
+          button: MouseButton.left,
+          col: 2,
+          row: 0,
+        ),
+      );
+      tester.sendMouse(
+        const MouseEvent(
+          kind: MouseEventKind.up,
+          button: MouseButton.left,
+          col: 2,
+          row: 0,
+        ),
+      );
       await Future<void>.delayed(Duration.zero);
-    }, (error, _) => errors.add(error));
+    });
 
     expect(result?.status, SemanticActionInvocationStatus.unsupported);
+    expect(presses, 3, reason: 'the press, Enter and the click all reached it');
     expect(errors, isEmpty);
   });
 }

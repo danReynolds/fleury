@@ -312,15 +312,10 @@ List<CommandPaletteItem> _activePaletteCommands(
     if (!command.showInPalette) return;
     seen.add(command.id);
     commands.add(
-      CommandPaletteItem(
-        id: command.id.value,
-        label: command.title,
-        description: command.description,
-        category: command.category,
-        shortcut: command.primaryShortcutLabel,
-        enabled: registry.isEnabled(command, buildContext: context),
-        onInvoke: () =>
-            registry.dispatchCommand(command, buildContext: context),
+      _RegistryPaletteItem(
+        registry: registry,
+        command: command,
+        context: context,
       ),
     );
   }
@@ -330,6 +325,40 @@ List<CommandPaletteItem> _activePaletteCommands(
   }
 
   return commands;
+}
+
+/// A registry command's row. Whether it can run is asked each time, not
+/// when the palette built, so a command that turned disabled or hidden since
+/// declines before the palette closes.
+final class _RegistryPaletteItem extends CommandPaletteItem {
+  _RegistryPaletteItem({
+    required CommandRegistry registry,
+    required AppCommand command,
+    required BuildContext context,
+  }) : _registry = registry,
+       _command = command,
+       _context = context,
+       super(
+         id: command.id.value,
+         label: command.title,
+         description: command.description,
+         category: command.category,
+         shortcut: command.primaryShortcutLabel,
+         onInvoke: () {
+           if (!registry.dispatchCommand(command, buildContext: context)) {
+             throw const SemanticActionDeclined();
+           }
+         },
+       );
+
+  final CommandRegistry _registry;
+  final AppCommand _command;
+  final BuildContext _context;
+
+  @override
+  bool get enabled =>
+      _registry.isVisible(_command, buildContext: _context) &&
+      _registry.isEnabled(_command, buildContext: _context);
 }
 
 class _CommandPaletteView extends StatefulWidget {

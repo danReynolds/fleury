@@ -287,31 +287,56 @@ class CommandRegistry extends Notifier {
   }
 
   /// Starts [id] for a press — a shortcut, a button, a palette row, a
-  /// semantic activation of one — without waiting on it. A command that is
-  /// hidden, disabled or gone declines at once by throwing
-  /// [SemanticActionDeclined]: a control's key or click ignores that, and a
-  /// semantic activation reports it `unsupported`. A command that throws is
-  /// reported as an uncaught error of the calling zone (runApp shows it in
-  /// its error overlay, as it does a throwing key binding) rather than only
-  /// being recorded in [lastResult], where no press looks.
-  void dispatch(CommandId id, {BuildContext? buildContext}) {
+  /// semantic activation of one — without waiting on it, and returns whether
+  /// it started. A command that is hidden, disabled or gone doesn't; a
+  /// control reports that as a declined press by throwing
+  /// [SemanticActionDeclined].
+  ///
+  /// A command that throws before it returns throws here, as a throwing
+  /// press handler does. One whose future fails is reported as an uncaught
+  /// error of the calling zone (runApp shows it in its error overlay, as it
+  /// does a throwing key binding) rather than only being recorded in
+  /// [lastResult], where no press looks.
+  bool dispatch(CommandId id, {BuildContext? buildContext}) {
     _checkNotDisposed();
     final command = this.command(id, buildContext: buildContext);
     if (command == null) {
       _record(CommandInvocationResult.notFound(id));
-      throw const SemanticActionDeclined();
+      return false;
     }
-    dispatchCommand(command, buildContext: buildContext);
+    return dispatchCommand(command, buildContext: buildContext);
   }
 
   /// [invokeCommand] for a press, as [dispatch].
-  void dispatchCommand(AppCommand command, {BuildContext? buildContext}) {
+  bool dispatchCommand(AppCommand command, {BuildContext? buildContext}) {
     _checkNotDisposed();
     final context = _context(buildContext);
-    if (_decline(command, context) != null) {
-      throw const SemanticActionDeclined();
+    if (_decline(command, context) != null) return false;
+    final FutureOr<void> running;
+    try {
+      running = command.run(context);
+    } catch (error, stackTrace) {
+      _record(_failed(command, error, stackTrace));
+      rethrow;
     }
-    unawaited(_run(command, context).then(_reportFailure));
+    if (running is Future<void>) {
+      unawaited(
+        running.then(
+          (_) {
+            _record(
+              CommandInvocationResult.completed(command.id, command: command),
+            );
+          },
+          onError: (Object error, StackTrace stackTrace) {
+            _record(_failed(command, error, stackTrace));
+            Zone.current.handleUncaughtError(error, stackTrace);
+          },
+        ),
+      );
+    } else {
+      _record(CommandInvocationResult.completed(command.id, command: command));
+    }
+    return true;
   }
 
   /// [invoke] for a semantic action — an agent's or assistive technology's
@@ -374,27 +399,20 @@ class CommandRegistry extends Notifier {
         CommandInvocationResult.completed(command.id, command: command),
       );
     } catch (error, stackTrace) {
-      return _record(
-        CommandInvocationResult.failed(
-          command.id,
-          command: command,
-          error: error,
-          stackTrace: stackTrace,
-        ),
-      );
+      return _record(_failed(command, error, stackTrace));
     }
   }
 
-  static void _reportFailure(CommandInvocationResult result) {
-    final error = result.error;
-    if (result.status != CommandInvocationStatus.failed || error == null) {
-      return;
-    }
-    Zone.current.handleUncaughtError(
-      error,
-      result.stackTrace ?? StackTrace.empty,
-    );
-  }
+  static CommandInvocationResult _failed(
+    AppCommand command,
+    Object error,
+    StackTrace stackTrace,
+  ) => CommandInvocationResult.failed(
+    command.id,
+    command: command,
+    error: error,
+    stackTrace: stackTrace,
+  );
 
   _CommandInvocationContext _context(BuildContext? buildContext) {
     return _CommandInvocationContext(

@@ -1,9 +1,9 @@
-// A command that throws is not a no-op. Every gesture that runs a command
-// (a shortcut here; buttons and palette rows share the path) reports the
-// error to the calling zone, which runApp shows in its error overlay as it
-// does a throwing key binding. A semantic activation reports it `failed`,
-// not `completed`, so tests and agents are not told a failed save
-// succeeded.
+// A command that throws is not a no-op. A press that runs one (a shortcut
+// here; buttons and palette rows share the path) throws with it when it
+// throws before returning, as any throwing key handler does, and reports a
+// later failure of its future to the calling zone; runApp shows both in its
+// error overlay. A semantic activation reports it `failed`, not
+// `completed`, so tests and agents are not told a failed save succeeded.
 import 'dart:async';
 
 import 'package:fleury/fleury.dart';
@@ -36,47 +36,64 @@ Widget _app() => FleuryApp(
   ),
 );
 
-void main() {
-  testWidgets('a command that throws from its shortcut is reported', (
-    tester,
-  ) async {
-    final errors = <Object>[];
-    await runZonedGuarded(() async {
-      tester.pumpWidget(_app());
-      tester.pump();
-      tester.sendKey(const KeyEvent(KeyCode.s, modifiers: {KeyModifier.ctrl}));
-      await Future<void>.delayed(Duration.zero);
-    }, (error, _) => errors.add(error));
+/// The errors [body] leaves uncaught. A throw from the body itself fails the
+/// test instead of hanging it.
+Future<List<Object>> _uncaught(Future<void> Function() body) {
+  final errors = <Object>[];
+  final done = Completer<List<Object>>();
+  runZonedGuarded(() {
+    body().then((_) => done.complete(errors), onError: done.completeError);
+  }, (error, _) => errors.add(error));
+  return done.future;
+}
 
-    expect(errors, [isA<StateError>()]);
+void main() {
+  testWidgets('a command that throws from its shortcut throws there', (tester) {
+    tester.pumpWidget(_app());
+    tester.pump();
+
+    expect(
+      () => tester.sendKey(
+        const KeyEvent(KeyCode.s, modifiers: {KeyModifier.ctrl}),
+      ),
+      throwsStateError,
+    );
     expect(tester.lastCommandResult?.status, CommandInvocationStatus.failed);
   });
 
-  testWidgets('a scoped command that throws from its shortcut is reported', (
-    tester,
-  ) async {
-    final errors = <Object>[];
-    await runZonedGuarded(() async {
-      tester.pumpWidget(
-        CommandScope(
-          commands: [
-            AppCommand(
-              id: _format,
-              title: 'Format',
-              shortcuts: [KeySequence.ctrl.f],
-              run: (_) => throw const FormatException('bad input'),
-            ),
-          ],
-          child: const Focus(autofocus: true, child: Text('doc')),
-        ),
-      );
-      tester.pump();
-      tester.sendKey(const KeyEvent(KeyCode.f, modifiers: {KeyModifier.ctrl}));
-      await Future<void>.delayed(Duration.zero);
-    }, (error, _) => errors.add(error));
+  for (final scoped in [false, true]) {
+    testWidgets(
+      'a${scoped ? ' scoped' : 'n app'} command whose shortcut fails later '
+      'is reported',
+      (tester) async {
+        final command = AppCommand(
+          id: _format,
+          title: 'Format',
+          shortcuts: [KeySequence.ctrl.f],
+          run: (_) async => throw const FormatException('bad input'),
+        );
+        const body = Focus(autofocus: true, child: Text('doc'));
+        final errors = await _uncaught(() async {
+          tester.pumpWidget(
+            scoped
+                ? CommandScope(commands: [command], child: body)
+                : FleuryApp(title: 'Editor', commands: [command], home: body),
+          );
+          tester.pump();
+          tester.sendKey(
+            const KeyEvent(KeyCode.f, modifiers: {KeyModifier.ctrl}),
+          );
+          await Future<void>.delayed(Duration.zero);
+        });
 
-    expect(errors, [isA<FormatException>()]);
-  });
+        expect(errors, [isA<FormatException>()]);
+        expect(
+          tester.lastCommandResult?.status,
+          CommandInvocationStatus.failed,
+        );
+      },
+    );
+  }
 
   testWidgets('a command hidden since the tree was read is not completed', (
     tester,
