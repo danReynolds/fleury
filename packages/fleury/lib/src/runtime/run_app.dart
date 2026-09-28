@@ -291,6 +291,12 @@ const _stdioCleanupResourceTimeout = Duration(seconds: 3);
 /// actions (and their optional values) for the lifetime of the session.
 const _maxPendingRemoteSemanticActions = 64;
 
+/// How long a served semantic action holds the actions queued behind it
+/// before the queue moves on without its result: long enough for a handler's
+/// own async work (an awaited validation, a store write), short of a handler
+/// awaiting UI that a later action answers.
+const _semanticActionQueueHold = Duration(milliseconds: 500);
+
 /// Runs an fleury application.
 ///
 /// This thin wrapper exists for one safety property: if ANYTHING escapes the
@@ -1409,16 +1415,18 @@ Future<AppExit> _runAppImpl(
             pendingSemanticActions++;
             // Serialize on a per-connection tail: an agent that sends
             // setValue(field) then activate(submit) back-to-back needs the
-            // activate to snapshot the tree the setValue mutated, and the two
-            // RESULT frames to return in submission order. The old
-            // fire-and-forget path let action N+1 snapshot the pre-mutation
-            // tree while N's async invocation was still in flight (the MCP
-            // path already serializes via its own mutation tail). Chaining
-            // each action onto the tail runs N+1's snapshot + invocation only
-            // after N's body completes. The closure still returns immediately
-            // after appending — it never awaits the tail — so frame dispatch
-            // is not blocked and there is no deadlock.
-            semanticActionTail = semanticActionTail.then((_) async {
+            // activate to snapshot the tree the setValue mutated, and the
+            // RESULT frames to return in submission order. Chaining each
+            // action onto the tail runs N+1's snapshot + invocation after N
+            // settles — but N is waited for only so long: a handler that
+            // presents a dialog and awaits its answer settles only when a
+            // LATER action answers it, which must not queue behind it. Past
+            // the hold the queue moves on, and N's RESULT still goes out when
+            // N settles. The closure still returns immediately after
+            // appending — it never awaits the tail — so frame dispatch is not
+            // blocked.
+            semanticActionTail = semanticActionTail.then<void>((_) {
+              var settling = false;
               try {
                 // Read the LIVE root HERE, not at arrival: the link runs
                 // arbitrarily later — behind prior queued actions and across
@@ -1431,7 +1439,7 @@ Future<AppExit> _runAppImpl(
                 // No live root (torn down, or an action that raced ahead of
                 // mount): skip rather than invoke against an absent/detached
                 // tree. A dead session can't honor the action.
-                if (root == null) return;
+                if (root == null) return null;
                 // Flush pending semantics first so the peer's view is current
                 // when the action's result lands — the embed contract, now on
                 // both paths. Deferred into the link (not fired at arrival) so
@@ -1447,34 +1455,60 @@ Future<AppExit> _runAppImpl(
                       action,
                       SemanticActionInvocationStatus.notFound,
                     );
-                    return;
+                    return null;
                   }
                 }
                 // An agent's or assistive technology's action is input too:
                 // errors it causes stop when it stops.
                 errorReporter.noteInput();
-                final result = await invokeSemanticActionFromElement(
+                // Runs the handler's synchronous part now; the rest settles
+                // later, and the next action need not wait for it.
+                final invocation = invokeSemanticActionFromElement(
                   tree: liveTree,
                   id: id,
                   action: action,
                   value: value,
                 );
-                // Ship the outcome back so the peer (agent bridge, AT
-                // mirror) gets a real status instead of guessing from
-                // tree diffs — and surface a throwing onAction handler
-                // like any other app error rather than swallowing it.
-                negotiatedSink.presentSemanticActionResult(
-                  id,
-                  action,
-                  result.status,
+                settling = true;
+                final settled = invocation
+                    .then((result) {
+                      // Ship the outcome back so the peer (agent bridge, AT
+                      // mirror) gets a real status instead of guessing from
+                      // tree diffs — and surface a throwing onAction handler
+                      // like any other app error rather than swallowing it.
+                      negotiatedSink.presentSemanticActionResult(
+                        id,
+                        action,
+                        result.status,
+                      );
+                      if (result.status ==
+                          SemanticActionInvocationStatus.failed) {
+                        reportSemanticActionFault(
+                          result.error ??
+                              StateError(
+                                'semantic action ${action.name} failed',
+                              ),
+                          result.stackTrace ?? StackTrace.current,
+                        );
+                      }
+                    })
+                    .catchError((Object error, StackTrace stackTrace) {
+                      // A throwing sink: the handler's fault is already in
+                      // its result.
+                      reportSemanticActionFault(error, stackTrace);
+                    })
+                    .whenComplete(() => pendingSemanticActions--);
+                final released = Completer<void>();
+                final hold = Timer(_semanticActionQueueHold, () {
+                  if (!released.isCompleted) released.complete();
+                });
+                unawaited(
+                  settled.whenComplete(() {
+                    hold.cancel();
+                    if (!released.isCompleted) released.complete();
+                  }),
                 );
-                if (result.status == SemanticActionInvocationStatus.failed) {
-                  reportSemanticActionFault(
-                    result.error ??
-                        StateError('semantic action ${action.name} failed'),
-                    result.stackTrace ?? StackTrace.current,
-                  );
-                }
+                return released.future;
               } catch (error, stackTrace) {
                 // Catch INSIDE the link so a fault never rejects the tail — a
                 // rejected tail future would skip every later action's
@@ -1486,7 +1520,8 @@ Future<AppExit> _runAppImpl(
                 // NOT throw, so the link's future always RESOLVES.
                 reportSemanticActionFault(error, stackTrace);
               } finally {
-                pendingSemanticActions--;
+                // A settling invocation counts itself down when it settles.
+                if (!settling) pendingSemanticActions--;
               }
             });
             scheduleFrame('semantic-action:${action.name}');

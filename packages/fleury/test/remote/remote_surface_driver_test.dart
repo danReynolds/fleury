@@ -1057,6 +1057,175 @@ void main() {
   // invoke while action N's async invocation was still in flight, so an agent
   // that sent setValue(field) then activate(submit) back-to-back could submit
   // the pre-mutation value and get its RESULT frames out of order.
+  group('a semantic action that awaits a dialog', () {
+    // The `await context.present(Confirm())` idiom on the semantic channel:
+    // the handler settles only when the dialog is answered, and over the
+    // wire the answer is a later action. It must not queue behind the action
+    // that opened the dialog, and each RESULT goes out when its handler
+    // settles.
+    late BuildContext home;
+    bool? deleted;
+
+    Future<void> askAndDelete({RouteTransition? transition}) async {
+      deleted = await Navigator.of(home).present<bool>(
+        Semantics(
+          id: const SemanticNodeId('confirm'),
+          role: SemanticRole.button,
+          label: 'Confirm',
+          actions: const {SemanticAction.activate},
+          onAction: (_) => Navigator.of(home).pop(true),
+          child: const Text('Delete it?'),
+        ),
+        transition: transition ?? RouteTransition.none,
+      );
+    }
+
+    Future<List<String>> answerThroughSemantics(
+      Widget screen,
+      SemanticNodeId Function(_FakeTransport transport) opener,
+    ) async {
+      deleted = null;
+      final transport = _FakeTransport();
+      scheduleMicrotask(() => transport.emit(_init));
+      final done = runApp(
+        Navigator(
+          transition: RouteTransition.none,
+          home: _ContextProbe((context) => home = context, screen),
+        ),
+        driver: RemoteTerminalDriver(transport),
+        requireInteractiveTerminal: false,
+      );
+      await Future<void>.delayed(const Duration(milliseconds: 20));
+
+      transport.emit(
+        SemanticActionFrame(opener(transport), SemanticAction.activate),
+      );
+      await Future<void>.delayed(const Duration(milliseconds: 50));
+      transport.emit(
+        const SemanticActionFrame(
+          SemanticNodeId('confirm'),
+          SemanticAction.activate,
+        ),
+      );
+      await Future<void>.delayed(const Duration(milliseconds: 900));
+
+      await transport.disconnect();
+      await done;
+      return [
+        for (final frame in transport.sent)
+          if (frame is SemanticActionResultFrame)
+            '${frame.action.name}:${frame.status.name}',
+      ];
+    }
+
+    test('from a Semantics handler', () async {
+      final results = await answerThroughSemantics(
+        Semantics(
+          id: const SemanticNodeId('delete'),
+          role: SemanticRole.button,
+          label: 'Delete',
+          actions: const {SemanticAction.activate},
+          onAction: (_) => askAndDelete(),
+          child: const Text('Delete'),
+        ),
+        (_) => const SemanticNodeId('delete'),
+      );
+
+      expect(deleted, isTrue, reason: 'the dialog was answered');
+      expect(results, ['activate:completed', 'activate:completed']);
+    });
+
+    test('from a command node', () async {
+      final results = await answerThroughSemantics(
+        CommandScope(
+          commands: [
+            AppCommand(
+              id: const CommandId('files.delete'),
+              title: 'Delete',
+              run: (_) => askAndDelete(),
+            ),
+          ],
+          child: const Text('files'),
+        ),
+        (transport) => _latestSemanticTree(
+          transport,
+        ).single(role: SemanticRole.command, label: 'Delete').id,
+      );
+
+      expect(deleted, isTrue, reason: 'the dialog was answered');
+      expect(results, ['activate:completed', 'activate:completed']);
+    });
+
+    test(
+      'an action behind a dismissal does not reach the dismissed route',
+      () async {
+        final transport = _FakeTransport();
+        scheduleMicrotask(() => transport.emit(_init));
+        final done = runApp(
+          Navigator(
+            transition: RouteTransition.none,
+            home: _ContextProbe(
+              (context) => home = context,
+              const Text('home'),
+            ),
+          ),
+          driver: RemoteTerminalDriver(transport),
+          requireInteractiveTerminal: false,
+        );
+        await Future<void>.delayed(const Duration(milliseconds: 20));
+        final navigator = Navigator.of(home);
+        unawaited(navigator.push<void>(const _KeyCounter()));
+        // It fades out, so it stays mounted while it leaves.
+        unawaited(askAndDelete(transition: RouteTransition.fade));
+        await Future<void>.delayed(const Duration(milliseconds: 20));
+        expect(navigator.depth, 3, reason: 'the dialog is up');
+        final dialog = _latestSemanticTree(transport).nodes.lastWhere(
+          (node) =>
+              node.role == SemanticRole.route &&
+              node.selfAndDescendants.any(
+                (child) => child.id == const SemanticNodeId('confirm'),
+              ),
+        );
+
+        // In one burst: a key that renders a frame, then a peer dismissing
+        // the dialog and confirming it. The confirm reaches a dialog that is
+        // leaving, still mounted and before a frame shows it gone. It must
+        // not run: its pop would close the page beneath.
+        transport.emit(
+          const InputEventFrame(InputBatch(key: KeyEvent(KeyCode.char('k')))),
+        );
+        transport.emit(
+          SemanticActionFrame(
+            dialog.id,
+            SemanticAction.dismiss,
+            targetToken: dialog.actionTargetToken,
+          ),
+        );
+        transport.emit(
+          const SemanticActionFrame(
+            SemanticNodeId('confirm'),
+            SemanticAction.activate,
+          ),
+        );
+        await Future<void>.delayed(const Duration(milliseconds: 200));
+
+        expect(navigator.depth, 2, reason: 'the page is still open');
+        expect(deleted, isNull, reason: 'the dialog was dismissed');
+        expect(
+          [
+            for (final frame in transport.sent)
+              if (frame is SemanticActionResultFrame)
+                '${frame.action.name}:${frame.status.name}',
+          ],
+          ['dismiss:completed', 'activate:notFound'],
+        );
+
+        await transport.disconnect();
+        await done;
+      },
+    );
+  });
+
   group('semantic action serialization (F16)', () {
     test('a following activate observes the value a preceding setValue set '
         '(not the pre-mutation tree)', () async {
@@ -1894,6 +2063,37 @@ void main() {
 /// surface reports it can render links. Used to exercise capability propagation
 /// end-to-end through a real runApp + driver + MediaQuery, without reaching
 /// across the package boundary into fleury_widgets.
+final class _ContextProbe extends StatelessWidget {
+  const _ContextProbe(this.sink, this.child);
+
+  final void Function(BuildContext context) sink;
+  final Widget child;
+
+  @override
+  Widget build(BuildContext context) {
+    sink(context);
+    return child;
+  }
+}
+
+// A page that rebuilds on every key, so a key renders a frame.
+final class _KeyCounter extends StatefulWidget {
+  const _KeyCounter();
+
+  @override
+  State<_KeyCounter> createState() => _KeyCounterState();
+}
+
+final class _KeyCounterState extends State<_KeyCounter> {
+  var _keys = 0;
+
+  @override
+  Widget build(BuildContext context) => KeyDetector(
+    onKey: (_) => setState(() => _keys++),
+    child: Focus(autofocus: true, child: Text('page $_keys')),
+  );
+}
+
 final class _LinkProbe extends StatelessWidget {
   const _LinkProbe(this.url);
 

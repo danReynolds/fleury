@@ -255,7 +255,7 @@ final class FleuryAppBridge {
     SemanticAction action, {
     String? targetToken,
   }) {
-    _requireActionSession();
+    _requireActionSession(id, action);
     final status = _expectActionResult(id, action);
     try {
       _send(SemanticActionFrame(id, action, targetToken: targetToken));
@@ -263,7 +263,7 @@ final class FleuryAppBridge {
       // Encoding can still reject a locally-invalid id/token after the result
       // slot is armed. Release that unsent action immediately so its orphaned
       // waiter cannot block the next valid mutation.
-      _abortPendingAction();
+      _abortPendingAction(id, action);
       rethrow;
     }
     return status;
@@ -279,7 +279,7 @@ final class FleuryAppBridge {
     Object? value, {
     String? targetToken,
   }) {
-    _requireActionSession();
+    _requireActionSession(id, SemanticAction.setValue);
     final status = _expectActionResult(id, SemanticAction.setValue);
     try {
       _send(
@@ -295,16 +295,16 @@ final class FleuryAppBridge {
       // Drop the armed wait and let the failure propagate so the caller reports
       // it; the app is untouched. (invokeAction's payload is just id+action and
       // is always within the cap, so it needs no such guard.)
-      _abortPendingAction();
+      _abortPendingAction(id, SemanticAction.setValue);
       rethrow;
     }
     return status;
   }
 
-  void _requireActionSession() {
+  void _requireActionSession(SemanticNodeId id, SemanticAction action) {
     _requireNegotiatedSession();
-    if (_pendingAction != null) {
-      final pending = _pendingAction!;
+    final pending = _pendingActions[(id, action)];
+    if (pending != null) {
       throw FleurySemanticActionBusyException(
         pending.id,
         pending.action,
@@ -327,37 +327,42 @@ final class FleuryAppBridge {
     }
   }
 
-  /// The in-flight mutation awaiting its SEMANTIC_ACTION_RESULT, tagged with the
-  /// (id, action) it was armed for so an arriving result is correlated to the
-  /// request it belongs to. Mutations are serialized by the MCP server, so at
-  /// most one is pending.
-  _PendingSemanticAction? _pendingAction;
+  /// Mutations awaiting their SEMANTIC_ACTION_RESULT, by the (id, action) the
+  /// app echoes onto the result. The MCP server serializes mutations, but one
+  /// can stay pending past its wait: a handler that presents a dialog and
+  /// awaits its answer finishes only after the dialog is answered through
+  /// another node. So only a repeat of the same (id, action) is busy until its
+  /// result arrives — the wire has no sequence number to tell a late result
+  /// from a retry's — and any other action goes ahead.
+  final Map<(SemanticNodeId, SemanticAction), _PendingSemanticAction>
+  _pendingActions = {};
 
   /// Arms a one-shot listener for the SEMANTIC_ACTION_RESULT that echoes back
-  /// [id]/[action] (the app echoes both onto the result frame). Bounded: a peer
-  /// that does not answer leaves a tombstone in the only correlation slot
-  /// because the wire has no sequence number with which to distinguish its late
-  /// result from a retry.
+  /// [id]/[action] (the app echoes both onto the result frame). Bounded: an
+  /// action whose handler outlives the wait keeps its (id, action) slot until
+  /// its late result arrives, because the wire has no sequence number with
+  /// which to tell that result from a retry's.
   Future<SemanticActionInvocationStatus?> _expectActionResult(
     SemanticNodeId id,
     SemanticAction action,
   ) {
     final completer = Completer<SemanticActionInvocationStatus?>();
     final pending = _PendingSemanticAction(id, action, completer);
-    _pendingAction = pending;
+    final key = (id, action);
+    _pendingActions[key] = pending;
     return completer.future.timeout(
       const Duration(seconds: 2),
       onTimeout: () {
-        if (!identical(_pendingAction, pending)) return null;
+        if (!identical(_pendingActions[key], pending)) return null;
         pending.timedOut = true;
         if (!pending.completer.isCompleted) {
           pending.completer.complete(null);
         }
         // There is no result sequence/nonce on this wire. Once this action's
         // result is late, a retry of the same (id, action) could consume it.
-        // Keep this completed record as a tombstone: the healthy app and
-        // non-semantic input stay usable, but no semantic action can re-arm
-        // the correlation slot until the exact late result clears it.
+        // Keep this completed record as a tombstone: every other action stays
+        // usable, but this (id, action) can't re-arm its slot until the exact
+        // late result clears it.
         throw FleurySemanticActionTimeoutException(id, action);
       },
     );
@@ -367,11 +372,18 @@ final class FleuryAppBridge {
   /// the peer exited. Resolving it promptly lets the MCP layer re-check bridge
   /// state and return `app_exited` / `protocol_mismatch` instead of waiting for
   /// the result timeout.
-  void _abortPendingAction() {
-    final pending = _pendingAction;
-    _pendingAction = null;
+  void _abortPendingAction(SemanticNodeId id, SemanticAction action) {
+    final pending = _pendingActions.remove((id, action));
     if (pending != null && !pending.completer.isCompleted) {
       pending.completer.complete(null);
+    }
+  }
+
+  void _abortPendingActions() {
+    final pending = _pendingActions.values.toList();
+    _pendingActions.clear();
+    for (final action in pending) {
+      if (!action.completer.isCompleted) action.completer.complete(null);
     }
   }
 
@@ -642,14 +654,9 @@ final class FleuryAppBridge {
         // prior slow action whose wait already timed out must NOT be attributed
         // to the next mutation now armed — match on (id, action), and drop a
         // stale straggler that matches nothing rather than mis-binding it.
-        final pending = _pendingAction;
-        if (pending != null &&
-            pending.id == f.id &&
-            pending.action == f.action) {
-          _pendingAction = null;
-          if (!pending.completer.isCompleted) {
-            pending.completer.complete(f.status);
-          }
+        final pending = _pendingActions.remove((f.id, f.action));
+        if (pending != null && !pending.completer.isCompleted) {
+          pending.completer.complete(f.status);
         }
     }
   }
@@ -671,7 +678,7 @@ final class FleuryAppBridge {
   }
 
   void _markExited() {
-    _abortPendingAction();
+    _abortPendingActions();
     for (final c in _pendingDebug.values) {
       if (!c.isCompleted) c.complete(null);
     }
@@ -749,9 +756,10 @@ final class FleuryAppBridgeException implements Exception {
   String toString() => 'FleuryAppBridgeException: $message';
 }
 
-/// The peer failed to acknowledge a semantic action before its bounded result
-/// deadline. The bridge keeps the unsequenced correlation slot reserved after
-/// throwing this, so a late result cannot be mistaken for a retry.
+/// A semantic action's handler had not finished by its bounded result
+/// deadline, for example because it awaits a dialog it opened. The bridge
+/// keeps that (id, action) slot reserved after throwing this, so a late
+/// result cannot be mistaken for a retry's.
 final class FleurySemanticActionTimeoutException implements Exception {
   const FleurySemanticActionTimeoutException(this.id, this.action);
 
@@ -759,16 +767,16 @@ final class FleurySemanticActionTimeoutException implements Exception {
   final SemanticAction action;
 
   String get message =>
-      'The Fleury app did not acknowledge "${action.name}" on "${id.value}" '
-      'within 2 seconds. New semantic actions are blocked until that late '
-      'result arrives or the bridge disconnects.';
+      'The Fleury app has not finished "${action.name}" on "${id.value}" '
+      'within 2 seconds; its handler may be waiting on UI it opened. Only a '
+      'repeat of this action waits for its late result.';
 
   @override
   String toString() => 'FleurySemanticActionTimeoutException: $message';
 }
 
-/// A semantic action cannot be sent while the unsequenced result slot belongs
-/// to another action (including a timed-out action awaiting its late result).
+/// A semantic action cannot be sent while its (id, action) result slot
+/// belongs to an earlier one (including one still running past its wait).
 final class FleurySemanticActionBusyException implements Exception {
   const FleurySemanticActionBusyException(
     this.id,
@@ -781,11 +789,11 @@ final class FleurySemanticActionBusyException implements Exception {
   final bool timedOut;
 
   String get message => timedOut
-      ? 'A timed-out "${action.name}" action on "${id.value}" is still '
-            'awaiting its late result. Retry semantic actions only after that '
-            'result arrives or the bridge reconnects.'
+      ? 'An earlier "${action.name}" on "${id.value}" is still running (it '
+            'may be waiting on a dialog it opened). Send it again once that '
+            'one finishes; other actions can go ahead.'
       : 'A "${action.name}" action on "${id.value}" is still awaiting its '
-            'result. Wait for it before sending another semantic action.';
+            'result. Wait for it before sending it again.';
 
   @override
   String toString() => 'FleurySemanticActionBusyException: $message';

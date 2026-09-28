@@ -466,40 +466,49 @@ void main() {
   });
 
   group('SEMANTIC_ACTION_RESULT is correlated to its request', () {
-    test(
-      'a second action cannot supersede one whose result is pending',
-      () async {
-        final transport = _EncodingTransport();
-        final bridge = FleuryAppBridge(transport)..start();
-        addTearDown(bridge.close);
-        transport.addIncoming(_appInit(remoteProtocolVersion));
-        await _pump();
+    test('an action on another node goes ahead while one is pending', () async {
+      final transport = _EncodingTransport();
+      final bridge = FleuryAppBridge(transport)..start();
+      addTearDown(bridge.close);
+      transport.addIncoming(_appInit(remoteProtocolVersion));
+      await _pump();
 
-        const a = SemanticNodeId('nodeA');
-        const b = SemanticNodeId('nodeB');
+      const a = SemanticNodeId('nodeA');
+      const b = SemanticNodeId('nodeB');
 
-        // The MCP server serializes mutations, but the bridge is public. Reject
-        // direct concurrent use rather than replacing the only correlation slot.
-        final aResult = bridge.invokeAction(a, SemanticAction.activate);
-        expect(
-          () => bridge.invokeAction(b, SemanticAction.activate),
-          throwsA(
-            predicate<Object>(
-              (error) => error.toString().contains('still awaiting its result'),
-            ),
+      // A handler that awaits a dialog finishes only once another node
+      // answers it, so a pending action must not hold up the others. Each
+      // result still reaches its own request.
+      final aResult = bridge.invokeAction(a, SemanticAction.activate);
+      final bResult = bridge.invokeAction(b, SemanticAction.activate);
+      expect(transport.sent.whereType<SemanticActionFrame>(), hasLength(2));
+      expect(
+        () => bridge.invokeAction(a, SemanticAction.activate),
+        throwsA(
+          predicate<Object>(
+            (error) => error.toString().contains('still awaiting its result'),
           ),
-        );
+        ),
+        reason: 'a repeat could take the pending one\'s result',
+      );
 
-        transport.addIncoming(
-          SemanticActionResultFrame(
-            a,
-            SemanticAction.activate,
-            SemanticActionInvocationStatus.completed,
-          ),
-        );
-        expect(await aResult, SemanticActionInvocationStatus.completed);
-      },
-    );
+      transport.addIncoming(
+        SemanticActionResultFrame(
+          b,
+          SemanticAction.activate,
+          SemanticActionInvocationStatus.completed,
+        ),
+      );
+      transport.addIncoming(
+        SemanticActionResultFrame(
+          a,
+          SemanticAction.activate,
+          SemanticActionInvocationStatus.disabled,
+        ),
+      );
+      expect(await bResult, SemanticActionInvocationStatus.completed);
+      expect(await aResult, SemanticActionInvocationStatus.disabled);
+    });
 
     test(
       'a timed-out action blocks same-target retry until its late result',
@@ -517,7 +526,7 @@ void main() {
           throwsA(
             predicate<Object>(
               (error) =>
-                  error.toString().contains('did not acknowledge "activate"') &&
+                  error.toString().contains('has not finished "activate"') &&
                   error.toString().contains('late result'),
             ),
           ),
@@ -529,8 +538,8 @@ void main() {
           throwsA(
             predicate<Object>(
               (error) =>
-                  error.toString().contains('timed-out "activate"') &&
-                  error.toString().contains('late result'),
+                  error.toString().contains('earlier "activate"') &&
+                  error.toString().contains('still running'),
             ),
           ),
           reason: 'the late first result must have no retry slot to satisfy',
