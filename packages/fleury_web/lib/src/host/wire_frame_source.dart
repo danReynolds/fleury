@@ -682,10 +682,20 @@ final class WireFrameSource implements BrowserFrameSource {
     final tree = _semanticsDecoder.apply(frame.json);
     if (tree == null) return;
     // The owner advances only on a successful decode, so a swallowed frame
-    // leaves the diff anchored at the last good tree. A full (resync) frame
-    // diffs to a large added/removed set, so the presenter falls back to a full
-    // rebuild; a patch yields updated-only, taking the incremental path.
-    semantics.present(tree, update: _semanticsOwner.update(tree));
+    // leaves the diff anchored at the last good tree. A patch that changed
+    // only content names the nodes it rebuilt, so the owner takes them
+    // without diffing the whole tree. A full (resync) frame diffs to a large
+    // added/removed set, so the presenter falls back to a full rebuild.
+    final replacements = _semanticsDecoder.contentReplacements;
+    final update =
+        (replacements == null
+            ? null
+            : _semanticsOwner.updateRetainedNodes(
+                next: tree,
+                replacements: replacements,
+              )) ??
+        _semanticsOwner.update(tree);
+    semantics.present(tree, update: update);
   }
 
   void _send(Uint8List bytes, {bool isInit = false}) {

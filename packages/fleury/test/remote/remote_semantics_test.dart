@@ -128,6 +128,127 @@ void main() {
       }
     });
 
+    group('a patch that changes only content', () {
+      // A label, value or state change (no node added or removed, no child
+      // list changed) rebuilds only the changed nodes and their ancestors,
+      // reusing the rest of the decoded tree.
+      test('reuses every subtree it did not touch', () {
+        final encoder = SemanticsWireEncoder();
+        final decoder = SemanticsWireDecoder();
+        final before = decoder.apply(
+          encoder.encode(_snap(messages: 40, tick: 0))!,
+        )!;
+
+        final after = decoder.apply(
+          encoder.encode(_snap(messages: 40, tick: 1))!,
+        )!;
+
+        SemanticNode node(SemanticTree tree, String id) =>
+            tree.nodeById(SemanticNodeId(id))!;
+        expect(node(after, 'msg:3'), same(node(before, 'msg:3')));
+        expect(node(after, 'input'), same(node(before, 'input')));
+        expect(node(after, 'status'), isNot(same(node(before, 'status'))));
+        expect(node(after, 'status').label, 'streaming — 1 tokens');
+        expect(
+          decoder.contentReplacements!.keys.map((id) => id.value).toSet(),
+          {'root', 'status', 'messages', 'msg:39'},
+          reason: 'the two changed nodes and their ancestors',
+        );
+        expect(decoder.changedIds.toSet(), {'status', 'msg:39'});
+        expect(decoder.removedIds, isEmpty);
+        expect(decoder.wasFull, isFalse);
+      });
+
+      test('a structural patch or a full frame reports no replacements', () {
+        final encoder = SemanticsWireEncoder();
+        final decoder = SemanticsWireDecoder();
+        decoder.apply(encoder.encode(_snap(messages: 5, tick: 0))!);
+        expect(decoder.contentReplacements, isNull, reason: 'a full frame');
+
+        decoder.apply(encoder.encode(_snap(messages: 5, tick: 1))!);
+        expect(decoder.contentReplacements, isNotNull);
+
+        decoder.apply(encoder.encode(_snap(messages: 6, tick: 2))!);
+        expect(decoder.contentReplacements, isNull, reason: 'a node added');
+      });
+
+      test('one it cannot apply is rejected, and the next lands on the last '
+          'good tree', () {
+        final encoder = SemanticsWireEncoder();
+        final decoder = SemanticsWireDecoder();
+        decoder.apply(encoder.encode(_snap(messages: 5, tick: 0))!);
+
+        // A node that lost its role cannot be decoded.
+        final broken = utf8.encode(
+          jsonEncode({
+            'v': semanticsWireVersion,
+            'mode': 'patch',
+            'set': [
+              {'id': 'status', 'label': 'no role'},
+            ],
+          }),
+        );
+        expect(decoder.apply(broken), isNull);
+
+        final next = decoder.apply(
+          encoder.encode(_snap(messages: 5, tick: 1))!,
+        )!;
+        expect(
+          _canonical(next),
+          _canonical(_snap(messages: 5, tick: 1).toSemanticTree()),
+        );
+      });
+
+      test('a removal or a new root is structural', () {
+        final encoder = SemanticsWireEncoder();
+        List<int> patch(Map<String, Object?> fields) => utf8.encode(
+          jsonEncode({'v': semanticsWireVersion, 'mode': 'patch', ...fields}),
+        );
+
+        final removing = SemanticsWireDecoder()
+          ..apply(encoder.encode(_snap(messages: 3, tick: 0))!);
+        final removed = removing.apply(
+          patch({
+            'removed': ['input'],
+          }),
+        )!;
+        expect(removed.nodeById(const SemanticNodeId('input')), isNull);
+        expect(removing.removedIds, ['input']);
+
+        final rerooting = SemanticsWireDecoder()
+          ..apply(SemanticsWireEncoder().encode(_snap(messages: 3, tick: 0))!);
+        final rerooted = rerooting.apply(patch({'root': 'messages'}))!;
+        expect(rerooted.root.id, const SemanticNodeId('messages'));
+        expect(rerooted.nodeById(const SemanticNodeId('status')), isNull);
+      });
+
+      test('one that would outgrow the frame cap is rejected', () {
+        final encoder = SemanticsWireEncoder();
+        final full = encoder.encode(_snap(messages: 5, tick: 0))!;
+        final decoder = SemanticsWireDecoder(
+          maxWirePayloadLength: full.length + 64,
+        );
+        decoder.apply(full);
+
+        final grown = utf8.encode(
+          jsonEncode({
+            'v': semanticsWireVersion,
+            'mode': 'patch',
+            'set': [
+              {'id': 'status', 'role': 'status', 'label': 'x' * 200},
+            ],
+          }),
+        );
+        expect(decoder.apply(grown), isNull);
+        expect(
+          _canonical(
+            decoder.apply(encoder.encode(_snap(messages: 5, tick: 1))!)!,
+          ),
+          _canonical(_snap(messages: 5, tick: 1).toSemanticTree()),
+        );
+      });
+    });
+
     test('a steady patch is a tiny fraction of the full frame', () {
       final encoder = SemanticsWireEncoder();
       final full = encoder.encode(_snap(messages: 240, tick: 0))!;

@@ -758,11 +758,20 @@ final class SemanticsWireDecoder {
 
   final Map<String, Map<String, Object?>> _flat = {};
   final Map<String, int> _flatNodeByteLengths = {};
+  int _flatBytes = 0;
   String _rootId = 'root';
   bool _hasState = false;
   List<String> _changedIds = const <String>[];
   List<String> _removedIds = const <String>[];
   bool _wasFull = false;
+
+  // The last reconstructed tree's nodes by id, and each id's parents (a
+  // repeated leaf has several), so a patch that changes only the content of
+  // nodes already in the tree rebuilds just those nodes and their ancestors,
+  // rather than the whole tree.
+  final Map<String, SemanticNode> _nodes = {};
+  final Map<String, Set<String>> _parentIds = {};
+  Map<SemanticNodeId, SemanticNode>? _contentReplacements;
 
   /// Whether a full frame has been applied (so patches have a base to land on).
   bool get isPrimed => _hasState;
@@ -779,6 +788,14 @@ final class SemanticsWireDecoder {
   /// Whether the most recently applied frame was a full (resync) frame — a
   /// consumer should treat [changedIds] as "re-read everything".
   bool get wasFull => _wasFull;
+
+  /// The nodes the most recently applied frame rebuilt, when it changed only
+  /// the content of nodes already in the tree: those nodes and their
+  /// ancestors, by id. A consumer can advance a [SemanticsOwner] with
+  /// `updateRetainedNodes` instead of diffing the whole tree. Null after a
+  /// full frame or a structural patch.
+  Map<SemanticNodeId, SemanticNode>? get contentReplacements =>
+      _contentReplacements;
 
   /// Applies one wire payload and returns the reconstructed tree, or null if
   /// the payload is malformed or a patch arrives before any full frame (a
@@ -817,6 +834,14 @@ final class SemanticsWireDecoder {
         candidateWasFull = true;
       case 'patch':
         if (!_hasState) return null;
+        switch (_applyContentPatch(decoded)) {
+          case _ContentPatchApplied(:final tree):
+            return tree;
+          case _ContentPatchRejected():
+            return null;
+          case _NotAContentPatch():
+            break;
+        }
         candidate = Map<String, Map<String, Object?>>.of(_flat);
         final set = decoded['set'];
         if (set != null) {
@@ -952,6 +977,9 @@ final class SemanticsWireDecoder {
     _flatNodeByteLengths
       ..clear()
       ..addAll(reachableNodeByteLengths);
+    _flatBytes = reachableNodeBytes;
+    _index(tree);
+    _contentReplacements = null;
     final rootChanged = candidateRootId != _rootId;
     _rootId = candidateRootId;
     _hasState = true;
@@ -972,6 +1000,143 @@ final class SemanticsWireDecoder {
       _removedIds = removed.toList(growable: false);
     }
     return tree;
+  }
+
+  /// Applies a patch that only changes the content of nodes already in the
+  /// tree: no node added or removed, no child list or root changed. Only those
+  /// nodes and their ancestors are rebuilt; the rest of the tree is reused.
+  /// Anything else is left to the full reconstruction, which validates the
+  /// graph.
+  _ContentPatch _applyContentPatch(Map<Object?, Object?> patch) {
+    final removed = patch['removed'];
+    if (removed != null && (removed is! List || removed.isNotEmpty)) {
+      return const _NotAContentPatch();
+    }
+    final root = patch['root'];
+    if (root != null && root != _rootId) return const _NotAContentPatch();
+    final set = patch['set'] ?? const <Object?>[];
+    if (set is! List || set.length > maxSemanticWireNodes) {
+      return const _NotAContentPatch();
+    }
+    final changed = <String, Map<String, Object?>>{};
+    for (final value in set) {
+      final normalized = _normalizeNode(value);
+      if (normalized == null) return const _ContentPatchRejected();
+      final retained = _flat[normalized.id];
+      if (retained == null ||
+          !_sameChildIds(retained['childIds'], normalized.node['childIds'])) {
+        return const _NotAContentPatch();
+      }
+      changed[normalized.id] = normalized.node;
+    }
+
+    final byteLengths = <String, int>{};
+    var bytes = _flatBytes;
+    for (final MapEntry(key: id, value: node) in changed.entries) {
+      final length = _semanticNodeWireLength(node);
+      byteLengths[id] = length;
+      bytes += length - (_flatNodeByteLengths[id] ?? 0);
+    }
+    if (_semanticFullPayloadLength(
+          _rootId,
+          nodeBytes: bytes,
+          nodeCount: _flat.length,
+        ) >
+        maxWirePayloadLength) {
+      return const _ContentPatchRejected();
+    }
+
+    // The changed nodes and every ancestor of one, rebuilt from the root
+    // down through them only.
+    final stale = <String>{};
+    final pending = [...changed.keys];
+    while (pending.isNotEmpty) {
+      final id = pending.removeLast();
+      if (!stale.add(id)) continue;
+      pending.addAll(_parentIds[id] ?? const <String>{});
+    }
+    final rebuilt = <String, SemanticNode>{};
+    var failed = false;
+    SemanticNode? rebuild(String id) {
+      final existing = rebuilt[id];
+      if (existing != null) return existing;
+      final flat = changed[id] ?? _flat[id]!;
+      final childIds = flat['childIds'];
+      final children = <SemanticNode>[
+        if (childIds is List<String>)
+          for (final childId in childIds)
+            if (stale.contains(childId))
+              ?rebuild(childId)
+            else
+              ?_nodes[childId],
+      ];
+      if (failed) return null;
+      final node = _materialize(flat, children);
+      if (node == null) {
+        failed = true;
+        return null;
+      }
+      return rebuilt[id] = node;
+    }
+
+    final rootNode = rebuild(_rootId);
+    if (rootNode == null || failed) return const _ContentPatchRejected();
+
+    _flat.addAll(changed);
+    _flatNodeByteLengths.addAll(byteLengths);
+    _flatBytes = bytes;
+    _nodes.addAll(rebuilt);
+    _changedIds = changed.keys.toList(growable: false);
+    _removedIds = const <String>[];
+    _wasFull = false;
+    _contentReplacements = {
+      for (final MapEntry(key: id, value: node) in rebuilt.entries)
+        SemanticNodeId(id): node,
+    };
+    return _ContentPatchApplied(SemanticTree(root: rootNode));
+  }
+
+  /// One node from its normalized wire map, with [children] already built.
+  /// Null for a node that fails inspection parsing.
+  static SemanticNode? _materialize(
+    Map<String, Object?> flat,
+    List<SemanticNode> children,
+  ) {
+    try {
+      final node = SemanticInspectionNode.fromJson(<String, Object?>{
+        for (final entry in flat.entries)
+          if (entry.key != 'childIds') entry.key: entry.value,
+      }).toSemanticNode();
+      return children.isEmpty ? node : node.copyWith(children: children);
+    } on Object {
+      return null;
+    }
+  }
+
+  static bool _sameChildIds(Object? a, Object? b) {
+    if (a is! List<String> || b is! List<String>) return a == null && b == null;
+    if (a.length != b.length) return false;
+    for (var i = 0; i < a.length; i++) {
+      if (a[i] != b[i]) return false;
+    }
+    return true;
+  }
+
+  void _index(SemanticTree tree) {
+    _nodes.clear();
+    _parentIds.clear();
+    void visit(SemanticNode node, String? parentId) {
+      final id = node.id.value;
+      if (parentId != null) (_parentIds[id] ??= <String>{}).add(parentId);
+      // A repeated leaf is one node wherever it appears.
+      if (_nodes.containsKey(id)) return;
+      _nodes[id] = node;
+      for (final child in node.children) {
+        visit(child, id);
+      }
+    }
+
+    visit(tree.root, null);
   }
 
   static ({String id, Map<String, Object?> node})? _normalizeNode(
@@ -1011,4 +1176,22 @@ final class SemanticsWireDecoder {
     };
     return (id: id, node: node);
   }
+}
+
+sealed class _ContentPatch {
+  const _ContentPatch();
+}
+
+final class _ContentPatchApplied extends _ContentPatch {
+  const _ContentPatchApplied(this.tree);
+
+  final SemanticTree tree;
+}
+
+final class _ContentPatchRejected extends _ContentPatch {
+  const _ContentPatchRejected();
+}
+
+final class _NotAContentPatch extends _ContentPatch {
+  const _NotAContentPatch();
 }
