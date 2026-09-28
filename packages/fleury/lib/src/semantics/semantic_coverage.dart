@@ -36,7 +36,8 @@ final class SemanticCoverageAudit {
 /// The visual grid is `aria-hidden`, so visible painted text without semantics
 /// would otherwise be unreachable to assistive technology. This bridge keeps
 /// rich widget semantics authoritative where bounds exist and appends plain
-/// text fallback nodes only for uncovered non-whitespace buffer text.
+/// text fallback nodes only for uncovered buffer text. Whitespace and drawing
+/// glyphs (a border, a bar, a plot's dots) are not text.
 SemanticCoverageResult applySemanticTextFallback({
   required SemanticTree tree,
   required CellBuffer buffer,
@@ -305,10 +306,26 @@ int _fallbackCandidateWidth(
   if (cell.role != CellRole.leading) return 0;
   final grapheme = cell.grapheme;
   if (grapheme == null || grapheme.trim().isEmpty) return 0;
+  if (_isDrawingGlyph(grapheme)) return 0;
   final nextCol = col + 1;
   if (nextCol < buffer.size.cols &&
       buffer.atColRow(nextCol, row).role == CellRole.continuation) {
     return 2;
   }
   return 1;
+}
+
+/// Whether [grapheme] draws rather than reads: Box Drawing and Block Elements
+/// (borders, bars, gauges), Braille Patterns (plots), and Symbols for Legacy
+/// Computing (sextants and octants). Read aloud, a panel's frame would be a
+/// run of "box drawings light vertical".
+bool _isDrawingGlyph(String grapheme) {
+  final unit = grapheme.codeUnitAt(0);
+  if (unit >= 0x2500 && unit <= 0x259F) return true;
+  if (unit >= 0x2800 && unit <= 0x28FF) return true;
+  // U+1FB00–U+1FBFF, as a surrogate pair.
+  return unit == 0xD83E &&
+      grapheme.length > 1 &&
+      grapheme.codeUnitAt(1) >= 0xDF00 &&
+      grapheme.codeUnitAt(1) <= 0xDFFF;
 }
