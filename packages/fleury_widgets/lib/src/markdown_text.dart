@@ -1457,6 +1457,34 @@ TextSpan _inline(
     buf.clear();
   }
 
+  // Where a scan for each delimiter's closer found none: an opener after it
+  // has none either, so it is not scanned again. Rescanning made a paragraph
+  // of unclosed `_name` words quadratic.
+  final noCloserFrom = <String, int>{};
+  int emphasisEnd(int start, String delimiter) {
+    final from = noCloserFrom[delimiter];
+    if (from != null && start >= from) return -1;
+    final end = _emphasisEnd(src, start, delimiter);
+    if (end != _noEmphasisCloser) return end;
+    noCloserFrom[delimiter] = start;
+    return -1;
+  }
+
+  // Emphasis content is markup too: bold inside italic renders.
+  void emphasis(int start, int end, int width, CellStyle style) {
+    flushText();
+    children.add(
+      _inline(
+        src.substring(start + width, end),
+        base.merge(style),
+        links: links,
+        blockIndex: blockIndex,
+        hyperlinks: hyperlinks,
+        inlineLinkUrls: inlineLinkUrls,
+      ),
+    );
+  }
+
   while (i < src.length) {
     final ch = src[i];
 
@@ -1477,17 +1505,20 @@ TextSpan _inline(
         continue;
       }
     }
+    // Bold and italic: ***…***
+    if (ch == '*' && src.startsWith('***', i)) {
+      final end = emphasisEnd(i, '***');
+      if (end > i) {
+        emphasis(i, end, 3, const CellStyle(bold: true, italic: true));
+        i = end + 3;
+        continue;
+      }
+    }
     // Bold: **…**
     if (ch == '*' && i + 1 < src.length && src[i + 1] == '*') {
-      final end = _emphasisEnd(src, i, '**');
+      final end = emphasisEnd(i, '**');
       if (end > i) {
-        flushText();
-        children.add(
-          TextSpan(
-            text: src.substring(i + 2, end),
-            style: base.merge(const CellStyle(bold: true)),
-          ),
-        );
+        emphasis(i, end, 2, const CellStyle(bold: true));
         i = end + 2;
         continue;
       }
@@ -1509,15 +1540,9 @@ TextSpan _inline(
     }
     // Italic: *…* OR _…_ (a single delimiter; a longer run is text).
     if (ch == '*' || ch == '_') {
-      final end = _emphasisEnd(src, i, ch);
+      final end = emphasisEnd(i, ch);
       if (end > i) {
-        flushText();
-        children.add(
-          TextSpan(
-            text: src.substring(i + 1, end),
-            style: base.merge(const CellStyle(italic: true)),
-          ),
-        );
+        emphasis(i, end, 1, const CellStyle(italic: true));
         i = end + 1;
         continue;
       }
@@ -1595,6 +1620,8 @@ TextSpan _inline(
     // silently lose the styling, including a link's linkUri. A plain-text child
     // (from flushText) has no style and falls back to base.
     final only = children.first;
+    // Emphasis with markup inside is a span of spans; keep them.
+    if (only.children != null) return only;
     return TextSpan(text: only.text, style: only.style ?? base);
   }
   return TextSpan(style: base, children: children);
@@ -1602,9 +1629,12 @@ TextSpan _inline(
 
 final _wordChar = RegExp(r'[\p{L}\p{N}]', unicode: true);
 
-/// Where the emphasis [delimiter] opening at [start] closes in [src], or -1
-/// when it does not open there — CommonMark's flanking rules, in the subset
-/// this parser renders:
+/// [_emphasisEnd] for an opener no closer follows.
+const _noEmphasisCloser = -2;
+
+/// Where the emphasis [delimiter] opening at [start] closes in [src]: -1 when
+/// it does not open there, [_noEmphasisCloser] when nothing closes it.
+/// CommonMark's flanking rules, in the subset this parser renders:
 ///
 /// - an opener is followed, and a closer preceded, by non-whitespace, so
 ///   `2 * 3 * 4` stays text;
@@ -1613,25 +1643,52 @@ final _wordChar = RegExp(r'[\p{L}\p{N}]', unicode: true);
 /// - a single delimiter is a run of one: `__init__` stays text;
 /// - the span between is never empty.
 int _emphasisEnd(String src, int start, String delimiter) {
-  final ch = delimiter[0];
+  final unit = delimiter.codeUnitAt(0);
+  final underscore = unit == 0x5F;
   final width = delimiter.length;
-  bool isRun(int at) => at >= 0 && at < src.length && src[at] == ch;
-  bool isSpace(int at) => at < 0 || at >= src.length || src[at].trim().isEmpty;
-  bool isWordChar(int at) =>
-      at >= 0 && at < src.length && _wordChar.hasMatch(src[at]);
+  bool isRun(int at) =>
+      at >= 0 && at < src.length && src.codeUnitAt(at) == unit;
+  bool isSpace(int at) =>
+      at < 0 || at >= src.length || _isWhitespace(src.codeUnitAt(at));
+  bool isWordChar(int at) => at >= 0 && at < src.length && _isWordChar(src, at);
   final after = start + width;
   if (isRun(start - 1) || isRun(after) || isSpace(after)) return -1;
-  if (ch == '_' && isWordChar(start - 1)) return -1;
+  if (underscore && isWordChar(start - 1)) return -1;
   for (
     var end = src.indexOf(delimiter, after + 1);
     end != -1;
     end = src.indexOf(delimiter, end + 1)
   ) {
     if (isRun(end - 1) || isRun(end + width) || isSpace(end - 1)) continue;
-    if (ch == '_' && isWordChar(end + width)) continue;
+    if (underscore && isWordChar(end + width)) continue;
     return end;
   }
-  return -1;
+  return _noEmphasisCloser;
+}
+
+/// Whitespace as [String.trim] sees it.
+bool _isWhitespace(int unit) =>
+    unit == 0x20 ||
+    (unit >= 0x09 && unit <= 0x0D) ||
+    (unit >= 0x85 &&
+        (unit == 0x85 ||
+            unit == 0xA0 ||
+            unit == 0x1680 ||
+            (unit >= 0x2000 && unit <= 0x200A) ||
+            unit == 0x2028 ||
+            unit == 0x2029 ||
+            unit == 0x202F ||
+            unit == 0x205F ||
+            unit == 0x3000 ||
+            unit == 0xFEFF));
+
+bool _isWordChar(String src, int at) {
+  final unit = src.codeUnitAt(at);
+  if (unit < 0x80) {
+    final lower = unit | 0x20;
+    return (unit >= 0x30 && unit <= 0x39) || (lower >= 0x61 && lower <= 0x7A);
+  }
+  return _wordChar.hasMatch(src[at]);
 }
 
 void _collectMarkdownLinks(

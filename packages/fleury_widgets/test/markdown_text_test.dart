@@ -239,6 +239,41 @@ void main() {
         'Use emphasis, this and bold here',
       );
     });
+
+    testWidgets('bold inside italic renders both', (tester) {
+      expect(
+        rendered(tester, '*Note: use **only** this*'),
+        'Note: use only this',
+      );
+      final buf = tester.render(size: const CellSize(60, 1));
+      expect(
+        _anyCellMatches(buf, {'o', 'n', 'l', 'y'}, (s) => s.bold && s.italic),
+        isTrue,
+      );
+      expect(_anyCellMatches(buf, {'N'}, (s) => s.italic && !s.bold), isTrue);
+    });
+
+    testWidgets('a run of three stars is bold and italic', (tester) {
+      expect(rendered(tester, 'Say ***both*** now'), 'Say both now');
+      final buf = tester.render(size: const CellSize(60, 1));
+      expect(
+        _anyCellMatches(buf, {'b', 'o', 't', 'h'}, (s) => s.bold && s.italic),
+        isTrue,
+      );
+    });
+
+    test('unclosed delimiters cost linear time', () {
+      // Every `_field` opens a run nothing closes. Each used to rescan the
+      // rest of the paragraph for a closer.
+      final paragraph = [for (var i = 0; i < 20000; i++) '_field$i'].join(' ');
+      final watch = Stopwatch()..start();
+      final document = MarkdownDocument.parse(paragraph, maxLineLength: null);
+      watch.stop();
+
+      expect(document.blocks.single.plainText, paragraph);
+      // About 50 ms linear; the rescans took several seconds.
+      expect(watch.elapsed, lessThan(const Duration(seconds: 1)));
+    });
   });
 
   group('MarkdownText — hyperlinks (OSC 8)', () {

@@ -1,7 +1,6 @@
 import 'dart:async' show scheduleMicrotask, unawaited;
 
 import 'package:fleury/fleury_core.dart';
-import 'package:fleury/fleury_internal.dart' show readScope;
 
 import 'semantic_roles.dart';
 
@@ -290,7 +289,6 @@ class _FileMentionPickerState extends State<FileMentionPicker> {
   bool _ownsController = false;
   bool _ownsQueryFocusNode = false;
   bool _ownsResultsFocusNode = false;
-  FocusManager? _focusManager;
   String? _pendingSelectedMentionPath;
   int _selectionSyncGeneration = 0;
 
@@ -312,18 +310,6 @@ class _FileMentionPickerState extends State<FileMentionPicker> {
         FocusNode(debugLabel: 'FileMentionPicker results');
     _ownsResultsFocusNode = widget.resultsFocusNode == null;
     _resetSelection(_currentOrder, preserveCurrent: true);
-  }
-
-  @override
-  void didChangeDependencies() {
-    super.didChangeDependencies();
-    // Registered with, not depended on: the listener follows focus, and a
-    // dependency would rebuild this widget on every focus move anywhere.
-    final manager = readScope<FocusManager>(context);
-    if (identical(manager, _focusManager)) return;
-    _focusManager?.removeListener(_onFocusChange);
-    _focusManager = manager;
-    _focusManager?.addListener(_onFocusChange);
   }
 
   @override
@@ -383,8 +369,6 @@ class _FileMentionPickerState extends State<FileMentionPicker> {
   }
 
   void _onControllerChange() => setState(() {});
-
-  void _onFocusChange() => setState(() {});
 
   void _resetSelection(List<int> order, {bool preserveCurrent = false}) {
     _selectionSyncGeneration++;
@@ -571,7 +555,6 @@ class _FileMentionPickerState extends State<FileMentionPicker> {
     if (_ownsQuery) _query.dispose();
     _controller.removeListener(_onControllerChange);
     if (_ownsController) _controller.dispose();
-    _focusManager?.removeListener(_onFocusChange);
     if (_ownsQueryFocusNode) _queryFocusNode.dispose();
     if (_ownsResultsFocusNode) _resultsFocusNode.dispose();
     super.dispose();
@@ -665,7 +648,10 @@ class _FileMentionPickerState extends State<FileMentionPicker> {
         role: WidgetRoles.fileMentionPicker,
         label: widget.semanticLabel,
         value: _query.text,
-        focused: _queryFocusNode.hasFocus || _resultsFocusNode.hasFocus,
+        // `|`, not `||`: each read subscribes to its node.
+        focused:
+            context.listen(_queryFocusNode).hasFocus |
+            context.listen(_resultsFocusNode).hasFocus,
         actions: {
           SemanticAction.focus,
           SemanticAction.navigate,

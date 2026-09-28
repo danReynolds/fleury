@@ -1638,4 +1638,33 @@ void main() {
       expect(stats.cachedCount, 1, reason: 'the image was not sampled again');
     });
   });
+
+  testWidgets('an evicted file reloads when the image rebuilds', (tester) {
+    final dir = Directory.systemTemp.createTempSync('fleury_image_evict_');
+    addTearDown(() {
+      ImageSource.evictAll();
+      dir.deleteSync(recursive: true);
+    });
+    final path = '${dir.path}/live.png';
+    img.Image solid(int r, int g, int b) =>
+        img.fill(img.Image(width: 2, height: 2), color: img.ColorRgb8(r, g, b));
+    Widget view() => SizedBox(
+      width: 2,
+      height: 1,
+      child: Image.file(path, fit: ImageFit.fill),
+    );
+    CellStyle cell() =>
+        tester.render(size: const CellSize(4, 2)).atColRow(0, 0).style;
+
+    File(path).writeAsBytesSync(img.encodePng(solid(200, 0, 0)));
+    tester.pumpWidget(view());
+    final red = cell();
+
+    // The documented refresh: write the file, evict it, rebuild.
+    File(path).writeAsBytesSync(img.encodePng(solid(0, 0, 200)));
+    ImageSource.evictFile(path);
+    tester.pumpWidget(view());
+
+    expect(cell(), isNot(red));
+  });
 }

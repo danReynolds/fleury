@@ -12,6 +12,26 @@ Matcher _stateError(String message) {
 }
 
 void main() {
+  testWidgets('a parent rebuild shows data changed in place', (tester) {
+    // JsonView(value:) hands a new document on every parent build; only the
+    // view's own rebuilds (a cursor move, a focus change) reuse the old one.
+    final state = <String, Object?>{'status': 'idle', 'count': 1};
+    Widget view() => JsonView(value: state, defaultExpandedDepth: 1);
+    tester.pumpWidget(view());
+    expect(
+      tester.renderToString(size: const CellSize(40, 6)),
+      contains('idle'),
+    );
+
+    state['status'] = 'running';
+    state['count'] = 2;
+    tester.pumpWidget(view());
+
+    final text = tester.renderToString(size: const CellSize(40, 6));
+    expect(text, contains('running'));
+    expect(text, isNot(contains('idle')));
+  });
+
   group('JsonViewController lifecycle', () {
     test('dispose is idempotent and keeps final readable state', () {
       final controller = JsonViewController(

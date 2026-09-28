@@ -112,12 +112,14 @@ abstract class ImageSource {
   /// to force the next [decode] to re-read from disk.
   static void evictFile(String path) {
     _FileSource._cache.remove(image_file.canonicalPath(path));
+    _FileSource._evictions++;
   }
 
   /// Drop every cached file decode. Useful in long-running sessions
   /// where assets get hot-swapped underneath.
   static void evictAll() {
     _FileSource._cache.clear();
+    _FileSource._evictions++;
   }
 }
 
@@ -142,8 +144,14 @@ class _BytesSource implements ImageSource {
 }
 
 class _FileSource implements ImageSource {
-  _FileSource(this._path);
+  _FileSource(this._path) : _generation = _evictions;
   final String _path;
+
+  /// Evictions before this source was made. A source made after an eviction
+  /// differs from one made before it, so an image rebuilt with it decodes
+  /// the file again rather than keeping the evicted pixels.
+  final int _generation;
+  static int _evictions = 0;
 
   /// Cross-instance decode cache. Keyed by absolute path so two
   /// `_FileSource('logo.png')` instances in different parts of the
@@ -169,10 +177,11 @@ class _FileSource implements ImageSource {
   @override
   bool operator ==(Object other) =>
       other is _FileSource &&
+      other._generation == _generation &&
       image_file.canonicalPath(other._path) == image_file.canonicalPath(_path);
 
   @override
-  int get hashCode => image_file.canonicalPath(_path).hashCode;
+  int get hashCode => Object.hash(image_file.canonicalPath(_path), _generation);
 }
 
 class _DecodedSource implements ImageSource {

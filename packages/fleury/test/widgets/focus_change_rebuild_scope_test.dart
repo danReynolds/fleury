@@ -148,6 +148,102 @@ void main() {
       contains('idle'),
     );
   });
+  testWidgets('a node whose Focus unmounts while focused tells its listeners', (
+    tester,
+  ) async {
+    final node = FocusNode(debugLabel: 'row');
+    var calls = 0;
+    node.addListener(() => calls++);
+    final toggle = _Toggle();
+    tester.pumpWidget(
+      Column(
+        children: [
+          NotifierBuilder(
+            notifier: toggle,
+            builder: (_, toggle) => toggle.shown
+                ? Focus(
+                    focusNode: node,
+                    autofocus: true,
+                    child: const Text('row'),
+                  )
+                : const Text('gone'),
+          ),
+          _Cue(node),
+        ],
+      ),
+    );
+    tester.pump();
+    expect(
+      tester.renderToString(size: const CellSize(20, 2)),
+      contains('FOCUSED'),
+    );
+    final before = calls;
+
+    toggle.shown = false;
+    tester.pump();
+    await Future<void>.delayed(Duration.zero);
+    tester.pump();
+
+    expect(node.hasFocus, isFalse);
+    expect(calls, before + 1);
+    expect(
+      tester.renderToString(size: const CellSize(20, 2)),
+      contains('idle'),
+    );
+  });
+
+  testWidgets('Focus.of in a build rebuilds for its own node only', (tester) {
+    final list = FocusNode(debugLabel: 'list');
+    final a = FocusNode(debugLabel: 'a');
+    final b = FocusNode(debugLabel: 'b');
+    final builds = <bool>[];
+    tester.pumpWidget(
+      Column(
+        children: [
+          Focus(focusNode: a, autofocus: true, child: const Text('A')),
+          Focus(focusNode: b, child: const Text('B')),
+          Focus(focusNode: list, child: _FocusReader(builds)),
+        ],
+      ),
+    );
+    tester.pump();
+    builds.clear();
+
+    for (var i = 0; i < 6; i++) {
+      (i.isEven ? b : a).requestFocus();
+      tester.pump();
+    }
+    expect(builds, isEmpty, reason: 'moves between two other nodes');
+
+    list.requestFocus();
+    tester.pump();
+    a.requestFocus();
+    tester.pump();
+    expect(builds, [true, false]);
+  });
+}
+
+final class _Toggle with Notifier {
+  bool _shown = true;
+  bool get shown => _shown;
+  set shown(bool value) {
+    _shown = value;
+    notify();
+  }
+}
+
+/// Counts its builds, and shows whether its nearest Focus holds focus.
+final class _FocusReader extends StatelessWidget {
+  const _FocusReader(this.builds);
+
+  final List<bool> builds;
+
+  @override
+  Widget build(BuildContext context) {
+    final focused = Focus.of(context).hasFocus;
+    builds.add(focused);
+    return Text(focused ? 'FOCUSED' : 'idle');
+  }
 }
 
 /// Shows whether [node] has focus, rebuilding only when it flips.

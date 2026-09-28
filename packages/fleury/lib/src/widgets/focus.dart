@@ -848,8 +848,11 @@ class FocusManager extends Notifier {
       _focusedNode = fallback;
       if (fallback != null) _rememberFocusInScopes(fallback);
       notify();
-      // Not [node]: it is leaving, and its listeners are tearing it down.
       fallback?._notifyFocusFlip();
+      // [node] lost focus too. Its listeners may belong to what is unmounting
+      // with it, so they hear once this pass is over, when a disposed owner
+      // has stopped listening.
+      scheduleMicrotask(node._notifyFocusFlip);
     }
   }
 
@@ -1432,9 +1435,6 @@ class Focus extends StatefulWidget {
   /// The nearest enclosing [FocusNode], or null when the context is not
   /// inside a [Focus]. See [of].
   static FocusNode? maybeOf(BuildContext context) {
-    // Depend on the manager so the caller rebuilds when focus moves; the node
-    // identity alone would not tell it that `hasFocus` flipped.
-    FocusManager.maybeOf(context);
     // Start at the context itself: a Focus's own element is its State's
     // context, so a widget can ask for the node it just installed. Otherwise
     // walk out to the closest enclosing one.
@@ -1443,7 +1443,19 @@ class Focus extends StatefulWidget {
       element != null;
       element = element.elementParent
     ) {
-      if (element is _FocusElement) return element.node;
+      if (element is _FocusElement) {
+        final node = element.node;
+        if (identical(Element.current, context)) {
+          // Read in the caller's own build: it rebuilds when this node's
+          // focus flips, not on every focus move anywhere.
+          context.listen(node);
+        } else {
+          // Read for another element, as a lazy list does when it builds a
+          // row during layout: only a manager dependency can be taken there.
+          FocusManager.maybeOf(context);
+        }
+        return node;
+      }
     }
     return null;
   }

@@ -1,7 +1,6 @@
 import 'dart:async' show unawaited;
 
 import 'package:fleury/fleury_core.dart';
-import 'package:fleury/fleury_internal.dart' show readScope;
 
 /// One result rendered by [SearchPanel].
 final class SearchResult {
@@ -270,7 +269,6 @@ class _SearchPanelState extends State<SearchPanel> {
   bool _ownsList = false;
   bool _ownsQueryFocusNode = false;
   bool _ownsResultsFocusNode = false;
-  FocusManager? _focusManager;
   List<SearchResult>? _indexedResults;
   SearchResultIndex? _searchIndex;
 
@@ -296,18 +294,6 @@ class _SearchPanelState extends State<SearchPanel> {
     _ownsResultsFocusNode = widget.resultsFocusNode == null;
     _resetSelectionForOrder(_currentOrder, preserveCurrent: true);
     _list.addListener(_onListChange);
-  }
-
-  @override
-  void didChangeDependencies() {
-    super.didChangeDependencies();
-    // Registered with, not depended on: the listener follows focus, and a
-    // dependency would rebuild this widget on every focus move anywhere.
-    final manager = readScope<FocusManager>(context);
-    if (identical(manager, _focusManager)) return;
-    _focusManager?.removeListener(_onFocusChange);
-    _focusManager = manager;
-    _focusManager?.addListener(_onFocusChange);
   }
 
   @override
@@ -366,8 +352,6 @@ class _SearchPanelState extends State<SearchPanel> {
   }
 
   void _onListChange() => setState(() {});
-
-  void _onFocusChange() => setState(() {});
 
   SearchResultIndex get _resultIndex {
     final index = _searchIndex;
@@ -540,7 +524,6 @@ class _SearchPanelState extends State<SearchPanel> {
     if (_ownsQuery) _query.dispose();
     _list.removeListener(_onListChange);
     if (_ownsList) _list.dispose();
-    _focusManager?.removeListener(_onFocusChange);
     if (_ownsQueryFocusNode) _queryFocusNode.dispose();
     if (_ownsResultsFocusNode) _resultsFocusNode.dispose();
     super.dispose();
@@ -694,7 +677,10 @@ class _SearchPanelState extends State<SearchPanel> {
         role: SemanticRole.region,
         label: widget.semanticLabel,
         value: _query.text,
-        focused: _queryFocusNode.hasFocus || _resultsFocusNode.hasFocus,
+        // `|`, not `||`: each read subscribes to its node.
+        focused:
+            context.listen(_queryFocusNode).hasFocus |
+            context.listen(_resultsFocusNode).hasFocus,
         actions: {
           SemanticAction.focus,
           if (canActivate) SemanticAction.submit,

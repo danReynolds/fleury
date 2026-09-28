@@ -67,4 +67,34 @@ void main() {
 
     expect(controller.currentIndex, 3);
   });
+
+  testWidgets('a placement after a move supersedes it', (tester) {
+    final items = _Items();
+    final controller = ListController(initialIndex: 1);
+    tester.pumpWidget(_list(items, controller));
+    tester.render(size: const CellSize(10, 8));
+
+    items.items = const ['a', 'x', 'y', 'b', 'c', 'd'];
+    controller.moveCursor(5, itemCount: 6);
+    controller.currentIndex = 0;
+    tester.pump();
+
+    expect(controller.currentIndex, 0);
+  });
+
+  testWidgets('cursorFor reads the move until the list shows it', (tester) {
+    final items = _Items();
+    final controller = ListController(initialIndex: 1);
+    tester.pumpWidget(_list(items, controller));
+    tester.render(size: const CellSize(10, 8));
+
+    items.items = const ['a', 'x', 'y', 'b', 'c', 'd'];
+    controller.moveCursor(5, itemCount: 6);
+
+    expect(controller.cursorFor(itemCount: 6), 5);
+    expect(controller.cursorFor(itemCount: 4), 1);
+    tester.pump();
+    expect(controller.cursorFor(itemCount: 6), 5);
+    expect(controller.currentIndex, 5);
+  });
 }

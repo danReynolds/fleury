@@ -123,4 +123,60 @@ void main() {
     expect(_selectedKey(tester), 'app');
     expect(controller.currentIndex, 0);
   });
+
+  group('two changes before a frame', () {
+    // The first change moves the cursor for rows the list has yet to show;
+    // the second must start from there, and an explicit placement wins.
+    final roots = [
+      _node('app', [_node('search'), _node('logs')]),
+      _node('docs', [_node('guide'), _node('api')]),
+      _node('notes'),
+      _node('readme'),
+    ];
+
+    testWidgets('an explicit placement after an expand wins', (tester) {
+      final controller = TreeTableController(initialIndex: 2);
+      addTearDown(controller.dispose);
+      tester.pumpWidget(_table(controller, roots: roots));
+      expect(_selectedKey(tester), 'notes');
+
+      controller.expand('app');
+      controller.currentIndex = 1;
+      tester.pump();
+
+      expect(_selectedKey(tester), 'search');
+    });
+
+    testWidgets('an expand then a collapse leaves the cursor on its node', (
+      tester,
+    ) async {
+      final controller = TreeTableController(initialIndex: 2);
+      addTearDown(controller.dispose);
+      tester.pumpWidget(_table(controller, roots: roots));
+
+      controller.expand('app');
+      controller.collapse('app');
+      tester.pump();
+      expect(_selectedKey(tester), 'notes');
+
+      // No move from the first change is left over for a later one.
+      tester.sendKey(const KeyEvent(KeyCode.home));
+      tester.pump();
+      tester.sendKey(const KeyEvent(KeyCode.arrowRight));
+      tester.pump();
+      expect(_selectedKey(tester), 'app');
+    });
+
+    testWidgets('two expands above the cursor keep it on its node', (tester) {
+      final controller = TreeTableController(initialIndex: 2);
+      addTearDown(controller.dispose);
+      tester.pumpWidget(_table(controller, roots: roots));
+
+      controller.expand('app');
+      controller.expand('docs');
+      tester.pump();
+
+      expect(_selectedKey(tester), 'notes');
+    });
+  });
 }

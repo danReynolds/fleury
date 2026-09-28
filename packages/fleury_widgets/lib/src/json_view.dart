@@ -552,18 +552,22 @@ class _JsonViewState extends State<JsonView> {
     super.dispose();
   }
 
-  // The document is normalized once, and its rows are built again only when
-  // something they show changes: a cursor move or a focus change reuses
-  // them. Rebuilding them walked the whole document, collapsed parts too.
+  // The document is normalized once per document object, and its rows are
+  // built again only when something they show changes: a cursor move or a
+  // focus change reuses both. Rebuilding them walked the whole document,
+  // collapsed parts too. A parent that rebuilds `JsonView(value:)` hands a
+  // new document, so data it changed in place shows.
   _NormalizedJson? _normalized;
+  JsonViewDocument? _normalizedDocument;
   List<JsonViewRow>? _cachedRows;
   (JsonViewDocument, JsonViewController, int, int, int?)? _rowsKey;
 
   List<JsonViewRow> get _rows {
     final document = widget.document;
     var normalized = _normalized;
-    if (normalized == null || !identical(normalized.source, document.value)) {
+    if (normalized == null || !identical(_normalizedDocument, document)) {
       normalized = _normalized = _NormalizedJson(document.value);
+      _normalizedDocument = document;
     }
     final key = (
       document,

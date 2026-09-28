@@ -758,6 +758,8 @@ class TreeTableController extends Notifier {
     _list.moveCursor(index, itemCount: rowCount);
   }
 
+  int? _cursorFor(int rowCount) => _list.cursorFor(itemCount: rowCount);
+
   ({int first, int last})? get visibleRange => _list.visibleRange;
 
   Set<Object> get expandedKeys => Set<Object>.unmodifiable(_expandedKeys);
@@ -1109,8 +1111,11 @@ class _TreeTableState<T> extends State<TreeTable<T>> {
   // the new rows, so no frame shows the cursor on another node.
   void _followSelectedKey() {
     final oldRows = _cachedRows;
-    final index = _controller.currentIndex;
-    if (oldRows == null || oldRows.isEmpty || index == null) return;
+    if (oldRows == null || oldRows.isEmpty) return;
+    // Where the cursor is in those rows, a move from an earlier rebuild this
+    // frame included.
+    final index = _controller._cursorFor(oldRows.length);
+    if (index == null) return;
     final rows = _ensureRows();
     if (identical(rows, oldRows) || rows.isEmpty) return;
     final indexOf = <Object, int>{

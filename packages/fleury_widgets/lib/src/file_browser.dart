@@ -139,6 +139,13 @@ class FileBrowserController extends Notifier {
     _list.currentIndex = value;
   }
 
+  void _moveCursor(int index, int rowCount) {
+    _checkNotDisposed();
+    _list.moveCursor(index, itemCount: rowCount);
+  }
+
+  int? _cursorFor(int rowCount) => _list.cursorFor(itemCount: rowCount);
+
   ({int first, int last})? get visibleRange => _list.visibleRange;
 
   void jumpToIndex(int index) {
@@ -315,7 +322,17 @@ class _FileBrowserState extends State<FileBrowser> {
   /// Runs [change] to the entries or their order, then selects the entry
   /// that was selected before if it is still listed, else the first row.
   void _keepSelection(void Function() change) {
-    final before = _selectedEntry(_currentOrder)?.entry.path;
+    // The entry selected in the order the user saw. The widget's filter may
+    // already be the new one, so that order is the cached one, not
+    // [_currentOrder].
+    final shown = _order;
+    final shownEntries = _orderEntries;
+    final shownIndex = shown == null || shown.isEmpty
+        ? null
+        : _controller._cursorFor(shown.length);
+    final before = shownIndex == null
+        ? null
+        : shownEntries![shown![shownIndex.clamp(0, shown.length - 1)]].path;
     change();
     final order = _currentOrder;
     final index = before == null
@@ -323,9 +340,12 @@ class _FileBrowserState extends State<FileBrowser> {
         : order.indexWhere((i) => _entries[i].path == before);
     _updatingController = true;
     try {
-      _controller.currentIndex = order.isEmpty
-          ? null
-          : (index >= 0 ? index : 0);
+      if (order.isEmpty) {
+        _controller.currentIndex = null;
+      } else {
+        // The list still counts the old rows; place the cursor in the new.
+        _controller._moveCursor(index >= 0 ? index : 0, order.length);
+      }
     } finally {
       _updatingController = false;
     }

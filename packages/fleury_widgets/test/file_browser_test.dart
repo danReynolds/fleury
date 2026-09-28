@@ -250,6 +250,96 @@ void main() {
     expect(selected.state['selectedPath'], endsWith('deploy.log'));
   });
 
+  group('the selected entry stays selected', () {
+    String dirWith(List<String> names) {
+      final tmp = Directory.systemTemp.createTempSync('fleuryfb_keep_');
+      addTearDown(() => tmp.deleteSync(recursive: true));
+      for (final name in names) {
+        File('${tmp.path}/$name').writeAsStringSync(name);
+      }
+      return tmp.path;
+    }
+
+    String? selectedPath(FleuryTester tester) =>
+        tester.semantics().single(role: SemanticRole.tree).state['selectedPath']
+            as String?;
+
+    Widget browser(
+      String dir,
+      FileBrowserController controller, {
+      String query = '',
+      bool showHidden = false,
+    }) => FileBrowser(
+      initialDirectory: dir,
+      controller: controller,
+      autofocus: true,
+      filter: FileBrowserFilterDescriptor(query: query, showHidden: showHidden),
+    );
+
+    void down(FleuryTester tester, int times) {
+      for (var i = 0; i < times; i++) {
+        tester.sendKey(const KeyEvent(KeyCode.arrowDown));
+      }
+      tester.pump();
+    }
+
+    testWidgets('through a query that moves it up', (tester) {
+      final dir = dirWith(['a1.txt', 'b2.txt', 'c3.log', 'd4.txt', 'e5.txt']);
+      final controller = FileBrowserController();
+      addTearDown(controller.dispose);
+      tester.pumpWidget(browser(dir, controller));
+      down(tester, 3);
+      expect(selectedPath(tester), endsWith('d4.txt'));
+
+      tester.pumpWidget(browser(dir, controller, query: 'txt'));
+
+      expect(selectedPath(tester), endsWith('d4.txt'));
+    });
+
+    testWidgets('when hidden entries above it are hidden', (tester) {
+      final dir = dirWith(['.h1', '.h2', 'a.txt', 'b.txt', 'c.txt']);
+      final controller = FileBrowserController();
+      addTearDown(controller.dispose);
+      tester.pumpWidget(browser(dir, controller, showHidden: true));
+      down(tester, 2);
+      expect(selectedPath(tester), endsWith('a.txt'));
+
+      tester.pumpWidget(browser(dir, controller));
+
+      expect(selectedPath(tester), endsWith('a.txt'));
+    });
+
+    testWidgets('when hidden entries above it are shown', (tester) {
+      // Row 2 of 3 moves to row 4 of 5, past the row count the list showed.
+      final dir = dirWith(['.h1', '.h2', 'a.txt', 'b.txt', 'c.txt']);
+      final controller = FileBrowserController();
+      addTearDown(controller.dispose);
+      tester.pumpWidget(browser(dir, controller));
+      down(tester, 2);
+      expect(selectedPath(tester), endsWith('c.txt'));
+
+      tester.pumpWidget(browser(dir, controller, showHidden: true));
+
+      expect(selectedPath(tester), endsWith('c.txt'));
+    });
+
+    testWidgets('through a reload with new entries ahead of it', (tester) {
+      final dir = dirWith(['b.txt', 'c.txt']);
+      final controller = FileBrowserController();
+      addTearDown(controller.dispose);
+      tester.pumpWidget(browser(dir, controller));
+      down(tester, 1);
+      expect(selectedPath(tester), endsWith('c.txt'));
+
+      File('$dir/a0.txt').writeAsStringSync('a0');
+      File('$dir/a1.txt').writeAsStringSync('a1');
+      controller.reload();
+      tester.pump();
+
+      expect(selectedPath(tester), endsWith('c.txt'));
+    });
+  });
+
   testWidgets('semantic open navigates directories and activates files', (
     tester,
   ) async {

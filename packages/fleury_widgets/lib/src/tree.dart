@@ -105,12 +105,7 @@ class _TreeState<T> extends State<Tree<T>> {
     _focusNode = widget.focusNode ?? FocusNode(debugLabel: 'Tree');
     _ownsFocusNode = widget.focusNode == null;
     _seedInitialExpansion(widget.roots, 0);
-    // The tree's semantic node reports the cursor and the visible range,
-    // which arrow keys, typeahead and clicks change inside the ListView.
-    _list.addListener(_onListChange);
   }
-
-  void _onListChange() => setState(() {});
 
   void _setExpanded(TreeNode<T> node, bool expanded) {
     setState(() {
@@ -269,7 +264,6 @@ class _TreeState<T> extends State<Tree<T>> {
 
   @override
   void dispose() {
-    _list.removeListener(_onListChange);
     _list.dispose();
     if (_ownsFocusNode) _focusNode.dispose();
     super.dispose();
@@ -287,13 +281,12 @@ class _TreeState<T> extends State<Tree<T>> {
     // `ignored` and bubbles to the focus chain — letting an enclosing
     // FocusTraversalGroup move between panes at the tree's edges. (A
     // matched KeyBinding is terminal even when it returns ignored.)
-    return Semantics(
-      role: SemanticRole.tree,
+    return _TreeSemantics(
+      controller: _list,
+      focusNode: _focusNode,
       label: widget.semanticLabel,
-      focused: _focusNode.hasFocus,
-      actions: const {SemanticAction.focus, SemanticAction.navigate},
       onAction: _handleTreeAction,
-      state: SemanticState({
+      state: () => SemanticState({
         'collectionRowCount': _flat.length,
         'rootCount': widget.roots.length,
         'expandedCount': _expanded.length,
@@ -355,6 +348,42 @@ class _TreeState<T> extends State<Tree<T>> {
           ),
         ),
       ),
+    );
+  }
+}
+
+/// The tree's own semantic node: the cursor and the visible range, which
+/// arrow keys, typeahead, clicks and every scroll step change inside the
+/// ListView. It rebuilds alone for them and passes the rows through
+/// untouched; rebuilding the tree would rebuild every visible row.
+final class _TreeSemantics extends StatelessWidget {
+  const _TreeSemantics({
+    required this.controller,
+    required this.focusNode,
+    required this.label,
+    required this.onAction,
+    required this.state,
+    required this.child,
+  });
+
+  final ListController controller;
+  final FocusNode focusNode;
+  final String? label;
+  final void Function(SemanticAction action) onAction;
+  final SemanticState Function() state;
+  final Widget child;
+
+  @override
+  Widget build(BuildContext context) {
+    context.listen(controller);
+    return Semantics(
+      role: SemanticRole.tree,
+      label: label,
+      focused: context.listen(focusNode).hasFocus,
+      actions: const {SemanticAction.focus, SemanticAction.navigate},
+      onAction: onAction,
+      state: state(),
+      child: child,
     );
   }
 }

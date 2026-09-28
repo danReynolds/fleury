@@ -19,29 +19,39 @@
 - `FileBrowser` reads a directory when it opens it or on
   `FileBrowserController.reload()`, not on every parent rebuild; an inline
   `entityFilter` no longer re-reads the disk and resets the cursor. Toggling
-  `showHidden` or changing the query keeps the selected entry. The display
-  order is kept until the entries or the filter change.
+  `showHidden`, changing the query or a reload keeps the selected entry,
+  wherever it lands. The display order is kept until the entries or the
+  filter change.
 - `Image` no longer re-decodes when its parent rebuilds with the same
   source, an animated image keeps playing across rebuilds, and a static
-  image is painted once rather than resampled every frame.
+  image is painted once rather than resampled every frame. After
+  `ImageSource.evictFile` or `evictAll`, a rebuilt `Image.file` reads the
+  file again.
 - Markdown emphasis follows CommonMark's flanking rules: `snake_case`,
   `__init__` and `a * b * c` stay text instead of losing characters.
+  Emphasis nests (`*use **only** this*`), `***both***` is bold and italic,
+  and a paragraph of delimiters that never close parses in linear time.
 - `JsonView` builds its rows once per document and expansion, not on every
-  build, and `SearchPanel` ranks its results once per query.
+  build, and `SearchPanel` ranks its results once per query. A parent that
+  rebuilds `JsonView(value:)` hands a new document, so data it changed in
+  place shows.
 - Toasts, tooltips, autocomplete and completion lists, and the color
   picker's hex entry paint the theme where their owner sits; under a light
   app they painted the dark fallback. `Select` and `Menu` follow a theme
   change while open.
 - `Tree`'s own semantic node follows the cursor (current index, selected
-  key, visible range) through arrow keys, typeahead and clicks.
+  key, visible range) through arrow keys, typeahead, clicks and scrolling,
+  rebuilding alone: no row rebuilds for it.
 - `TreeTable`'s cursor stays on its node when an expand or collapse above
   it, a filter, or new roots rebuild the rows; when the node leaves the
-  rows it moves to the nearest ancestor still shown. Enter and copy act on
-  the node the user picked.
+  rows it moves to the nearest ancestor still shown, including after two
+  such changes before a frame. Enter and copy act on the node the user
+  picked.
 - The library's controls (`Select`, `MultiSelect`, `DatePicker`, `Stepper`,
   `RangeSlider`, `FilePicker`, `ColorPicker`, `Autocomplete`,
-  `CompletionTextInput` and others) rebuild only when their own focus
-  changes, not on every focus move.
+  `CompletionTextInput` and others), `SearchPanel`, `ConversationNavigator`
+  and `FileMentionPicker` rebuild only when their own focus changes, not on
+  every focus move.
 - `DiffView` measures its line-number gutter once per document.
 - `LineChart` collects its cursor positions only when it is interactive,
   and a chart behind a `RepaintBoundary` with an unchanged series list no
