@@ -55,11 +55,11 @@
 | E | low | FileBrowser, SearchPanel and DiffView recompute O(n) data on every build and every navigation call | Fixed |
 | E | low | LineChart sorts and dedupes every x value on each series update or parent rebuild, even when not interactive, and repaints all points when the data is unchanged | Fixed: cursor and palette; skipping a fresh series list over the same points waits on the in-place list mutation decision |
 | E | low | parseUnifiedDiff reads the `git format-patch` signature line (`-- `) as a deletion: phantom row, wrong counts, corrupt hunk copy | Fixed |
-| F | high | A legal duplicate semantic id on a node with children makes the wire encoder drop the whole semantic tree. Serve's a11y DOM goes empty and MCP reports that the app never rendered. | Open |
-| F | medium | A semantic action whose handler awaits UI (the `await context.present(Confirm())` idiom) blocks the served semantic-action queue, so the dialog can't be confirmed through a11y/MCP | Open |
-| F | medium | SemanticDomPresenter re-inserts the whole content of every aria-live region on any structural change, so screen readers re-read the entire log for each appended line | Open |
-| F | medium | The coverage fallback turns border glyphs (Panel, Dialog, Menu…) into hundreds of junk text nodes and keeps the semantics pipeline on its slow path | Open |
-| F | medium | The semantic wire decoder (browser client and MCP bridge) rebuilds the whole tree for every one-node patch; the wire diff saves bytes but not peer CPU | Open |
+| F | high | A legal duplicate semantic id on a node with children makes the wire encoder drop the whole semantic tree. Serve's a11y DOM goes empty and MCP reports that the app never rendered. | Decision pending: duplicate semantic ids (now reported as a developer warning) |
+| F | medium | A semantic action whose handler awaits UI (the `await context.present(Confirm())` idiom) blocks the served semantic-action queue, so the dialog can't be confirmed through a11y/MCP | Fixed |
+| F | medium | SemanticDomPresenter re-inserts the whole content of every aria-live region on any structural change, so screen readers re-read the entire log for each appended line | Fixed |
+| F | medium | The coverage fallback turns border glyphs (Panel, Dialog, Menu…) into hundreds of junk text nodes and keeps the semantics pipeline on its slow path | Fixed (an explicit ASCII border is a follow-up) |
+| F | medium | The semantic wire decoder (browser client and MCP bridge) rebuilds the whole tree for every one-node patch; the wire diff saves bytes but not peer CPU | Fixed |
 
 A multi-agent sweep of `main` plus #270, run twice. An independent verifier reproduced every finding with a probe, and none were refuted. Findings are grouped into proposed fix batches, most severe first.
 

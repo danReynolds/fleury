@@ -23,3 +23,8 @@ its semantic tree.
   titles, and conservative read/mutation annotations.
 - Structured + text tool results; clean lifecycle teardown on
   disconnect/SIGINT/SIGTERM.
+- A handler still running past the two-second result wait, most often one
+  that presented a dialog and awaits its answer, reports `status: pending`
+  with the UI the action opened. Only a repeat of that action on that node
+  waits for its late result; every other action goes ahead, so an agent can
+  answer the dialog.

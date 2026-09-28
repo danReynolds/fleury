@@ -202,6 +202,31 @@
 - A terminal-only app no longer re-derives the screen geometry of every
   mounted `Semantics` node (every `Text`) on every paint pass; nothing reads
   it until a semantics consumer takes a full rebuild.
+- A served app says why it could not send its semantic tree. The encoder
+  rejects a tree it cannot carry, most often two nodes that derive the same
+  id from one `Key` used under different unkeyed parents, and the serve
+  driver used to drop it silently: the browser's accessibility tree and
+  agents over MCP saw nothing. runApp now reports it as a developer warning,
+  once for as long as it lasts.
+- A served semantic action whose handler awaits UI no longer holds up the
+  actions behind it. The `await context.present(Confirm())` idiom in a
+  `Semantics` handler or an `AppCommand` finishes only once a later action
+  answers the dialog, and that action queued behind it forever. The queue
+  now waits for a handler for at most 500 ms, and the handler's RESULT goes
+  out when it finishes.
+- A framed app no longer floods its served accessibility tree and MCP with
+  its frame. The coverage fallback, which exposes painted text that has no
+  semantics, counted drawing glyphs (box drawing, block elements, braille,
+  sextants) as text: a panel's frame became dozens of `│` nodes, and every
+  framed app kept the semantics pipeline off its fast paths, walking the
+  whole tree and scanning the whole screen every frame. Text inside a frame
+  still falls back, without the frame.
+- A semantic patch costs its peer what it changed. `SemanticsWireDecoder`
+  rebuilds only the nodes a content-only patch changed (no node added or
+  removed, no child list changed) and their ancestors, reusing the rest of
+  the tree, and names them in `contentReplacements`; `SemanticTreeUpdate` no
+  longer copies the node maps. A one-label patch on a 2,000-node tree now
+  decodes and updates its owner in about 0.2 ms rather than 5.7 ms.
 - Debugger mode changes preserve application state and layout. Opening the
   shell starts a bounded 60-frame recording that continues while hidden;
   Rebuilds shows the worst frame's phase costs. Inspector reports scroll with
