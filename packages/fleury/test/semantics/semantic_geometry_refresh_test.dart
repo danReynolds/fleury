@@ -4,6 +4,8 @@
 // terminal-only app, where nothing consumes semantics — that walk is wasted:
 // the rebuild re-derives every node anyway.
 import 'package:fleury/fleury.dart';
+import 'package:fleury/src/rendering/render_repaint_boundary.dart'
+    show RepaintBoundaryCacheVerification;
 import 'package:test/test.dart';
 
 import '../support/harness.dart';
@@ -101,6 +103,7 @@ void main() {
   testWidgets('no consumer: a paint pass does not walk the semantics', (
     tester,
   ) {
+    _measureProductionPaint();
     final clock = _Clock();
     tester.pumpWidget(_app(clock, ValueNotifier(0)));
     tester.render(size: const CellSize(20, 30));
@@ -116,6 +119,7 @@ void main() {
   });
 
   testWidgets('with a consumer: a node that moves is reported', (tester) {
+    _measureProductionPaint();
     final gap = ValueNotifier(0);
     tester.pumpWidget(_app(_Clock(), gap));
     tester.render(size: const CellSize(20, 30));
@@ -129,3 +133,10 @@ void main() {
     expect(tester.owner.semanticDirtyTracker.hasDirt, isTrue);
   });
 }
+
+/// The tests count geometry reads, which the debug repaint-cache check (the
+/// suite's `FLEURY_VERIFY_REPAINT_CACHE` mode) makes too: its placement
+/// check resolves every node's position. They measure the production paint
+/// pass, so they run without it.
+void _measureProductionPaint() =>
+    RepaintBoundaryCacheVerification.enabled = false;
