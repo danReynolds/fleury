@@ -72,9 +72,19 @@ class RuntimeErrorReporter with Notifier {
   List<RuntimeErrorRecord> get history =>
       List<RuntimeErrorRecord>.unmodifiable(_history);
 
-  /// True when errors arrive faster than the app can recover — the runtime
-  /// treats this as fatal rather than looping forever.
+  /// True when errors recur with nothing to cause them: 24 inside three
+  /// seconds with no input between them. The runtime treats this as a loop
+  /// and stops rather than spinning forever.
   bool get isStorming => _window.length >= 24;
+
+  /// Starts a fresh [isStorming] window; the runtime calls this for each
+  /// input it dispatches — a key, text, a paste, a click, a scroll, a
+  /// semantic action — but not bare pointer motion. An error that follows
+  /// input stops when the input does — a held shortcut whose command fails,
+  /// fast typing into a field whose async handler fails — so it is reported,
+  /// not counted toward a loop.
+  @internal
+  void noteInput() => _window.clear();
 
   /// True once [dispose] has run: [report] is a silent no-op from here on, so
   /// the zone handler must fall back to stderr for anything arriving now.

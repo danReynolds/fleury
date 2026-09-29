@@ -151,6 +151,195 @@ void main() {
     expect(output, contains('deploy.log'));
   });
 
+  for (final unreadable in [false, true]) {
+    testWidgets('the keyboard climbs out of an '
+        '${unreadable ? 'unreadable' : 'empty'} directory', (tester) {
+      // A directory with nothing to list leaves no rows to hold focus;
+      // the browser holds it, so Backspace and Left still go up.
+      final tmp = Directory.systemTemp.createTempSync('fleuryfb_leaf_');
+      addTearDown(() {
+        if (unreadable) Process.runSync('chmod', ['755', '${tmp.path}/a']);
+        tmp.deleteSync(recursive: true);
+      });
+      Directory('${tmp.path}/a').createSync();
+      File('${tmp.path}/z.txt').writeAsStringSync('z');
+      final controller = FileBrowserController();
+      addTearDown(controller.dispose);
+      tester.pumpWidget(
+        FileBrowser(
+          initialDirectory: tmp.path,
+          controller: controller,
+          autofocus: true,
+        ),
+      );
+      final start = controller.currentDirectory;
+
+      for (final key in [KeyCode.backspace, KeyCode.arrowLeft]) {
+        if (unreadable) {
+          Process.runSync('chmod', ['000', '${tmp.path}/a']);
+        }
+        tester.sendKey(const KeyEvent(KeyCode.enter));
+        expect(controller.currentDirectory, endsWith('a'));
+        tester.render(size: const CellSize(40, 4));
+
+        tester.sendKey(KeyEvent(key));
+
+        expect(controller.currentDirectory, start, reason: '$key goes up');
+        if (unreadable) {
+          Process.runSync('chmod', ['755', '${tmp.path}/a']);
+        }
+      }
+    }, skip: unreadable && Platform.isWindows ? 'no chmod' : false);
+  }
+
+  testWidgets('a rebuilt inline entityFilter neither re-reads nor moves', (
+    tester,
+  ) {
+    // An inline closure is a new predicate on every parent build; the
+    // directory is read when it opens or on reload(), not on each rebuild.
+    final dir = _scratchDir();
+    final controller = FileBrowserController();
+    addTearDown(controller.dispose);
+    Widget browser() => FileBrowser(
+      initialDirectory: dir,
+      controller: controller,
+      autofocus: true,
+      entityFilter: (entity) => !entity.path.endsWith('.tmp'),
+    );
+    tester.pumpWidget(browser());
+    tester.sendKey(const KeyEvent(KeyCode.arrowDown));
+    tester.sendKey(const KeyEvent(KeyCode.arrowDown));
+    expect(controller.currentIndex, 2);
+    File('$dir/new.txt').writeAsStringSync('new');
+
+    tester.pumpWidget(browser());
+
+    expect(controller.currentIndex, 2, reason: 'the cursor stays put');
+    expect(
+      tester.renderToString(size: const CellSize(40, 8)),
+      isNot(contains('new.txt')),
+      reason: 'the disk was not read again',
+    );
+
+    controller.reload();
+    expect(
+      tester.renderToString(size: const CellSize(40, 8)),
+      contains('new.txt'),
+    );
+  });
+
+  testWidgets('a query change keeps the selected entry selected', (tester) {
+    final dir = _scratchDir();
+    final controller = FileBrowserController();
+    addTearDown(controller.dispose);
+    Widget browser(String query) => FileBrowser(
+      initialDirectory: dir,
+      controller: controller,
+      autofocus: true,
+      filter: FileBrowserFilterDescriptor(query: query),
+    );
+    // src/, alpha.txt, deploy.log: select deploy.log.
+    tester.pumpWidget(browser(''));
+    tester.sendKey(const KeyEvent(KeyCode.arrowDown));
+    tester.sendKey(const KeyEvent(KeyCode.arrowDown));
+
+    // 'l' lists alpha.txt then deploy.log: deploy.log moves to row 1.
+    tester.pumpWidget(browser('l'));
+
+    final selected = tester.semantics().single(role: SemanticRole.tree);
+    expect(selected.state['selectedPath'], endsWith('deploy.log'));
+  });
+
+  group('the selected entry stays selected', () {
+    String dirWith(List<String> names) {
+      final tmp = Directory.systemTemp.createTempSync('fleuryfb_keep_');
+      addTearDown(() => tmp.deleteSync(recursive: true));
+      for (final name in names) {
+        File('${tmp.path}/$name').writeAsStringSync(name);
+      }
+      return tmp.path;
+    }
+
+    String? selectedPath(FleuryTester tester) =>
+        tester.semantics().single(role: SemanticRole.tree).state['selectedPath']
+            as String?;
+
+    Widget browser(
+      String dir,
+      FileBrowserController controller, {
+      String query = '',
+      bool showHidden = false,
+    }) => FileBrowser(
+      initialDirectory: dir,
+      controller: controller,
+      autofocus: true,
+      filter: FileBrowserFilterDescriptor(query: query, showHidden: showHidden),
+    );
+
+    void down(FleuryTester tester, int times) {
+      for (var i = 0; i < times; i++) {
+        tester.sendKey(const KeyEvent(KeyCode.arrowDown));
+      }
+      tester.pump();
+    }
+
+    testWidgets('through a query that moves it up', (tester) {
+      final dir = dirWith(['a1.txt', 'b2.txt', 'c3.log', 'd4.txt', 'e5.txt']);
+      final controller = FileBrowserController();
+      addTearDown(controller.dispose);
+      tester.pumpWidget(browser(dir, controller));
+      down(tester, 3);
+      expect(selectedPath(tester), endsWith('d4.txt'));
+
+      tester.pumpWidget(browser(dir, controller, query: 'txt'));
+
+      expect(selectedPath(tester), endsWith('d4.txt'));
+    });
+
+    testWidgets('when hidden entries above it are hidden', (tester) {
+      final dir = dirWith(['.h1', '.h2', 'a.txt', 'b.txt', 'c.txt']);
+      final controller = FileBrowserController();
+      addTearDown(controller.dispose);
+      tester.pumpWidget(browser(dir, controller, showHidden: true));
+      down(tester, 2);
+      expect(selectedPath(tester), endsWith('a.txt'));
+
+      tester.pumpWidget(browser(dir, controller));
+
+      expect(selectedPath(tester), endsWith('a.txt'));
+    });
+
+    testWidgets('when hidden entries above it are shown', (tester) {
+      // Row 2 of 3 moves to row 4 of 5, past the row count the list showed.
+      final dir = dirWith(['.h1', '.h2', 'a.txt', 'b.txt', 'c.txt']);
+      final controller = FileBrowserController();
+      addTearDown(controller.dispose);
+      tester.pumpWidget(browser(dir, controller));
+      down(tester, 2);
+      expect(selectedPath(tester), endsWith('c.txt'));
+
+      tester.pumpWidget(browser(dir, controller, showHidden: true));
+
+      expect(selectedPath(tester), endsWith('c.txt'));
+    });
+
+    testWidgets('through a reload with new entries ahead of it', (tester) {
+      final dir = dirWith(['b.txt', 'c.txt']);
+      final controller = FileBrowserController();
+      addTearDown(controller.dispose);
+      tester.pumpWidget(browser(dir, controller));
+      down(tester, 1);
+      expect(selectedPath(tester), endsWith('c.txt'));
+
+      File('$dir/a0.txt').writeAsStringSync('a0');
+      File('$dir/a1.txt').writeAsStringSync('a1');
+      controller.reload();
+      tester.pump();
+
+      expect(selectedPath(tester), endsWith('c.txt'));
+    });
+  });
+
   testWidgets('semantic open navigates directories and activates files', (
     tester,
   ) async {
@@ -259,6 +448,60 @@ void main() {
       expect(text, isNot(contains('\n')));
       expect(text, contains(replacementCharacter));
       expect(text, contains('name'));
+    });
+  });
+
+  group('the display order follows its inputs', () {
+    String screen(FleuryTester tester) =>
+        tester.renderToString(size: const CellSize(60, 8));
+
+    testWidgets('a new query re-filters, and clearing it restores all', (
+      tester,
+    ) {
+      final dir = _scratchDir();
+      Widget browser(String query) => FileBrowser(
+        initialDirectory: dir,
+        filter: FileBrowserFilterDescriptor(query: query),
+      );
+      tester.pumpWidget(browser(''));
+      expect(screen(tester), contains('alpha.txt'));
+
+      tester.pumpWidget(browser('deploy'));
+      expect(screen(tester), isNot(contains('alpha.txt')));
+      expect(screen(tester), contains('deploy.log'));
+
+      tester.pumpWidget(browser(''));
+      expect(screen(tester), contains('alpha.txt'));
+    });
+
+    testWidgets('a reload lists a file created since', (tester) {
+      final dir = _scratchDir();
+      final controller = FileBrowserController();
+      addTearDown(controller.dispose);
+      tester.pumpWidget(
+        FileBrowser(initialDirectory: dir, controller: controller),
+      );
+      expect(screen(tester), isNot(contains('zeta.md')));
+
+      File('$dir/zeta.md').writeAsStringSync('zeta');
+      controller.reload();
+      tester.pump();
+
+      expect(screen(tester), contains('zeta.md'));
+    });
+
+    testWidgets('showing hidden entries lists them', (tester) {
+      final dir = _scratchDir();
+      Widget browser(bool showHidden) => FileBrowser(
+        initialDirectory: dir,
+        filter: FileBrowserFilterDescriptor(showHidden: showHidden),
+      );
+      tester.pumpWidget(browser(false));
+      expect(screen(tester), isNot(contains('.secret')));
+
+      tester.pumpWidget(browser(true));
+
+      expect(screen(tester), contains('.secret'));
     });
   });
 

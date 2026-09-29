@@ -10,6 +10,15 @@
   region. Exiting during a resize removes the old UI without allocating another
   frame; missing cursor replies still use a bounded, conservative cleanup.
 
+- Generated semantic IDs distinguish repeated row keys in separate unkeyed
+  lists and keys with different value types. Keyed rows retain their IDs when
+  reordered within a list; explicit semantic IDs and `Semantics(key:)` IDs are
+  unchanged. Generated positional IDs remain opaque, session-scoped handles.
+- `FleuryTester.invokeCommand` and `invokeSemanticAction` pump requested frames
+  while awaiting a handler, so post-frame validation no longer deadlocks them.
+  Test time remains under the caller's control, and a dialog still needs an
+  explicit answer. Disposal and frame failures release pending invocations.
+
 - **Breaking:** `requestExit()` is now `exitApp()`, the counterpart to
   `runApp()`. It starts orderly UI shutdown; await `runApp` for terminal
   restoration to finish. It does not terminate the host process.
@@ -144,6 +153,105 @@
   (KP 4 with NumLock off, and Left) are tracked as two keys.
 - A letter typed after an abandoned key chord reaches `KeyDetector`s, such
   as a list's type-ahead, on kitty-protocol terminals and in the browser.
+- A command's shortcut asks the command's `visible` and `enabled`
+  predicates when its key is pressed, as the palette, semantics, and
+  `invoke` do. A command that becomes enabled after its scope built fires on
+  its shortcut, and one that becomes disabled lets its key through to an
+  outer binding. A hint bar asks them too: the frame after an answer changes
+  shows the change, even when nothing rebuilt for it.
+- Esc at a navigator's root, where there is nothing to pop, reaches what
+  binds Esc above the navigator: FleuryApp's own Esc commands, the Toaster's
+  Esc dismiss, and an outer navigator. A blocking `PopScope` at the root
+  still intercepts it.
+- **Breaking:** `StatusController` keeps what FleuryApp derives from its
+  `status` builder and extensions apart from items an app or command sets.
+  Status a command reports through `context.status` survives the command's
+  completion, and a later command no longer wipes it. `put` and `remove` set
+  and clear one item beside the items others set. `update` replaces only the
+  set items, so `items` no longer equals what was last passed to it; don't
+  write `items` back through `update`, which would freeze the derived items
+  at their current values. Use `put`.
+- A command that throws is reported. From a shortcut, a button, or a palette
+  row it reaches runApp's error overlay, as a throwing key binding does.
+  `CommandRegistry.dispatch` and `dispatchCommand` start a command this way
+  for custom command surfaces and return whether it started; one that
+  throws before it returns throws from them, and a later failure of its
+  future reaches the zone.
+- A semantic action reports what it did. A handler declines by throwing the
+  new `SemanticActionDeclined`, which reports `unsupported` rather than
+  `completed`.
+  - A command node or a status item runs its command: one that failed
+    reports `failed`, and one that is disabled, hidden or gone reports
+    `unsupported`. `CommandRegistry.invokeFromSemantics` and
+    `invokeCommandFromSemantics` do the same for custom semantic handlers.
+  - A control's `activate` is a press, as Enter or a click is: nothing waits
+    on the work it starts, whose failure reaches the error overlay. A press
+    that throws reports `failed`, a `CommandButton` or palette row whose
+    command throws included; one whose command turned disabled, hidden or
+    gone since it built reports `unsupported`, and a palette stays open.
+  - A route dismissal a `PopScope` refuses reports `unsupported`.
+- runApp stops on a storm of uncaught errors only when they recur with no
+  input between them. Holding a key whose command or async handler fails,
+  typing fast into a field whose async handler fails, or an agent repeating
+  such an action, reported 24 errors inside three seconds and ended the
+  session. Bare pointer motion doesn't count as input, so moving the mouse no
+  longer keeps a genuine error loop alive.
+- `FleuryTester.lastCommandResult` and the app node's `lastCommandId` are
+  the latest command visible from the focused context, scoped or app-level.
+  Both kept reporting the app's last command after a screen command ran.
+- `NavigatorState.topScreen` is the screen widget of the top route, so a
+  screen that closes itself can tell being presented from being shown
+  inline.
+- `FleuryTester.renderToString` trims each row's trailing empty cells rather
+  than trailing copies of the mark. An empty mark no longer hangs the test,
+  a mark of several characters works, and a glyph equal to the mark stays.
+- A focus move rebuilds the controls whose focus changed, not every
+  `TextInput`, `TextArea` and button in the tree (41 elements per Tab in a
+  20-row form). `FocusNode` is a `Listenable` that notifies when its own
+  focus flips, including when its `Focus` unmounts while focused; a control
+  shows a focus cue with `context.listen(node)`. `Focus.of` read in a build
+  rebuilds its caller for that node's focus only. A click in a text field
+  no longer subscribes it to every focus move.
+- `ListController.moveCursor(index, itemCount:)` places the cursor in a list
+  its owner is rebuilding to a new number of items, where `currentIndex`
+  would clamp against the old count; a later `currentIndex` supersedes it,
+  and `cursorFor(itemCount:)` reads it back before the list shows it.
+- An `Anchored` float paints the theme where it sits, not the fallback theme
+  of the overlay above the app's `Theme`.
+- A terminal-only app no longer re-derives the screen geometry of every
+  mounted `Semantics` node (every `Text`) on every paint pass; nothing reads
+  it until a semantics consumer takes a full rebuild.
+- **Breaking:** a served app says why it could not send its semantic tree.
+  The encoder rejects a tree it cannot carry, most often two nodes that
+  derive the same id from one `Key` used under different unkeyed parents,
+  and the serve driver dropped it silently: the browser's accessibility tree
+  and agents over MCP saw nothing, or a tree frozen at the last one sent.
+  runApp now reports it as a developer warning, once per episode.
+  `RemoteSurfaceSink` gained `onDeveloperWarning`, which an implementation
+  must provide.
+- A served semantic action whose handler awaits UI no longer holds up the
+  actions behind it. The `await context.present(Confirm())` idiom in a
+  `Semantics` handler or an `AppCommand` finishes only once a later action
+  answers the dialog, and that action queued behind it forever. The queue
+  now waits for a handler for at most 500 ms, and the handler's RESULT goes
+  out when it finishes. Actions still apply in order when each finishes
+  within that; one slower than it can be overtaken by the next.
+- A framed app no longer floods its served accessibility tree and MCP with
+  its frame. The coverage fallback, which exposes painted text that has no
+  semantics, counted drawing glyphs (box drawing, block elements, braille,
+  sextants, octants) as text: a panel's frame became dozens of `│` nodes,
+  and every framed app kept the semantics pipeline off its fast paths,
+  walking the whole tree and scanning the whole screen every frame. Text
+  inside a frame still falls back, without the frame; an ASCII frame (`+`,
+  `-`, `|`) still reads as text.
+- A semantic patch that only changes content (labels, values, state; no
+  node added or removed, no child list changed) costs its peer about what it
+  changed. `SemanticsWireDecoder` rebuilds only those nodes and their
+  ancestors, reusing the rest of the tree, and names them in
+  `contentReplacements`; `SemanticTreeUpdate` no longer copies the node
+  maps. A one-label patch on a 2,253-node tree now decodes and updates its
+  owner in about 0.2 ms rather than 5.7 ms. A structural patch still
+  rebuilds the tree.
 - Debugger mode changes preserve application state and layout. Opening the
   shell starts a bounded 60-frame recording that continues while hidden;
   Rebuilds shows the worst frame's phase costs. Inspector reports scroll with

@@ -67,15 +67,13 @@ class Dialog extends StatelessWidget {
               child,
             ],
           );
+    // No dismiss action of its own: a presented dialog's route advertises
+    // dismiss when it can be dismissed, and routes it through maybePop, which
+    // honours barrierDismissible and PopScope. A dialog shown inline is not a
+    // route at all.
     return Semantics(
       role: SemanticRole.dialog,
       label: t,
-      actions: const <SemanticAction>{SemanticAction.dismiss},
-      onAction: (action) {
-        if (action == SemanticAction.dismiss) {
-          Navigator.maybeOf(context)?.pop();
-        }
-      },
       state: SemanticState({'hasTitle': t != null}),
       child: Container(
         width: width,

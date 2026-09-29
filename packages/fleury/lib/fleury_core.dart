@@ -171,6 +171,7 @@ export 'src/semantics/semantics.dart'
         SemanticAction,
         SemanticActionCallback,
         SemanticActionContributor,
+        SemanticActionDeclined,
         SemanticChildrenProvider,
         SemanticContributor,
         SemanticNode,

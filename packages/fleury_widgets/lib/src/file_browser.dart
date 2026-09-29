@@ -100,6 +100,21 @@ class FileBrowserController extends Notifier {
     host._openDirectory(path, interaction: false);
   }
 
+  /// Reads the current directory again, applying the browser's current
+  /// `entityFilter`, and keeps the selected entry selected when it is still
+  /// listed. The browser reads its directory only when it opens one or this
+  /// is called: a new filter closure on a rebuild does not re-read the disk.
+  void reload() {
+    _checkNotDisposed();
+    final host = _host;
+    if (host == null) {
+      throw StateError(
+        "FileBrowserController is not attached to a FileBrowser.",
+      );
+    }
+    host._reload();
+  }
+
   void _directoryChanged() => notify();
 
   void _attach(_FileBrowserState host) {
@@ -123,6 +138,13 @@ class FileBrowserController extends Notifier {
     _checkNotDisposed();
     _list.currentIndex = value;
   }
+
+  void _moveCursor(int index, int rowCount) {
+    _checkNotDisposed();
+    _list.moveCursor(index, itemCount: rowCount);
+  }
+
+  int? _cursorFor(int rowCount) => _list.cursorFor(itemCount: rowCount);
 
   ({int first, int last})? get visibleRange => _list.visibleRange;
 
@@ -216,7 +238,10 @@ class FileBrowser extends StatefulWidget {
   /// Text and hidden-file filter applied to loaded entries.
   final FileBrowserFilterDescriptor filter;
 
-  /// Optional filesystem-entity predicate applied before rows are built.
+  /// Optional filesystem-entity predicate applied when a directory is read:
+  /// on opening one, and on [FileBrowserController.reload]. A new predicate
+  /// takes effect at the next of those, so an inline closure rebuilt with
+  /// its parent never re-reads the disk.
   final FileBrowserEntityFilter? entityFilter;
 
   /// Whether Ctrl+C and semantic copy export the selected entry.
@@ -280,11 +305,49 @@ class _FileBrowserState extends State<FileBrowser> {
       _focusNode = widget.focusNode ?? FocusNode(debugLabel: 'FileBrowser');
       _ownsFocusNode = widget.focusNode == null;
     }
-    if (widget.entityFilter != oldWidget.entityFilter ||
-        widget.filter.showHidden != oldWidget.filter.showHidden) {
-      _reloadCurrentDirectory();
+    // The selected entry stays selected wherever it is still listed.
+    if (widget.filter.showHidden != oldWidget.filter.showHidden) {
+      _keepSelection(() => _entries = _readEntries(_currentDirectory));
     } else if (widget.filter.query != oldWidget.filter.query) {
-      _resetSelection();
+      _keepSelection(() {});
+    }
+  }
+
+  void _reload() {
+    setState(() {
+      _keepSelection(() => _entries = _readEntries(_currentDirectory));
+    });
+  }
+
+  /// Runs [change] to the entries or their order, then selects the entry
+  /// that was selected before if it is still listed, else the first row.
+  void _keepSelection(void Function() change) {
+    // The entry selected in the order the user saw. The widget's filter may
+    // already be the new one, so that order is the cached one, not
+    // [_currentOrder].
+    final shown = _order;
+    final shownEntries = _orderEntries;
+    final shownIndex = shown == null || shown.isEmpty
+        ? null
+        : _controller._cursorFor(shown.length);
+    final before = shownIndex == null
+        ? null
+        : shownEntries![shown![shownIndex.clamp(0, shown.length - 1)]].path;
+    change();
+    final order = _currentOrder;
+    final index = before == null
+        ? -1
+        : order.indexWhere((i) => _entries[i].path == before);
+    _updatingController = true;
+    try {
+      if (order.isEmpty) {
+        _controller.currentIndex = null;
+      } else {
+        // The list still counts the old rows; place the cursor in the new.
+        _controller._moveCursor(index >= 0 ? index : 0, order.length);
+      }
+    } finally {
+      _updatingController = false;
     }
   }
 
@@ -392,8 +455,28 @@ class _FileBrowserState extends State<FileBrowser> {
     }
   }
 
-  List<int> get _currentOrder =>
-      buildFileBrowserEntryOrder(_entries, filter: widget.filter);
+  // The display order, kept until the entries or the filter change. Every
+  // build, arrow key and row callback reads it, and with a query it is a
+  // match over every entry.
+  List<int>? _order;
+  List<FileBrowserEntry>? _orderEntries;
+  String? _orderQuery;
+  bool? _orderShowHidden;
+
+  List<int> get _currentOrder {
+    final filter = widget.filter;
+    final cached = _order;
+    if (cached != null &&
+        identical(_orderEntries, _entries) &&
+        _orderQuery == filter.query &&
+        _orderShowHidden == filter.showHidden) {
+      return cached;
+    }
+    _orderEntries = _entries;
+    _orderQuery = filter.query;
+    _orderShowHidden = filter.showHidden;
+    return _order = buildFileBrowserEntryOrder(_entries, filter: filter);
+  }
 
   _SelectedFileEntry? _selectedEntry(List<int> order) {
     if (order.isEmpty) return null;
@@ -517,16 +600,27 @@ class _FileBrowserState extends State<FileBrowser> {
     final canActivate =
         widget.onActivate != null || selected?.entry.isDirectory == true;
 
-    Widget body = _error != null
+    // With no rows to list (an empty or unreadable directory) the browser
+    // itself holds focus, inside the same key handling, so Left and
+    // Backspace still go up: there is no list to hold it.
+    final Widget? placeholder = _error != null
         ? Text('  $_error', style: const CellStyle(dim: true))
         : order.isEmpty
         ? const Text('  (empty)', style: CellStyle(dim: true))
-        : KeyDetector(
-            onKey: (event) {
-              if ((_onNavigationKey)(event) == KeyEventResult.handled)
-                event.consume();
-            },
-            child: Focus(
+        : null;
+    Widget body = KeyDetector(
+      onKey: (event) {
+        if ((_onNavigationKey)(event) == KeyEventResult.handled) {
+          event.consume();
+        }
+      },
+      child: placeholder != null
+          ? Focus(
+              focusNode: _focusNode,
+              autofocus: widget.autofocus,
+              child: placeholder,
+            )
+          : Focus(
               canRequestFocus: false,
               child: ListView.builder(
                 controller: _controller._listController,
@@ -553,7 +647,7 @@ class _FileBrowserState extends State<FileBrowser> {
                 },
               ),
             ),
-          );
+    );
 
     body = SizedBox(height: visible, child: body);
 

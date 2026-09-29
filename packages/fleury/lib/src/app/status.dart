@@ -1,3 +1,5 @@
+import 'package:meta/meta.dart';
+
 import '../foundation/collections.dart';
 import '../foundation/change_notifier.dart';
 import '../rendering/cell.dart';
@@ -100,10 +102,28 @@ final class StatusItem {
 }
 
 /// Mutable status model installed by [FleuryApp].
+///
+/// Two sources feed it. An app or command sets the items it reports itself —
+/// a task's progress, a command's result — with [put], [remove] and
+/// [update]. [FleuryApp] also derives items from its `status` builder and
+/// extensions, and re-derives them after every command and rebuild; those
+/// never replace a set item. [items] shows the derived items, each replaced
+/// by a set item with the same id, then the set items with ids of their own.
+///
+/// ```dart
+/// run: (context) async {
+///   context.status!.put(StatusItem.text('Deploy', value: 'running'));
+///   await deploy();
+///   context.status!.put(StatusItem.success('Deploy', value: 'done'));
+/// },
+/// ```
 class StatusController extends Notifier {
   StatusController({List<StatusItem> items = const <StatusItem>[]})
-    : _items = List<StatusItem>.of(items);
+    : _set = List<StatusItem>.of(items),
+      _items = List<StatusItem>.of(items);
 
+  List<StatusItem> _set;
+  List<StatusItem> _derived = const <StatusItem>[];
   List<StatusItem> _items;
   bool _disposed = false;
 
@@ -112,10 +132,55 @@ class StatusController extends Notifier {
   bool get isNotEmpty => _items.isNotEmpty;
   int get length => _items.length;
 
+  /// Sets [item], replacing the set item with its id and leaving the others:
+  /// for a writer that owns one item beside items others set.
+  void put(StatusItem item) {
+    _checkNotDisposed();
+    final index = _set.indexWhere((existing) => existing.id == item.id);
+    _set = index < 0 ? [..._set, item] : ([..._set]..[index] = item);
+    _merge();
+  }
+
+  /// Removes the set item with [id], if there is one.
+  void remove(String id) {
+    _checkNotDisposed();
+    _set = [
+      for (final item in _set)
+        if (item.id != id) item,
+    ];
+    _merge();
+  }
+
+  /// Replaces every set item with [items]. Pass only items you set: [items]
+  /// also holds the derived items, and one written back here overrides the
+  /// builder's later values for its id.
   void update(List<StatusItem> items) {
     _checkNotDisposed();
-    if (listEquals(_items, items)) return;
-    _items = List<StatusItem>.of(items);
+    if (listEquals(_set, items)) return;
+    _set = List<StatusItem>.of(items);
+    _merge();
+  }
+
+  /// Framework-internal: replaces the items [FleuryApp] derives from its
+  /// status builder and extensions.
+  @internal
+  void updateDerived(List<StatusItem> items) {
+    _checkNotDisposed();
+    if (listEquals(_derived, items)) return;
+    _derived = List<StatusItem>.of(items);
+    _merge();
+  }
+
+  void _merge() {
+    final setById = {for (final item in _set) item.id: item};
+    final derivedIds = {for (final item in _derived) item.id};
+    final merged = [
+      for (final item in _derived) setById[item.id] ?? item,
+      for (final item in _set)
+        if (!derivedIds.contains(item.id)) item,
+    ];
+    if (listEquals(_items, merged)) return;
+    _items = merged;
     notify();
   }
 
@@ -200,9 +265,13 @@ final class _StatusItemView extends StatelessWidget {
           ? null
           : (action) async {
               if (action != SemanticAction.activate) return;
-              final registry = CommandRegistryScope.maybeOf(context);
-              if (registry == null) return;
-              await registry.invoke(item.action!, buildContext: context);
+              // Read, not depended on: this is an action, not a build.
+              final registry = readScope<CommandRegistry>(context);
+              if (registry == null) throw const SemanticActionDeclined();
+              await registry.invokeFromSemantics(
+                item.action!,
+                buildContext: context,
+              );
             },
       child: Text(
         item.displayText,

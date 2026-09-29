@@ -1,4 +1,6 @@
-import 'dart:async' show FutureOr, unawaited;
+import 'dart:async' show FutureOr, Zone, unawaited;
+
+import 'package:meta/meta.dart';
 
 import '../foundation/change_notifier.dart';
 import '../semantics/semantics.dart';
@@ -172,6 +174,11 @@ class CommandRegistry extends Notifier {
   CommandRegistry? _parent;
   List<AppCommand> _commands;
   CommandInvocationResult? _lastResult;
+
+  /// When [_lastResult] was recorded, on one clock shared by every registry,
+  /// so the latest across a registry chain can be told apart.
+  int _lastRecorded = 0;
+  static int _recordClock = 0;
   bool _disposed = false;
 
   CommandRegistry? get parent => _parent;
@@ -194,6 +201,24 @@ class CommandRegistry extends Notifier {
   }
 
   CommandInvocationResult? get lastResult => _lastResult;
+
+  /// Framework-internal: the latest result recorded in this registry or any
+  /// registry above it — the latest invocation visible from here. A screen's
+  /// command records in the screen's own registry, so reading only the app
+  /// registry would miss it once any app command has run.
+  @internal
+  CommandInvocationResult? get latestVisibleResult {
+    CommandInvocationResult? latest;
+    var recorded = 0;
+    for (CommandRegistry? registry = this; registry != null;) {
+      if (registry._lastRecorded > recorded) {
+        recorded = registry._lastRecorded;
+        latest = registry._lastResult;
+      }
+      registry = registry._parent;
+    }
+    return latest;
+  }
 
   List<AppCommand> activeCommands({BuildContext? buildContext}) {
     final context = _context(buildContext);
@@ -258,32 +283,136 @@ class CommandRegistry extends Notifier {
   }) async {
     _checkNotDisposed();
     final context = _context(buildContext);
+    return _decline(command, context) ?? await _run(command, context);
+  }
+
+  /// Starts [id] for a press — a shortcut, a button, a palette row, a
+  /// semantic activation of one — without waiting on it, and returns whether
+  /// it started. A command that is hidden, disabled or gone doesn't; a
+  /// control reports that as a declined press by throwing
+  /// [SemanticActionDeclined].
+  ///
+  /// A command that throws before it returns throws here, as a throwing
+  /// press handler does. One whose future fails is reported as an uncaught
+  /// error of the calling zone (runApp shows it in its error overlay, as it
+  /// does a throwing key binding) rather than only being recorded in
+  /// [lastResult], where no press looks.
+  bool dispatch(CommandId id, {BuildContext? buildContext}) {
+    _checkNotDisposed();
+    final command = this.command(id, buildContext: buildContext);
+    if (command == null) {
+      _record(CommandInvocationResult.notFound(id));
+      return false;
+    }
+    return dispatchCommand(command, buildContext: buildContext);
+  }
+
+  /// [invokeCommand] for a press, as [dispatch].
+  bool dispatchCommand(AppCommand command, {BuildContext? buildContext}) {
+    _checkNotDisposed();
+    final context = _context(buildContext);
+    if (_decline(command, context) != null) return false;
+    final FutureOr<void> running;
+    try {
+      running = command.run(context);
+    } catch (error, stackTrace) {
+      _record(_failed(command, error, stackTrace));
+      rethrow;
+    }
+    if (running is Future<void>) {
+      unawaited(
+        running.then(
+          (_) {
+            _record(
+              CommandInvocationResult.completed(command.id, command: command),
+            );
+          },
+          onError: (Object error, StackTrace stackTrace) {
+            _record(_failed(command, error, stackTrace));
+            Zone.current.handleUncaughtError(error, stackTrace);
+          },
+        ),
+      );
+    } else {
+      _record(CommandInvocationResult.completed(command.id, command: command));
+    }
+    return true;
+  }
+
+  /// [invoke] for a semantic action — an agent's or assistive technology's
+  /// activation — whose result carries the outcome. Completes when the
+  /// command did; throws the command's error when it failed, so the action
+  /// reports `failed`; and throws [SemanticActionDeclined] when the command
+  /// is disabled or gone, so it reports `unsupported` rather than
+  /// `completed`.
+  ///
+  /// ```dart
+  /// Semantics(
+  ///   role: SemanticRole.button,
+  ///   label: 'Save',
+  ///   actions: const {SemanticAction.activate},
+  ///   onAction: (_) => registry.invokeFromSemantics(save, buildContext: context),
+  ///   child: saveButton,
+  /// )
+  /// ```
+  Future<void> invokeFromSemantics(
+    CommandId id, {
+    BuildContext? buildContext,
+  }) async {
+    if (!semanticOutcomeOf(await invoke(id, buildContext: buildContext))) {
+      throw const SemanticActionDeclined();
+    }
+  }
+
+  /// [invokeCommand] for a semantic action, as [invokeFromSemantics].
+  Future<void> invokeCommandFromSemantics(
+    AppCommand command, {
+    BuildContext? buildContext,
+  }) async {
+    final result = await invokeCommand(command, buildContext: buildContext);
+    if (!semanticOutcomeOf(result)) throw const SemanticActionDeclined();
+  }
+
+  // The result of a command that cannot run now, recorded; null when it can.
+  CommandInvocationResult? _decline(
+    AppCommand command,
+    _CommandInvocationContext context,
+  ) {
     if (!command.visible(context)) {
       return _record(CommandInvocationResult.notFound(command.id));
     }
-
     if (!command.enabled(context)) {
       return _record(
         CommandInvocationResult.disabled(command.id, command: command),
       );
     }
+    return null;
+  }
 
+  Future<CommandInvocationResult> _run(
+    AppCommand command,
+    _CommandInvocationContext context,
+  ) async {
     try {
       await command.run(context);
       return _record(
         CommandInvocationResult.completed(command.id, command: command),
       );
     } catch (error, stackTrace) {
-      return _record(
-        CommandInvocationResult.failed(
-          command.id,
-          command: command,
-          error: error,
-          stackTrace: stackTrace,
-        ),
-      );
+      return _record(_failed(command, error, stackTrace));
     }
   }
+
+  static CommandInvocationResult _failed(
+    AppCommand command,
+    Object error,
+    StackTrace stackTrace,
+  ) => CommandInvocationResult.failed(
+    command.id,
+    command: command,
+    error: error,
+    stackTrace: stackTrace,
+  );
 
   _CommandInvocationContext _context(BuildContext? buildContext) {
     return _CommandInvocationContext(
@@ -295,6 +424,7 @@ class CommandRegistry extends Notifier {
   CommandInvocationResult _record(CommandInvocationResult result) {
     if (_disposed) return result;
     _lastResult = result;
+    _lastRecorded = ++_recordClock;
     notify();
     return result;
   }
@@ -412,15 +542,17 @@ class _CommandScopeState extends State<CommandScope> {
         commands: registry,
         buildContext: this.context,
       );
-      if (!command.visible(context)) continue;
       bindings.add(
-        KeyBinding(
+        // The predicates read state this scope does not rebuild for, so the
+        // shortcut asks them when its key is pressed — as the palette,
+        // semantics and invoke do — and a disabled one lets the key bubble.
+        KeyBinding.live(
           command.shortcuts.first,
           aliases: command.shortcuts.skip(1).toList(),
           label: command.title,
-          enabled: command.enabled(context),
+          isEnabled: () => command.visible(context) && command.enabled(context),
           onTrigger: (_) {
-            unawaited(registry.invoke(command.id, buildContext: this.context));
+            registry.dispatchCommand(command, buildContext: this.context);
           },
         ),
       );
@@ -547,12 +679,33 @@ final class _CommandScopeSemanticsElement extends ComponentElement
           command.semanticAction != action) {
         return false;
       }
-      await widget.registry.invokeCommand(
-        command,
-        buildContext: widget.buildContext,
+      return semanticOutcomeOf(
+        await widget.registry.invokeCommand(
+          command,
+          buildContext: widget.buildContext,
+        ),
       );
-      return true;
     }
     return false;
+  }
+}
+
+/// What a semantic action that invoked a command reports: handled when it
+/// completed, not handled when the command is disabled or gone, and — when
+/// it failed — the command's own error, rethrown, so the action reports
+/// `failed` (and runApp's error overlay shows it) instead of `completed`.
+@internal
+bool semanticOutcomeOf(CommandInvocationResult result) {
+  switch (result.status) {
+    case CommandInvocationStatus.completed:
+      return true;
+    case CommandInvocationStatus.failed:
+      Error.throwWithStackTrace(
+        result.error!,
+        result.stackTrace ?? StackTrace.empty,
+      );
+    case CommandInvocationStatus.disabled:
+    case CommandInvocationStatus.notFound:
+      return false;
   }
 }

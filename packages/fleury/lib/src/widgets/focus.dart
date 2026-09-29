@@ -150,7 +150,12 @@ abstract interface class TextCompositionClaimant {
 /// A long-lived focus identity. One per [Focus] widget; consumers can
 /// also create their own and pass it into a `Focus` to keep focus
 /// state stable across reparenting.
-class FocusNode {
+///
+/// A node notifies its listeners when [hasFocus] flips. A control that shows
+/// a focus cue listens to its own node — `context.listen(node)` in build —
+/// so a focus move rebuilds the two controls it concerns, not every control
+/// that depends on the [FocusManager].
+class FocusNode implements Listenable {
   FocusNode({
     /// Whether this node can receive focus through traversal, pointer input,
     /// or [requestFocus].
@@ -357,6 +362,24 @@ class FocusNode {
   /// Whether this node is currently the focused node in its manager.
   bool get hasFocus => _manager?.focusedNode == this;
 
+  List<VoidCallback>? _listeners;
+
+  /// Calls [listener] each time [hasFocus] flips.
+  @override
+  void addListener(VoidCallback listener) =>
+      (_listeners ??= <VoidCallback>[]).add(listener);
+
+  @override
+  void removeListener(VoidCallback listener) => _listeners?.remove(listener);
+
+  void _notifyFocusFlip() {
+    final listeners = _listeners;
+    if (listeners == null || listeners.isEmpty) return;
+    for (final listener in List<VoidCallback>.of(listeners)) {
+      listener();
+    }
+  }
+
   /// Whether the node's mounted subtree currently participates in input.
   ///
   /// A contained render failure keeps the element tree mounted so it can
@@ -404,6 +427,7 @@ class FocusNode {
     textCompositionClaimant = null;
     _boundsHost = null;
     _caretHost = null;
+    _listeners = null;
   }
 
   @override
@@ -522,6 +546,54 @@ class FocusManager extends Notifier {
     _frameInputAborted = false;
   }
 
+  /// What each hint surface — an element that resolved the active bindings
+  /// in its build — saw the live bindings ([KeyBinding.isLive]) answer.
+  final Map<Element, List<(KeyBinding, bool)>> _liveAnswers =
+      Map<Element, List<(KeyBinding, bool)>>.identity();
+
+  /// Framework-internal: records what the live bindings answered a
+  /// resolution made in [Element.current]'s build. A resolution outside a
+  /// build — a key's dispatch, a test reading the bindings — records
+  /// nothing: no surface shows its answers.
+  @internal
+  void recordLiveAnswers(List<(KeyBinding, bool)>? answers) {
+    final surface = Element.current;
+    if (surface == null) return;
+    if (answers == null || answers.isEmpty) {
+      _liveAnswers.remove(surface);
+    } else {
+      _liveAnswers[surface] = answers;
+    }
+  }
+
+  /// Framework-internal: asks the live bindings again, and notifies when one
+  /// answers differently from what a hint surface showed, so the surfaces
+  /// rebuild. A live binding's predicate reads app state that nothing
+  /// rebuilds its scope for. The frame driver calls this at the start of
+  /// every frame, before deciding the frame has nothing to do. A surface
+  /// that left the tree is forgotten, and with it the predicates it asked.
+  @internal
+  void recheckLiveAnswers() {
+    if (_disposed || _liveAnswers.isEmpty) return;
+    var changed = false;
+    _liveAnswers.removeWhere((surface, answers) {
+      if (!surface.mounted) return true;
+      for (final (binding, answer) in answers) {
+        bool now;
+        try {
+          now = binding.enabled;
+        } catch (_) {
+          // The surface's own resolution reports it when it rebuilds.
+          now = !answer;
+        }
+        // The surface records afresh when it rebuilds.
+        if (now != answer) return changed = true;
+      }
+      return false;
+    });
+    if (changed) notify();
+  }
+
   /// Commits the current focus paint transaction.
   @internal
   void endFrame() {
@@ -565,6 +637,8 @@ class FocusManager extends Notifier {
       if (focused != null && _isExcludedFromFocus(focused)) {
         _focusedNode = null;
         _focusedAncestry = null;
+        // Mid-build, like the manager's own notification below.
+        scheduleMicrotask(focused._notifyFocusFlip);
       }
       _notifyManagerScopeChanged();
     }
@@ -811,6 +885,11 @@ class FocusManager extends Notifier {
       _focusedNode = fallback;
       if (fallback != null) _rememberFocusInScopes(fallback);
       notify();
+      fallback?._notifyFocusFlip();
+      // [node] lost focus too. Its listeners may belong to what is unmounting
+      // with it, so they hear once this pass is over, when a disposed owner
+      // has stopped listening.
+      scheduleMicrotask(node._notifyFocusFlip);
     }
   }
 
@@ -848,6 +927,7 @@ class FocusManager extends Notifier {
     _checkNotDisposed();
     if (node != null && !isClickable(node)) return false;
     if (identical(_focusedNode, node)) return false;
+    final previous = _focusedNode;
     _focusedNode = node;
     if (node != null) {
       _rememberFocusInScopes(node);
@@ -855,6 +935,8 @@ class FocusManager extends Notifier {
       _focusedAncestry = null;
     }
     notify();
+    previous?._notifyFocusFlip();
+    node?._notifyFocusFlip();
     return true;
   }
 
@@ -1396,9 +1478,6 @@ class Focus extends StatefulWidget {
   /// The nearest enclosing [FocusNode], or null when the context is not
   /// inside a [Focus]. See [of].
   static FocusNode? maybeOf(BuildContext context) {
-    // Depend on the manager so the caller rebuilds when focus moves; the node
-    // identity alone would not tell it that `hasFocus` flipped.
-    FocusManager.maybeOf(context);
     // Start at the context itself: a Focus's own element is its State's
     // context, so a widget can ask for the node it just installed. Otherwise
     // walk out to the closest enclosing one.
@@ -1407,7 +1486,19 @@ class Focus extends StatefulWidget {
       element != null;
       element = element.elementParent
     ) {
-      if (element is _FocusElement) return element.node;
+      if (element is _FocusElement) {
+        final node = element.node;
+        if (identical(Element.current, context)) {
+          // Read in the caller's own build: it rebuilds when this node's
+          // focus flips, not on every focus move anywhere.
+          context.listen(node);
+        } else {
+          // Read for another element, as a lazy list does when it builds a
+          // row during layout: only a manager dependency can be taken there.
+          FocusManager.maybeOf(context);
+        }
+        return node;
+      }
     }
     return null;
   }

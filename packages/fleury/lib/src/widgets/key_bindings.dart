@@ -249,9 +249,11 @@ final class KeyBinding {
     List<KeySequence> aliases = const <KeySequence>[],
     this.includeRepeats = false,
     this.label,
-    this.enabled = true,
+    bool enabled = true,
     this.hideFromHintBar = false,
-  }) : assert(
+  }) : _enabled = enabled,
+       _isEnabled = null,
+       assert(
          !includeRepeats ||
              (sequence.stepCount == 1 &&
                  !aliases.any((alias) => alias.stepCount > 1)),
@@ -281,15 +283,36 @@ final class KeyBinding {
     required KeyBindingHandler this.onHoldStart,
     required KeyBindingHandler this.onHoldEnd,
     this.label,
-    this.enabled = true,
+    bool enabled = true,
     this.hideFromHintBar = false,
-  }) : assert(
+  }) : _enabled = enabled,
+       _isEnabled = null,
+       assert(
          key.stepCount == 1,
          'a hold brackets one key press, not a multi-step sequence',
        ),
        sequences = [key],
        onTrigger = null,
        includeRepeats = false;
+
+  /// Framework-internal: a binding whose [enabled] is [isEnabled], asked
+  /// each time a key matches it rather than fixed when it was built — for a
+  /// command's shortcut, whose `visible`/`enabled` predicates read app
+  /// state that no rebuild of the binding's scope tracks.
+  @internal
+  KeyBinding.live(
+    KeySequence sequence, {
+    required KeyBindingHandler this.onTrigger,
+    required bool Function() isEnabled,
+    List<KeySequence> aliases = const <KeySequence>[],
+    this.label,
+  }) : _enabled = true,
+       _isEnabled = isEnabled,
+       sequences = [sequence, ...aliases],
+       includeRepeats = false,
+       hideFromHintBar = false,
+       onHoldStart = null,
+       onHoldEnd = null;
 
   /// The sequence(s) this binding matches. Any firing triggers [onTrigger].
   /// The first is always canonical for hint-bar display.
@@ -316,7 +339,14 @@ final class KeyBinding {
 
   /// When false, the binding doesn't match and doesn't appear in the hint
   /// bar. Useful for context-sensitive shortcuts.
-  final bool enabled;
+  bool get enabled => _isEnabled?.call() ?? _enabled;
+  final bool _enabled;
+  final bool Function()? _isEnabled;
+
+  /// Framework-internal: whether [enabled] is asked each time rather than
+  /// fixed (see [KeyBinding.live]).
+  @internal
+  bool get isLive => _isEnabled != null;
 
   /// When true, the binding still fires but is hidden from `KeyHintBar`.
   /// Useful for ubiquitous bindings like Ctrl+C.
@@ -385,17 +415,26 @@ final class ActiveKeyBinding {
 /// The returned list is deepest-first and immutable. This is the canonical
 /// resolution API for hint bars, help overlays, and keymap inspection; those
 /// surfaces should not independently walk [FocusManager.activeChain].
+///
+/// A command's shortcut is enabled by predicates over app state that no
+/// rebuild tracks. Called from a widget's build, the resolution remembers
+/// what they answered for that widget, and the focus manager asks them again
+/// at the start of each frame: when one answers differently, the widget
+/// rebuilds. A resolution outside a build remembers nothing.
 List<ActiveKeyBinding> resolveActiveKeyBindings(FocusManager manager) {
   final result = <ActiveKeyBinding>[];
   // Canonical sequence identity mirrors dispatch. Differently spelled aliases
   // for the same firing event must not evade deeper-binding precedence.
   final seenSequences = <KeySequence>{};
   final textFocused = manager.focusedNodeClaimsText;
+  List<(KeyBinding, bool)>? liveAnswers;
 
   void consider(KeyBinding binding) {
     if (binding.label == null) return;
     if (binding.hideFromHintBar) return;
-    if (!binding.enabled) return;
+    final enabled = binding.enabled;
+    if (binding.isLive) (liveAnswers ??= []).add((binding, enabled));
+    if (!enabled) return;
 
     final firable = [
       for (final sequence in binding.sequences)
@@ -423,6 +462,7 @@ List<ActiveKeyBinding> resolveActiveKeyBindings(FocusManager manager) {
       consider(binding);
     }
   }
+  manager.recordLiveAnswers(liveAnswers);
   return List<ActiveKeyBinding>.unmodifiable(result);
 }
 
@@ -631,7 +671,9 @@ class _KeyBindingsState extends State<KeyBindings> implements KeyBindingSource {
       final x = a[i];
       final y = b[i];
       if (x.label != y.label ||
-          x.enabled != y.enabled ||
+          // Two live predicates read the same state and agree; the focus
+          // manager's recheck is what follows them.
+          (!(x.isLive && y.isLive) && x.enabled != y.enabled) ||
           x.hideFromHintBar != y.hideFromHintBar) {
         return true;
       }

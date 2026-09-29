@@ -39,6 +39,42 @@ Matcher _stateError(String message) {
 }
 
 void main() {
+  for (final key in [
+    KeyCode.arrowLeft,
+    KeyCode.arrowRight,
+    KeyCode.home,
+    KeyCode.end,
+  ]) {
+    testWidgets('body focus keeps $key out of tab-strip navigation', (tester) {
+      final tabs = TabController(initialIndex: 1);
+      final body = FocusNode();
+      addTearDown(tabs.dispose);
+      addTearDown(body.dispose);
+      tester.pumpWidget(
+        Tabs(
+          controller: tabs,
+          tabs: [
+            const TabItem(label: 'First', content: Text('First')),
+            TabItem(
+              label: 'Second',
+              content: Focus(
+                focusNode: body,
+                autofocus: true,
+                child: const Text('Body'),
+              ),
+            ),
+            const TabItem(label: 'Third', content: Text('Third')),
+          ],
+        ),
+      );
+      tester.pump();
+      expect(body.hasFocus, isTrue);
+      tester.sendKey(KeyEvent(key));
+      expect(tabs.index, 1);
+      expect(body.hasFocus, isTrue);
+    });
+  }
+
   group('TabController lifecycle', () {
     test('dispose is idempotent and keeps final readable state', () {
       final controller = TabController(initialIndex: 2);

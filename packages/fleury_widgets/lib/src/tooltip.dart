@@ -33,6 +33,10 @@ class _TooltipState extends State<Tooltip> {
   final BoundsNotifier _bounds = BoundsNotifier();
   OverlayEntry? _entry;
 
+  // The overlay builds the tip above any Theme the app set, so it carries
+  // the theme where this Tooltip sits.
+  ThemeData? _theme;
+
   // Set when Esc dismisses the tip while the trigger keeps focus; cleared when
   // focus leaves, so re-focusing the trigger shows the tip again.
   bool _dismissed = false;
@@ -63,15 +67,18 @@ class _TooltipState extends State<Tooltip> {
         // text is chrome, not content, so it opts out of the app's ambient
         // selection — stated here rather than inherited from the fact that an
         // overlay entry happens to mount outside DefaultRootSelection.
-        child: SelectionArea.disabled(
-          child: Container.framed(
-            border: const BoxBorder(style: BorderStyle.rounded),
-            child: Semantics(
-              role: SemanticRole.text,
-              label: widget.semanticLabel,
-              value: _safeMessage,
-              state: const SemanticState({'tooltipVisible': true}),
-              child: Text(widget.message, allowSelect: false),
+        child: Theme(
+          data: _theme!,
+          child: SelectionArea.disabled(
+            child: Container.framed(
+              border: const BoxBorder(style: BorderStyle.rounded),
+              child: Semantics(
+                role: SemanticRole.text,
+                label: widget.semanticLabel,
+                value: _safeMessage,
+                state: const SemanticState({'tooltipVisible': true}),
+                child: Text(widget.message, allowSelect: false),
+              ),
             ),
           ),
         ),
@@ -86,6 +93,16 @@ class _TooltipState extends State<Tooltip> {
     _entry?.remove();
     _entry = null;
     if (notify && mounted) setState(() {});
+  }
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    final theme = Theme.of(context);
+    if (theme != _theme) {
+      _theme = theme;
+      _entry?.markNeedsBuild();
+    }
   }
 
   @override

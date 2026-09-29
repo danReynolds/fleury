@@ -1,5 +1,68 @@
 ## 0.1.0
 
+- Tabs handle Left/Right and Home/End only while the tab strip has focus.
+  Navigation bubbling from controls in a tab body no longer switches tabs or
+  loses focus. Explicit Alt+digit and Ctrl+PageUp/PageDown shortcuts still work.
+
+- **Breaking:** `Dialog` and `CommandPalette` no longer carry a semantic
+  dismiss action of their own. A presented dialog's or palette's route
+  advertises dismiss and honours `barrierDismissible` and `PopScope`; their
+  own action bypassed both and could pop a page they were shown inline in.
+  Dismiss through the route node (`role: SemanticRole.route`).
+- A `CommandPalette` shown inline on a page no longer pops the page after
+  running a command; a presented palette still closes.
+- A `CommandButton` or palette row whose command throws is reported to
+  runApp's error overlay. Activating one through semantics is a press: it
+  reports `failed` for a command that throws, `unsupported` for one that
+  turned disabled, hidden or gone since it built, and doesn't wait on the
+  command. A palette row asks whether its command can run when chosen, so a
+  stale row leaves the palette open. `CommandPaletteItem.onInvoke` may throw
+  `SemanticActionDeclined` to decline.
+- `FileBrowser` keeps its keys working in an empty or unreadable directory:
+  Left and Backspace climb to the parent again.
+- `FileBrowser` reads a directory when it opens it or on
+  `FileBrowserController.reload()`, not on every parent rebuild; an inline
+  `entityFilter` no longer re-reads the disk and resets the cursor. Toggling
+  `showHidden`, changing the query or a reload keeps the selected entry,
+  wherever it lands. The display order is kept until the entries or the
+  filter change.
+- `Image` no longer re-decodes when its parent rebuilds with the same
+  source, an animated image keeps playing across rebuilds, and a static
+  image is painted once rather than resampled every frame. After
+  `ImageSource.evictFile` or `evictAll`, a rebuilt `Image.file` reads the
+  file again.
+- Markdown emphasis follows CommonMark's flanking rules: `snake_case`,
+  `__init__` and `a * b * c` stay text instead of losing characters.
+  Emphasis nests (`*use **only** this*`), `***both***` is bold and italic,
+  and a paragraph of delimiters that never close parses in linear time.
+- `JsonView` builds its rows once per document and expansion, not on every
+  build, and `SearchPanel` ranks its results once per query. A parent that
+  rebuilds `JsonView(value:)` hands a new document, so data it changed in
+  place shows.
+- Toasts, tooltips, autocomplete and completion lists, and the color
+  picker's hex entry paint the theme where their owner sits; under a light
+  app they painted the dark fallback. `Select` and `Menu` follow a theme
+  change while open.
+- `Tree`'s own semantic node follows the cursor (current index, selected
+  key, visible range) through arrow keys, typeahead, clicks and scrolling,
+  rebuilding alone: no row rebuilds for it.
+- `TreeTable`'s cursor stays on its node when an expand or collapse above
+  it, a filter, or new roots rebuild the rows; when the node leaves the
+  rows it moves to the nearest ancestor still shown, including after two
+  such changes before a frame. Enter and copy act on the node the user
+  picked.
+- The library's controls (`Select`, `MultiSelect`, `DatePicker`, `Stepper`,
+  `RangeSlider`, `FilePicker`, `ColorPicker`, `Autocomplete`,
+  `CompletionTextInput` and others), `SearchPanel`, `ConversationNavigator`
+  and `FileMentionPicker` rebuild only when their own focus changes, not on
+  every focus move.
+- `DiffView` measures its line-number gutter once per document.
+- `LineChart` collects its cursor positions only when it is interactive,
+  and a chart behind a `RepaintBoundary` with an unchanged series list no
+  longer repaints for its default palette.
+- A `git format-patch` email signature (`-- `) after the last hunk no longer
+  parses as a deletion.
+
 - `LogRegion` no longer does work proportional to the whole log on every
   build: the unfiltered view order allocates nothing, and row-id validation
   re-checks the rows it already validated by equality and hashes only new

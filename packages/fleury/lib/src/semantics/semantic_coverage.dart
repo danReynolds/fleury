@@ -36,7 +36,8 @@ final class SemanticCoverageAudit {
 /// The visual grid is `aria-hidden`, so visible painted text without semantics
 /// would otherwise be unreachable to assistive technology. This bridge keeps
 /// rich widget semantics authoritative where bounds exist and appends plain
-/// text fallback nodes only for uncovered non-whitespace buffer text.
+/// text fallback nodes only for uncovered buffer text. Whitespace and drawing
+/// glyphs (a border, a bar, a plot's dots) are not text.
 SemanticCoverageResult applySemanticTextFallback({
   required SemanticTree tree,
   required CellBuffer buffer,
@@ -305,10 +306,31 @@ int _fallbackCandidateWidth(
   if (cell.role != CellRole.leading) return 0;
   final grapheme = cell.grapheme;
   if (grapheme == null || grapheme.trim().isEmpty) return 0;
+  if (_isDrawingGlyph(grapheme)) return 0;
   final nextCol = col + 1;
   if (nextCol < buffer.size.cols &&
       buffer.atColRow(nextCol, row).role == CellRole.continuation) {
     return 2;
   }
   return 1;
+}
+
+/// Whether [grapheme] draws rather than reads: Box Drawing and Block Elements
+/// (borders, bars, gauges), Braille Patterns (plots), sextants and the other
+/// Symbols for Legacy Computing, and the octants of its supplement (canvases).
+/// Read aloud, a panel's frame would be a run of "box drawings light
+/// vertical". The block's segmented digits are digits, so they read.
+bool _isDrawingGlyph(String grapheme) {
+  final unit = grapheme.codeUnitAt(0);
+  if (unit >= 0x2500 && unit <= 0x259F) return true;
+  if (unit >= 0x2800 && unit <= 0x28FF) return true;
+  if (grapheme.length < 2) return false;
+  final low = grapheme.codeUnitAt(1);
+  return switch (unit) {
+    // U+1FB00–U+1FBEF, as a surrogate pair; U+1FBF0–U+1FBF9 are digits.
+    0xD83E => low >= 0xDF00 && low <= 0xDFEF,
+    // U+1CD00–U+1CDE5, the octants.
+    0xD833 => low >= 0xDD00 && low <= 0xDDE5,
+    _ => false,
+  };
 }

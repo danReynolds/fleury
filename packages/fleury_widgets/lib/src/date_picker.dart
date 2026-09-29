@@ -126,7 +126,6 @@ class _DatePickerState extends State<DatePicker> implements TextInputClaimant {
   @override
   void didChangeDependencies() {
     super.didChangeDependencies();
-    FocusManager.maybeOf(context); // rebuild on focus change
     final registration = FormControlScope.maybeOf(context);
     if (!identical(registration, _formRegistration)) {
       _formRegistration?.release(this);
@@ -341,7 +340,7 @@ class _DatePickerState extends State<DatePicker> implements TextInputClaimant {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final enabled = _enabled;
-    final focused = enabled && _node.hasFocus;
+    final focused = enabled && context.listen(_node).hasFocus;
     final disabledStyle = theme.mutedStyle;
     final v = widget.value;
     final firstOfMonth = DateTime(v.year, v.month, 1);

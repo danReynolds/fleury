@@ -1752,8 +1752,6 @@ final class McpServer {
         'smaller value.',
         code: _ErrorCode.tooLarge,
       );
-    } on FleurySemanticActionTimeoutException catch (error) {
-      return _toolError(error.message, code: _ErrorCode.actionTimedOut);
     } on FleurySemanticActionBusyException catch (error) {
       return _toolError(error.message, code: _ErrorCode.actionBusy);
     } on FleuryAppBridgeException catch (error) {
@@ -2029,12 +2027,21 @@ final class McpServer {
     // Future.wait observes both from the outset.
     final completed = await Future.wait<Object?>(<Future<Object?>>[
       bridge.settle(sinceRevision: before),
-      statusFuture,
+      _stillRunningOnTimeout(statusFuture),
     ]);
     final after = completed[0] as SemanticInspectionSnapshot?;
-    final status = completed[1] as SemanticActionInvocationStatus?;
+    final status = completed[1];
     _throwIfBridgeStopped();
-    if (status == null) {
+    if (status == _stillRunning) {
+      return _toolJson(<String, Object?>{
+        'invoked': <String, Object?>{'id': id, 'action': actionName},
+        'status': 'pending',
+        'changed': bridge.revision != before,
+        'note': _stillRunningNote(actionName, id),
+        'ui': _uiResult(after),
+      });
+    }
+    if (status is! SemanticActionInvocationStatus) {
       throw const _ToolFailure(
         'The app ended a semantic action without a result status.',
         code: _ErrorCode.internal,
@@ -2215,12 +2222,21 @@ final class McpServer {
     );
     final completed = await Future.wait<Object?>(<Future<Object?>>[
       bridge.settle(sinceRevision: before),
-      statusFuture,
+      _stillRunningOnTimeout(statusFuture),
     ]);
     final after = completed[0] as SemanticInspectionSnapshot?;
-    final status = completed[1] as SemanticActionInvocationStatus?;
+    final status = completed[1];
     _throwIfBridgeStopped();
-    if (status == null) {
+    if (status == _stillRunning) {
+      return _toolJson(<String, Object?>{
+        'set': <String, Object?>{'id': id, 'value': value},
+        'status': 'pending',
+        'changed': bridge.revision != before,
+        'note': _stillRunningNote('setValue', id),
+        'ui': _uiResult(after),
+      });
+    }
+    if (status is! SemanticActionInvocationStatus) {
       throw const _ToolFailure(
         'The app ended a setValue action without a result status.',
         code: _ErrorCode.internal,
@@ -2241,6 +2257,26 @@ final class McpServer {
       'ui': _uiResult(after),
     });
   }
+
+  // A handler that outlives the result wait is still running, not lost: one
+  // that presents a dialog and awaits its answer finishes only once another
+  // action answers it.
+  static const _stillRunning = #stillRunning;
+
+  static Future<Object?> _stillRunningOnTimeout(
+    Future<SemanticActionInvocationStatus?> status,
+  ) => status.then<Object?>(
+    (status) => status,
+    onError: (Object error, StackTrace stackTrace) {
+      if (error is FleurySemanticActionTimeoutException) return _stillRunning;
+      Error.throwWithStackTrace(error, stackTrace);
+    },
+  );
+
+  static String _stillRunningNote(String action, String id) =>
+      'The handler is still running, for example waiting on a dialog this '
+      'action opened. Act on the UI it shows. "$action" on "$id" can be sent '
+      'again once this one finishes.';
 
   void _rejectMissingActionTarget(
     String id,
@@ -2682,7 +2718,6 @@ abstract final class _ErrorCode {
   static const ambiguous = 'ambiguous';
   static const actionUnsupported = 'action_unsupported';
   static const actionFailed = 'action_failed';
-  static const actionTimedOut = 'action_timed_out';
   static const actionBusy = 'action_busy';
   static const staleReference = 'stale_reference';
   static const outOfDomain = 'out_of_domain';

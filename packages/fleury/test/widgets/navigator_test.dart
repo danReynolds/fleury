@@ -1530,7 +1530,8 @@ void main() {
       );
       tester.pump(const Duration(milliseconds: 300));
 
-      expect(result.completed, isTrue);
+      // Refused, and reported as not done rather than completed.
+      expect(result.status, SemanticActionInvocationStatus.unsupported);
       expect(blocked, 1, reason: 'semantic close used maybePop');
       expect(_screen(tester), 'editor', reason: 'still on the guarded screen');
       expect(nav.depth, 2, reason: 'semantic close was vetoed');

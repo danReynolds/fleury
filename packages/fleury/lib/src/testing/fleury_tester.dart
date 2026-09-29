@@ -24,6 +24,8 @@
 // control. Mirrors the discipline already established in the
 // animation suite.
 
+import 'dart:async';
+
 import '../animation/animation_policy.dart';
 import '../animation/clock.dart';
 import '../animation/ticker_scheduler.dart';
@@ -139,6 +141,9 @@ class FleuryTester {
     // layout/paint containment can use `ErrorBoundary(rethrowContained:
     // false)` instead, which does not affect build errors.
     _owner.rethrowContainedErrors = true;
+    _owner.onScheduleBuild = _scheduleActionFrame;
+    _owner.renderDamageTracker.onInvalidate = _scheduleActionFrame;
+    _binding.onPostFrameCallback = _scheduleActionFrame;
     // Off by default in tests so it doesn't perturb golden output; an
     // overflow-specific test opts back in.
     RenderFlex.debugShowOverflow = false;
@@ -262,6 +267,57 @@ class FleuryTester {
     builder: (_) => DefaultRootSelection(child: _currentUserWidget),
   );
   bool _disposed = false;
+  int _pendingActions = 0;
+  Timer? _actionFrameTimer;
+  Completer<Never>? _actionFrameFailure;
+
+  // While an invocation waits, drive requested frames as the runtime does.
+  // No periodic polling or fake-clock advancement: tests still own time and
+  // must explicitly answer dialogs. Concurrent invocations share one pump.
+  void _scheduleActionFrame() {
+    if (_disposed ||
+        _pendingActions == 0 ||
+        _actionFrameTimer != null ||
+        _actionFrameFailure!.isCompleted) {
+      return;
+    }
+    _actionFrameTimer = Timer(Duration.zero, () {
+      _actionFrameTimer = null;
+      if (_disposed ||
+          _pendingActions == 0 ||
+          _actionFrameFailure!.isCompleted) {
+        return;
+      }
+      try {
+        pump();
+      } catch (error, stack) {
+        _actionFrameTimer?.cancel();
+        _actionFrameTimer = null;
+        final failure = _actionFrameFailure;
+        if (failure != null && !failure.isCompleted) {
+          failure.completeError(error, stack);
+        }
+      }
+    });
+  }
+
+  Future<T> _runAction<T>(Future<T> Function() invoke) async {
+    if (_pendingActions++ == 0) _actionFrameFailure = Completer<Never>();
+    try {
+      // Register the waiter before invoking user code: a handler can dispose
+      // the tester synchronously, before returning its future. Future.sync
+      // also keeps a synchronous throw on the same cleanup path.
+      final action = Future<T>.sync(invoke);
+      _scheduleActionFrame();
+      return await Future.any<T>([action, _actionFrameFailure!.future]);
+    } finally {
+      if (--_pendingActions == 0) {
+        _actionFrameTimer?.cancel();
+        _actionFrameTimer = null;
+        _actionFrameFailure = null;
+      }
+    }
+  }
 
   /// The binding installed above the test tree. Exposed so tests can
   /// override animation policy mid-flight or read out scheduler
@@ -771,7 +827,9 @@ class FleuryTester {
     // With a ticker registered this is a no-op; the tick publishes instead.
     _publishFrameLatch();
     final buffer = CellBuffer(viewportSize);
+    _focusManager.recheckLiveAnswers();
     _pointerRouter.beginFrame();
+    _focusManager.beginFrame();
     try {
       _owner.renderFrame(_root!, buffer);
     } catch (_) {
@@ -779,6 +837,7 @@ class FleuryTester {
       rethrow;
     }
     _pointerRouter.endFrame();
+    _focusManager.endFrame();
     _closeFrame();
     return buffer;
   }
@@ -811,8 +870,14 @@ class FleuryTester {
     final buffer = render(size: size);
     final out = StringBuffer();
     for (var row = 0; row < buffer.size.rows; row++) {
+      // Trim by cell, not by text: a glyph that happens to equal the mark
+      // is content, and a mark of any length (even empty) trims the same.
+      var end = buffer.size.cols;
+      while (end > 0 && buffer.atColRow(end - 1, row).role == CellRole.empty) {
+        end--;
+      }
       final line = StringBuffer();
-      for (var col = 0; col < buffer.size.cols; col++) {
+      for (var col = 0; col < end; col++) {
         final cell = buffer.atColRow(col, row);
         switch (cell.role) {
           case CellRole.empty:
@@ -829,7 +894,7 @@ class FleuryTester {
             break;
         }
       }
-      out.writeln(_rstrip(line.toString(), emptyMark));
+      out.writeln(line.toString());
     }
     return out.toString();
   }
@@ -900,6 +965,9 @@ class FleuryTester {
   /// can exercise app commands, controls, fields, and app-authored regions by
   /// role/label/action instead of reaching through widget internals.
   ///
+  /// Requested frames continue while the handler is pending, without advancing
+  /// test time. Dialog-opening handlers still need an explicit answer.
+  ///
   /// For [SemanticAction.setValue], pass the value to apply as [payload] (the
   /// [value] argument is a node *filter*, not the payload).
   Future<SemanticActionInvocationResult> invokeSemanticAction(
@@ -955,11 +1023,13 @@ class FleuryTester {
     // Dispatch through the same map-based path the live wire uses, so the tester
     // can't pass where production fails (the divergence that previously hid a
     // cross-fire bug). The tree from `semantics()` carries the id→element map.
-    final result = await invokeSemanticActionFromElement(
-      tree: tree,
-      id: target.id,
-      action: action,
-      value: payload,
+    final result = await _runAction(
+      () => invokeSemanticActionFromElement(
+        tree: tree,
+        id: target.id,
+        action: action,
+        value: payload,
+      ),
     );
     _owner.flushBuild();
     return result;
@@ -982,16 +1052,19 @@ class FleuryTester {
     return registry;
   }
 
-  /// Latest command invocation result for the active command registry, if any.
+  /// The latest command invocation result visible from the focused context:
+  /// from its nearest command registry or any registry above it, the app's
+  /// included, whichever recorded last.
   CommandInvocationResult? get lastCommandResult {
     _assertNotDisposed('lastCommandResult');
     final buildContext = _defaultCommandContext(null);
     if (buildContext == null) return null;
-    return FleuryApp.maybeOf(buildContext)?.commands.lastResult ??
-        CommandRegistryScope.maybeOf(buildContext)?.lastResult;
+    return CommandRegistryScope.maybeOf(buildContext)?.latestVisibleResult;
   }
 
-  /// Invokes a command by stable ID and flushes builds triggered by it.
+  /// Invokes a command by stable ID, pumping requested frames while it waits.
+  /// Test time does not advance automatically. For a command that awaits a
+  /// dialog, start the invocation, answer the dialog, then await its result.
   ///
   /// Resolution follows app-shell expectations: nearest local command scopes
   /// win first, then active screen commands, then app/parent commands.
@@ -1003,12 +1076,14 @@ class FleuryTester {
     final buildContext = _defaultCommandContext(context);
     final registry = commandRegistry(context: buildContext);
     final resolution = _resolveCommandForTester(id, registry, buildContext);
-    final result = resolution == null
-        ? await registry.invoke(id, buildContext: buildContext)
-        : await resolution.registry.invokeCommand(
-            resolution.command,
-            buildContext: buildContext,
-          );
+    final result = await _runAction(
+      () => resolution == null
+          ? registry.invoke(id, buildContext: buildContext)
+          : resolution.registry.invokeCommand(
+              resolution.command,
+              buildContext: buildContext,
+            ),
+    );
     _owner.flushBuild();
     return result;
   }
@@ -1020,6 +1095,14 @@ class FleuryTester {
   void dispose() {
     if (_disposed) return;
     _disposed = true;
+    _actionFrameTimer?.cancel();
+    _actionFrameTimer = null;
+    final pendingFailure = _actionFrameFailure;
+    if (pendingFailure != null && !pendingFailure.isCompleted) {
+      pendingFailure.completeError(
+        StateError('FleuryTester disposed during an action.'),
+      );
+    }
     try {
       _closeFrame();
     } finally {
@@ -1227,12 +1310,4 @@ final class _CommandResolution {
 
   final AppCommand command;
   final CommandRegistry registry;
-}
-
-String _rstrip(String s, String mark) {
-  var end = s.length;
-  while (end > 0 && s.substring(end - mark.length, end) == mark) {
-    end -= mark.length;
-  }
-  return s.substring(0, end);
 }

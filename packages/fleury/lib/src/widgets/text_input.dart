@@ -973,9 +973,13 @@ class _TextInputState extends State<TextInput>
     _focusNode =
         widget.focusNode ??
         FocusNode(debugLabel: 'TextInput', canRequestFocus: widget.enabled);
+    _focusNode.addListener(_onFocusFlip);
     _syncClaimants();
     _ownsFocusNode = widget.focusNode == null;
   }
+
+  // Cursor visibility and the blink ticker follow this field's own focus.
+  void _onFocusFlip() => setState(_syncBlinkToFocus);
 
   /// Claim typed text only while [TextInput.enabled]: a disabled field
   /// DECLINES every printable (`onTextInput` returns ignored), so the chars
@@ -1020,12 +1024,15 @@ class _TextInputState extends State<TextInput>
       if (identical(_focusNode.textCompositionClaimant, this)) {
         _focusNode.textCompositionClaimant = null;
       }
+      _focusNode.removeListener(_onFocusFlip);
       if (_ownsFocusNode) _focusNode.dispose();
       _focusNode =
           widget.focusNode ??
           FocusNode(debugLabel: 'TextInput', canRequestFocus: widget.enabled);
+      _focusNode.addListener(_onFocusFlip);
       _syncClaimants();
       _ownsFocusNode = widget.focusNode == null;
+      _syncBlinkToFocus();
     }
     if (widget.enabled != oldWidget.enabled) {
       _syncClaimants();
@@ -1064,9 +1071,6 @@ class _TextInputState extends State<TextInput>
   @override
   void didChangeDependencies() {
     super.didChangeDependencies();
-    // Rebuild on focus change so cursor visibility flips: reading the
-    // manager subscribes us to its scope.
-    FocusManager.maybeOf(context);
     final registration = FormControlScope.maybeOf(context);
     if (!identical(registration, _formRegistration)) {
       _formRegistration?.release(this);
@@ -1595,6 +1599,7 @@ class _TextInputState extends State<TextInput>
     if (identical(_focusNode.textCompositionClaimant, this)) {
       _focusNode.textCompositionClaimant = null;
     }
+    _focusNode.removeListener(_onFocusFlip);
     if (_ownsFocusNode) _focusNode.dispose();
     _formRegistration?.release(this);
     super.dispose();
@@ -1628,7 +1633,10 @@ class _TextInputState extends State<TextInput>
 
   void _pointerDown(PointerDetails details) {
     if (!widget.enabled ||
-        !(FocusManager.maybeOf(context)?.isClickable(_focusNode) ?? false)) {
+        !(FocusManager.maybeOfWithoutDependency(
+              context,
+            )?.isClickable(_focusNode) ??
+            false)) {
       return;
     }
     final hit = _offsetForPointer(details);
@@ -1645,7 +1653,10 @@ class _TextInputState extends State<TextInput>
 
   void _pointerDrag(PointerDragDetails details) {
     if (!widget.enabled ||
-        !(FocusManager.maybeOf(context)?.isClickable(_focusNode) ?? false)) {
+        !(FocusManager.maybeOfWithoutDependency(
+              context,
+            )?.isClickable(_focusNode) ??
+            false)) {
       return;
     }
     final hit = _offsetForPointer(details);

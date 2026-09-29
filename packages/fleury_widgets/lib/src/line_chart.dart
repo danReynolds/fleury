@@ -346,21 +346,18 @@ class _LineChartState extends State<LineChart> {
       (_internalNode ??= FocusNode(debugLabel: 'LineChart'));
 
   int _cursorIdx = 0;
-  List<num> _cursorXs = const [];
   bool _focused = false;
 
-  @override
-  void initState() {
-    super.initState();
-    _rebuildCursorXs();
-  }
+  /// The distinct x values the cursor steps through, sorted — collected when
+  /// first read after the series change, and only an interactive chart reads
+  /// them. A parent rebuild passes a new series list every time.
+  List<num>? _cursorXsCache;
+  List<num> get _cursorXs => _cursorXsCache ??= _collectCursorXs();
 
   @override
   void didUpdateWidget(covariant LineChart oldWidget) {
     super.didUpdateWidget(oldWidget);
-    if (!identical(widget.series, oldWidget.series)) {
-      _rebuildCursorXs();
-    }
+    if (!identical(widget.series, oldWidget.series)) _cursorXsCache = null;
   }
 
   @override
@@ -369,7 +366,7 @@ class _LineChartState extends State<LineChart> {
     super.dispose();
   }
 
-  void _rebuildCursorXs() {
+  List<num> _collectCursorXs() {
     final s = <num>{};
     for (final ser in widget.series) {
       for (final (x, _) in ser.points) {
@@ -377,10 +374,10 @@ class _LineChartState extends State<LineChart> {
       }
     }
     final list = s.toList()..sort((a, b) => a.compareTo(b));
-    _cursorXs = list;
     if (_cursorIdx >= list.length) {
       _cursorIdx = list.isEmpty ? 0 : list.length - 1;
     }
+    return list;
   }
 
   KeyEventResult _onKey(KeyEvent e) {
@@ -438,8 +435,9 @@ class _LineChartState extends State<LineChart> {
         widget.palette ??
         [cs.primary, cs.info, cs.warning, cs.success, cs.error];
 
-    final showCursor = widget.interactive && _focused && _cursorXs.isNotEmpty;
-    final cursorX = showCursor ? _cursorXs[_cursorIdx] : null;
+    final cursorXs = widget.interactive ? _cursorXs : const <num>[];
+    final showCursor = widget.interactive && _focused && cursorXs.isNotEmpty;
+    final cursorX = showCursor ? cursorXs[_cursorIdx] : null;
 
     final raw = _RawLineChart(
       series: widget.series,
@@ -469,7 +467,7 @@ class _LineChartState extends State<LineChart> {
       focused: widget.interactive && _focused,
       actions: {
         if (widget.interactive) SemanticAction.focus,
-        if (widget.interactive && _cursorIdx < _cursorXs.length - 1)
+        if (widget.interactive && _cursorIdx < cursorXs.length - 1)
           SemanticAction.increment,
         if (widget.interactive && _cursorIdx > 0) SemanticAction.decrement,
       },
@@ -481,7 +479,7 @@ class _LineChartState extends State<LineChart> {
         padding: widget.padding,
         references: widget.references,
         interactive: widget.interactive,
-        cursorXs: _cursorXs,
+        cursorXs: cursorXs,
         cursorIndex: _cursorIdx,
       ),
       child: raw,
@@ -559,6 +557,15 @@ SemanticState _lineChartSemanticState({
       'chartCursorX': cursorXs[safeCursorIndex],
     },
   });
+}
+
+bool _sameColors(List<Color> a, List<Color> b) {
+  if (identical(a, b)) return true;
+  if (a.length != b.length) return false;
+  for (var i = 0; i < a.length; i++) {
+    if (a[i] != b[i]) return false;
+  }
+  return true;
 }
 
 (double, double) _lineChartExtents(List<LineSeries> series, {required bool x}) {
@@ -792,7 +799,8 @@ class RenderLineChart extends RenderObject {
 
   List<Color> _palette;
   set palette(List<Color> v) {
-    if (identical(_palette, v)) return;
+    // By value: the default palette is a new list on every build.
+    if (_sameColors(_palette, v)) return;
     _palette = v;
     markNeedsPaintOnly();
   }
