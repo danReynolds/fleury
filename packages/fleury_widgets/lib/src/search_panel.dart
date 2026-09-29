@@ -293,7 +293,7 @@ class _SearchPanelState extends State<SearchPanel> {
         widget.resultsFocusNode ?? FocusNode(debugLabel: 'SearchPanel results');
     _ownsResultsFocusNode = widget.resultsFocusNode == null;
     _resetSelectionForOrder(_currentOrder, preserveCurrent: true);
-    _list.addListener(_onListChange);
+    _list.viewChanges.addListener(_onListChange);
   }
 
   @override
@@ -307,7 +307,7 @@ class _SearchPanelState extends State<SearchPanel> {
       _query.addListener(_onQueryChange);
     }
     if (widget.controller != oldWidget.controller) {
-      _list.removeListener(_onListChange);
+      _list.viewChanges.removeListener(_onListChange);
       if (_ownsList) _list.dispose();
       _list = widget.controller ?? ListController(initialIndex: 0);
       _ownsList = widget.controller == null;
@@ -341,7 +341,7 @@ class _SearchPanelState extends State<SearchPanel> {
     }
     if (widget.controller != oldWidget.controller) {
       _resetSelectionForOrder(_currentOrder, preserveCurrent: true);
-      _list.addListener(_onListChange);
+      _list.viewChanges.addListener(_onListChange);
     }
   }
 
@@ -522,7 +522,7 @@ class _SearchPanelState extends State<SearchPanel> {
   void dispose() {
     _query.removeListener(_onQueryChange);
     if (_ownsQuery) _query.dispose();
-    _list.removeListener(_onListChange);
+    _list.viewChanges.removeListener(_onListChange);
     if (_ownsList) _list.dispose();
     if (_ownsQueryFocusNode) _queryFocusNode.dispose();
     if (_ownsResultsFocusNode) _resultsFocusNode.dispose();
@@ -535,7 +535,6 @@ class _SearchPanelState extends State<SearchPanel> {
     final visible = order.isEmpty
         ? 1
         : (order.length > widget.maxVisible ? widget.maxVisible : order.length);
-    final visibleRange = _list.visibleRange;
     final selected = _selectedResult(order);
     final copyEnabled = widget.copySelection && selected != null;
     final canActivate = widget.onActivate != null;
@@ -687,20 +686,24 @@ class _SearchPanelState extends State<SearchPanel> {
           if (copyEnabled) SemanticAction.copy,
         },
         onAction: _handlePanelSemanticAction,
-        state: SemanticState({
-          'filterText': _query.text,
-          'collectionRowCount': order.length,
-          'totalResultCount': widget.results.length,
-          'filteredResultCount': order.length,
-          'copyEnabled': copyEnabled,
-          'clipboardPolicy': widget.copyOptions.clipboardPolicy.name,
-          if (visibleRange != null && order.isNotEmpty) ...{
-            'visibleRangeStart': visibleRange.first,
-            'visibleRangeEnd': visibleRange.last,
-          },
-          if (_list.currentIndex != null) 'currentIndex': _list.currentIndex,
-          if (selected != null) ..._selectedResultState(selected.result),
-        }),
+        stateListenable: _list,
+        stateBuilder: () {
+          final visibleRange = _list.visibleRange;
+          return SemanticState({
+            'filterText': _query.text,
+            'collectionRowCount': order.length,
+            'totalResultCount': widget.results.length,
+            'filteredResultCount': order.length,
+            'copyEnabled': copyEnabled,
+            'clipboardPolicy': widget.copyOptions.clipboardPolicy.name,
+            if (visibleRange != null && order.isNotEmpty) ...{
+              'visibleRangeStart': visibleRange.first,
+              'visibleRangeEnd': visibleRange.last,
+            },
+            if (_list.currentIndex != null) 'currentIndex': _list.currentIndex,
+            if (selected != null) ..._selectedResultState(selected.result),
+          });
+        },
         child: panel,
       ),
     );

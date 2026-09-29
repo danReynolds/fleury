@@ -1,5 +1,6 @@
 import 'dart:async' show FutureOr;
 
+import '../foundation/change_notifier.dart';
 import '../foundation/geometry.dart';
 import '../foundation/key.dart' show Key, ValueKey;
 import '../rendering/cell_buffer.dart';
@@ -1599,12 +1600,22 @@ final class Semantics extends ProxyWidget {
     this.busy = false,
     this.validationError,
     this.actions = const <SemanticAction>{},
-    this.state = SemanticState.empty,
+    SemanticState? state,
+    this.stateBuilder,
+    this.stateListenable,
     this.includeChildren = true,
     this.onAction,
     this.onSetValue,
     required super.child,
-  });
+  }) : assert(
+         state == null || stateBuilder == null,
+         'Provide either state or stateBuilder, not both.',
+       ),
+       assert(
+         stateListenable == null || stateBuilder != null,
+         'stateListenable requires stateBuilder.',
+       ),
+       state = state ?? SemanticState.empty;
 
   /// Stable app-authored identity.
   ///
@@ -1624,6 +1635,24 @@ final class Semantics extends ProxyWidget {
   final String? validationError;
   final Set<SemanticAction> actions;
   final SemanticState state;
+
+  /// Computes state when a semantic snapshot is collected, after layout.
+  ///
+  /// Use this for live controller data such as a list's visible range. It is
+  /// not a widget builder: do not read inherited dependencies, mutate models,
+  /// or schedule work here. Return a fresh immutable snapshot when data changes.
+  /// It may run more than once per frame, or never when semantics are unused.
+  /// Mutually exclusive with [state].
+  final SemanticState Function()? stateBuilder;
+
+  /// Invalidates semantic state without rebuilding or laying out [child].
+  ///
+  /// Pair this with [stateBuilder] when its model changes independently of a
+  /// widget rebuild. Notifications schedule semantic presentation even when
+  /// no pixels change. The element subscribes while active and never disposes
+  /// the source. Without a source, live state is read on ordinary semantic
+  /// collection, but changing the model alone does not schedule a snapshot.
+  final Listenable? stateListenable;
   final bool includeChildren;
   final SemanticActionCallback? onAction;
 
@@ -1646,6 +1675,25 @@ final class SemanticsElement extends ComponentElement
 
   CellRect? _bounds;
   SemanticNode? _cachedSemanticNode;
+  Listenable? _stateSource;
+
+  void _subscribeState(Listenable? source) {
+    if (identical(source, _stateSource)) return;
+    _stateSource?.removeListener(_stateChanged);
+    _stateSource = source;
+    source?.addListener(_stateChanged);
+  }
+
+  void _stateChanged() {
+    _cachedSemanticNode = null;
+    final tracker = owner.semanticDirtyTracker;
+    final pending = tracker.hasDirt;
+    tracker.recordLeafDirty(this);
+    // Reuse the host's scheduling hook without dirtying widgets or render
+    // objects. Structured hosts flush semantics even on a skipped frame.
+    // Terminal-only hosts leave semantic dirt pending and incur no work.
+    if (!pending) owner.onScheduleBuild?.call();
+  }
 
   @override
   Semantics get widget => super.widget as Semantics;
@@ -1653,6 +1701,7 @@ final class SemanticsElement extends ComponentElement
   @override
   void mount(Element? parent) {
     super.mount(parent);
+    _subscribeState(widget.stateListenable);
     owner.semanticDirtyTracker
       ..recordStructureDirty()
       .._geometryElements.add(this);
@@ -1668,12 +1717,14 @@ final class SemanticsElement extends ComponentElement
         widget.id == null &&
         newWidget.id == null) {
       super.update(newWidget);
+      _subscribeState(widget.stateListenable);
       rebuild(force: true);
       return;
     }
     final oldId = _nodeId;
     final oldIncludeChildren = widget.includeChildren;
     super.update(newWidget);
+    _subscribeState(widget.stateListenable);
     if (oldId != _nodeId || oldIncludeChildren || newWidget.includeChildren) {
       owner.semanticDirtyTracker.recordStructureDirty();
     } else {
@@ -1684,6 +1735,7 @@ final class SemanticsElement extends ComponentElement
 
   @override
   void deactivate() {
+    _subscribeState(null);
     owner.semanticDirtyTracker
       ..recordStructureDirty()
       .._geometryElements.remove(this);
@@ -1693,6 +1745,7 @@ final class SemanticsElement extends ComponentElement
   @override
   void activate() {
     super.activate();
+    _subscribeState(widget.stateListenable);
     owner.semanticDirtyTracker
       ..recordStructureDirty()
       .._geometryElements.add(this);
@@ -1700,6 +1753,7 @@ final class SemanticsElement extends ComponentElement
 
   @override
   void unmount() {
+    _subscribeState(null);
     owner.semanticDirtyTracker
       ..recordStructureDirty()
       .._geometryElements.remove(this);
@@ -1823,6 +1877,7 @@ final class SemanticsElement extends ComponentElement
     final id = _nodeId;
     final bounds = _deriveBounds();
     _bounds = bounds;
+    final state = widget.stateBuilder?.call() ?? widget.state;
     final cached = _cachedSemanticNode;
     if (cached != null &&
         semanticChildren.isEmpty &&
@@ -1841,7 +1896,7 @@ final class SemanticsElement extends ComponentElement
         cached.validationError == widget.validationError &&
         cached.bounds == bounds &&
         identical(cached.actions, widget.actions) &&
-        cached.state.hasSameValues(widget.state)) {
+        cached.state.hasSameValues(state)) {
       return cached;
     }
     final node = SemanticNode(
@@ -1860,7 +1915,7 @@ final class SemanticsElement extends ComponentElement
       bounds: bounds,
       actions: widget.actions,
       children: semanticChildren,
-      state: widget.state,
+      state: state,
     );
     if (semanticChildren.isEmpty) _cachedSemanticNode = node;
     return node;

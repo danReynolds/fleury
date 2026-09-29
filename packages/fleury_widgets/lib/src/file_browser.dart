@@ -3,6 +3,8 @@ import 'dart:io';
 
 import 'package:fleury/fleury.dart';
 
+import 'internal/collection_notifications.dart';
+
 /// Type of filesystem entry rendered by [FileBrowser].
 enum FileBrowserEntryType { directory, file, link, other }
 
@@ -77,10 +79,18 @@ final class FileBrowserCopyResult {
 class FileBrowserController extends Notifier {
   FileBrowserController({int? initialIndex = 0})
     : _list = ListController(initialIndex: initialIndex) {
-    _list.addListener(notify);
+    _notifications = CollectionNotifications(
+      _list,
+      dispatch: notify,
+      publish: super.notify,
+    );
   }
 
   final ListController _list;
+  late final CollectionNotifications _notifications;
+
+  @override
+  void notify() => _notifications.publish();
   bool _disposed = false;
   _FileBrowserState? _host;
 
@@ -163,7 +173,7 @@ class FileBrowserController extends Notifier {
   void dispose() {
     if (_disposed) return;
     _disposed = true;
-    _list.removeListener(notify);
+    _notifications.dispose();
     _list.dispose();
     super.dispose();
   }
@@ -282,7 +292,7 @@ class _FileBrowserState extends State<FileBrowser> {
     _controller = widget.controller ?? FileBrowserController();
     _ownsController = widget.controller == null;
     _controller._attach(this);
-    _controller.addListener(_onControllerChange);
+    _controller._notifications.viewChanges.addListener(_onControllerChange);
     _currentDirectory = Directory(widget.initialDirectory).absolute.path;
     _reloadCurrentDirectory(preserveCurrent: true);
   }
@@ -291,13 +301,15 @@ class _FileBrowserState extends State<FileBrowser> {
   void didUpdateWidget(covariant FileBrowser oldWidget) {
     super.didUpdateWidget(oldWidget);
     if (widget.controller != oldWidget.controller) {
-      _controller.removeListener(_onControllerChange);
+      _controller._notifications.viewChanges.removeListener(
+        _onControllerChange,
+      );
       _controller._detach(this);
       if (_ownsController) _controller.dispose();
       _controller = widget.controller ?? FileBrowserController();
       _ownsController = widget.controller == null;
       _controller._attach(this);
-      _controller.addListener(_onControllerChange);
+      _controller._notifications.viewChanges.addListener(_onControllerChange);
       _resetSelection(preserveCurrent: true);
     }
     if (widget.focusNode != oldWidget.focusNode) {
@@ -358,7 +370,7 @@ class _FileBrowserState extends State<FileBrowser> {
 
   @override
   void deactivate() {
-    _controller.removeListener(_onControllerChange);
+    _controller._notifications.viewChanges.removeListener(_onControllerChange);
     _controller._detach(this);
     super.deactivate();
   }
@@ -367,12 +379,12 @@ class _FileBrowserState extends State<FileBrowser> {
   void activate() {
     super.activate();
     _controller._attach(this);
-    _controller.addListener(_onControllerChange);
+    _controller._notifications.viewChanges.addListener(_onControllerChange);
   }
 
   @override
   void dispose() {
-    _controller.removeListener(_onControllerChange);
+    _controller._notifications.viewChanges.removeListener(_onControllerChange);
     _controller._detach(this);
     if (_ownsController) _controller.dispose();
     if (_ownsFocusNode) _focusNode.dispose();
@@ -594,7 +606,6 @@ class _FileBrowserState extends State<FileBrowser> {
     final visible = order.isEmpty
         ? 1
         : (order.length > widget.maxVisible ? widget.maxVisible : order.length);
-    final visibleRange = _controller.visibleRange;
     final selected = _selectedEntry(order);
     final copyEnabled = widget.copySelection && selected != null;
     final canActivate =
@@ -676,24 +687,28 @@ class _FileBrowserState extends State<FileBrowser> {
         SemanticAction.navigate,
       },
       onAction: _handleBrowserAction,
-      state: SemanticState({
-        'currentDirectory': _sanitizeFileText(_currentDirectory),
-        'collectionRowCount': order.length,
-        'totalEntryCount': _entries.length,
-        'filteredEntryCount': order.length,
-        'filterText': _sanitizeFileText(widget.filter.query),
-        'showHidden': widget.filter.showHidden,
-        'copyEnabled': copyEnabled,
-        'clipboardPolicy': widget.copyOptions.clipboardPolicy.name,
-        if (_error != null) 'error': _sanitizeFileText(_error!),
-        if (visibleRange != null && order.isNotEmpty) ...{
-          'visibleRangeStart': visibleRange.first,
-          'visibleRangeEnd': visibleRange.last,
-        },
-        if (_controller.currentIndex != null)
-          'currentIndex': _controller.currentIndex,
-        if (selected != null) ..._selectedEntryState(selected.entry),
-      }),
+      stateListenable: _controller,
+      stateBuilder: () {
+        final visibleRange = _controller.visibleRange;
+        return SemanticState({
+          'currentDirectory': _sanitizeFileText(_currentDirectory),
+          'collectionRowCount': order.length,
+          'totalEntryCount': _entries.length,
+          'filteredEntryCount': order.length,
+          'filterText': _sanitizeFileText(widget.filter.query),
+          'showHidden': widget.filter.showHidden,
+          'copyEnabled': copyEnabled,
+          'clipboardPolicy': widget.copyOptions.clipboardPolicy.name,
+          if (_error != null) 'error': _sanitizeFileText(_error!),
+          if (visibleRange != null && order.isNotEmpty) ...{
+            'visibleRangeStart': visibleRange.first,
+            'visibleRangeEnd': visibleRange.last,
+          },
+          if (_controller.currentIndex != null)
+            'currentIndex': _controller.currentIndex,
+          if (selected != null) ..._selectedEntryState(selected.entry),
+        });
+      },
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [

@@ -1,5 +1,11 @@
 # Changelog
 
+- `Semantics.stateBuilder` reads live model state when a semantic snapshot is
+  collected. Pair it with `stateListenable` to publish model-only changes without
+  rebuilding the child. Existing `state:` annotations remain supported.
+- `ListController.viewChanges` reports cursor/content/scroll requests separately
+  from completed viewport metrics; ordinary listeners still receive both.
+
 - Segmented pastes keep their original input claimant when focus moves. A tail
   cannot spill into another field after its owner detaches or is replaced.
 - POSIX teardown, suspend, and handoff enqueue input-report disables before

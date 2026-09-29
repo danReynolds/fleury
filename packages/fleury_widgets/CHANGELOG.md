@@ -2,8 +2,10 @@
 
 - FileBrowser exposes a clickable, semantic parent-directory action in its
   existing separator row, including empty and unreadable directories.
-- CodeView refreshes viewport semantics without rebuilding its source rows
-  after scrolling. Selection and explicit controller refreshes still rebuild.
+- Collection widgets read viewport semantics lazily without rebuilding their
+  content after scrolling. Selection, filtering, expansion, explicit refresh,
+  and public controller notifications retain their behavior. The shared adapter
+  uses `ListController.viewChanges`; no private core imports are needed.
 
 - Tabs handle Left/Right and Home/End only while the tab strip has focus.
   Navigation bubbling from controls in a tab body no longer switches tabs or

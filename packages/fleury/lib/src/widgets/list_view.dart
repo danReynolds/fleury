@@ -39,11 +39,6 @@ enum EdgeBehavior {
   bubble,
 }
 
-// Package-internal: wrappers can isolate post-layout semantic updates without
-// changing the public ListController notification contract.
-bool isListMetricsNotification(ListController controller) =>
-    controller._deliveringMetrics;
-
 /// Navigation cursor and viewport state for a [ListView].
 ///
 /// Moving the cursor reveals its item. Scrolling leaves the cursor alone,
@@ -113,23 +108,37 @@ class ListController extends Notifier {
   int _attachment = 0;
   int _viewRevision = 0;
   bool _nextNotificationIsMetrics = false;
-  bool _deliveringMetrics = false;
+  Notifier? _viewChanges;
+
+  /// Changes to the requested view: cursor, content refresh, or scroll requests.
+  ///
+  /// Unlike this controller's ordinary listeners, these listeners are not
+  /// called when layout publishes the resulting viewport metrics. Collection
+  /// wrappers can rebuild their content from this source and observe this
+  /// controller separately for semantic state such as [visibleRange].
+  /// The controller owns this listenable; callers must not dispose it. Once
+  /// obtained, it remains accessible after disposal so listeners can detach.
+  Listenable get viewChanges {
+    final changes = _viewChanges;
+    if (changes != null) return changes;
+    _checkNotDisposed();
+    return _viewChanges = Notifier();
+  }
 
   /// Refreshes consumers after externally managed list content changes.
   @override
   void notify() {
+    _checkNotDisposed();
     // Consume the kind before invoking listeners: a nested command or explicit
     // refresh must advance the view revision even during metric delivery.
     final metrics = _nextNotificationIsMetrics;
-    if (!metrics) _viewRevision++;
     _nextNotificationIsMetrics = false;
-    final previous = _deliveringMetrics;
-    _deliveringMetrics = metrics;
-    try {
-      super.notify();
-    } finally {
-      _deliveringMetrics = previous;
+    if (!metrics) {
+      _viewRevision++;
+      _viewChanges?.notify();
+      if (_disposed) return; // a view listener may dispose the controller
     }
+    super.notify();
   }
 
   /// Whether new output should be followed while the viewport is at its end.
@@ -461,6 +470,7 @@ class ListController extends Notifier {
     _disposed = true;
     _detach();
     _clearRequests();
+    _viewChanges?.dispose();
     super.dispose();
   }
 }

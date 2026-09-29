@@ -3,6 +3,7 @@ import 'dart:async' show scheduleMicrotask, unawaited;
 import 'package:characters/characters.dart';
 import 'package:fleury/fleury_core.dart';
 
+import 'internal/collection_notifications.dart';
 import 'semantic_roles.dart';
 
 /// Protocol-neutral lifecycle for a conversation/session row.
@@ -81,10 +82,18 @@ typedef ConversationMatcher =
 class ConversationNavigatorController extends Notifier {
   ConversationNavigatorController({int? initialIndex = 0})
     : _list = ListController(initialIndex: initialIndex) {
-    _list.addListener(notify);
+    _notifications = CollectionNotifications(
+      _list,
+      dispatch: notify,
+      publish: super.notify,
+    );
   }
 
   final ListController _list;
+  late final CollectionNotifications _notifications;
+
+  @override
+  void notify() => _notifications.publish();
   bool _disposed = false;
 
   ListController get _listController => _list;
@@ -112,7 +121,7 @@ class ConversationNavigatorController extends Notifier {
   void dispose() {
     if (_disposed) return;
     _disposed = true;
-    _list.removeListener(notify);
+    _notifications.dispose();
     _list.dispose();
     super.dispose();
   }
@@ -328,7 +337,7 @@ class _ConversationNavigatorState extends State<ConversationNavigator> {
     _query.addListener(_onQueryChange);
     _controller = widget.controller ?? ConversationNavigatorController();
     _ownsController = widget.controller == null;
-    _controller.addListener(_onControllerChange);
+    _controller._notifications.viewChanges.addListener(_onControllerChange);
     _queryFocusNode =
         widget.queryFocusNode ??
         FocusNode(debugLabel: 'ConversationNavigator query');
@@ -351,11 +360,13 @@ class _ConversationNavigatorState extends State<ConversationNavigator> {
       _query.addListener(_onQueryChange);
     }
     if (widget.controller != oldWidget.controller) {
-      _controller.removeListener(_onControllerChange);
+      _controller._notifications.viewChanges.removeListener(
+        _onControllerChange,
+      );
       if (_ownsController) _controller.dispose();
       _controller = widget.controller ?? ConversationNavigatorController();
       _ownsController = widget.controller == null;
-      _controller.addListener(_onControllerChange);
+      _controller._notifications.viewChanges.addListener(_onControllerChange);
     }
     if (widget.queryFocusNode != oldWidget.queryFocusNode) {
       if (_ownsQueryFocusNode) _queryFocusNode.dispose();
@@ -584,7 +595,7 @@ class _ConversationNavigatorState extends State<ConversationNavigator> {
   void dispose() {
     _query.removeListener(_onQueryChange);
     if (_ownsQuery) _query.dispose();
-    _controller.removeListener(_onControllerChange);
+    _controller._notifications.viewChanges.removeListener(_onControllerChange);
     if (_ownsController) _controller.dispose();
     if (_ownsQueryFocusNode) _queryFocusNode.dispose();
     if (_ownsListFocusNode) _listFocusNode.dispose();
@@ -598,7 +609,14 @@ class _ConversationNavigatorState extends State<ConversationNavigator> {
         ? 1
         : (order.length > widget.maxVisible ? widget.maxVisible : order.length);
     final selected = _selectedConversation(order);
-    final visibleRange = _controller.visibleRange;
+    final unreadCount = widget.conversations.fold<int>(
+      0,
+      (total, entry) => total + (entry.unreadCount > 0 ? 1 : 0),
+    );
+    final pinnedCount = widget.conversations.fold<int>(
+      0,
+      (total, entry) => total + (entry.pinned ? 1 : 0),
+    );
     final copyEnabled = widget.copySelection && selected != null;
     final canSelect = widget.onSelect != null;
 
@@ -697,28 +715,26 @@ class _ConversationNavigatorState extends State<ConversationNavigator> {
           if (copyEnabled) SemanticAction.copy,
         },
         onAction: _handleNavigatorAction,
-        state: SemanticState({
-          'filterText': _query.text,
-          'collectionRowCount': order.length,
-          'totalConversationCount': widget.conversations.length,
-          'filteredConversationCount': order.length,
-          'unreadConversationCount': widget.conversations.fold<int>(
-            0,
-            (total, entry) => total + (entry.unreadCount > 0 ? 1 : 0),
-          ),
-          'pinnedConversationCount': widget.conversations.fold<int>(
-            0,
-            (total, entry) => total + (entry.pinned ? 1 : 0),
-          ),
-          'copyEnabled': copyEnabled,
-          'clipboardPolicy': widget.copyOptions.clipboardPolicy.name,
-          if (visibleRange != null && order.isNotEmpty) ...{
-            'visibleRangeStart': visibleRange.first,
-            'visibleRangeEnd': visibleRange.last,
-          },
-          'currentIndex': ?_controller.currentIndex,
-          if (selected != null) ..._selectedConversationState(selected.entry),
-        }),
+        stateListenable: _controller,
+        stateBuilder: () {
+          final visibleRange = _controller.visibleRange;
+          return SemanticState({
+            'filterText': _query.text,
+            'collectionRowCount': order.length,
+            'totalConversationCount': widget.conversations.length,
+            'filteredConversationCount': order.length,
+            'unreadConversationCount': unreadCount,
+            'pinnedConversationCount': pinnedCount,
+            'copyEnabled': copyEnabled,
+            'clipboardPolicy': widget.copyOptions.clipboardPolicy.name,
+            if (visibleRange != null && order.isNotEmpty) ...{
+              'visibleRangeStart': visibleRange.first,
+              'visibleRangeEnd': visibleRange.last,
+            },
+            'currentIndex': ?_controller.currentIndex,
+            if (selected != null) ..._selectedConversationState(selected.entry),
+          });
+        },
         child: panel,
       ),
     );

@@ -1,9 +1,10 @@
 # Batch G follow-ups
 
-Status: review draft, 2026-09-29. Based on main `34e6b68b` and the pasted
+Status: review draft, 2026-09-29. Reconciled with main `273e4725` and the pasted
 "Batch G — needs Dan's input" report. This is the current disposition of that
-report, not a release qualification checklist. Public exports and the wire
-version are unchanged.
+report, not a release qualification checklist. The lazy-semantics and list
+view-change APIs are additive; the wire version and existing controller listener
+behavior are unchanged.
 
 ## Implemented in this batch
 
@@ -14,12 +15,7 @@ version are unchanged.
 | Terminal reports remain enabled during asynchronous teardown | Enqueue mouse/focus/paste disables before the runtime's first teardown await, and at driver restore/suspend/handoff entry. Keep protocol-stack restoration ordered, leave a borrowed terminal alone, and never drain typeahead. | Lifecycle/suspend/inline suites, synchronous shutdown and reentry tests. This narrows the window; it cannot retract reports already in flight over SSH. |
 | Flex and ScrollView use inconsistent scratch compositors | Both use `CellBuffer.compositeRectFrom` for cells and images. A wide glyph at the right clip becomes `?`, preserving the adjacent sibling. | 26 Flex/ScrollView tests; paint and wire gates pass. |
 | Palette command can decline after the palette closes | Added the missing regression. Availability depends on the palette still being open, so the row passes its check and the registry declines after the pop. The press reports unsupported and never runs the command. | Palette suite passes; no production change needed. |
-| Collection metrics rebuild rows | **CodeView pilot only:** update semantics in a small NotifierBuilder and retain the content widget. Public notifications, selection, explicit refresh and controller subclass dispatch remain intact. | 20 wheel steps: 180 redundant source-row reads before, 0 after. Aggregate/row semantics and copy behavior pass. |
-
-The CodeView pilot introduces an explicitly private bridge between the first-party
-packages, plus notification classification in its controller. It is here as a
-concrete alternative for the collection decision below; it does not fix the other
-13 wrappers.
+| Collection metrics rebuild rows | All 14 affected wrappers use lazy semantic state and a shared view-change adapter; Tree also uses the core API. Public notifications, selection, explicit refresh and controller subclass dispatch remain intact. | Each collection passes 20 wheel steps with zero follow-up widget builds. CodeView retains the measured 180-to-0 redundant source-row-read regression. |
 
 ## Performance and DX decisions
 
@@ -61,25 +57,27 @@ loss and byte accounting before calling it a deterministic gate. Making current
 gates fail closed is honest but would turn CI red until the replacement lands.
 That workflow cost is a decision, not something hidden by loosening tolerances.
 
-### Collection semantics rollout
+### Collection semantics architecture (resolved)
 
-Affected remaining wrappers: DiffView, FileBrowser, LogRegion, JsonView,
-MessageList, TaskGraph, PatchReview, FileMentionPicker, TraceTimeline, TreeTable,
-ContextPanel, ConversationNavigator and SearchPanel. Tree already isolates its
-semantic updates; its zero-row-rebuild regression passes.
+Use the supported `Semantics.stateBuilder` / `stateListenable` contract and
+`ListController.viewChanges`. This replaces the CodeView-only pilot and its
+private cross-package bridge. The callback lifecycle and authoring example live
+in [Built for agents](../agents-and-semantics.md#live-semantic-state-without-rebuilding-content).
 
-- **Keep the public API unchanged:** extend the demonstrated CodeView split one
-  widget at a time. Preserve selection/filter/expansion notifications and test
-  viewport semantics plus explicit refresh. Cost: more wrapper and notification
-  plumbing, and a private dependency between packages.
-- **Add lazy semantic state:** a callback evaluated when semantics are read can
-  remove the metrics-driven wrapper rebuilds with less repeated code. Cost: a
-  public API addition and a documented callback lifecycle/purity contract.
+CodeView, DiffView, FileBrowser, LogRegion, JsonView, MessageList, TaskGraph,
+PatchReview, FileMentionPicker, TraceTimeline, TreeTable, ContextPanel,
+ConversationNavigator and SearchPanel now keep completed viewport metrics out of
+their content build dependencies. Tree uses the same lazy semantic API. One
+widgets-package adapter preserves explicit refresh and virtual `notify()`
+dispatch, including a listener that refreshes during a metrics notification.
 
-Recommendation: choose the intended semantic-state API before spreading the
-private bridge. The CodeView pilot makes the benefit and maintenance cost
-reviewable. The attempted bulk structural rewrite was rejected by automatic
-approval review and was not applied; only this narrower, tested change exists.
+Cost: one lazily-created notifier when `viewChanges` is used, a shared adapter
+per collection controller, and an active semantic source subscription. The API
+is source-compatible and keeps existing listener semantics. Semantic callbacks
+are pure reads; aggregate scans stay with content builds. Terminal-only hosts do
+not evaluate the callback or schedule repeated semantic work. Structured hosts
+publish source-only changes on skipped visual frames. No benchmark baseline or
+tolerance is relaxed for this design.
 
 ### Input latency and editing behavior
 
@@ -131,8 +129,9 @@ approval review and was not applied; only this narrower, tested change exists.
   impose a new build-scope architecture based only on the older report; retain
   any additional failing tree as a distinct reproducer.
 - **Focus reveal / ListView half-visible items:** still require targeted work.
-  PR #278 is still open at `bc0f12e6` and owns adjacent native/focus/reveal changes; reconcile against it
-  before introducing another reveal path. Programmatic/autofocus reveal must
+  PR #278 merged at `f0d75510`, and this branch includes it. Reconcile any remaining
+  reproducer with its ancestor-aware focus/reveal behavior before introducing
+  another reveal path. Programmatic/autofocus reveal must
   distinguish pointer focus so a click does not move content under the pointer.
 - **Shared RenderText/RichText line breaker:** consolidation remains useful;
   this report names duplication rather than a newly reproduced wrapping error.
@@ -144,16 +143,21 @@ approval review and was not applied; only this narrower, tested change exists.
 
 ## Local validation
 
-- 98 input/paste tests; real fields, ownership invalidation and one-step undo.
-- 87 terminal lifecycle/suspend/inline tests, including synchronous reentry.
-- 124 list/runtime/reparenting tests; 26 Flex/ScrollView tests.
-- 84 FileBrowser/CodeView/palette/focus-scope tests.
-- Targeted analysis clean; formatting and `git diff --check` clean.
-- Paint, runtime, wire, scenario, semantics, selection, image and bundle gates
-  pass. The allocation gates exited green but are **unqualified**, as above.
+- 613 core regressions passed, one skipped, in 21 seconds: semantics, retained
+  presentation, list navigation, GlobalKey moves, paste ownership, terminal
+  lifecycle/suspend/inline behavior, shared compositing, and remote parity.
+- All 1,453 widget tests passed in 19 seconds. The 15 collection scroll probes
+  each exercise 20 wheel steps with zero follow-up widget builds. Additional
+  probes cover initial tail selection, bounded semantic reads, source/controller
+  replacement, reentrant refresh, subclass dispatch, and disposal.
+- Changed-file analysis, formatting and `git diff --check` are clean.
+- The fast gates passed in 39 seconds: semantics, image, bundle size, paint,
+  selection and runtime; the allocation gates also exited green but remain
+  **unqualified** for churn measurement. The scenario gate passed in 19 seconds.
+- The browser examples compiled in 15 seconds. The embedded-client freshness
+  check passed after regeneration; compiled JS bytes are unchanged, and only
+  its source fingerprint changed. The earlier compositor wire gate also passed.
 - No baseline or tolerance was changed. These checks do not replace live
   terminal/SSH qualification or a valid allocation-churn measurement.
 
-The initial fast-gate run caught a missing import while the CodeView pilot was
-being edited. The affected gates were rerun successfully after correction.
 Optional hosted CI is not the local development feedback loop for this draft.

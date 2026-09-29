@@ -3,6 +3,7 @@ import 'dart:async' show scheduleMicrotask, unawaited;
 import 'package:characters/characters.dart';
 import 'package:fleury/fleury_core.dart';
 
+import 'internal/collection_notifications.dart';
 import 'semantic_roles.dart';
 
 /// Protocol-neutral lifecycle state for a timeline event.
@@ -86,10 +87,18 @@ final class TraceTimelineEntry {
 class TraceTimelineController extends Notifier {
   TraceTimelineController({int? initialIndex = 0})
     : _list = ListController(initialIndex: initialIndex) {
-    _list.addListener(notify);
+    _notifications = CollectionNotifications(
+      _list,
+      dispatch: notify,
+      publish: super.notify,
+    );
   }
 
   final ListController _list;
+  late final CollectionNotifications _notifications;
+
+  @override
+  void notify() => _notifications.publish();
   bool _disposed = false;
 
   ListController get _listController => _list;
@@ -117,7 +126,7 @@ class TraceTimelineController extends Notifier {
   void dispose() {
     if (_disposed) return;
     _disposed = true;
-    _list.removeListener(notify);
+    _notifications.dispose();
     _list.dispose();
     super.dispose();
   }
@@ -273,7 +282,7 @@ class _TraceTimelineState extends State<TraceTimeline> {
     super.initState();
     _controller = widget.controller ?? TraceTimelineController();
     _ownsController = widget.controller == null;
-    _controller.addListener(_onControllerChange);
+    _controller._notifications.viewChanges.addListener(_onControllerChange);
     _focusNode = widget.focusNode ?? FocusNode(debugLabel: 'TraceTimeline');
     _ownsFocusNode = widget.focusNode == null;
   }
@@ -282,11 +291,13 @@ class _TraceTimelineState extends State<TraceTimeline> {
   void didUpdateWidget(covariant TraceTimeline oldWidget) {
     super.didUpdateWidget(oldWidget);
     if (widget.controller != oldWidget.controller) {
-      _controller.removeListener(_onControllerChange);
+      _controller._notifications.viewChanges.removeListener(
+        _onControllerChange,
+      );
       if (_ownsController) _controller.dispose();
       _controller = widget.controller ?? TraceTimelineController();
       _ownsController = widget.controller == null;
-      _controller.addListener(_onControllerChange);
+      _controller._notifications.viewChanges.addListener(_onControllerChange);
     }
     if (widget.focusNode != oldWidget.focusNode) {
       if (_ownsFocusNode) _focusNode.dispose();
@@ -434,7 +445,7 @@ class _TraceTimelineState extends State<TraceTimeline> {
 
   @override
   void dispose() {
-    _controller.removeListener(_onControllerChange);
+    _controller._notifications.viewChanges.removeListener(_onControllerChange);
     if (_ownsController) _controller.dispose();
     if (_ownsFocusNode) _focusNode.dispose();
     super.dispose();
@@ -442,16 +453,8 @@ class _TraceTimelineState extends State<TraceTimeline> {
 
   @override
   Widget build(BuildContext context) {
-    final currentIndex = _controller.currentIndex;
-    final visibleRange = _controller.visibleRange;
     final copyEnabled = widget.copySelection && widget.events.isNotEmpty;
     final canSelect = widget.onSelect != null;
-    final selectedEvent =
-        currentIndex == null ||
-            currentIndex < 0 ||
-            currentIndex >= widget.events.length
-        ? null
-        : widget.events[currentIndex];
 
     Widget list = widget.events.isEmpty
         ? Text('No trace events')
@@ -506,21 +509,32 @@ class _TraceTimelineState extends State<TraceTimeline> {
           if (copyEnabled) SemanticAction.copy,
         },
         onAction: _handleTimelineAction,
-        state: SemanticState({
-          'collectionRowCount': widget.events.length,
-          'traceEventCount': widget.events.length,
-          'runningTraceEventCount': counts[TraceTimelineStatus.running] ?? 0,
-          'failedTraceEventCount': counts[TraceTimelineStatus.failed] ?? 0,
-          'warningTraceEventCount': counts[TraceTimelineStatus.warning] ?? 0,
-          'copyEnabled': copyEnabled,
-          'clipboardPolicy': widget.copyOptions.clipboardPolicy.name,
-          if (visibleRange != null) ...{
-            'visibleRangeStart': visibleRange.first,
-            'visibleRangeEnd': visibleRange.last,
-          },
-          'currentIndex': ?currentIndex,
-          if (selectedEvent != null) ..._selectedTraceState(selectedEvent),
-        }),
+        stateListenable: _controller,
+        stateBuilder: () {
+          final currentIndex = _controller.currentIndex;
+          final selectedEvent =
+              currentIndex == null ||
+                  currentIndex < 0 ||
+                  currentIndex >= widget.events.length
+              ? null
+              : widget.events[currentIndex];
+          final visibleRange = _controller.visibleRange;
+          return SemanticState({
+            'collectionRowCount': widget.events.length,
+            'traceEventCount': widget.events.length,
+            'runningTraceEventCount': counts[TraceTimelineStatus.running] ?? 0,
+            'failedTraceEventCount': counts[TraceTimelineStatus.failed] ?? 0,
+            'warningTraceEventCount': counts[TraceTimelineStatus.warning] ?? 0,
+            'copyEnabled': copyEnabled,
+            'clipboardPolicy': widget.copyOptions.clipboardPolicy.name,
+            if (visibleRange != null) ...{
+              'visibleRangeStart': visibleRange.first,
+              'visibleRangeEnd': visibleRange.last,
+            },
+            'currentIndex': ?currentIndex,
+            if (selectedEvent != null) ..._selectedTraceState(selectedEvent),
+          });
+        },
         child: list,
       ),
     );

@@ -42,7 +42,87 @@ class _CountingLines extends ListBase<CodeLine> {
       throw UnsupportedError('read-only');
 }
 
+class _RecordingController extends CodeViewController {
+  int notifications = 0;
+  @override
+  void notify() {
+    notifications++;
+    super.notify();
+  }
+}
+
 void main() {
+  testWidgets('metrics retain subclass dispatch and nested explicit refresh', (
+    tester,
+  ) {
+    final controller = _RecordingController();
+    addTearDown(controller.dispose);
+    var refresh = false;
+    var delivered = 0;
+    controller.addListener(() {
+      delivered++;
+      if (refresh) {
+        refresh = false;
+        controller.notify();
+      }
+    });
+    tester.pumpWidget(
+      SizedBox(
+        height: 8,
+        child: CodeView(
+          controller: controller,
+          source: List.generate(100, (i) => 'line $i').join('\n'),
+        ),
+      ),
+    );
+    tester.pump();
+    tester.pump();
+    tester.sendMouse(
+      const MouseEvent(
+        kind: MouseEventKind.scrollDown,
+        button: MouseButton.none,
+        col: 2,
+        row: 2,
+      ),
+    );
+    // The wheel request is a view change. Trigger the nested refresh only
+    // when the completed frame subsequently reports its metrics.
+    delivered = controller.notifications = 0;
+    refresh = true;
+    tester.pump();
+    expect(delivered, 2);
+    expect(controller.notifications, 2);
+    expect(
+      tester.owner.flushBuild().rebuiltElementCount,
+      greaterThan(0),
+      reason: 'nested explicit refresh must still rebuild content',
+    );
+  });
+
+  testWidgets(
+    'controller replacement detaches old view and semantic subscriptions',
+    (tester) {
+      final first = CodeViewController();
+      final second = CodeViewController();
+      addTearDown(first.dispose);
+      addTearDown(second.dispose);
+      Widget view(CodeViewController source) =>
+          CodeView(source: 'one\ntwo', controller: source);
+      tester.pumpWidget(view(first));
+      tester.pumpWidget(view(second));
+      tester.pump();
+      tester.pump();
+      tester.owner.semanticDirtyTracker.takeDirtySnapshot();
+      first.notify();
+      expect(tester.owner.flushBuild().rebuiltElementCount, 0);
+      expect(tester.owner.semanticDirtyTracker.hasDirt, isFalse);
+      second.notify();
+      expect(tester.owner.flushBuild().rebuiltElementCount, greaterThan(0));
+      tester.pumpWidget(const SizedBox());
+      expect(second.hasListeners, isFalse);
+    },
+  );
+
   testWidgets(
     'scroll metrics update semantics without rebuilding source rows',
     (tester) {

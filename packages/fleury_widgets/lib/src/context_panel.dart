@@ -3,6 +3,7 @@ import 'dart:async' show scheduleMicrotask, unawaited;
 import 'package:characters/characters.dart';
 import 'package:fleury/fleury_core.dart';
 
+import 'internal/collection_notifications.dart';
 import 'model_status_bar.dart';
 import 'semantic_roles.dart';
 
@@ -76,10 +77,18 @@ final class ContextItem {
 class ContextPanelController extends Notifier {
   ContextPanelController({int? initialIndex = 0})
     : _list = ListController(initialIndex: initialIndex) {
-    _list.addListener(notify);
+    _notifications = CollectionNotifications(
+      _list,
+      dispatch: notify,
+      publish: super.notify,
+    );
   }
 
   final ListController _list;
+  late final CollectionNotifications _notifications;
+
+  @override
+  void notify() => _notifications.publish();
   bool _disposed = false;
 
   ListController get _listController => _list;
@@ -107,7 +116,7 @@ class ContextPanelController extends Notifier {
   void dispose() {
     if (_disposed) return;
     _disposed = true;
-    _list.removeListener(notify);
+    _notifications.dispose();
     _list.dispose();
     super.dispose();
   }
@@ -263,7 +272,7 @@ class _ContextPanelState extends State<ContextPanel> {
     super.initState();
     _controller = widget.controller ?? ContextPanelController();
     _ownsController = widget.controller == null;
-    _controller.addListener(_onControllerChange);
+    _controller._notifications.viewChanges.addListener(_onControllerChange);
     _focusNode = widget.focusNode ?? FocusNode(debugLabel: 'ContextPanel');
     _ownsFocusNode = widget.focusNode == null;
   }
@@ -272,11 +281,13 @@ class _ContextPanelState extends State<ContextPanel> {
   void didUpdateWidget(covariant ContextPanel oldWidget) {
     super.didUpdateWidget(oldWidget);
     if (widget.controller != oldWidget.controller) {
-      _controller.removeListener(_onControllerChange);
+      _controller._notifications.viewChanges.removeListener(
+        _onControllerChange,
+      );
       if (_ownsController) _controller.dispose();
       _controller = widget.controller ?? ContextPanelController();
       _ownsController = widget.controller == null;
-      _controller.addListener(_onControllerChange);
+      _controller._notifications.viewChanges.addListener(_onControllerChange);
     }
     if (widget.focusNode != oldWidget.focusNode) {
       if (_ownsFocusNode) _focusNode.dispose();
@@ -422,7 +433,7 @@ class _ContextPanelState extends State<ContextPanel> {
 
   @override
   void dispose() {
-    _controller.removeListener(_onControllerChange);
+    _controller._notifications.viewChanges.removeListener(_onControllerChange);
     if (_ownsController) _controller.dispose();
     if (_ownsFocusNode) _focusNode.dispose();
     super.dispose();
@@ -430,16 +441,13 @@ class _ContextPanelState extends State<ContextPanel> {
 
   @override
   Widget build(BuildContext context) {
-    final currentIndex = _controller.currentIndex;
-    final visibleRange = _controller.visibleRange;
+    final tokenCount = _totalTokens(widget.items);
+    final pinnedCount = widget.items.fold<int>(
+      0,
+      (total, item) => total + (item.pinned ? 1 : 0),
+    );
     final copyEnabled = widget.copySelection && widget.items.isNotEmpty;
     final canSelect = widget.onSelect != null;
-    final selectedItem =
-        currentIndex == null ||
-            currentIndex < 0 ||
-            currentIndex >= widget.items.length
-        ? null
-        : widget.items[currentIndex];
     final visible = widget.items.isEmpty
         ? 1
         : (widget.items.length > widget.maxVisible
@@ -463,9 +471,7 @@ class _ContextPanelState extends State<ContextPanel> {
                 activeSelection: activeSelected,
                 canSelect: canSelect,
                 copyEnabled: copyEnabled,
-                tokenShareTotal: widget.showTokenShare
-                    ? _totalTokens(widget.items)
-                    : null,
+                tokenShareTotal: widget.showTokenShare ? tokenCount : null,
                 onSelect: () => _selectAt(index),
                 onCopy: () => _copyAt(index),
               );
@@ -507,24 +513,32 @@ class _ContextPanelState extends State<ContextPanel> {
           if (copyEnabled) SemanticAction.copy,
         },
         onAction: _handlePanelAction,
-        state: SemanticState({
-          'collectionRowCount': widget.items.length,
-          'contextItemCount': widget.items.length,
-          'contextTokenCount': _totalTokens(widget.items),
-          'pinnedContextItemCount': widget.items.fold<int>(
-            0,
-            (total, item) => total + (item.pinned ? 1 : 0),
-          ),
-          'copyEnabled': copyEnabled,
-          'clipboardPolicy': widget.copyOptions.clipboardPolicy.name,
-          ..._tokenState(widget.usage),
-          if (visibleRange != null && widget.items.isNotEmpty) ...{
-            'visibleRangeStart': visibleRange.first,
-            'visibleRangeEnd': visibleRange.last,
-          },
-          'currentIndex': ?currentIndex,
-          if (selectedItem != null) ..._selectedItemState(selectedItem),
-        }),
+        stateListenable: _controller,
+        stateBuilder: () {
+          final currentIndex = _controller.currentIndex;
+          final selectedItem =
+              currentIndex == null ||
+                  currentIndex < 0 ||
+                  currentIndex >= widget.items.length
+              ? null
+              : widget.items[currentIndex];
+          final visibleRange = _controller.visibleRange;
+          return SemanticState({
+            'collectionRowCount': widget.items.length,
+            'contextItemCount': widget.items.length,
+            'contextTokenCount': tokenCount,
+            'pinnedContextItemCount': pinnedCount,
+            'copyEnabled': copyEnabled,
+            'clipboardPolicy': widget.copyOptions.clipboardPolicy.name,
+            ..._tokenState(widget.usage),
+            if (visibleRange != null && widget.items.isNotEmpty) ...{
+              'visibleRangeStart': visibleRange.first,
+              'visibleRangeEnd': visibleRange.last,
+            },
+            'currentIndex': ?currentIndex,
+            if (selectedItem != null) ..._selectedItemState(selectedItem),
+          });
+        },
         child: child,
       ),
     );

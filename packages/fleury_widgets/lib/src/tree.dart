@@ -318,8 +318,9 @@ class _TreeState<T> extends State<Tree<T>> {
                     return KeyEventResult.ignored;
                 }
               })(event) ==
-              KeyEventResult.handled)
+              KeyEventResult.handled) {
             event.consume();
+          }
         },
         child: Focus(
           canRequestFocus: false,
@@ -354,8 +355,8 @@ class _TreeState<T> extends State<Tree<T>> {
 
 /// The tree's own semantic node: the cursor and the visible range, which
 /// arrow keys, typeahead, clicks and every scroll step change inside the
-/// ListView. It rebuilds alone for them and passes the rows through
-/// untouched; rebuilding the tree would rebuild every visible row.
+/// ListView. Semantic collection reads them lazily; only focus changes rebuild
+/// this wrapper, and its content widget is retained.
 final class _TreeSemantics extends StatelessWidget {
   const _TreeSemantics({
     required this.controller,
@@ -375,14 +376,14 @@ final class _TreeSemantics extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    context.listen(controller);
     return Semantics(
       role: SemanticRole.tree,
       label: label,
       focused: context.listen(focusNode).hasFocus,
       actions: const {SemanticAction.focus, SemanticAction.navigate},
       onAction: onAction,
-      state: state(),
+      stateListenable: controller,
+      stateBuilder: state,
       child: child,
     );
   }
