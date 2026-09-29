@@ -203,10 +203,9 @@ class FocusNode implements Listenable {
   /// This node's rectangle on screen in absolute cells, derived from the
   /// layout of the `Focus` widget that carries it. Null when the node cannot
   /// take input, has no widget, or its widget is not presented or is fully
-  /// clipped out of view (scrolled past the viewport): you scroll to such a
-  /// widget, you don't arrow to it. Directional traversal and click-to-focus
-  /// read it; nothing writes it. Tab order reads the node's place in its
-  /// scroll viewports instead, which a scrolled-out node still has.
+  /// clipped out of view (scrolled past the viewport). Click-to-focus uses
+  /// these visible bounds. Traversal can also reveal a scrolled-out node:
+  /// Tab uses content order, while arrows stay within the same scroll viewport.
   CellRect? get rect {
     final host = _boundsHost;
     if (host == null) return null;
@@ -215,6 +214,44 @@ class FocusNode implements Listenable {
     final geometry = host.screenGeometry();
     if (geometry == null || geometry.visible == null) return null;
     return geometry.bounds;
+  }
+
+  /// Directional traversal may reveal another control in the same or an
+  /// enclosing viewport.
+  /// Keep unrelated clipped panes and non-scrolling clips out of navigation;
+  /// [rect] remains visibility-bound for pointer input and external geometry.
+  @internal
+  CellRect? directionalRectFrom(FocusNode from) {
+    final visible = rect;
+    if (visible != null) return visible;
+    final host = _boundsHost;
+    final source = from._boundsHost;
+    if (host is! RenderObject || source is! RenderObject) return null;
+    if (!acceptsInput) return null;
+    final geometry = host.screenGeometry();
+    if (geometry == null) return null;
+    // Explicit scrolling can hide the current control and its whole viewport.
+    // Its layout still provides the navigation origin; candidates below must
+    // independently prove that reveal can make them visible.
+    if (identical(this, from)) return geometry.bounds;
+    RenderScrollViewport? viewportOf(RenderObject object) {
+      for (var parent = object.parent; parent != null; parent = parent.parent) {
+        if (parent is RenderScrollViewport) return parent;
+      }
+      return null;
+    }
+
+    final viewport = viewportOf(host);
+    if (viewport == null) return null;
+    var shared = false;
+    for (var parent = source.parent; parent != null; parent = parent.parent) {
+      if (identical(parent, viewport)) {
+        shared = true;
+        break;
+      }
+    }
+    if (!shared) return null;
+    return canRevealInScrollViews(host) ? geometry.bounds : null;
   }
 
   /// Where Tab finds this node: the scroll viewports it sits in, outermost
@@ -961,15 +998,19 @@ class FocusManager extends Notifier {
   /// follows the content, including what is scrolled out of view, and the
   /// node focus moves to is scrolled into view. When a trapping
   /// [FocusScope] is active, traversal is confined to nodes inside it.
-  bool focusNext() => _cycleFocus(forward: true);
+  /// If [scopeContext] is supplied, only nodes below it participate.
+  bool focusNext({BuildContext? scopeContext}) =>
+      _cycleFocus(forward: true, scopeContext: scopeContext);
 
   /// Moves focus to the previous focusable node in reading order,
   /// cycling at the start.
-  bool focusPrevious() => _cycleFocus(forward: false);
+  /// If [scopeContext] is supplied, only nodes below it participate.
+  bool focusPrevious({BuildContext? scopeContext}) =>
+      _cycleFocus(forward: false, scopeContext: scopeContext);
 
-  bool _cycleFocus({required bool forward}) {
+  bool _cycleFocus({required bool forward, BuildContext? scopeContext}) {
     _checkNotDisposed();
-    final order = _traversalOrder();
+    final order = _traversalOrder(scopeContext: scopeContext);
     if (order.isEmpty) return false;
     final current = _focusedNode;
     final i = current == null ? -1 : order.indexOf(current);
@@ -992,14 +1033,16 @@ class FocusManager extends Notifier {
   /// its viewport's content, so the order does not depend on how far the
   /// user has scrolled. Filtered to the active focus trap when one is open —
   /// Tab inside a trapped dialog cannot escape it.
-  List<FocusNode> _traversalOrder() {
+  List<FocusNode> _traversalOrder({BuildContext? scopeContext}) {
     final attachIndex = <FocusNode, int>{};
     for (var i = 0; i < _attachedNodes.length; i++) {
       attachIndex[_attachedNodes[i]] = i;
     }
     final trap = _innermostFocusTrapElement(_focusedNode);
+    final scopeElement = scopeContext is Element ? scopeContext : null;
     final nodes = _attachedNodes
         .where(isTraversable)
+        .where((n) => scopeElement == null || _isUnderElement(n, scopeElement))
         .where((n) => trap == null || _isUnderScopeMarker(n, trap))
         .toList();
     // Geometry is derived on read; resolve each node's place once, not once

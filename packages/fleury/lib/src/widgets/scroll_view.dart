@@ -11,6 +11,7 @@ import '../rendering/scroll_reveal.dart';
 import '../rendering/render_object.dart';
 import '../input/events.dart';
 import 'focus.dart';
+import 'focus_traversal.dart';
 import 'framework.dart';
 import 'keyboard.dart';
 import 'list_view.dart' show EdgeBehavior;
@@ -154,10 +155,15 @@ class ScrollController extends Notifier {
 
 /// A scrollable viewport onto a single [child].
 ///
-/// When focused, claims:
+/// When the viewport itself is focused, claims:
 ///   - Up / Down (vertical), Left / Right (horizontal) — scroll one cell.
 ///   - PageUp / PageDown — scroll a viewport's worth.
 ///   - Home / End — jump to the start / end.
+///
+/// With a focused descendant, unhandled arrows navigate between controls and
+/// reveal the next control, including one outside the viewport. Other scroll
+/// chords still scroll this view when the descendant does not handle them.
+/// Editors and lists receive their keys before this enclosing viewport.
 ///
 /// At either edge, [edgeBehavior] decides whether the key is
 /// consumed (`contain`) or returned to the focus chain (`bubble`) so an
@@ -172,6 +178,7 @@ class ScrollView extends StatefulWidget {
     this.autofocus = false,
     this.edgeBehavior = EdgeBehavior.bubble,
     this.scrollbar = false,
+    this.showScrollbarWhenFits = true,
   });
 
   /// The full content subtree; it is laid out eagerly and clipped to the viewport.
@@ -189,7 +196,10 @@ class ScrollView extends StatefulWidget {
   /// Whether to request focus on first mount.
   final bool autofocus;
 
-  /// How main-axis arrows and wheel gestures behave at an edge.
+  /// How scroll keys and wheel gestures behave at an edge. With a focused
+  /// descendant, main-axis arrows first navigate controls within this view;
+  /// when no target remains, contain stops the arrow and bubble lets an
+  /// enclosing traversal group move focus outside. Tab is unaffected.
   final EdgeBehavior edgeBehavior;
 
   /// When true, wrap the viewport in a [Scrollbar] gutter that reflects the
@@ -200,6 +210,10 @@ class ScrollView extends StatefulWidget {
   /// for horizontal scrolling. It needs a bounded cross axis: width for a
   /// vertical view, height for a horizontal one.
   final bool scrollbar;
+
+  /// Whether an enabled [scrollbar] draws a full thumb when content fits.
+  /// False keeps the gutter stable but draws the bar only while overflowing.
+  final bool showScrollbarWhenFits;
 
   @override
   State<ScrollView> createState() => _ScrollViewState();
@@ -261,6 +275,24 @@ class _ScrollViewState extends State<ScrollView> {
         : _controller.viewportExtent;
     final code = widget.scrollDirection.navigationKey(event.code);
     if (code == null) return KeyEventResult.ignored;
+    if (!_focusNode.hasFocus &&
+        (code == KeyCode.arrowUp || code == KeyCode.arrowDown)) {
+      final manager = FocusManager.of(context);
+      final current = manager.focusedNode;
+      if (current == null) return KeyEventResult.ignored;
+      final backward = code == KeyCode.arrowUp;
+      final direction = widget.scrollDirection == Axis.vertical
+          ? (backward ? TraversalDirection.up : TraversalDirection.down)
+          : (backward ? TraversalDirection.left : TraversalDirection.right);
+      final moved = moveFocusInDirection(
+        current: current,
+        candidates: manager
+            .traversalCandidates(scopeContext: context)
+            .where((node) => !identical(node, _focusNode)),
+        direction: direction,
+      );
+      return moved == KeyEventResult.handled ? moved : _edge();
+    }
     switch (code) {
       case KeyCode.arrowUp:
         if (_controller.atStart) return _edge();
@@ -362,6 +394,7 @@ class _ScrollViewState extends State<ScrollView> {
     return Scrollbar(
       controller: _controller,
       scrollDirection: widget.scrollDirection,
+      showWhenFits: widget.showScrollbarWhenFits,
       child: content,
     );
   }
@@ -407,6 +440,11 @@ class _RenderScrollView extends RenderObject
 
   @override
   Axis get scrollAxis => _scrollDirection;
+
+  @override
+  int clampScrollDelta(int delta) =>
+      (_controller.offset + delta).clamp(0, _controller.maxOffset) -
+      _controller.offset;
 
   @override
   void scrollContentBy(int delta) => _controller.scrollBy(delta);
