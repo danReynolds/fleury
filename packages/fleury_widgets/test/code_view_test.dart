@@ -1,3 +1,5 @@
+import 'dart:collection';
+
 import 'package:fleury/fleury.dart';
 import 'package:fleury_test/fleury_test.dart';
 import 'package:fleury_widgets/fleury_widgets.dart';
@@ -21,7 +23,102 @@ Matcher _stateError(String message) {
   );
 }
 
+class _CountingLines extends ListBase<CodeLine> {
+  _CountingLines(this.lines);
+  final List<CodeLine> lines;
+  int reads = 0;
+  @override
+  int get length => lines.length;
+  @override
+  set length(int value) => throw UnsupportedError('read-only');
+  @override
+  CodeLine operator [](int index) {
+    reads++;
+    return lines[index];
+  }
+
+  @override
+  void operator []=(int index, CodeLine value) =>
+      throw UnsupportedError('read-only');
+}
+
 void main() {
+  testWidgets(
+    'scroll metrics update semantics without rebuilding source rows',
+    (tester) {
+      final parsed = parseCodeDocument(
+        List.generate(300, (i) => 'line $i').join('\n'),
+      );
+      final lines = _CountingLines(parsed.lines);
+      final document = CodeDocument(
+        lines: lines,
+        language: null,
+        filePath: null,
+        lineCount: 300,
+        nonEmptyLineCount: 300,
+        commentCount: 0,
+        blankCount: 0,
+        showLineNumbers: true,
+        tabSize: 2,
+      );
+      final controller = CodeViewController();
+      addTearDown(controller.dispose);
+      tester.pumpWidget(
+        SizedBox(
+          height: 8,
+          child: CodeView.document(
+            document: document,
+            controller: controller,
+            autofocus: true,
+          ),
+        ),
+      );
+      tester.pump();
+      tester.pump();
+      var followUpReads = 0;
+      for (var i = 0; i < 20; i++) {
+        tester.sendMouse(
+          const MouseEvent(
+            kind: MouseEventKind.scrollDown,
+            button: MouseButton.none,
+            col: 2,
+            row: 2,
+          ),
+        );
+        tester.pump();
+        lines.reads = 0;
+        tester.pump();
+        followUpReads += lines.reads;
+      }
+      expect(followUpReads, 0);
+      expect(
+        tester
+            .semantics()
+            .single(role: SemanticRole.code)
+            .state['visibleRangeStart'],
+        greaterThan(0),
+      );
+      controller.currentIndex = 90;
+      tester.pump();
+      tester.pump();
+      expect(
+        tester
+            .semantics()
+            .single(role: SemanticRole.code)
+            .state['selectedLineNumber'],
+        91,
+      );
+      lines.reads = 0;
+      controller.notify();
+      tester.pump();
+      expect(
+        lines.reads,
+        greaterThan(0),
+        reason: 'explicit refresh still rebuilds content',
+      );
+    },
+  );
+
   group('CodeViewController lifecycle', () {
     test('dispose is idempotent and keeps final readable state', () {
       final controller = CodeViewController(initialIndex: 2);

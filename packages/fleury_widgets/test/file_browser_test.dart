@@ -23,6 +23,61 @@ Matcher _stateError(String message) {
 }
 
 void main() {
+  for (final missing in [false, true]) {
+    testWidgets(
+      'parent action leaves an ${missing ? "unreadable" : "empty"} directory',
+      (tester) async {
+        final parent = _scratchDir();
+        final leaf = Directory('$parent/empty');
+        if (!missing) leaf.createSync();
+        final controller = FileBrowserController();
+        addTearDown(controller.dispose);
+        final changed = <String>[];
+        tester.pumpWidget(
+          FileBrowser(
+            initialDirectory: leaf.path,
+            controller: controller,
+            onDirectoryChanged: changed.add,
+          ),
+        );
+        tester.render(size: const CellSize(80, 5));
+        final up = tester.semantics().single(
+          role: SemanticRole.button,
+          label: 'Parent directory',
+        );
+        expect(up.bounds?.top, 1, reason: 'reuse the existing separator row');
+        expect(
+          (await tester.invokeSemanticAction(
+            SemanticAction.activate,
+            id: up.id,
+          )).completed,
+          isTrue,
+        );
+        expect(controller.currentDirectory, parent);
+        expect(changed, [parent]);
+        // The navigation row is outside the collection: source/view indices stay intact.
+        expect(controller.currentIndex, 0);
+      },
+    );
+  }
+
+  testWidgets('mouse can use the parent action without a file row', (tester) {
+    final parent = _scratchDir();
+    final leaf = Directory('$parent/empty')..createSync();
+    final controller = FileBrowserController();
+    addTearDown(controller.dispose);
+    tester.pumpWidget(
+      FileBrowser(initialDirectory: leaf.path, controller: controller),
+    );
+    tester.render(size: const CellSize(80, 5));
+    for (final kind in [MouseEventKind.down, MouseEventKind.up]) {
+      tester.sendMouse(
+        MouseEvent(kind: kind, button: MouseButton.left, col: 2, row: 1),
+      );
+    }
+    expect(controller.currentDirectory, parent);
+  });
+
   group('FileBrowserController lifecycle', () {
     test('dispose is idempotent and keeps final readable state', () {
       final controller = FileBrowserController(initialIndex: 2);

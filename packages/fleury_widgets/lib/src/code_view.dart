@@ -2,6 +2,10 @@ import 'dart:async' show unawaited;
 
 import 'package:characters/characters.dart';
 import 'package:fleury/fleury_core.dart';
+// First-party implementation bridge; intentionally absent from the app API.
+// ignore: implementation_imports
+import 'package:fleury/src/widgets/list_view.dart'
+    show isListMetricsNotification;
 
 import 'component_theme.dart';
 
@@ -141,11 +145,36 @@ class CodeViewController extends Notifier {
     /// Initial browsing row. Null starts without a current row.
     int? initialIndex = 0,
   }) : _list = ListController(initialIndex: initialIndex) {
-    _list.addListener(notify);
+    _list.addListener(_onListChange);
   }
 
   final ListController _list;
   bool _disposed = false;
+
+  bool _nextNotificationIsMetrics = false;
+  bool _notifyingMetrics = false;
+
+  void _onListChange() {
+    _nextNotificationIsMetrics = isListMetricsNotification(_list);
+    try {
+      notify();
+    } finally {
+      _nextNotificationIsMetrics = false;
+    }
+  }
+
+  @override
+  void notify() {
+    final metrics = _nextNotificationIsMetrics;
+    _nextNotificationIsMetrics = false;
+    final previous = _notifyingMetrics;
+    _notifyingMetrics = metrics;
+    try {
+      super.notify();
+    } finally {
+      _notifyingMetrics = previous;
+    }
+  }
 
   ListController get _listController => _list;
 
@@ -172,7 +201,7 @@ class CodeViewController extends Notifier {
   void dispose() {
     if (_disposed) return;
     _disposed = true;
-    _list.removeListener(notify);
+    _list.removeListener(_onListChange);
     _list.dispose();
     super.dispose();
   }
@@ -438,7 +467,9 @@ class _CodeViewState extends State<CodeView> {
     }
   }
 
-  void _onControllerChange() => setState(() {});
+  void _onControllerChange() {
+    if (!_controller._notifyingMetrics) setState(() {});
+  }
 
   void _onFocusDetectorChange(bool focused) {
     if (_focusedWithin == focused) return;
@@ -522,7 +553,6 @@ class _CodeViewState extends State<CodeView> {
   Widget build(BuildContext context) {
     final lines = widget.document.lines;
     final selected = _selectedLine();
-    final visibleRange = _controller.visibleRange;
     final copyEnabled = widget.copySelection && lines.isNotEmpty;
     final visible = lines.isEmpty
         ? 1
@@ -576,44 +606,50 @@ class _CodeViewState extends State<CodeView> {
 
     return FocusDetector(
       onFocusChange: _onFocusDetectorChange,
-      child: Semantics(
-        role: SemanticRole.code,
-        label: widget.semanticLabel,
-        focused: _focusedWithin || _focusNode.hasFocus,
-        actions: {
-          SemanticAction.focus,
-          SemanticAction.navigate,
-          if (copyEnabled) SemanticAction.copy,
+      child: NotifierBuilder(
+        notifier: _controller,
+        builder: (context, _) {
+          final visibleRange = _controller.visibleRange;
+          return Semantics(
+            role: SemanticRole.code,
+            label: widget.semanticLabel,
+            focused: _focusedWithin || _focusNode.hasFocus,
+            actions: {
+              SemanticAction.focus,
+              SemanticAction.navigate,
+              if (copyEnabled) SemanticAction.copy,
+            },
+            onAction: _handleCodeAction,
+            state: SemanticState({
+              'collectionRowCount': lines.length,
+              'lineCount': widget.document.lineCount,
+              'nonEmptyLineCount': widget.document.nonEmptyLineCount,
+              'commentCount': widget.document.commentCount,
+              'blankCount': widget.document.blankCount,
+              'showLineNumbers': widget.document.showLineNumbers,
+              'tabSize': widget.document.tabSize,
+              'copyEnabled': copyEnabled,
+              'copyMode': widget.copyOptions.mode.name,
+              'clipboardPolicy': widget.copyOptions.clipboardPolicy.name,
+              if (widget.document.language != null)
+                'language': widget.document.language,
+              if (widget.document.filePath != null)
+                'filePath': widget.document.filePath,
+              if (visibleRange != null) ...{
+                'visibleRangeStart': visibleRange.first,
+                'visibleRangeEnd': visibleRange.last,
+              },
+              if (_controller.currentIndex != null)
+                'currentIndex': _controller.currentIndex,
+              if (selected != null) ...{
+                'selectedKey': selected.lineNumber,
+                'selectedLineNumber': selected.lineNumber,
+                'selectedCodeLineKind': selected.kind.name,
+              },
+            }),
+            child: list,
+          );
         },
-        onAction: _handleCodeAction,
-        state: SemanticState({
-          'collectionRowCount': lines.length,
-          'lineCount': widget.document.lineCount,
-          'nonEmptyLineCount': widget.document.nonEmptyLineCount,
-          'commentCount': widget.document.commentCount,
-          'blankCount': widget.document.blankCount,
-          'showLineNumbers': widget.document.showLineNumbers,
-          'tabSize': widget.document.tabSize,
-          'copyEnabled': copyEnabled,
-          'copyMode': widget.copyOptions.mode.name,
-          'clipboardPolicy': widget.copyOptions.clipboardPolicy.name,
-          if (widget.document.language != null)
-            'language': widget.document.language,
-          if (widget.document.filePath != null)
-            'filePath': widget.document.filePath,
-          if (visibleRange != null) ...{
-            'visibleRangeStart': visibleRange.first,
-            'visibleRangeEnd': visibleRange.last,
-          },
-          if (_controller.currentIndex != null)
-            'currentIndex': _controller.currentIndex,
-          if (selected != null) ...{
-            'selectedKey': selected.lineNumber,
-            'selectedLineNumber': selected.lineNumber,
-            'selectedCodeLineKind': selected.kind.name,
-          },
-        }),
-        child: list,
       ),
     );
   }

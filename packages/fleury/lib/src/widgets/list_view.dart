@@ -39,6 +39,11 @@ enum EdgeBehavior {
   bubble,
 }
 
+// Package-internal: wrappers can isolate post-layout semantic updates without
+// changing the public ListController notification contract.
+bool isListMetricsNotification(ListController controller) =>
+    controller._deliveringMetrics;
+
 /// Navigation cursor and viewport state for a [ListView].
 ///
 /// Moving the cursor reveals its item. Scrolling leaves the cursor alone,
@@ -108,15 +113,23 @@ class ListController extends Notifier {
   int _attachment = 0;
   int _viewRevision = 0;
   bool _nextNotificationIsMetrics = false;
+  bool _deliveringMetrics = false;
 
   /// Refreshes consumers after externally managed list content changes.
   @override
   void notify() {
     // Consume the kind before invoking listeners: a nested command or explicit
     // refresh must advance the view revision even during metric delivery.
-    if (!_nextNotificationIsMetrics) _viewRevision++;
+    final metrics = _nextNotificationIsMetrics;
+    if (!metrics) _viewRevision++;
     _nextNotificationIsMetrics = false;
-    super.notify();
+    final previous = _deliveringMetrics;
+    _deliveringMetrics = metrics;
+    try {
+      super.notify();
+    } finally {
+      _deliveringMetrics = previous;
+    }
   }
 
   /// Whether new output should be followed while the viewport is at its end.

@@ -5,6 +5,14 @@ measurements with a baseline (or a structural invariant) that fail on a
 regression. They exist because the perf pass found the machinery healthy; their
 job is to keep it that way as the code moves.
 
+**Allocation measurement limitation (Dart 3.12.2):** `alloc-gate` and
+`input-alloc-gate` currently consume a heap census, not cumulative allocation
+churn. Their green result is **not allocation-regression evidence** on this SDK;
+do not update their baselines from a low reading. The reproduction, VM source
+and replacement choices are tracked in
+[Batch G follow-ups](batch-g-followups.md#allocation-measurement).
+The other gates retain their stated scope.
+
 **The one rule:** after a change that touches a gated path (table below), run
 that gate and confirm it passes before you land. If the change *intends* to move
 the number (a real optimization, or an accepted cost), re-baseline in the same

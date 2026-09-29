@@ -701,7 +701,24 @@ class _FileBrowserState extends State<FileBrowser> {
             _sanitizeFileText(_currentDirectory),
             style: Theme.of(context).mutedStyle,
           ),
-          const SizedBox(height: 1),
+          // Reuse the separator row for navigation. Keep it outside the list
+          // so file indices, maxVisible, and keyboard selection stay intact.
+          if (Directory(_currentDirectory).parent.absolute.path !=
+              _currentDirectory)
+            Semantics(
+              role: SemanticRole.button,
+              label: 'Parent directory',
+              actions: const {SemanticAction.activate},
+              onAction: (action) {
+                if (action == SemanticAction.activate) _goUp();
+              },
+              child: GestureDetector(
+                onTap: _goUp,
+                child: Text('.. (parent)', style: Theme.of(context).mutedStyle),
+              ),
+            )
+          else
+            const SizedBox(height: 1),
           body,
         ],
       ),

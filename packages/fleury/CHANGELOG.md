@@ -1,5 +1,14 @@
 # Changelog
 
+- Segmented pastes keep their original input claimant when focus moves. A tail
+  cannot spill into another field after its owner detaches or is replaced.
+- POSIX teardown, suspend, and handoff enqueue input-report disables before
+  yielding, without draining typeahead or popping protocol stacks early.
+  Restoration remains single-flight if a synchronous output callback reenters it.
+- Flex overflow and ScrollView use the shared cell/image compositor. A wide
+  glyph clipped at the Flex edge now uses the same `?` replacement as other
+  viewports, preserving the neighboring cell.
+
 - Generated semantic IDs distinguish repeated row keys in separate unkeyed
   lists and keys with different value types. Keyed rows retain their IDs when
   reordered within a list; explicit semantic IDs and `Semantics(key:)` IDs are

@@ -1,5 +1,10 @@
 ## 0.1.0
 
+- FileBrowser exposes a clickable, semantic parent-directory action in its
+  existing separator row, including empty and unreadable directories.
+- CodeView refreshes viewport semantics without rebuilding its source rows
+  after scrolling. Selection and explicit controller refreshes still rebuild.
+
 - Tabs handle Left/Right and Home/End only while the tab strip has focus.
   Navigation bubbling from controls in a tab body no longer switches tabs or
   loses focus. Explicit Alt+digit and Ctrl+PageUp/PageDown shortcuts still work.
