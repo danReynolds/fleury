@@ -108,8 +108,7 @@ void main() {
     final b = FocusNode(debugLabel: 'b');
     addTearDown(a.dispose);
     addTearDown(b.dispose);
-    // A group inside the scroll view: arrows move between its controls
-    // (outside one, they scroll the view).
+    // An explicit nested group can still own navigation among its controls.
     tester.pumpWidget(
       SizedBox(
         height: 3,

@@ -20,7 +20,7 @@ typedef _ScrollbarMetrics = (int, int, int);
 /// reflecting a [ScrollController] (or a [ListController] via
 /// [Scrollbar.list]). The thumb's size shows the visible fraction and its
 /// position shows how far you've scrolled; when everything fits, the thumb
-/// fills the track.
+/// fills the track unless [showWhenFits] is false.
 ///
 /// When the mouse is enabled, click the track or drag the thumb to scroll
 /// — the drag is captured, so it keeps tracking even past the bar's edge.
@@ -35,6 +35,7 @@ class Scrollbar extends StatefulWidget {
     this.scrollDirection = Axis.vertical,
     this.trackStyle = const CellStyle(dim: true),
     this.thumbStyle = CellStyle.none,
+    this.showWhenFits = true,
   }) : _metrics = (() => (
          controller.contentExtent,
          controller.viewportExtent,
@@ -54,6 +55,7 @@ class Scrollbar extends StatefulWidget {
     this.scrollDirection = Axis.vertical,
     this.trackStyle = const CellStyle(dim: true),
     this.thumbStyle = CellStyle.none,
+    this.showWhenFits = true,
   }) : _metrics = (() {
          // Fixed precision keeps the bar independent of whether the viewport
          // spans many short items or part of one oversized item.
@@ -77,6 +79,11 @@ class Scrollbar extends StatefulWidget {
   final CellStyle trackStyle;
   final CellStyle thumbStyle;
 
+  /// Whether to draw the bar when all content is visible. When false, a fitting
+  /// view keeps its gutter and child identity but paints no bar and ignores
+  /// track clicks and drags. The default preserves the full-track thumb.
+  final bool showWhenFits;
+
   @override
   State<Scrollbar> createState() => _ScrollbarState();
 }
@@ -91,6 +98,8 @@ class _ScrollbarState extends State<Scrollbar> {
   final _ScrollbarGeometry _geom = _ScrollbarGeometry();
 
   void _jumpToPosition(CellOffset position) {
+    final (content, viewport, _) = widget._metrics();
+    if (!widget.showWhenFits && content <= viewport) return;
     final host = _geom.host;
     if (host == null) return;
     final extent = widget.scrollDirection.extent(host.size);
@@ -130,6 +139,7 @@ class _ScrollbarState extends State<Scrollbar> {
                 trackStyle: widget.trackStyle,
                 thumbStyle: widget.thumbStyle,
                 textPolicy: policy,
+                showWhenFits: widget.showWhenFits,
               ),
             ),
           ),
@@ -227,6 +237,7 @@ class _BarView extends LeafRenderObjectWidget {
     required this.trackStyle,
     required this.thumbStyle,
     required this.textPolicy,
+    required this.showWhenFits,
   });
 
   final _ScrollbarMetrics Function() metrics;
@@ -235,6 +246,7 @@ class _BarView extends LeafRenderObjectWidget {
   final CellStyle trackStyle;
   final CellStyle thumbStyle;
   final TextPresentationPolicy textPolicy;
+  final bool showWhenFits;
 
   @override
   RenderObject createRenderObject(BuildContext context) => _RenderScrollbar(
@@ -244,6 +256,7 @@ class _BarView extends LeafRenderObjectWidget {
     trackStyle: trackStyle,
     thumbStyle: thumbStyle,
     textPolicy: textPolicy,
+    showWhenFits: showWhenFits,
   );
 
   @override
@@ -257,6 +270,7 @@ class _BarView extends LeafRenderObjectWidget {
       ..scrollDirection = scrollDirection
       ..trackStyle = trackStyle
       ..thumbStyle = thumbStyle
+      ..showWhenFits = showWhenFits
       ..textPolicy = textPolicy;
   }
 }
@@ -272,11 +286,13 @@ class _RenderScrollbar extends RenderObject {
     required CellStyle trackStyle,
     required CellStyle thumbStyle,
     required TextPresentationPolicy textPolicy,
+    required bool showWhenFits,
   }) : _metrics = metrics,
        _geometry = geometry,
        _scrollDirection = scrollDirection,
        _trackStyle = trackStyle,
        _thumbStyle = thumbStyle,
+       _showWhenFits = showWhenFits,
        _textPolicy = textPolicy {
     geometry.host = this;
   }
@@ -285,6 +301,13 @@ class _RenderScrollbar extends RenderObject {
   set scrollDirection(Axis value) {
     if (_scrollDirection == value) return;
     _scrollDirection = value;
+    markNeedsPaintOnly();
+  }
+
+  bool _showWhenFits;
+  set showWhenFits(bool value) {
+    if (_showWhenFits == value) return;
+    _showWhenFits = value;
     markNeedsPaintOnly();
   }
 
@@ -343,6 +366,7 @@ class _RenderScrollbar extends RenderObject {
         : size.cols ~/ glyphWidth;
     if (h == 0) return;
     final (content, viewport, scrollOffset) = _metrics();
+    if (!_showWhenFits && content <= viewport) return;
     final int thumbSize;
     final int thumbTop;
     if (content <= viewport || content <= 0) {

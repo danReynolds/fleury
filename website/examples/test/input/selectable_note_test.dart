@@ -18,7 +18,7 @@ void main() {
     await tester.settle();
     expect(
       (tester.clipboard as InProcessClipboard).lastWritten,
-      'Planning notes\nShip',
+      'Planning notes\nMeet',
     );
     expect(tester.field('Reply'), isNot(isFocused));
     expect(tester.field('Reply'), hasValue('Looks good.'));
@@ -27,7 +27,7 @@ void main() {
     await tester.settle();
     expect(
       (tester.clipboard as InProcessClipboard).lastWritten,
-      'Planning notes\nShip the guide.\nReview the gestures.',
+      'Planning notes\nMeet on Tuesday.\nBring the sketches.',
     );
     tester.press(KeySequence.escape);
     expect(tester.exists(text('Drag across the note')), isTrue);

@@ -11,6 +11,8 @@ interface Props {
   id: string;
   /** An executable walkthrough alongside this live widget. */
   test?: 'preferences';
+  /** Show the input guide's automatic interaction checklist. */
+  practice?: boolean;
   /** Optional caption shown above the example. */
   title?: string;
   /** Grid width in character cells. */
@@ -27,6 +29,7 @@ interface Props {
 const {
   id,
   test,
+  practice = false,
   title,
   cols = 60,
   rows = 12,
@@ -65,6 +68,7 @@ const servingGuide = '/fleury/architecture/serving-and-embedding/';
           data-rows={rows}
           data-theme={surfaceTheme}
           data-test={test}
+          data-practice={practice ? 'true' : undefined}
           style={test ? "display: none" : undefined}
           aria-label="Expand this example to full screen"
         >⛶ Expand</button>}
@@ -91,7 +95,7 @@ const servingGuide = '/fleury/architecture/serving-and-embedding/';
     if (window.__fleuryExamplesBoot) return;
     window.__fleuryExamplesBoot = true;
 
-    function expand(id, cols, rows, theme) {
+    function expand(id, cols, rows, theme, practice) {
       const fc = Math.min(Math.round(cols * 1.5), 160);
       const fr = Math.min(Math.round(rows * 1.4), 46);
       const overlay = document.createElement('div');
@@ -112,7 +116,14 @@ const servingGuide = '/fleury/architecture/serving-and-embedding/';
       host.style.cssText =
         `width:${fc}ch;height:${(fr * 1.25).toFixed(1)}em;max-width:92vw;max-height:78vh`;
       card.appendChild(bar);
-      card.appendChild(host);
+      if (practice) {
+        const exercise = document.createElement('input-practice');
+        exercise.dataset.example = id;
+        exercise.append(host);
+        card.append(exercise);
+      } else {
+        card.appendChild(host);
+      }
       overlay.appendChild(card);
       document.body.appendChild(overlay);
       document.documentElement.style.overflow = 'hidden';
@@ -139,7 +150,7 @@ const servingGuide = '/fleury/architecture/serving-and-embedding/';
     document.addEventListener('click', (e) => {
       const btn = e.target.closest && e.target.closest('.fleury-expand');
       if (!btn) return;
-      expand(btn.dataset.id, +btn.dataset.cols, +btn.dataset.rows, btn.dataset.theme);
+      expand(btn.dataset.id, +btn.dataset.cols, +btn.dataset.rows, btn.dataset.theme, btn.dataset.practice === 'true');
     });
   })();
 </script>

@@ -223,9 +223,10 @@ reports the error.
 
 Natural content height, permanent log insertion above a running region, and
 retaining the final frame are not implemented. Native image protocols fall back
-to glyph rendering. Terminal emulators differ in how they reflow old lines on
-resize; if cleanup cannot establish which rows it owns, it leaves uncertain
-rows alone to protect earlier output.
+to glyph rendering. When exit overlaps a resize, Fleury gets a fresh cursor
+report before clearing the region. If the terminal stops answering, cleanup
+still restores terminal modes and leaves uncertain rows alone to protect
+earlier output.
 
 Browser embeds take their size from the containing element. A served native
 preview also has a host-controlled viewport; neither demonstrates a native

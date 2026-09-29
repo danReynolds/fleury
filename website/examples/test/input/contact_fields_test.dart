@@ -10,7 +10,7 @@ void main() {
     pointer(tester, MouseEventKind.down, 3, 1);
     pointer(tester, MouseEventKind.up, 3, 1);
     tester.type('!');
-    expect(tester.field('Name'), hasValue('Ada! Lovelace'));
+    expect(tester.field('Title'), hasValue('Pla!nning notes'));
     tester.press(KeySequence.tab);
     expect(tester.field('Note'), isFocused);
   });

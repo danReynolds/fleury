@@ -188,6 +188,81 @@ void main() {
   });
 
   group('FocusTraversalGroup with real widgets', () {
+    for (final key in [
+      KeyCode.arrowRight,
+      KeyCode.arrowDown,
+      KeyCode.arrowLeft,
+      KeyCode.arrowUp,
+      KeyCode.tab,
+    ]) {
+      testWidgets('starts unfocused and enters on $key without activating', (
+        tester,
+      ) {
+        final first = FocusNode();
+        final last = FocusNode();
+        final skipped = FocusNode(skipTraversal: true);
+        var activations = 0;
+        tester.pumpWidget(
+          FocusTraversalGroup(
+            child: Column(
+              children: [
+                Button(
+                  text: 'Skip',
+                  focusNode: skipped,
+                  onPressed: () => activations++,
+                ),
+                Button(
+                  text: 'First',
+                  focusNode: first,
+                  onPressed: () => activations++,
+                ),
+                const Button(text: 'Disabled', onPressed: null),
+                Button(
+                  text: 'Last',
+                  focusNode: last,
+                  onPressed: () => activations++,
+                ),
+              ],
+            ),
+          ),
+        );
+        expect(tester.focusManager.focusedNode, isNull);
+        tester.sendKey(_code(KeyCode.enter));
+        expect(activations, 0);
+        tester.sendKey(_code(key));
+        final reverse = key == KeyCode.arrowLeft || key == KeyCode.arrowUp;
+        expect(tester.focusManager.focusedNode, same(reverse ? last : first));
+        expect(activations, 0);
+        tester.sendKey(_code(KeyCode.enter));
+        expect(activations, 1);
+      });
+    }
+
+    testWidgets('initial arrow focus remains inside the active trap', (tester) {
+      final outside = FocusNode();
+      final inside = FocusNode();
+      tester.pumpWidget(
+        FocusTraversalGroup(
+          child: Column(
+            children: [
+              Button(text: 'Outside', focusNode: outside, onPressed: () {}),
+              FocusScope(
+                trapFocus: true,
+                child: Button(
+                  text: 'Inside',
+                  focusNode: inside,
+                  onPressed: () {},
+                ),
+              ),
+            ],
+          ),
+        ),
+      );
+      expect(tester.focusManager.focusedNode, isNull);
+      tester.sendKey(_code(KeyCode.arrowDown));
+      expect(tester.focusManager.focusedNode, same(inside));
+    });
+
     testWidgets('left/right cycles focus between two ListView panes', (tester) {
       final leftNode = FocusNode(debugLabel: 'sidebar');
       final rightNode = FocusNode(debugLabel: 'messages');
@@ -1190,7 +1265,7 @@ void main() {
       expect(
         node.rect,
         isNull,
-        reason: 'scrolled past the viewport — not a directional target',
+        reason: 'scrolled past the viewport — no visible pointer bounds',
       );
     });
   });

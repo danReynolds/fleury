@@ -8,6 +8,21 @@
 - Flex overflow and ScrollView use the shared cell/image compositor. A wide
   glyph clipped at the Flex edge now uses the same `?` replacement as other
   viewports, preserving the neighboring cell.
+- `Button.onSecondaryPressed` handles a completed right click while retaining
+  keyboard focus and the button's enabled state. `CellStyle.interactive(pressed:)`
+  styles a held primary pointer press on activatable controls; release,
+  cancellation, or disabling clears it. Keyboard and semantic activation remain
+  immediate actions. Custom controls can also pass `pressed:` to `CellStyle.resolve`.
+
+- Arrow navigation now reveals controls outside the current scroll viewport
+  without scrolling away from the focused action. Descendant editors and lists
+  retain their key handling. Scrollbars can hide when content fits with
+  `showWhenFits: false` (`showScrollbarWhenFits` on `ScrollView`).
+- Explicit native POSIX drivers now tolerate a full terminal output queue.
+  Large frames no longer crash when stdin and stdout share nonblocking flags.
+- Inline shutdown now resolves a pending terminal resize before clearing its
+  region. Exiting during a resize removes the old UI without allocating another
+  frame; missing cursor replies still use a bounded, conservative cleanup.
 
 - Generated semantic IDs distinguish repeated row keys in separate unkeyed
   lists and keys with different value types. Keyed rows retain their IDs when

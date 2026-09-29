@@ -8,6 +8,9 @@ class SplitPane extends StatefulWidget {
 }
 
 class _SplitPaneState extends State<SplitPane> {
+  final focus = FocusNode();
+  // #docregion focus
+  bool focused = false;
   int leftWidth = 14;
   bool dragging = false;
 
@@ -16,6 +19,48 @@ class _SplitPaneState extends State<SplitPane> {
   });
 
   void finish() => setState(() => dragging = false);
+  // #enddocregion focus
+
+  @override
+  void dispose() {
+    focus.dispose();
+    super.dispose();
+  }
+
+  // #docregion focus
+  Widget get dividerGesture => MouseRegion(
+    cursor: MouseCursor.resizeLeftRight,
+    child: GestureDetector(
+      onDragStart: (_) => setState(() => dragging = true),
+      onDragUpdate: (details) => resize(details.delta.col),
+      onDragEnd: (_) => finish(),
+      onDragCancel: finish,
+      child: SizedBox(
+        width: 1,
+        child: Text(
+          '│\n│\n│\n│\n│',
+          allowSelect: false,
+          style: CellStyle(inverse: focused, bold: dragging),
+        ),
+      ),
+    ),
+  );
+  // #enddocregion focus
+
+  // #docregion keyboard
+  List<KeyBinding> get resizeKeys => [
+    KeyBinding(
+      KeySequence.left,
+      includeRepeats: true,
+      onTrigger: (_) => resize(-1),
+    ),
+    KeyBinding(
+      KeySequence.right,
+      includeRepeats: true,
+      onTrigger: (_) => resize(1),
+    ),
+  ];
+  // #enddocregion keyboard
 
   @override
   Widget build(BuildContext context) => Column(
@@ -30,42 +75,54 @@ class _SplitPaneState extends State<SplitPane> {
               child: const Text('Files\n\nnotes.md\nsketches.txt'),
             ),
             KeyBindings(
-              bindings: [
-                KeyBinding(KeySequence.left, onTrigger: (_) => resize(-1)),
-                KeyBinding(KeySequence.right, onTrigger: (_) => resize(1)),
-              ],
-              child: Focus(
-                autofocus: true,
-                // #docregion interaction
-                child: MouseRegion(
-                  cursor: MouseCursor.resizeLeftRight,
-                  child: GestureDetector(
-                    onDragStart: (_) => setState(() => dragging = true),
-                    onDragUpdate: (details) => resize(details.delta.col),
-                    onDragEnd: (_) => finish(),
-                    onDragCancel: finish,
-                    child: const SizedBox(
-                      width: 1,
-                      child: Text(
-                        '│\n│\n│\n│\n│',
-                        style: CellStyle(inverse: true),
-                      ),
-                    ),
+              bindings: resizeKeys,
+              child: FocusDetector(
+                onFocusChange: (value) => setState(() => focused = value),
+                child: Focus(
+                  focusNode: focus,
+                  autofocus: true,
+                  child: Semantics(
+                    role: SemanticRole.slider,
+                    label: 'File pane width',
+                    value: leftWidth,
+                    focused: focused,
+                    state: const SemanticState({
+                      'min': 8,
+                      'max': 24,
+                      'step': 1,
+                    }),
+                    actions: {
+                      SemanticAction.focus,
+                      if (leftWidth < 24) SemanticAction.increment,
+                      if (leftWidth > 8) SemanticAction.decrement,
+                    },
+                    onAction: (action) {
+                      focus.requestFocus();
+                      if (action == SemanticAction.increment) resize(1);
+                      if (action == SemanticAction.decrement) resize(-1);
+                    },
+                    child: dividerGesture,
                   ),
                 ),
-                // #enddocregion interaction
               ),
             ),
             const Expanded(
               child: Padding(
                 padding: EdgeInsets.only(left: 1),
-                child: Text('Preview\n\nReady to edit.'),
+                child: Text(
+                  'notes.md\n\nMeet on Tuesday.\nBring the sketches.',
+                ),
               ),
             ),
           ],
         ),
       ),
       Text(dragging ? 'Resizing…' : 'Width: $leftWidth · ← → resize'),
+      const SizedBox(height: 1),
+      Button(
+        text: 'Reset width',
+        onPressed: () => setState(() => leftWidth = 14),
+      ),
     ],
   );
 }

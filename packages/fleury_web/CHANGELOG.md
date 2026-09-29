@@ -4,6 +4,9 @@
 
 Initial public release.
 
+- Numeric sliders expose their current value and bounds to browser
+  accessibility, including custom resize handles.
+
 - Unawaited async handlers and command failures reach the browser error overlay.
   Each local host guards its runtime callbacks and owns a default error reporter
   when none is supplied; setup failures still reject the mount operation.
