@@ -15,9 +15,9 @@ abstract class Key {
   const Key.empty();
 }
 
-/// Base class for chords that are local to a parent's children list.
+/// Base class for keys that are local to a parent's children list.
 ///
-/// Local chords must compare equal across rebuilds when they identify the same
+/// Local keys must compare equal across rebuilds when they identify the same
 /// logical child. [GlobalKey] is the cross-tree counterpart.
 @immutable
 abstract class LocalKey extends Key {

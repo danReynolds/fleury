@@ -379,6 +379,24 @@ void main() {
       );
     });
 
+    // The supervisor's early-exit hint sends users to a named section of the
+    // hot-reload guide. It pointed at "How it works" long after the advice
+    // there changed; renaming the section must fail here instead.
+    test('the dev supervisor hint names a real hot-reload guide section', () {
+      final bootstrap = File(
+        p.join(repo.path, 'packages/fleury/lib/src/runtime/dev_bootstrap.dart'),
+      ).readAsStringSync();
+      final guide = File(
+        p.join(repo.path, 'website/src/content/docs/guides/hot-reload.md'),
+      ).readAsStringSync();
+      final section = RegExp(
+        r'hot-reload guide → "([^"]+)"',
+      ).firstMatch(bootstrap);
+
+      expect(section, isNotNull);
+      expect(guide, contains('\n## ${section!.group(1)}\n'));
+    });
+
     // The documented browser command — `--spawn dart run …` — starts no VM
     // service, and the dev supervisor yields to a serve handle, so it hot
     // reloads nothing. `InAppDevReload` needs the spawn command itself to

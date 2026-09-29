@@ -28,12 +28,12 @@ and any local *path* dependencies — a framework checkout included), and hot
 reloads on save. Edit in vim, Zed, IntelliJ, anything — saving is the trigger.
 
 - Reload outcomes surface in the debug shell (`Ctrl+G`): "Reloaded N libraries
-  in Xms" in the **Logs** tab, compile errors in the **Errors** tab. The
-  frames themselves are never disturbed.
+  in Xms" in the **Logs** tab, compile errors in the **Errors** tab. A failed
+  reload also shows an error banner; the app keeps running the previous code.
 - **Hot restart** — drop state and re-run `main()` fresh, same terminal
   session — is in the debug shell: `Ctrl+G`, then `F5` (shown in the shell
-  header whenever it's available). Any VM-service client (an editor,
-  `fleury_mcp`, a script) can also invoke `ext.fleury.restart`. Reload keeps
+  header whenever it's available). A VM-service client (an editor or a
+  script) can also invoke `ext.fleury.restart`. Reload keeps
   state; restart is for the changes reload can't apply (see below).
 - Opt out with `FLEURY_HOT_RELOAD=0`, or `runApp(enableHotReload: false)`.
 - The supervisor steps aside automatically whenever something else owns the
@@ -44,9 +44,11 @@ reloads on save. Edit in vim, Zed, IntelliJ, anything — saving is the trigger.
   'dart --enable-vm-service=0 run bin/main.dart'`) — the browser preview then
   updates live — but there is never a restart there (the serve socket accepts
   exactly one connection).
-- One caveat: a dev restart re-runs `main()` without the original CLI
-  arguments (a process cannot recover its own argv for a sibling spawn). An
-  app that must re-see argv can set `FLEURY_HOT_RELOAD=0`.
+- Under a plain `dart run`, the app runs in a supervised child process that
+  cannot recover the original CLI arguments by itself. An app that reads argv
+  passes it on: `runApp(app, args: args)`. Without it the app sees an empty
+  argv from its first frame, not only after a restart. `fleury run` passes the
+  arguments for you.
 
 ## Faster start: `fleury run`
 
@@ -165,10 +167,10 @@ process or sends a signal is not stateful hot reload.
 - Anything you computed once in `main()` before `runApp` ran.
 - Top-level globals initialized at startup.
 - Object identity for new instances created in `build()` (Flutter same).
-- Edits that change a constructor signature, generic parameter, or
-  add a non-`const` top-level initializer — the VM rejects these as
-  `isolate reload failed` (the message lands in the debug shell's Errors
-  tab). **Hot restart** instead: `Ctrl+G`, then `F5` — or invoke
+- Edits the VM cannot apply to a running program, such as changing a
+  class's type parameters, and edits that don't compile. The failure lands in
+  the debug shell's Errors tab as `hot reload failed: …`. **Hot restart**
+  instead: `Ctrl+G`, then `F5` — or invoke
   `ext.fleury.restart` (or stop and relaunch); it drops state but picks up the unsupported change, in the same
   terminal session.
 
@@ -304,10 +306,11 @@ Some edits can't be applied cleanly to a running tree (changing a
 State references). The VM accepts the source change but the next
 build crashes. Stop and relaunch the process.
 
-**"`isolate reload failed: missing fields`"** — You added a non-
-nullable field to a `State` class without a default value. The
-existing State instance can't be migrated. Hot restart, or make the
-field nullable / give it a default.
+**A new field throws `type 'Null' is not a subtype of type …` after a
+reload** — Existing objects never ran the constructor that sets the new
+field. Give it an initializer where it's declared, or hot restart. A
+non-nullable field with neither is a compile error, and the reload reports
+it.
 
 ## Implementation references
 
