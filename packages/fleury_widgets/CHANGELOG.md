@@ -1,5 +1,9 @@
 ## 0.1.0
 
+- Tabs handle Left/Right and Home/End only while the tab strip has focus.
+  Navigation bubbling from controls in a tab body no longer switches tabs or
+  loses focus. Explicit Alt+digit and Ctrl+PageUp/PageDown shortcuts still work.
+
 - **Breaking:** `Dialog` and `CommandPalette` no longer carry a semantic
   dismiss action of their own. A presented dialog's or palette's route
   advertises dismiss and honours `barrierDismissible` and `PopScope`; their

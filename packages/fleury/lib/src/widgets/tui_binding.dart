@@ -39,8 +39,9 @@ class TuiBinding implements TickerProvider {
   }
 
   /// Hook the runtime installs to wire post-frame callback registration
-  /// into frame scheduling. Null in tests by default — `FleuryTester.pump`
-  /// drains synchronously after each pump, so no scheduling is needed.
+  /// into frame scheduling. `FleuryTester` schedules only while a command or
+  /// semantic action is pending; otherwise its explicit `pump` drains the
+  /// callbacks synchronously.
   void Function()? onPostFrameCallback;
 
   /// The animation scheduler for this runtime. All [Ticker]s

@@ -498,6 +498,109 @@ MeasuredCellBox _box({
 
 void main() {
   test(
+    'the default host displays unawaited errors without a supplied reporter',
+    () async {
+      final root = web.document.createElement('div');
+      final input = _FakeInputSource();
+      final flush = _FakeFlush();
+      final trigger = Completer<void>();
+      final host = await runTuiSurface(
+        () => FleuryApp(
+          title: 'Errors',
+          commands: [
+            AppCommand(
+              id: const CommandId('fail'),
+              title: 'Fail',
+              shortcuts: [KeySequence.ctrl.f],
+              run: (_) async {
+                await trigger.future;
+                throw StateError('default reporter failure');
+              },
+            ),
+          ],
+          home: const Focus(autofocus: true, child: Text('Ready')),
+        ),
+        surface: DomGridSurface(root: root, size: const CellSize(60, 12)),
+        inputSource: input,
+        flushScheduler: flush.schedule,
+      );
+      addTearDown(host.dispose);
+      flush.fire();
+      input.emit(const KeyEvent(KeyCode.f, modifiers: {KeyModifier.ctrl}));
+      flush.fire();
+      trigger.complete();
+      await Future<void>.delayed(Duration.zero);
+      expect(flush.pending, isTrue);
+      flush.fire();
+      expect(root.textContent, contains('default reporter failure'));
+      await host.dispose();
+      expect(flush.pending, isFalse);
+    },
+  );
+
+  test(
+    'async shortcut errors reach the reporter and the next frame stays guarded',
+    () async {
+      final root = web.document.createElement('div');
+      final input = _FakeInputSource();
+      final flush = _FakeFlush();
+      final errors = RuntimeErrorReporter(autoDismiss: Duration.zero);
+      addTearDown(errors.dispose);
+      var calls = 0;
+      final host = await runTuiSurface(
+        () => FleuryApp(
+          title: 'Errors',
+          commands: [
+            AppCommand(
+              id: const CommandId('fail'),
+              title: 'Fail',
+              shortcuts: [KeySequence.ctrl.f],
+              run: (_) async {
+                await Future<void>.delayed(Duration.zero);
+                throw StateError('async failure ${++calls}');
+              },
+            ),
+          ],
+          home: const Focus(autofocus: true, child: Text('Ready')),
+        ),
+        surface: DomGridSurface(root: root, size: const CellSize(60, 12)),
+        inputSource: input,
+        flushScheduler: flush.schedule,
+        errorReporter: errors,
+      );
+      addTearDown(host.dispose);
+      flush.fire();
+      for (var i = 1; i <= 2; i++) {
+        final reported = Completer<void>();
+        void onError() {
+          if (errors.history.length == i && !reported.isCompleted)
+            reported.complete();
+        }
+
+        errors.addListener(onError);
+        input.emit(const KeyEvent(KeyCode.f, modifiers: {KeyModifier.ctrl}));
+        flush.fire();
+        await reported.future.timeout(const Duration(seconds: 1));
+        errors.removeListener(onError);
+        expect(
+          errors.history.last.error.toString(),
+          contains('async failure $i'),
+        );
+        expect(flush.pending, isTrue);
+        flush.fire();
+        expect(root.textContent, contains('async failure $i'));
+        input.emit(
+          const KeyEvent(
+            KeyCode.f,
+            modifiers: {KeyModifier.ctrl},
+            type: KeyEventType.up,
+          ),
+        );
+      }
+    },
+  );
+
+  test(
     'isolated debugger records real phases while hidden and survives errors',
     () async {
       final root = web.document.createElement('div');

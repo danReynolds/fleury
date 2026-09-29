@@ -1,5 +1,14 @@
 # Changelog
 
+- Generated semantic IDs distinguish repeated row keys in separate unkeyed
+  lists and keys with different value types. Keyed rows retain their IDs when
+  reordered within a list; explicit semantic IDs and `Semantics(key:)` IDs are
+  unchanged. Generated positional IDs remain opaque, session-scoped handles.
+- `FleuryTester.invokeCommand` and `invokeSemanticAction` pump requested frames
+  while awaiting a handler, so post-frame validation no longer deadlocks them.
+  Test time remains under the caller's control, and a dialog still needs an
+  explicit answer. Disposal and frame failures release pending invocations.
+
 - **Breaking:** `requestExit()` is now `exitApp()`, the counterpart to
   `runApp()`. It starts orderly UI shutdown; await `runApp` for terminal
   restoration to finish. It does not terminate the host process.

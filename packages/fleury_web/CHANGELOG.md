@@ -4,6 +4,10 @@
 
 Initial public release.
 
+- Unawaited async handlers and command failures reach the browser error overlay.
+  Each local host guards its runtime callbacks and owns a default error reporter
+  when none is supplied; setup failures still reject the mount operation.
+
 - The semantic DOM updates in place: a structural change moves, inserts or
   removes only the nodes it changed, and text keeps its node. A screen
   reader no longer re-announces a live region (a log, a status) whenever a
