@@ -475,8 +475,8 @@ List<ActiveKeyBinding> resolveActiveKeyBindings(FocusManager manager) {
 /// ```dart
 /// KeyBindings(
 ///   bindings: [
-///     KeyBinding(.ctrl.s, onTrigger: _save, label: 'Save'),
-///     KeyBinding(.escape, onTrigger: _cancel, label: 'Cancel'),
+///     KeyBinding(.ctrl.s, label: 'Save', onTrigger: (_) => save()),
+///     KeyBinding(.escape, label: 'Cancel', onTrigger: (_) => cancel()),
 ///   ],
 ///   child: app,
 /// )
@@ -502,7 +502,7 @@ class KeyBindings extends StatefulWidget {
   /// either side knowing about the other.
   final List<KeyBinding> bindings;
 
-  /// Whether unmatched keys stop at this scope (RFC 0020 §14.3).
+  /// Whether unmatched keys stop at this scope.
   ///
   /// A dialog binds y/n/Esc; a fat-fingered `j` matches nothing, and with
   /// `modal: false` it would sail past into the app behind. There is no

@@ -4,29 +4,18 @@
 
 import 'package:fleury/fleury_core.dart';
 
-/// Walks the active focus chain and renders each visible binding as
-/// "`[label] description`". Updates automatically when focus moves (because it
-/// depends on the [FocusManager] via [FocusManager.of]).
+/// A one-line bar listing the labelled key bindings active for the current
+/// focus, as `[key] label · [key] label`. It updates when focus moves.
 ///
-/// Under width pressure it degrades **honestly**: it fits as many whole
-/// bindings as the width allows and collapses the rest into a trailing `+N`,
-/// rather than clipping a label mid-word or silently dropping the trailing
-/// hints. Priority is chain order — the deepest / most local bindings are kept
-/// first, and the outermost collapse into the `+N` first; the marker is the
-/// affordance that a narrow terminal is hiding more (the missing "no
-/// affordance" the plain-`Text` bar lacked). Pinning ubiquitous bindings like
-/// quit/help ahead of locals is a deliberate non-goal for now — it would
-/// break the contiguous prefix + single trailing marker. A binding
-/// bound to several aliases (`KeyBinding(↑, aliases: [↓], …)`) renders a
-/// **combined** label — `[↑↓] move`, not just `[↑] move`.
+/// When the width runs out, it shows as many whole hints as fit and collapses
+/// the rest into a trailing `+N`, rather than clipping a label mid-word or
+/// silently dropping hints. The deepest (most local) bindings come first, so
+/// the outermost ones are the first to collapse. A binding with aliases
+/// (`KeyBinding(↑, aliases: [↓], …)`) shows a combined key: `[↑↓] move`.
 ///
-/// Filtering rules:
-///   1. Bindings with `label == null` are hidden (the chord's
-///      auto-label alone isn't enough — a binding needs a written
-///      label to qualify for the bar).
-///   2. Bindings with `hideFromHintBar: true` are hidden.
-///   3. Bindings with `enabled: false` are hidden.
-///   4. Duplicate chords keep the nearest (deeper) binding.
+/// A binding appears only when it has a `label`, does not set
+/// `hideFromHintBar: true`, and is enabled. When two scopes bind the same key,
+/// the nearer (deeper) binding is shown.
 class KeyHintBar extends StatelessWidget {
   const KeyHintBar({
     super.key,

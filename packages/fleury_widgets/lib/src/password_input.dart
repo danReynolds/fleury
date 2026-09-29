@@ -93,9 +93,8 @@ class PasswordInput extends StatefulWidget {
   /// field is focused.
   final bool canReveal;
 
-  /// The sequence that toggles reveal. Defaults to Ctrl+R (see
-  /// [_defaultRevealChord]). The focused field consumes it, so it shadows any
-  /// app-level binding on the same sequence.
+  /// The sequence that toggles reveal. Defaults to Ctrl+R. The focused field
+  /// consumes it, so it shadows any app-level binding on the same sequence.
   final KeySequence? revealChord;
 
   /// Optional validation error displayed by the underlying input.

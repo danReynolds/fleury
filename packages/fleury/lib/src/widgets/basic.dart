@@ -110,9 +110,9 @@ final class Text extends StatelessWidget implements WidgetUpdatePruner {
 
   /// The text-presentation policy used to measure grapheme clusters. Null
   /// (the default) resolves the surface's ambient policy from [MediaQuery] —
-  /// derived at startup from the width probe and `FLEURY_*` overrides
-  /// (RFC 0019). Pass an explicit policy only to pin measurement against the
-  /// ambient surface (goldens comparing policies, documentation demos).
+  /// derived at startup from the width probe and `FLEURY_*` overrides. Pass
+  /// an explicit policy only to pin measurement against the ambient surface
+  /// (goldens comparing policies, documentation demos).
   final TextPresentationPolicy? policy;
 
   /// Whether this Text participates in any ancestor `SelectionArea`'s
@@ -414,9 +414,20 @@ class Flex extends MultiChildRenderObjectWidget {
     super.children,
   });
 
+  /// The axis the children are laid out along.
   final Axis direction;
+
+  /// Whether this widget fills the free space on its main axis
+  /// ([MainAxisSize.max], the default) or shrinks to its children
+  /// ([MainAxisSize.min]).
   final MainAxisSize mainAxisSize;
+
+  /// How the children are placed along the main axis when there is space
+  /// left over.
   final MainAxisAlignment mainAxisAlignment;
+
+  /// How the children are placed across the main axis.
+  /// [CrossAxisAlignment.stretch] makes them fill it.
   final CrossAxisAlignment crossAxisAlignment;
 
   @override
@@ -444,7 +455,15 @@ class Flex extends MultiChildRenderObjectWidget {
   }
 }
 
-/// Horizontal [Flex].
+/// Lays out its children in a horizontal line.
+///
+/// Children take their natural width. Wrap one in [Expanded] to give it the
+/// width left over, or in [Flexible] to let it take up to a share of it; put a
+/// `SizedBox(width: …)` between children for a fixed gap. A row fills the
+/// available width unless [mainAxisSize] is [MainAxisSize.min].
+///
+/// Children that don't fit are clipped. With assertions enabled, the
+/// overflowing edge is marked so the mismatch is easy to spot.
 class Row extends Flex {
   const Row({
     super.key,
@@ -455,7 +474,16 @@ class Row extends Flex {
   }) : super(direction: Axis.horizontal);
 }
 
-/// Vertical [Flex].
+/// Lays out its children in a vertical line.
+///
+/// Children take their natural height. Wrap one in [Expanded] to give it the
+/// height left over, or in [Flexible] to let it take up to a share of it; put
+/// a `SizedBox(height: …)` between children for a fixed gap. A column fills
+/// the available height unless [mainAxisSize] is [MainAxisSize.min].
+///
+/// Children that don't fit are clipped. With assertions enabled, the
+/// overflowing edge is marked; make long content scroll with a `ListView` or
+/// `ScrollView` instead.
 class Column extends Flex {
   const Column({
     super.key,
@@ -695,13 +723,19 @@ final class Positioned extends SingleChildRenderObjectWidget {
 // Container
 // ---------------------------------------------------------------------------
 
-/// A convenience widget composing [Padding] + [SizedBox] + an
-/// optional [BoxBorder] frame.
+/// One visual region: size, spacing, background, border, and alignment in a
+/// single widget.
 ///
-/// Composition order, from outermost to innermost: `SizedBox` →
-/// `Border` → `Padding` → child. That means `width` / `height`
-/// describe the *outer* dimensions including the border, and
-/// `padding` insets the child away from the border on the inside.
+/// From outermost to innermost, a container applies [margin], then the
+/// [width] / [height] size, then the [border], then the [color] fill, then
+/// [padding], then [alignment]. So `width` and `height` are the outer size
+/// including the border, `padding` insets the child from the border, and the
+/// fill covers the padding too.
+///
+/// The plain constructor paints no background, so it can sit over an
+/// already-styled surface. Use [Container.filled] for an opaque theme
+/// surface, and [Container.framed] for floating chrome that needs both a fill
+/// and a border.
 final class Container extends StatelessWidget {
   const Container({
     super.key,
@@ -770,11 +804,10 @@ final class Container extends StatelessWidget {
   /// Resolve [border] from the theme when it is null (set by [framed]).
   final bool _themedBorder;
 
-  /// How the [child] is positioned inside the container's content
-  /// area (after padding, inside the border). null means "stretch the
-  /// child to fill the available space" — the same behaviour you get
-  /// when [Container] has no alignment today. Use [Alignment.center]
-  /// to centre a fixed-size child inside a larger container, etc.
+  /// How the [child] is positioned inside the container's content area
+  /// (inside the border and padding). Null stretches the child to fill that
+  /// area. Use [Alignment.center] to center a smaller child in a larger
+  /// container.
   final Alignment? alignment;
 
   /// Outer width in cells, including border and padding; null leaves it flexible.
@@ -795,10 +828,10 @@ final class Container extends StatelessWidget {
   /// side to the container's total extent.
   final BoxBorder? border;
 
-  /// Background color painted into every cell the container occupies
-  /// (after padding, inside the border). null leaves the underlying
-  /// surface visible — appropriate for laying a Container over an
-  /// already-styled background.
+  /// Background color painted into every cell inside the border, padding
+  /// included. Null leaves the underlying surface visible, which suits a
+  /// container laid over an already-styled background; [Container.filled]
+  /// and [Container.framed] fill with the theme's surface instead.
   final Color? color;
 
   /// Content inside the optional padding, fill, and border.

@@ -1,10 +1,11 @@
 import 'package:fleury/fleury_core.dart';
 import 'package:fleury/fleury_internal.dart';
 
-/// A numeric stepper: `[ − 42 + ]`. Focusable; arrow chords (and +/−)
-/// adjust the value by [step], PageUp / PageDown by [largeStep], Home /
-/// End jump to [min] / [max]. Clicking the `−` or `+` half also nudges
-/// the value, so pointer users get the same affordance.
+/// A numeric stepper: `[ − 42 + ]`. When focused, Up / Down (or + / −)
+/// change the value by [step], PageUp / PageDown by [largeStep], and Home /
+/// End jump to [min] / [max]. Typing digits enters a value directly; Enter or
+/// leaving the field commits it, and Escape cancels. Clicking the `−` or `+`
+/// half also nudges the value, so pointer users get the same affordance.
 ///
 /// Controlled — hold the value yourself and update it from [onChanged].
 /// Passing null for [onChanged] disables the stepper.

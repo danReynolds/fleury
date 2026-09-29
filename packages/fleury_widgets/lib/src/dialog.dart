@@ -1,7 +1,7 @@
 import 'package:fleury/fleury_core.dart';
 
 /// Modal chrome — a bordered, padded panel with an optional [title] —
-/// ready to hand to `present`:
+/// ready to hand to `present`.
 ///
 /// ```dart
 /// context.present<bool>(Dialog(
