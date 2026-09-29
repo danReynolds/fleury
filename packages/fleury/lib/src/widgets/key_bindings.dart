@@ -253,6 +253,7 @@ final class KeyBinding {
     this.hideFromHintBar = false,
   }) : _enabled = enabled,
        _isEnabled = null,
+       _availability = null,
        assert(
          !includeRepeats ||
              (sequence.stepCount == 1 &&
@@ -287,6 +288,7 @@ final class KeyBinding {
     this.hideFromHintBar = false,
   }) : _enabled = enabled,
        _isEnabled = null,
+       _availability = null,
        assert(
          key.stepCount == 1,
          'a hold brackets one key press, not a multi-step sequence',
@@ -304,10 +306,12 @@ final class KeyBinding {
     KeySequence sequence, {
     required KeyBindingHandler this.onTrigger,
     required bool Function() isEnabled,
+    Listenable? availability,
     List<KeySequence> aliases = const <KeySequence>[],
     this.label,
   }) : _enabled = true,
        _isEnabled = isEnabled,
+       _availability = availability,
        sequences = [sequence, ...aliases],
        includeRepeats = false,
        hideFromHintBar = false,
@@ -342,11 +346,12 @@ final class KeyBinding {
   bool get enabled => _isEnabled?.call() ?? _enabled;
   final bool _enabled;
   final bool Function()? _isEnabled;
+  final Listenable? _availability;
 
   /// Framework-internal: whether [enabled] is asked each time rather than
   /// fixed (see [KeyBinding.live]).
   @internal
-  bool get isLive => _isEnabled != null;
+  bool get isLive => _isEnabled != null && _availability == null;
 
   /// When true, the binding still fires but is hidden from `KeyHintBar`.
   /// Useful for ubiquitous bindings like Ctrl+C.
@@ -432,6 +437,11 @@ List<ActiveKeyBinding> resolveActiveKeyBindings(FocusManager manager) {
   void consider(KeyBinding binding) {
     if (binding.label == null) return;
     if (binding.hideFromHintBar) return;
+    final availability = binding._availability;
+    final reader = Element.current;
+    if (availability != null && reader != null) {
+      dependOnListenable(reader, availability);
+    }
     final enabled = binding.enabled;
     if (binding.isLive) (liveAnswers ??= []).add((binding, enabled));
     if (!enabled) return;

@@ -31,7 +31,7 @@ import '../rendering/cell_buffer.dart';
 import '../rendering/layout.dart';
 import '../rendering/render_object.dart';
 import '../rendering/render_repaint_boundary.dart';
-import 'basic.dart' show Stack;
+import 'basic.dart' show SizedBox, Stack;
 import 'error_boundary.dart';
 import 'framework.dart';
 
@@ -47,6 +47,7 @@ import 'framework.dart';
 class OverlayEntry extends Notifier {
   OverlayEntry({
     required this.builder,
+    this.owner,
     bool opaque = false,
     this.maintainState = true,
   }) : _opaque = opaque;
@@ -54,6 +55,12 @@ class OverlayEntry extends Notifier {
   /// Builds the layer's widget tree. Called with the [BuildContext]
   /// of the [Overlay] hosting this entry.
   final Widget Function(BuildContext) builder;
+
+  /// Logical owner for inherited scopes (Theme, commands and app models).
+  /// Readers follow live scope updates and GlobalKey moves. The floating
+  /// subtree is disposed before its owner is unmounted. Omit for a layer
+  /// intentionally owned by the host overlay, such as app-global chrome.
+  final BuildContext? owner;
 
   /// When true, the [Overlay] skips painting entries below this one.
   /// Useful for full-screen modals that fully cover the app.
@@ -74,6 +81,7 @@ class OverlayEntry extends Notifier {
   final bool maintainState;
 
   OverlayState? _state;
+  VoidCallback? _detachOwner;
   bool _disposed = false;
 
   /// Removes this entry from its [Overlay]. No-op if not currently
@@ -82,6 +90,8 @@ class OverlayEntry extends Notifier {
     final state = _state;
     if (state == null) return;
     _state = null;
+    _detachOwner?.call();
+    _detachOwner = null;
     state._removeEntry(this);
   }
 
@@ -99,18 +109,28 @@ class OverlayEntry extends Notifier {
   }
 
   void _attach(OverlayState state) {
-    _checkCanAttach();
+    _checkCanAttach(state.context);
+    final source = owner;
+    if (source != null) {
+      _detachOwner = watchScopeOwner(source, (alive) {
+        if (!alive) remove();
+      });
+    }
     _state = state;
   }
 
-  void _checkCanAttach() {
+  void _checkCanAttach(BuildContext host) {
     _checkNotDisposed();
     if (_state != null) {
       throw StateError('Entry is already inserted into an Overlay.');
     }
+    final source = owner;
+    if (source != null) validateScopeOwner(source, host);
   }
 
   void _detach() {
+    _detachOwner?.call();
+    _detachOwner = null;
     _state = null;
   }
 
@@ -313,7 +333,7 @@ class OverlayState extends State<Overlay> {
     // failed mount must not detach an entry belonging to another overlay.
     final seen = Set<OverlayEntry>.identity();
     for (final entry in widget.initialEntries) {
-      entry._checkCanAttach();
+      entry._checkCanAttach(context);
       if (!seen.add(entry)) {
         throw StateError('Overlay initialEntries contains a duplicate entry.');
       }
@@ -483,7 +503,20 @@ class _OverlayEntryWidgetState extends State<_OverlayEntryWidget> {
     // count, visibility, or frame state — so the entry's subtree is never
     // reparented (which would drop its State). Entry count only flips the
     // boundary's cachingEnabled, a render-object property.
-    final content = widget.entry.builder(context);
+    final entry = widget.entry;
+    final owner = entry.owner;
+    // An entry can be removed with its owner before its first floating build.
+    // Deactivated owners may also be reclaimed later in this same frame.
+    if (owner != null && !owner.mounted) {
+      return const SizedBox(width: 0, height: 0);
+    }
+    final content = owner == null
+        ? entry.builder(context)
+        : ScopeLink(
+            source: owner,
+            onOwnerUnmount: entry.remove,
+            child: _EntryBuilder(entry.builder),
+          );
     return _Visibility(
       visible: widget.visible,
       // Implicit containment: a crashing overlay entry (a dialog, a
@@ -596,4 +629,11 @@ class _RenderVisibility extends RenderObject
     if (!_visible) return;
     _child?.paint(buffer, offset);
   }
+}
+
+class _EntryBuilder extends StatelessWidget {
+  const _EntryBuilder(this.builder);
+  final Widget Function(BuildContext) builder;
+  @override
+  Widget build(BuildContext context) => builder(context);
 }

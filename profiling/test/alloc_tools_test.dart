@@ -4,10 +4,13 @@ import 'dart:io';
 import 'package:test/test.dart';
 
 Future<ProcessResult> runTool(String script, List<String> args,
-        {bool service = false}) =>
+        {bool service = false, bool preserveSamples = true}) =>
     Process.run(Platform.resolvedExecutable, [
       if (service) ...[
         '--deterministic',
+        '--profiler',
+        '--max-profile-depth=2',
+        if (preserveSamples) '--profile-startup',
         '--enable-vm-service=0',
         '--disable-service-auth-codes',
       ],
@@ -16,6 +19,56 @@ Future<ProcessResult> runTool(String script, List<String> args,
     ]);
 
 void main() {
+  test(
+      'allocation trace canary counts retained and discarded objects across GC',
+      () async {
+    final result = await runTool('allocation_trace_probe', [], service: true);
+    expect(result.exitCode, 0, reason: '${result.stdout}\n${result.stderr}');
+    expect(
+        result.stdout,
+        contains(
+            '4096 discarded allocations, 4096 traced after GC (inside=true'));
+  }, timeout: const Timeout(Duration(minutes: 2)));
+
+  test('allocation trace refuses truncated windows', () async {
+    final result = await runTool('allocation_trace_probe', ['--exhaust-buffer'],
+        service: true);
+    expect(result.exitCode, isNot(0));
+    expect(result.stderr, contains('Incomplete allocation trace window'));
+  }, timeout: const Timeout(Duration(minutes: 2)));
+
+  test('allocation trace rejects a ring buffer that could lose middle samples',
+      () async {
+    final result = await runTool('allocation_trace_probe', [],
+        service: true, preserveSamples: false);
+    expect(result.exitCode, isNot(0));
+    expect(result.stderr, contains('requires --profile-startup'));
+  });
+
+  test('input gate counts dispatcher objects and rejects regression', () async {
+    final directory =
+        Directory.systemTemp.createTempSync('fleury-input-alloc-');
+    addTearDown(() => directory.deleteSync(recursive: true));
+    final baseline = File('${directory.path}/baseline.json')
+      ..writeAsStringSync(jsonEncode({
+        'measurement': 'allocation-traces-v1-objects',
+        'objectsPerKey': 1,
+      }));
+    final result = await runTool(
+        'input_alloc_gate', ['--gate', '--baseline=${baseline.path}'],
+        service: true);
+    expect(result.exitCode, 1, reason: '${result.stdout}\n${result.stderr}');
+    expect(
+        result.stdout,
+        contains(
+            '2002 objects  package:fleury/src/input/events.dart::KeyEvent'));
+    expect(
+        result.stdout,
+        contains(
+            '2002 objects  package:fleury/src/input/keyboard_state.dart::_PressRecord'));
+    expect(result.stdout, contains('FAIL'));
+  });
+
   test('invalid counts fail before starting a profiler session', () async {
     for (final (script, argument) in [
       ('alloc_gate', '--frames=0'),
@@ -39,20 +92,21 @@ void main() {
     final directory = Directory.systemTemp.createTempSync('fleury-alloc-test-');
     addTearDown(() => directory.deleteSync(recursive: true));
     final baseline = File('${directory.path}/baseline.json');
-    final args = ['--frames=80', '--warmup=50', '--baseline=${baseline.path}'];
+    final args = ['--frames=4', '--warmup=50', '--baseline=${baseline.path}'];
     final capture = await runTool('alloc_gate', [...args, '--update-baseline'],
         service: true);
     expect(capture.exitCode, 0, reason: '${capture.stdout}\n${capture.stderr}');
     final measured = jsonDecode(baseline.readAsStringSync()) as Map;
-    final total = measured['bytesPerFrame'] as num;
-    final project = measured['projectBytesPerFrame'] as num;
+    final total = measured['objectsPerFrame'] as num;
+    final project = measured['projectObjectsPerFrame'] as num;
     expect(project, greaterThan(0));
     expect(total, greaterThan(project));
 
     for (final axis in ['total', 'project']) {
       baseline.writeAsStringSync(jsonEncode({
-        'bytesPerFrame': axis == 'total' ? 1 : total * 100,
-        'projectBytesPerFrame': axis == 'project' ? 1 : project * 100,
+        'measurement': 'allocation-traces-v1-objects',
+        'objectsPerFrame': axis == 'total' ? 1 : total * 100,
+        'projectObjectsPerFrame': axis == 'project' ? 1 : project * 100,
       }));
       final result = await runTool('alloc_gate', [...args, '--gate', '--top=0'],
           service: true);

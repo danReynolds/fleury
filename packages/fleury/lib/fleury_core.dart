@@ -421,7 +421,11 @@ export 'src/widgets/button.dart' show Button, ButtonAppearance, ButtonVariant;
 export 'src/widgets/spinner.dart' show Spinner, SpinnerStyle;
 export 'src/widgets/text_area.dart' show TextArea;
 export 'src/widgets/text_input.dart'
-    show TextClipboardPolicy, TextEditingController, TextInput;
+    show
+        TextClipboardPolicy,
+        TextEditingController,
+        TextEditingPaste,
+        TextInput;
 export 'src/widgets/ticker_mode.dart' show TickerMode;
 export 'src/widgets/theme.dart'
     show

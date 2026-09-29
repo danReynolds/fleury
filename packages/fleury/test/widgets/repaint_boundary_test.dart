@@ -559,7 +559,7 @@ void main() {
                             child: TextInput(
                               controller: controller,
                               focusNode: focusNode,
-                              autofocus: true,
+                              autofocus: false,
                             ),
                           ),
                         ),
@@ -571,6 +571,7 @@ void main() {
             ),
           ),
         );
+        focusNode.requestFocus(reveal: false);
         const size = CellSize(20, 5);
         tester.render(size: size);
         expect(focusNode.rect, isNull);

@@ -21,10 +21,17 @@ class WindowsTerminalDriver
     with TerminalAttentionSequences
     implements TerminalDriver, TerminalHandoffDriver {
   WindowsTerminalDriver({
+    String? keypadDecimal,
     Stdin? stdinOverride,
     Stdout? stdoutOverride,
     this.resizePollInterval = const Duration(milliseconds: 250),
-  }) : _stdin = stdinOverride ?? stdin,
+  }) : _parser = InputParser(
+         keypadDecimal:
+             keypadDecimal ??
+             Platform.environment['FLEURY_KEYPAD_DECIMAL'] ??
+             '.',
+       ),
+       _stdin = stdinOverride ?? stdin,
        _stdout = stdoutOverride ?? stdout,
        _consoleModeController = NativeWindowsConsoleModeController();
 
@@ -44,7 +51,7 @@ class WindowsTerminalDriver
   late final bool _stdinIsTerminal = _stdin.hasTerminal;
   late final bool _stdoutIsTerminal = _stdout.hasTerminal;
 
-  final InputParser _parser = InputParser();
+  final InputParser _parser;
   final StreamController<TuiEvent> _events =
       StreamController<TuiEvent>.broadcast();
   final _ParserSink _sink = _ParserSink();

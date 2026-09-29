@@ -33,10 +33,6 @@ class _TooltipState extends State<Tooltip> {
   final BoundsNotifier _bounds = BoundsNotifier();
   OverlayEntry? _entry;
 
-  // The overlay builds the tip above any Theme the app set, so it carries
-  // the theme where this Tooltip sits.
-  ThemeData? _theme;
-
   // Set when Esc dismisses the tip while the trigger keeps focus; cleared when
   // focus leaves, so re-focusing the trigger shows the tip again.
   bool _dismissed = false;
@@ -53,6 +49,7 @@ class _TooltipState extends State<Tooltip> {
   void _show() {
     if (_entry != null) return;
     final entry = OverlayEntry(
+      owner: context,
       // BoundsAnchor, not AnchoredFloat: a tooltip is decorative chrome that
       // shows on focus/hover and is never dismissed by a click, so it must not
       // stack AnchoredFloat's full-screen AbsorbPointer. That barrier ate every
@@ -60,25 +57,22 @@ class _TooltipState extends State<Tooltip> {
       // was visible. The dismissable floats (Autocomplete, ColorPicker,
       // CompletionTextInput) keep AnchoredFloat — they each pass onTapOutside
       // and need the outside click.
-      builder: (_) => BoundsAnchor(
+      builder: (context) => BoundsAnchor(
         notifier: _bounds,
         // Container.framed supplies the float's skin: an opaque fill so the
         // app beneath doesn't bleed through, plus the frame. The tooltip's
         // text is chrome, not content, so it opts out of the app's ambient
         // selection — stated here rather than inherited from the fact that an
         // overlay entry happens to mount outside DefaultRootSelection.
-        child: Theme(
-          data: _theme!,
-          child: SelectionArea.disabled(
-            child: Container.framed(
-              border: const BoxBorder(style: BorderStyle.rounded),
-              child: Semantics(
-                role: SemanticRole.text,
-                label: widget.semanticLabel,
-                value: _safeMessage,
-                state: const SemanticState({'tooltipVisible': true}),
-                child: Text(widget.message, allowSelect: false),
-              ),
+        child: SelectionArea.disabled(
+          child: Container.framed(
+            border: const BoxBorder(style: BorderStyle.rounded),
+            child: Semantics(
+              role: SemanticRole.text,
+              label: widget.semanticLabel,
+              value: _safeMessage,
+              state: const SemanticState({'tooltipVisible': true}),
+              child: Text(widget.message, allowSelect: false),
             ),
           ),
         ),
@@ -93,16 +87,6 @@ class _TooltipState extends State<Tooltip> {
     _entry?.remove();
     _entry = null;
     if (notify && mounted) setState(() {});
-  }
-
-  @override
-  void didChangeDependencies() {
-    super.didChangeDependencies();
-    final theme = Theme.of(context);
-    if (theme != _theme) {
-      _theme = theme;
-      _entry?.markNeedsBuild();
-    }
   }
 
   @override

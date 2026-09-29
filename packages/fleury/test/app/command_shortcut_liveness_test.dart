@@ -82,6 +82,53 @@ String _hintLine(FleuryTester tester) => tester
     .firstWhere((line) => line.startsWith('hints:'));
 
 void main() {
+  testWidgets(
+    'observable command availability refreshes without idle polling',
+    (tester) {
+      final history = _History();
+      var reads = 0;
+      tester.pumpWidget(
+        FleuryApp(
+          title: 'Observable',
+          commands: [
+            AppCommand(
+              id: _undo,
+              title: 'Undo',
+              shortcuts: [KeySequence.ctrl.z],
+              availability: history,
+              enabled: (_) {
+                reads++;
+                return history.canUndo;
+              },
+              run: (_) => history.undos++,
+            ),
+          ],
+          home: Column(children: [_body(history), const _Hints()]),
+        ),
+      );
+      tester.pump();
+      reads = 0;
+      for (var i = 0; i < 20; i++) {
+        tester.pump();
+      }
+      expect(
+        reads,
+        0,
+        reason: 'unchanged frames do not poll observable predicates',
+      );
+      history.canUndo = true;
+      tester.pump();
+      expect(_hintLine(tester), contains('Undo'));
+      history.canUndo = false;
+      tester.sendKey(
+        _ctrlZ,
+      ); // Dispatch before a frame still reads current state.
+      expect(history.undos, 0);
+      tester.pump();
+      expect(_hintLine(tester), isNot(contains('Undo')));
+    },
+  );
+
   testWidgets('an app command enabled after build fires on its shortcut', (
     tester,
   ) {

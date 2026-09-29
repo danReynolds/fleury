@@ -119,16 +119,6 @@ String _fmtHeat(num v) {
   return v == v.roundToDouble() ? v.toInt().toString() : v.toStringAsFixed(1);
 }
 
-bool _labelsEqual(List<String>? a, List<String>? b) {
-  if (identical(a, b)) return true;
-  if (a == null || b == null) return false;
-  if (a.length != b.length) return false;
-  for (var i = 0; i < a.length; i += 1) {
-    if (a[i] != b[i]) return false;
-  }
-  return true;
-}
-
 ({int rows, int columns, int pointCount, num min, num max}) _heatmapStats(
   List<List<num>> values, {
   required num? min,
@@ -226,6 +216,8 @@ class RenderHeatmap extends RenderObject {
   }) : _textPolicy = textPolicy,
        _glyphTier = glyphTier,
        _values = values,
+       _valueRows = values.length,
+       _valueColumns = values.isEmpty ? 0 : values.first.length,
        _min = min,
        _max = max,
        _cellWidth = cellWidth,
@@ -253,13 +245,15 @@ class RenderHeatmap extends RenderObject {
     markNeedsPaintOnly();
   }
 
+  int _valueRows;
+  int _valueColumns;
   List<List<num>> _values;
   set values(List<List<num>> v) {
-    if (identical(_values, v)) return;
-    final layoutChanged =
-        _values.length != v.length ||
-        (_values.isEmpty ? 0 : _values[0].length) !=
-            (v.isEmpty ? 0 : v[0].length);
+    final rows = v.length;
+    final columns = v.isEmpty ? 0 : v.first.length;
+    final layoutChanged = _valueRows != rows || _valueColumns != columns;
+    _valueRows = rows;
+    _valueColumns = columns;
     _values = v;
     if (layoutChanged) {
       markNeedsLayout();
@@ -306,14 +300,14 @@ class RenderHeatmap extends RenderObject {
 
   List<String>? _rowLabels;
   set rowLabels(List<String>? v) {
-    if (_labelsEqual(_rowLabels, v)) return;
+    if (_rowLabels == null && v == null) return;
     _rowLabels = v;
     markNeedsLayout();
   }
 
   List<String>? _colLabels;
   set colLabels(List<String>? v) {
-    if (_labelsEqual(_colLabels, v)) return;
+    if (_colLabels == null && v == null) return;
     _colLabels = v;
     markNeedsLayout();
   }

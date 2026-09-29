@@ -1,7 +1,8 @@
 // A LineChart rebuilt by its parent does no cursor work unless it has a
 // cursor: every rebuild with a new series list re-sorted every x value, which
-// only an interactive chart reads. And an unchanged series list does not
-// repaint: the default palette, a new list on every build, forced it.
+// only an interactive chart reads. An unchanged widget does not
+// repaint when the same widget instance is reused. A new widget explicitly
+// refreshes its data, including mutable lists.
 import 'dart:collection';
 
 import 'package:fleury/fleury.dart';
@@ -78,22 +79,21 @@ void main() {
     expect(plain, lessThan(interactive));
   });
 
-  testWidgets('an unchanged series list does not repaint', (tester) {
+  testWidgets('reusing an unchanged chart widget does not repaint', (tester) {
     addTearDown(() => RepaintBoundaryDebugStats.beginFrame(enabled: false));
     final host = _Host();
     final series = [
       LineSeries([for (var i = 0; i < 100; i++) (i, i % 10)]),
     ];
+    final chart = SizedBox(
+      width: 60,
+      height: 12,
+      child: LineChart(series: series),
+    );
     tester.pumpWidget(
       NotifierBuilder(
         notifier: host,
-        builder: (_, _) => RepaintBoundary(
-          child: SizedBox(
-            width: 60,
-            height: 12,
-            child: LineChart(series: series),
-          ),
-        ),
+        builder: (_, _) => RepaintBoundary(child: chart),
       ),
     );
     tester.render(size: const CellSize(60, 12));

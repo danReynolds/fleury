@@ -99,10 +99,6 @@ class _SelectState<T> extends State<Select<T>> {
   FormControlRegistration? _formRegistration;
   bool _hovered = false;
 
-  // The overlay builds the list above any Theme the app set, so it carries
-  // the theme where this Select sits.
-  ThemeData? _theme;
-
   bool get _isOpen => _entry != null;
 
   @override
@@ -141,11 +137,6 @@ class _SelectState<T> extends State<Select<T>> {
   @override
   void didChangeDependencies() {
     super.didChangeDependencies();
-    final theme = Theme.of(context);
-    if (theme != _theme) {
-      _theme = theme;
-      _entry?.markNeedsBuild();
-    }
     final registration = FormControlScope.maybeOf(context);
     if (!identical(registration, _formRegistration)) {
       _formRegistration?.release(this);
@@ -212,27 +203,25 @@ class _SelectState<T> extends State<Select<T>> {
     final overlay = Overlay.of(context);
     _priorFocus = manager.focusedNode;
     final entry = OverlayEntry(
-      builder: (_) => Theme(
-        data: _theme!,
-        child: AnchoredFloat(
-          notifier: _bounds,
-          onTapOutside: _dismiss,
-          child: _SelectList<T>(
-            trapContentKey: _trapContentKey,
-            options: widget.options,
-            semanticLabel: widget.semanticLabel,
-            initialIndex: _initialIndex(),
-            appliedIndex: _appliedIndex(),
-            selectionStyle: _theme!.selectionStyle,
-            mutedStyle: _theme!.mutedStyle,
-            borderStyle: _theme!.borderStyle,
-            onHighlighted: widget.onHighlightChanged,
-            onPicked: (value) {
-              _close();
-              _commit(value);
-            },
-            onDismiss: _dismiss,
-          ),
+      owner: context,
+      builder: (context) => AnchoredFloat(
+        notifier: _bounds,
+        onTapOutside: _dismiss,
+        child: _SelectList<T>(
+          trapContentKey: _trapContentKey,
+          options: widget.options,
+          semanticLabel: widget.semanticLabel,
+          initialIndex: _initialIndex(),
+          appliedIndex: _appliedIndex(),
+          selectionStyle: Theme.of(context).selectionStyle,
+          mutedStyle: Theme.of(context).mutedStyle,
+          borderStyle: Theme.of(context).borderStyle,
+          onHighlighted: widget.onHighlightChanged,
+          onPicked: (value) {
+            _close();
+            _commit(value);
+          },
+          onDismiss: _dismiss,
         ),
       ),
     );

@@ -151,6 +151,7 @@ final class TuiFrameLoop {
       previous: previous,
       next: next,
       damage: damage,
+      decorationRows: diff.decorationRows,
       bufferPrepareTime: bufferPrepareStopwatch.elapsed,
     );
   }
@@ -168,6 +169,7 @@ final class TuiRenderedFrame {
     required this.previous,
     required this.next,
     required this.damage,
+    required this.decorationRows,
     required this.bufferPrepareTime,
   });
 
@@ -176,6 +178,9 @@ final class TuiRenderedFrame {
 
   /// The newly painted frame.
   final CellBuffer next;
+
+  /// Coverage changes that do not necessarily require visual presentation.
+  final Set<int> decorationRows;
 
   /// Damage metadata captured while painting [next].
   final TuiFrameDamage damage;

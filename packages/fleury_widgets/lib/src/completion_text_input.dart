@@ -199,12 +199,6 @@ class _CompletionTextInputState extends State<CompletionTextInput> {
   FocusManager? _manager;
   OverlayEntry? _entry;
 
-  // The overlay builds the suggestions above any Theme the app set, so they
-  // carry the theme where this field sits.
-  ThemeData? _theme;
-  CellStyle _selectionStyle = const CellStyle(inverse: true);
-  BorderStyle _borderStyle = BorderStyle.rounded;
-
   @override
   void initState() {
     super.initState();
@@ -260,11 +254,6 @@ class _CompletionTextInputState extends State<CompletionTextInput> {
       _manager = manager;
       _manager?.addListener(_syncCompletion);
     }
-    final theme = Theme.of(context);
-    if (theme != _theme) {
-      _theme = theme;
-      _entry?.markNeedsBuild();
-    }
   }
 
   void _onTextChange() {
@@ -317,13 +306,11 @@ class _CompletionTextInputState extends State<CompletionTextInput> {
     }
     if (_entry == null) {
       final entry = OverlayEntry(
-        builder: (context) => Theme(
-          data: _theme!,
-          child: AnchoredFloat(
-            notifier: _bounds,
-            onTapOutside: _dismissOverlay,
-            child: _suggestions(context),
-          ),
+        owner: context,
+        builder: (context) => AnchoredFloat(
+          notifier: _bounds,
+          onTapOutside: _dismissOverlay,
+          child: _suggestions(context),
         ),
       );
       _entry = entry;
@@ -357,6 +344,7 @@ class _CompletionTextInputState extends State<CompletionTextInput> {
   }
 
   Widget _suggestions(BuildContext context) {
+    final theme = Theme.of(context);
     final state = _completion.state;
     final options = state.options;
     final visible = options.length > widget.maxVisible
@@ -418,7 +406,7 @@ class _CompletionTextInputState extends State<CompletionTextInput> {
       // completion rows are chrome, not copyable content.
       child: SelectionArea.disabled(
         child: Container.framed(
-          border: BoxBorder(style: _borderStyle),
+          border: BoxBorder(style: theme.borderStyle),
           child: SizedBox(
             width: boxWidth,
             height: visible,
@@ -474,7 +462,7 @@ class _CompletionTextInputState extends State<CompletionTextInput> {
                     },
                     child: Text(
                       '${selected ? '› ' : '  '}$label',
-                      style: selected ? _selectionStyle : CellStyle.none,
+                      style: selected ? theme.selectionStyle : CellStyle.none,
                       // One row per option, always: a label too wide for the box
                       // is cut with an ellipsis rather than wrapped into the row
                       // that belongs to the next option.
@@ -507,9 +495,6 @@ class _CompletionTextInputState extends State<CompletionTextInput> {
 
   @override
   Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    _selectionStyle = theme.selectionStyle;
-    _borderStyle = theme.borderStyle;
     return BoundsObserver(
       notifier: _bounds,
       child: TextInput(

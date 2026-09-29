@@ -37,7 +37,11 @@ import 'media_query.dart';
 import 'pointer.dart';
 import 'theme.dart';
 import 'text_input.dart'
-    show TextClipboardPolicy, TextEditingController, textClipboardSemanticState;
+    show
+        TextClipboardPolicy,
+        TextEditingController,
+        TextEditingPaste,
+        textClipboardSemanticState;
 import 'tui_binding.dart';
 
 /// A multi-line editable text widget. Pair with a [TextEditingController]
@@ -177,16 +181,29 @@ class _TextAreaState extends State<TextArea>
   bool _ownsFocusNode = false;
   bool _hovered = false;
   FormControlRegistration? _formRegistration;
+  TextEditingPaste? _pasteTransaction;
   late final TextPasteDriver _paste = TextPasteDriver(
     policy: () => widget.pastePolicy,
     atomic: () => _controller.editPolicy != null,
     checkSegment: (text, preceding) =>
         _controller.checkInsertion(text, precedingCodeUnits: preceding),
     onRejected: (reason) => _controller.onEditRejected?.call(reason),
+    beginTransaction: () {
+      _pasteTransaction = _controller.beginPaste(singleLine: false);
+    },
+    endTransaction: () {
+      _pasteTransaction?.close();
+      _pasteTransaction = null;
+    },
     documentLength: () => _controller.text.length,
-    applyEdit: (text, {required coalesce}) => _edit(
-      () => _controller.paste(text, singleLine: false, coalesce: coalesce),
-    ),
+    applyEdit: (text, {required coalesce}) => _edit(() {
+      final transaction = _pasteTransaction;
+      if (transaction != null) {
+        transaction.append(text);
+      } else {
+        _controller.paste(text, singleLine: false, coalesce: coalesce);
+      }
+    }),
     isAttached: () => mounted,
     onProgressChanged: () => setState(() {}),
     schedulePostFrame: _schedulePasteStep,
@@ -311,6 +328,7 @@ class _TextAreaState extends State<TextArea>
 
   void _onChange() {
     _paste.discardAtomic();
+    if (_pasteTransaction?.isActive == false) _paste.discard();
     setState(() {});
     final text = _controller.text;
     if (text != _lastNotifiedText) {
@@ -689,7 +707,7 @@ class _TextAreaState extends State<TextArea>
       details,
       obscured: widget.obscureText,
     );
-    _focusNode.requestFocus();
+    _focusNode.requestFocus(reveal: false);
   }
 
   void _pointerDrag(PointerDragDetails details) {

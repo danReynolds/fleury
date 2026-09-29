@@ -68,6 +68,7 @@ class InputParser {
     this.maxCsiSequenceLength = 256,
     this.maxControlStringLength = 64 * 1024,
     this.maxPasteBytes = 1024 * 1024,
+    this.keypadDecimal = '.',
     Iterable<LegacyKeySequence> additionalLegacyKeySequences =
         const <LegacyKeySequence>[],
   }) : _legacySequences = _LegacySequenceTable(<LegacyKeySequence>[
@@ -76,7 +77,14 @@ class InputParser {
        ]),
        assert(maxCsiSequenceLength > 0),
        assert(maxControlStringLength > 0),
-       assert(maxPasteBytes > 0);
+       assert(maxPasteBytes > 0),
+       assert(
+         keypadDecimal.runes.length == 1 &&
+             keypadDecimal.runes.single >= 0x20 &&
+             !(keypadDecimal.runes.single >= 0x7f &&
+                 keypadDecimal.runes.single <= 0x9f),
+         'keypadDecimal must be one printable Unicode scalar',
+       );
 
   /// Maximum bytes accepted between `CSI` and its final byte.
   ///
@@ -112,6 +120,13 @@ class InputParser {
   /// scalar may carry over by at most three bytes, and a CRLF/LFCR pair by one
   /// byte, rather than splitting either unit across events.
   final int maxPasteBytes;
+
+  /// Fallback decimal character when a keypad report carries no text.
+  /// Associated text teaches the session's actual decimal key when available.
+  /// Driver constructors and FLEURY_KEYPAD_DECIMAL configure legacy tiers.
+  final String keypadDecimal;
+  String? _learnedKeypadDecimal;
+  KeyCode? _heldKeypadDecimal;
 
   _State _state = _State.ground;
   final List<int> _pendingUtf8 = <int>[];
@@ -270,6 +285,7 @@ class InputParser {
   /// key/UTF-8/protocol prefixes so input after a child or suspend cannot finish
   /// an earlier key. This does not flush bytes still queued in the OS.
   void endInputOwnership(TuiEventSink sink) {
+    _heldKeypadDecimal = null;
     if (_state == _State.paste) _finishPaste(sink);
     _legacyCandidate.clear();
     _pendingUtf8.clear();
@@ -291,6 +307,7 @@ class InputParser {
   /// from its stdin `onDone` path; idle timeouts must continue to use [flush]
   /// so a slow but valid paste is never truncated.
   void finish(TuiEventSink sink) {
+    _heldKeypadDecimal = null;
     _replayLegacyCandidate(sink);
     _swallowNextLf = false;
     switch (_state) {
@@ -784,31 +801,33 @@ class InputParser {
       0x51 => KeyCode.f2,
       0x52 => KeyCode.f3,
       0x53 => KeyCode.f4,
-      0x70 => KeyCode.keypad0,
-      0x71 => KeyCode.keypad1,
-      0x72 => KeyCode.keypad2,
-      0x73 => KeyCode.keypad3,
-      0x74 => KeyCode.keypad4,
-      0x75 => KeyCode.keypad5,
-      0x76 => KeyCode.keypad6,
-      0x77 => KeyCode.keypad7,
-      0x78 => KeyCode.keypad8,
-      0x79 => KeyCode.keypad9,
-      0x6A => KeyCode.keypadMultiply,
-      0x6B => KeyCode.keypadAdd,
-      0x6C => KeyCode.keypadSeparator,
-      0x6D => KeyCode.keypadSubtract,
-      0x6E => KeyCode.keypadDecimal,
-      0x6F => KeyCode.keypadDivide,
-      0x4D => KeyCode.keypadEnter,
-      0x58 => KeyCode.keypadEqual,
+      0x70 => KeyCode.forSpecial(SpecialKey.keypad0),
+      0x71 => KeyCode.forSpecial(SpecialKey.keypad1),
+      0x72 => KeyCode.forSpecial(SpecialKey.keypad2),
+      0x73 => KeyCode.forSpecial(SpecialKey.keypad3),
+      0x74 => KeyCode.forSpecial(SpecialKey.keypad4),
+      0x75 => KeyCode.forSpecial(SpecialKey.keypad5),
+      0x76 => KeyCode.forSpecial(SpecialKey.keypad6),
+      0x77 => KeyCode.forSpecial(SpecialKey.keypad7),
+      0x78 => KeyCode.forSpecial(SpecialKey.keypad8),
+      0x79 => KeyCode.forSpecial(SpecialKey.keypad9),
+      0x6A => KeyCode.forSpecial(SpecialKey.keypadMultiply),
+      0x6B => KeyCode.forSpecial(SpecialKey.keypadAdd),
+      0x6C => KeyCode.forSpecial(SpecialKey.keypadSeparator),
+      0x6D => KeyCode.forSpecial(SpecialKey.keypadSubtract),
+      0x6E => KeyCode.forSpecial(SpecialKey.keypadDecimal),
+      0x6F => KeyCode.forSpecial(SpecialKey.keypadDivide),
+      0x4D => KeyCode.forSpecial(SpecialKey.keypadEnter),
+      0x58 => KeyCode.forSpecial(SpecialKey.keypadEqual),
       _ => null,
     };
     if (key != null) {
       final position = _positionFor(key);
       // An application-mode keypad key folds as a Kitty one does: a digit
       // types, KP Enter is Enter ([keypadMeaning]).
-      final code = keypadMeaning[key.special] ?? key;
+      final code = key.special == SpecialKey.keypadDecimal
+          ? KeyCode.forCharacter(_learnedKeypadDecimal ?? keypadDecimal)
+          : keypadMeaning[key.special] ?? key;
       final character = code.character;
       sink.add(
         character == null
@@ -1012,13 +1031,19 @@ class InputParser {
       // surface: KP_1 types a 1 and KP Enter is Enter, with the keypad kept
       // on the position (§8.7's keypad distinction) rather than on a code
       // no text field, button or list treats as its key.
-      final code = keypadMeaning[kc.special] ?? kc;
+      if (kc.special == SpecialKey.keypadDecimal &&
+          !_kittyAssociatedTextIsValid()) {
+        return;
+      }
+      final code = kc.special == SpecialKey.keypadDecimal
+          ? _decimalCode(type)
+          : keypadMeaning[kc.special] ?? kc;
       final character = code.character;
       if (character != null) {
         _emitCharacterKey(
           sink,
           code,
-          character.codeUnitAt(0),
+          character.runes.first,
           modifiers,
           type,
           position,
@@ -1044,6 +1069,28 @@ class InputParser {
       type,
       position,
     );
+  }
+
+  KeyCode _decimalCode(KeyEventType type) {
+    if (type == KeyEventType.up) {
+      final key =
+          _heldKeypadDecimal ??
+          KeyCode.forCharacter(_learnedKeypadDecimal ?? keypadDecimal);
+      _heldKeypadDecimal = null;
+      return key;
+    }
+    final text = _kittyAssociatedText();
+    if (text != null &&
+        text.runes.length == 1 &&
+        text.runes.single >= 0x20 &&
+        !(text.runes.single >= 0x7f && text.runes.single <= 0x9f)) {
+      _learnedKeypadDecimal = text;
+    }
+    final key = type == KeyEventType.repeat && _heldKeypadDecimal != null
+        ? _heldKeypadDecimal!
+        : KeyCode.forCharacter(_learnedKeypadDecimal ?? keypadDecimal);
+    _heldKeypadDecimal = key;
+    return key;
   }
 
   /// Emits a Kitty report of a key that types [code]'s character, whose

@@ -52,6 +52,7 @@ class PosixTerminalDriver
     with TerminalAttentionSequences
     implements TerminalDriver, TerminalHandoffDriver, InlineTerminalDriver {
   PosixTerminalDriver({
+    String? keypadDecimal,
     Stdin? stdinOverride,
     Stdout? stdoutOverride,
     this.signalGrace = const Duration(seconds: 5),
@@ -65,7 +66,13 @@ class PosixTerminalDriver
       void Function(ProcessSignal signal) onSignal,
     )?
     signalWatcherOverride,
-  }) : _stdin = stdinOverride ?? stdin,
+  }) : _parser = InputParser(
+         keypadDecimal:
+             keypadDecimal ??
+             Platform.environment['FLEURY_KEYPAD_DECIMAL'] ??
+             '.',
+       ),
+       _stdin = stdinOverride ?? stdin,
        _stdout = stdoutOverride ?? _nativeOutput(),
        _forceExitOverride = forceExitOverride,
        _selfStopOverride = selfStopOverride,
@@ -146,7 +153,7 @@ class PosixTerminalDriver
   late final bool _stdinIsTerminal = _stdin.hasTerminal;
   late final bool _stdoutIsTerminal = _stdout.hasTerminal;
 
-  final InputParser _parser = InputParser();
+  final InputParser _parser;
   late final StreamController<TuiEvent> _events;
   final _ParserSink _sink = _ParserSink();
   late final TerminalQueryRunner _queryRunner;

@@ -102,9 +102,24 @@ Future<void> main(List<String> args) async {
   final samples = <_RunMetrics>[];
   final attempts = CaptureAttempts(runs);
   final Process serve;
+  final serveDiagnostics = <String>[];
+  final kernelDir = Directory.systemTemp.createTempSync('fleury-wire-kernel-');
+  final scenarioKernel = '${kernelDir.path}/scenario.dill';
   try {
-    serve = await _bootServe(paths, port, scenario, steps, intervalMs);
+    // Source compilation is setup, not app attachment or input latency. A
+    // fresh frontend per session can exceed serve's unchanged attach timeout
+    // under CPU load. Compile once, then retain JIT execution for every run.
+    final compile = await Process.run(Platform.resolvedExecutable,
+        ['compile', 'kernel', paths.scenarioApp, '-o', scenarioKernel],
+        workingDirectory: paths.profilingRoot);
+    if (compile.exitCode != 0) {
+      throw StateError(
+          'Scenario compilation failed: ${compile.stdout}\n${compile.stderr}');
+    }
+    serve = await _bootServe(paths, port, scenario, steps, intervalMs,
+        serveDiagnostics, scenarioKernel);
   } catch (e) {
+    kernelDir.deleteSync(recursive: true);
     if (outPath != null) {
       File(outPath).writeAsStringSync(jsonEncode({
         'scenario': scenario,
@@ -177,19 +192,22 @@ Future<void> main(List<String> args) async {
     }
   } finally {
     await _shutdown(serve);
+    kernelDir.deleteSync(recursive: true);
   }
 
   final result = <String, Object?>{
     if (samples.isNotEmpty) ..._median(scenario, steps, intervalMs, samples),
     'scenario': scenario,
-    'runtime': 'JIT live socket',
+    'runtime': 'JIT live socket from prepared kernel',
     'boundary': latencyMode
         ? 'INPUT_EVENT send to PLAN socket arrival; excludes display'
         : 'live socket capture; excludes display',
     ...attempts.toJson(),
+    if (!attempts.complete) 'serveDiagnostics': serveDiagnostics,
   };
   if (!attempts.complete) {
     exitCode = 1;
+    stderr.writeln(serveDiagnostics.join('\n'));
     stderr.writeln('Incomplete capture: all attempted runs are retained; '
         'do not use successful-run medians as a passing baseline.');
   }
@@ -568,6 +586,8 @@ Future<Process> _bootServe(
   String scenario,
   int steps,
   int intervalMs,
+  List<String> stderrLines,
+  String scenarioKernel,
 ) async {
   final proc = await Process.start(
     Platform.resolvedExecutable,
@@ -578,8 +598,7 @@ Future<Process> _bootServe(
       '--port=$port',
       '--spawn',
       Platform.resolvedExecutable,
-      'run',
-      paths.scenarioApp,
+      scenarioKernel,
       scenario,
       '--steps=$steps',
       '--interval-ms=$intervalMs',
@@ -587,12 +606,12 @@ Future<Process> _bootServe(
     workingDirectory: paths.profilingRoot,
   );
   final ready = Completer<void>();
-  final stderrLines = <String>[];
   final stderrSub = proc.stderr
       .transform(utf8.decoder)
       .transform(const LineSplitter())
       .listen((line) {
     stderrLines.add(line);
+    if (stderrLines.length > 80) stderrLines.removeAt(0);
     if (line.contains('spawn mode') && !ready.isCompleted) ready.complete();
   });
   unawaited(proc.stdout.drain<void>().catchError((_) {}));

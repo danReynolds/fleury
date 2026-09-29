@@ -304,43 +304,71 @@ final class KeyCode extends KeySequence implements KeySelector {
   static const KeyCode printScreen = KeyCode._special(SpecialKey.printScreen);
   static const KeyCode pause = KeyCode._special(SpecialKey.pause);
   static const KeyCode menu = KeyCode._special(SpecialKey.menu);
+  @Deprecated('Use KeyPosition for a physical key or KeyCode for its meaning.')
   static const KeyCode keypad0 = KeyCode._special(SpecialKey.keypad0);
+  @Deprecated('Use KeyPosition for a physical key or KeyCode for its meaning.')
   static const KeyCode keypad1 = KeyCode._special(SpecialKey.keypad1);
+  @Deprecated('Use KeyPosition for a physical key or KeyCode for its meaning.')
   static const KeyCode keypad2 = KeyCode._special(SpecialKey.keypad2);
+  @Deprecated('Use KeyPosition for a physical key or KeyCode for its meaning.')
   static const KeyCode keypad3 = KeyCode._special(SpecialKey.keypad3);
+  @Deprecated('Use KeyPosition for a physical key or KeyCode for its meaning.')
   static const KeyCode keypad4 = KeyCode._special(SpecialKey.keypad4);
+  @Deprecated('Use KeyPosition for a physical key or KeyCode for its meaning.')
   static const KeyCode keypad5 = KeyCode._special(SpecialKey.keypad5);
+  @Deprecated('Use KeyPosition for a physical key or KeyCode for its meaning.')
   static const KeyCode keypad6 = KeyCode._special(SpecialKey.keypad6);
+  @Deprecated('Use KeyPosition for a physical key or KeyCode for its meaning.')
   static const KeyCode keypad7 = KeyCode._special(SpecialKey.keypad7);
+  @Deprecated('Use KeyPosition for a physical key or KeyCode for its meaning.')
   static const KeyCode keypad8 = KeyCode._special(SpecialKey.keypad8);
+  @Deprecated('Use KeyPosition for a physical key or KeyCode for its meaning.')
   static const KeyCode keypad9 = KeyCode._special(SpecialKey.keypad9);
+  @Deprecated('Use KeyPosition for a physical key or KeyCode for its meaning.')
   static const KeyCode keypadDecimal = KeyCode._special(
     SpecialKey.keypadDecimal,
   );
+  @Deprecated('Use KeyPosition for a physical key or KeyCode for its meaning.')
   static const KeyCode keypadDivide = KeyCode._special(SpecialKey.keypadDivide);
+  @Deprecated('Use KeyPosition for a physical key or KeyCode for its meaning.')
   static const KeyCode keypadMultiply = KeyCode._special(
     SpecialKey.keypadMultiply,
   );
+  @Deprecated('Use KeyPosition for a physical key or KeyCode for its meaning.')
   static const KeyCode keypadSubtract = KeyCode._special(
     SpecialKey.keypadSubtract,
   );
+  @Deprecated('Use KeyPosition for a physical key or KeyCode for its meaning.')
   static const KeyCode keypadAdd = KeyCode._special(SpecialKey.keypadAdd);
+  @Deprecated('Use KeyPosition for a physical key or KeyCode for its meaning.')
   static const KeyCode keypadEnter = KeyCode._special(SpecialKey.keypadEnter);
+  @Deprecated('Use KeyPosition for a physical key or KeyCode for its meaning.')
   static const KeyCode keypadEqual = KeyCode._special(SpecialKey.keypadEqual);
+  @Deprecated('Use KeyPosition for a physical key or KeyCode for its meaning.')
   static const KeyCode keypadSeparator = KeyCode._special(
     SpecialKey.keypadSeparator,
   );
+  @Deprecated('Use KeyPosition for a physical key or KeyCode for its meaning.')
   static const KeyCode keypadLeft = KeyCode._special(SpecialKey.keypadLeft);
+  @Deprecated('Use KeyPosition for a physical key or KeyCode for its meaning.')
   static const KeyCode keypadRight = KeyCode._special(SpecialKey.keypadRight);
+  @Deprecated('Use KeyPosition for a physical key or KeyCode for its meaning.')
   static const KeyCode keypadUp = KeyCode._special(SpecialKey.keypadUp);
+  @Deprecated('Use KeyPosition for a physical key or KeyCode for its meaning.')
   static const KeyCode keypadDown = KeyCode._special(SpecialKey.keypadDown);
+  @Deprecated('Use KeyPosition for a physical key or KeyCode for its meaning.')
   static const KeyCode keypadPageUp = KeyCode._special(SpecialKey.keypadPageUp);
+  @Deprecated('Use KeyPosition for a physical key or KeyCode for its meaning.')
   static const KeyCode keypadPageDown = KeyCode._special(
     SpecialKey.keypadPageDown,
   );
+  @Deprecated('Use KeyPosition for a physical key or KeyCode for its meaning.')
   static const KeyCode keypadHome = KeyCode._special(SpecialKey.keypadHome);
+  @Deprecated('Use KeyPosition for a physical key or KeyCode for its meaning.')
   static const KeyCode keypadEnd = KeyCode._special(SpecialKey.keypadEnd);
+  @Deprecated('Use KeyPosition for a physical key or KeyCode for its meaning.')
   static const KeyCode keypadInsert = KeyCode._special(SpecialKey.keypadInsert);
+  @Deprecated('Use KeyPosition for a physical key or KeyCode for its meaning.')
   static const KeyCode keypadDelete = KeyCode._special(SpecialKey.keypadDelete);
   static const KeyCode keypadBegin = KeyCode._special(SpecialKey.keypadBegin);
   static const KeyCode mediaPlay = KeyCode._special(SpecialKey.mediaPlay);
@@ -1413,7 +1441,7 @@ final class _KeyStep {
 
     final special = logical.special;
     if (special != null) {
-      if (event.code.special != special) return false;
+      if (!event.matches(logical)) return false;
       return shift == event.hasShift;
     }
 
@@ -2000,9 +2028,10 @@ final class KeyEvent extends TuiEvent {
   /// `KeyPosition.w`). For a [KeyPosition], the one-way degradation rule
   /// applies per press: a known position matches by position only; an
   /// unknown one falls back to the selector's [KeyPosition.usTwin]. A
-  /// [KeyCode] selector never upgrades to positional matching.
+  /// [KeyCode] selector matches its logical identity. Deprecated keypad
+  /// aliases additionally require their known keypad position.
   bool matches(KeySelector selector) {
-    if (selector is KeyCode) return code == selector;
+    if (selector is KeyCode) return matchesLogicalKey(code, position, selector);
     if (selector is KeyPosition) {
       final p = position;
       if (p != null) return p == selector;
