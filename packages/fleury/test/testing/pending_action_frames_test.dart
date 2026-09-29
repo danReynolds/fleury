@@ -113,6 +113,55 @@ void main() {
     await expectation;
   });
 
+  for (final semantic in [false, true]) {
+    testWidgets(
+      '${semantic ? "semantic action" : "command"} can dispose during startup',
+      (tester) async {
+        Future<void> run() {
+          tester.dispose();
+          return Completer<void>().future;
+        }
+
+        tester.pumpWidget(
+          FleuryApp(
+            title: 'Dispose',
+            commands: [
+              AppCommand(
+                id: const CommandId('dispose'),
+                title: 'Dispose',
+                run: (_) => run(),
+              ),
+            ],
+            home: Semantics(
+              role: SemanticRole.button,
+              label: 'Dispose',
+              actions: const {SemanticAction.activate},
+              onAction: (_) => run(),
+              child: const Text('Dispose'),
+            ),
+          ),
+        );
+        final Future<Object?> result = semantic
+            ? tester.invokeSemanticAction(
+                SemanticAction.activate,
+                role: SemanticRole.button,
+                label: 'Dispose',
+              )
+            : tester.invokeCommand(const CommandId('dispose'));
+        await expectLater(
+          result.timeout(const Duration(seconds: 1)),
+          throwsA(
+            isA<StateError>().having(
+              (error) => error.message,
+              'message',
+              'FleuryTester disposed during an action.',
+            ),
+          ),
+        );
+      },
+    );
+  }
+
   testWidgets('a failed command after a frame preserves its outcome', (
     tester,
   ) async {

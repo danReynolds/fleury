@@ -2286,9 +2286,9 @@ void _indexOwnedIds(
     if (graftedIds.contains(n.id)) return; // owned by a child contributor
     final existing = elements[n.id];
     if (existing != null && !identical(existing, element)) {
-      // Two DIFFERENT contributors derived the same id — e.g. a reused key under
-      // distinct unkeyed parents, which `semanticAnchorOf` can fold to one
-      // `auto:` id. Drop it so dispatch fails CLOSED (elementById → null →
+      // Two DIFFERENT contributors supplied the same id — for example, an
+      // app-owned id reused by independent controls. Drop it so dispatch fails
+      // CLOSED (elementById → null →
       // "unsupported") instead of silently routing to whichever was walked last.
       // The snapshot's `where(id:)` still sees both nodes, so the MCP layer
       // already rejects the id as ambiguous; this gives the terminal/AT dispatch

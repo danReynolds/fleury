@@ -301,12 +301,14 @@ class FleuryTester {
     });
   }
 
-  Future<T> _awaitAction<T>(Future<T> action) async {
+  Future<T> _runAction<T>(Future<T> Function() invoke) async {
     if (_pendingActions++ == 0) _actionFrameFailure = Completer<Never>();
-    // Includes builds/callbacks queued synchronously before the handler returned
-    // its future, when there was no pending action yet.
-    _scheduleActionFrame();
     try {
+      // Register the waiter before invoking user code: a handler can dispose
+      // the tester synchronously, before returning its future. Future.sync
+      // also keeps a synchronous throw on the same cleanup path.
+      final action = Future<T>.sync(invoke);
+      _scheduleActionFrame();
       return await Future.any<T>([action, _actionFrameFailure!.future]);
     } finally {
       if (--_pendingActions == 0) {
@@ -1021,8 +1023,8 @@ class FleuryTester {
     // Dispatch through the same map-based path the live wire uses, so the tester
     // can't pass where production fails (the divergence that previously hid a
     // cross-fire bug). The tree from `semantics()` carries the id→element map.
-    final result = await _awaitAction(
-      invokeSemanticActionFromElement(
+    final result = await _runAction(
+      () => invokeSemanticActionFromElement(
         tree: tree,
         id: target.id,
         action: action,
@@ -1074,8 +1076,8 @@ class FleuryTester {
     final buildContext = _defaultCommandContext(context);
     final registry = commandRegistry(context: buildContext);
     final resolution = _resolveCommandForTester(id, registry, buildContext);
-    final result = await _awaitAction(
-      resolution == null
+    final result = await _runAction(
+      () => resolution == null
           ? registry.invoke(id, buildContext: buildContext)
           : resolution.registry.invokeCommand(
               resolution.command,
