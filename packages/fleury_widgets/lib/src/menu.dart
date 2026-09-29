@@ -104,21 +104,7 @@ class _MenuState extends State<Menu> {
   OverlayEntry? _entry;
   FocusNode? _priorFocus;
 
-  // The overlay builds the panel above any Theme the app set, so it carries
-  // the theme where this Menu sits.
-  ThemeData? _theme;
-
   bool get _isOpen => _entry != null;
-
-  @override
-  void didChangeDependencies() {
-    super.didChangeDependencies();
-    final theme = Theme.of(context);
-    if (theme != _theme) {
-      _theme = theme;
-      _entry?.markNeedsBuild();
-    }
-  }
 
   KeyEventResult _onTriggerKey(KeyEvent event) {
     if (!_isOpen && event.code == KeyCode.enter) {
@@ -134,30 +120,28 @@ class _MenuState extends State<Menu> {
     final overlay = Overlay.of(context);
     _priorFocus = manager.focusedNode;
     final entry = OverlayEntry(
+      owner: context,
       // The root panel owns the whole slot for input: without the barrier a
       // click on the menu's backdrop fires whatever the app painted there.
       // Submenu entries deliberately do NOT add one — they paint above this
       // barrier, and a second barrier would shadow the root panel's own rows.
-      builder: (_) => Theme(
-        data: _theme!,
-        child: AnchoredFloat(
-          notifier: _bounds,
-          onTapOutside: _close,
-          child: _MenuBody(
-            key: _bodyKey,
-            trapContentKey: _trapContentKey,
-            entries: widget.items,
-            semanticLabel: widget.semanticLabel,
-            depth: 0,
-            selectionStyle: _theme!.selectionStyle,
-            mutedStyle: _theme!.mutedStyle,
-            borderStyle: _theme!.borderStyle,
-            onLeafSelected: (action) {
-              _close();
-              action();
-            },
-            onDismiss: _close,
-          ),
+      builder: (context) => AnchoredFloat(
+        notifier: _bounds,
+        onTapOutside: _close,
+        child: _MenuBody(
+          key: _bodyKey,
+          trapContentKey: _trapContentKey,
+          entries: widget.items,
+          semanticLabel: widget.semanticLabel,
+          depth: 0,
+          selectionStyle: Theme.of(context).selectionStyle,
+          mutedStyle: Theme.of(context).mutedStyle,
+          borderStyle: Theme.of(context).borderStyle,
+          onLeafSelected: (action) {
+            _close();
+            action();
+          },
+          onDismiss: _close,
         ),
       ),
     );
@@ -246,8 +230,9 @@ class _MenuState extends State<Menu> {
           },
           child: KeyDetector(
             onKey: (event) {
-              if ((_onTriggerKey)(event) == KeyEventResult.handled)
+              if ((_onTriggerKey)(event) == KeyEventResult.handled) {
                 event.consume();
+              }
             },
             child: Focus(
               focusNode: _triggerFocus,
@@ -321,10 +306,6 @@ class _MenuBodyState extends State<_MenuBody> {
   BoundsNotifier _boundsForRow(int index) =>
       _rowBounds.putIfAbsent(index, BoundsNotifier.new);
   OverlayEntry? _childEntry;
-
-  // A submenu's panel builds under the overlay too; it carries the theme
-  // this panel was given.
-  ThemeData? _theme;
 
   /// Reaches the open child panel's state, so a close driven from above can
   /// retire the chain's focus traps deepest-first (see [releaseChainFocusTraps]).
@@ -444,34 +425,32 @@ class _MenuBodyState extends State<_MenuBody> {
     final childKey = GlobalKey<_MenuBodyState>();
     final anchor = _boundsForRow(index);
     final entry = OverlayEntry(
+      owner: context,
       // A bare BoundsAnchor, deliberately: this panel paints ABOVE the root
       // panel's barrier, so its own rows already win, and a second barrier
       // would shadow the root panel's rows instead.
-      builder: (_) => Theme(
-        data: _theme!,
-        child: BoundsAnchor(
-          notifier: anchor,
-          alignment: Alignment.topRight,
-          anchorAlignment: Alignment.topLeft,
-          gap: 1,
-          child: _MenuBody(
-            key: childKey,
-            entries: sub.items,
-            semanticLabel: sub.label,
-            depth: widget.depth + 1,
-            selectionStyle: widget.selectionStyle,
-            mutedStyle: widget.mutedStyle,
-            borderStyle: widget.borderStyle,
-            onLeafSelected: (action) {
-              // Retire this panel's trap as the leaf selection bubbles through
-              // each parent panel. The root can then restore the trigger in the
-              // same close transaction.
-              _releaseFocusTrap();
-              widget.onLeafSelected(action);
-            },
-            onDismiss: _closeSubmenu,
-            canGoBack: true,
-          ),
+      builder: (context) => BoundsAnchor(
+        notifier: anchor,
+        alignment: Alignment.topRight,
+        anchorAlignment: Alignment.topLeft,
+        gap: 1,
+        child: _MenuBody(
+          key: childKey,
+          entries: sub.items,
+          semanticLabel: sub.label,
+          depth: widget.depth + 1,
+          selectionStyle: Theme.of(context).selectionStyle,
+          mutedStyle: Theme.of(context).mutedStyle,
+          borderStyle: Theme.of(context).borderStyle,
+          onLeafSelected: (action) {
+            // Retire this panel's trap as the leaf selection bubbles through
+            // each parent panel. The root can then restore the trigger in the
+            // same close transaction.
+            _releaseFocusTrap();
+            widget.onLeafSelected(action);
+          },
+          onDismiss: _closeSubmenu,
+          canGoBack: true,
         ),
       ),
     );
@@ -530,16 +509,6 @@ class _MenuBodyState extends State<_MenuBody> {
           return _typeahead(ch);
         }
         return KeyEventResult.ignored;
-    }
-  }
-
-  @override
-  void didChangeDependencies() {
-    super.didChangeDependencies();
-    final theme = Theme.of(context);
-    if (theme != _theme) {
-      _theme = theme;
-      _childEntry?.markNeedsBuild();
     }
   }
 

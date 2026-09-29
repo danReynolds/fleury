@@ -192,12 +192,16 @@ final class TextPasteDriver {
     TextEditRejection? Function(String text, int precedingCodeUnits)?
     checkSegment,
     void Function(TextEditRejection)? onRejected,
+    void Function()? beginTransaction,
+    void Function()? endTransaction,
     required int Function() documentLength,
     required void Function(String text, {required bool coalesce}) applyEdit,
     required bool Function() isAttached,
     required void Function() onProgressChanged,
     required void Function(void Function() callback) schedulePostFrame,
-  }) : _atomic = atomic,
+  }) : _beginTransaction = beginTransaction,
+       _endTransaction = endTransaction,
+       _atomic = atomic,
        _checkSegment = checkSegment,
        _onRejected = onRejected,
        _policy = policy,
@@ -244,6 +248,8 @@ final class TextPasteDriver {
     if (_isAttached()) _applyEdit(accepted, coalesce: false);
   }
 
+  final void Function()? _beginTransaction;
+  final void Function()? _endTransaction;
   final TextPastePolicy Function() _policy;
   final int Function() _documentLength;
   final void Function(String text, {required bool coalesce}) _applyEdit;
@@ -285,6 +291,7 @@ final class TextPasteDriver {
   }
 
   void discard() {
+    final wasActive = _active;
     discardAtomic();
     _generation++;
     _session = null;
@@ -299,13 +306,16 @@ final class TextPasteDriver {
     _insertedLength = 0;
     _totalLength = 0;
     _progress = TextPasteProgress.inactive;
+    if (wasActive) _endTransaction?.call();
   }
 
   /// Finishes an accepted paste before the next editing transaction.
   ///
   /// Frame chunking is a responsiveness policy, not permission to discard the
   /// unapplied tail when a second paste or key action arrives.
-  void finish() {
+  /// A stream still awaiting its terminal end marker keeps its transaction
+  /// and ownership; later segments continue at the controller's tracked anchor.
+  void finish({bool endStream = false}) {
     if (!_active) {
       discard();
       return;
@@ -323,7 +333,15 @@ final class TextPasteDriver {
     final text = pending.toString();
     if (text.isNotEmpty) _applyBulk(text);
     if (generation != _generation) return;
-    _complete();
+    if (_finalReceived || endStream) {
+      _complete();
+    } else {
+      _generation++; // invalidate any scheduled step over the drained prefix
+      _session = null;
+      _queuedCodeUnits = 0;
+      _stepScheduled = false;
+      _updateProgress();
+    }
   }
 
   /// Accepts normalized text, or raw text when atomic admission is enabled.
@@ -340,16 +358,18 @@ final class TextPasteDriver {
         !event.isFirst &&
         !_finalReceived &&
         event.pasteId == _activePasteId;
+    if (!event.isFirst && !continuesActivePaste) return;
     if (!continuesActivePaste) {
       // Finishing edits the model synchronously. A listener may start a new
       // paste during that edit; finish its accepted tail too before this
       // caller takes ownership, instead of combining two session records.
       do {
-        finish();
+        finish(endStream: true);
       } while (_active);
       if (!_isAttached()) return;
       _active = true;
       _activePasteId = event.pasteId;
+      _beginTransaction?.call();
     }
 
     _queuedSegments.addLast((text: text, isFinal: event.isFinal));
@@ -469,6 +489,7 @@ final class TextPasteDriver {
     _insertedLength = 0;
     _totalLength = 0;
     _progress = TextPasteProgress.inactive;
+    _endTransaction?.call();
   }
 
   void _updateProgress() {

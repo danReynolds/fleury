@@ -1,5 +1,21 @@
 # Changelog
 
+- Programmatic/autofocus requests reveal through the shared scroll-ancestor
+  plan after layout; pointer focus stays stable. Lazy rows use their own build
+  contexts, and eager/lazy ListView reveal partially visible items correctly.
+- `TextEditingController.beginPaste` preserves an insertion anchor and one paste
+  undo across intervening edits. `FleuryTester.sendTerminalBytes` tests actual
+  fragmented parser input with an optional injected `terminalParser`.
+- `OverlayEntry(owner: context)` keeps floating content attached to live local
+  scopes and its owner's lifetime. `AppCommand.availability` optionally makes
+  command presentation observable; invocation still checks current predicates.
+- Flex culling respects cached descendant paint overflow. ASCII border cells
+  retain decoration provenance through compositing and semantic-only changes.
+- Keypad decimal meaning follows associated text or configured `keypadDecimal`
+  (`FLEURY_KEYPAD_DECIMAL` in native drivers). Matching key-up keeps its identity.
+  Legacy keypad KeyCode aliases are deprecated but remain position-aware; enum
+  slots and the wire version are unchanged.
+
 - `Semantics.stateBuilder` reads live model state when a semantic snapshot is
   collected. Pair it with `stateListenable` to publish model-only changes without
   rebuilding the child. Existing `state:` annotations remain supported.

@@ -356,7 +356,7 @@ class InputDispatcher {
         : null;
     final handled = router?.route(event) ?? false;
     if (target != null && focusManager.isClickable(target)) {
-      target.requestFocus();
+      target.requestFocus(reveal: false);
       return KeyEventResult.handled;
     }
     return handled ? KeyEventResult.handled : KeyEventResult.ignored;

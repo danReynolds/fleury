@@ -32,6 +32,7 @@ import '../rendering/scroll_reveal.dart';
 import '../input/events.dart';
 import 'framework.dart';
 import 'key_bindings.dart' show KeyBinding;
+import 'tui_binding.dart';
 
 /// The result of handling a key event.
 enum KeyEventResult {
@@ -404,9 +405,12 @@ class FocusNode implements Listenable {
   /// No-op when [canRequestFocus] is false, this node is not attached, the
   /// node is excluded from focus, or an active focus trap contains another
   /// subtree.
-  void requestFocus() {
+  /// By default the next completed layout reveals this node through its
+  /// scroll ancestors. Pointer handlers use `reveal: false` to keep content
+  /// under the pointer still.
+  void requestFocus({bool reveal = true}) {
     if (!_canRequestFocus) return;
-    _manager?.requestFocus(this);
+    _manager?.requestFocus(this, reveal: reveal);
   }
 
   /// Removes focus from this node if it currently has focus.
@@ -923,9 +927,11 @@ class FocusManager extends Notifier {
   /// Denied — returning false — when [isClickable] is false: programmatic
   /// focus obeys the same availability, exclusion, and focus-trap boundaries as
   /// pointer and traversal focus.
-  bool requestFocus(FocusNode? node) {
+  bool requestFocus(FocusNode? node, {bool reveal = true}) {
     _checkNotDisposed();
     if (node != null && !isClickable(node)) return false;
+    _pendingReveal = reveal ? node : null;
+    if (_pendingReveal != null) _scheduleReveal(node!);
     if (identical(_focusedNode, node)) return false;
     final previous = _focusedNode;
     _focusedNode = node;
@@ -938,6 +944,33 @@ class FocusManager extends Notifier {
     previous?._notifyFocusFlip();
     node?._notifyFocusFlip();
     return true;
+  }
+
+  FocusNode? _pendingReveal;
+  bool _revealScheduled = false;
+
+  void _scheduleReveal(FocusNode node) {
+    if (_revealScheduled) return;
+    _revealScheduled = true;
+    void reveal() {
+      _revealScheduled = false;
+      final target = _pendingReveal;
+      _pendingReveal = null;
+      if (!_disposed &&
+          target != null &&
+          identical(target, _focusedNode) &&
+          isClickable(target)) {
+        target.reveal();
+      }
+    }
+
+    final context = node._element;
+    final binding = context == null ? null : readScope<TuiBinding>(context);
+    if (binding == null) {
+      scheduleMicrotask(reveal);
+    } else {
+      binding.addPostFrameCallback((_) => reveal());
+    }
   }
 
   /// Records [node] as the focus memory of every [FocusScope] enclosing it,
@@ -1021,7 +1054,7 @@ class FocusManager extends Notifier {
       next = (i + (forward ? 1 : -1)) % order.length;
     }
     final node = order[next];
-    if (!requestFocus(node)) return false;
+    if (!requestFocus(node, reveal: false)) return false;
     // Tab can reach a field scrolled out of view; bring it into view.
     node.reveal();
     return true;

@@ -256,7 +256,8 @@ class RenderCanvas extends RenderObject {
 
   CanvasPainter _painter;
   set painter(CanvasPainter v) {
-    if (identical(_painter, v)) return;
+    // A stable painter may close over mutable data. Updating the widget is
+    // an explicit request to repaint it.
     _painter = v;
     markNeedsPaintOnly();
   }
@@ -381,7 +382,7 @@ class _SubCellCtx implements CanvasContext {
     }
   }
 
-  /// Brush offsets for a rounded stamp of [width] pixels, packed as
+  /// Brush offsets for a rounded stamp of `width` pixels, packed as
   /// `[dx0, dy0, dx1, dy1, ...]` and cached — painters redraw every frame,
   /// and the brush for a given width never changes.
   static final Map<int, List<int>> _brushes = {};

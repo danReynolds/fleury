@@ -5,6 +5,49 @@ import 'package:test/test.dart';
 import '../support/render_fixtures.dart';
 
 void main() {
+  testWidgets('an offscreen child keeps visible positioned overflow', (tester) {
+    final scroll = ScrollController();
+    addTearDown(scroll.dispose);
+    Widget scene(int height) => SizedBox(
+      height: 4,
+      child: ScrollView(
+        controller: scroll,
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            SizedBox(
+              width: 3,
+              height: 1,
+              child: Stack(
+                children: [
+                  Positioned(
+                    left: 0,
+                    top: 0,
+                    width: 3,
+                    height: height,
+                    child: const Text('OUT\nOUT\nOUT\nOUT'),
+                  ),
+                ],
+              ),
+            ),
+            const SizedBox(height: 8),
+          ],
+        ),
+      ),
+    );
+    tester.pumpWidget(scene(3));
+    tester.render(size: const CellSize(8, 4));
+    scroll.offset = 2;
+    tester.pump();
+    var buffer = tester.render();
+    expect(buffer.atColRow(0, 0).grapheme, 'O');
+    tester.pumpWidget(scene(4));
+    buffer = tester.render();
+    expect(buffer.atColRow(0, 1).grapheme, 'O');
+    tester.pumpWidget(scene(1));
+    buffer = tester.render();
+    expect(buffer.atColRow(0, 0).grapheme, isNot('O'));
+  });
   // The harness disables the indicator in its constructor, so flip it on
   // inside each test body (after the tester exists).
   tearDown(() => RenderFlex.debugShowOverflow = false);

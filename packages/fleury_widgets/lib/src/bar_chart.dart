@@ -286,6 +286,7 @@ class RenderBarChart extends RenderObject {
     required GlyphTier glyphTier,
   }) : _textPolicy = textPolicy,
        _bars = bars,
+       _barCount = bars.length,
        _max = max,
        _barWidth = barWidth < 1 ? 1 : barWidth,
        _gap = gap < 0 ? 0 : gap,
@@ -309,9 +310,11 @@ class RenderBarChart extends RenderObject {
   ChartLabel _label(String text) => ChartLabel(text, _textPolicy);
 
   List<Bar> _bars;
+  int _barCount;
   set bars(List<Bar> v) {
-    if (identical(_bars, v)) return;
-    final layoutChanged = _bars.length != v.length;
+    // An explicit widget update also refreshes an in-place list mutation.
+    final layoutChanged = _barCount != v.length;
+    _barCount = v.length;
     _bars = v;
     if (layoutChanged) {
       markNeedsLayout();
@@ -373,14 +376,12 @@ class RenderBarChart extends RenderObject {
 
   List<String>? _segmentLabels;
   set segmentLabels(List<String>? v) {
-    if (identical(_segmentLabels, v)) return;
     _segmentLabels = v;
     markNeedsLayout();
   }
 
   List<Color> _palette;
   set palette(List<Color> v) {
-    if (identical(_palette, v)) return;
     _palette = v;
     markNeedsPaintOnly();
   }

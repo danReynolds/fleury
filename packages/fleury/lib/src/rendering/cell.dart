@@ -703,6 +703,14 @@ final class Cell {
     this.style = CellStyle.none,
   }) : role = CellRole.leading;
 
+  /// Paint-only decoration: excluded from automatic readable-text semantics.
+  const factory Cell.decoration({required String grapheme, CellStyle style}) =
+      _DecorationCell;
+
+  /// Whether this glyph was painted as decoration rather than readable text.
+  /// This provenance stays local to painting; wire cells retain their visual identity.
+  bool get isDecoration => false;
+
   const Cell.continuation({this.style = CellStyle.none})
     : grapheme = null,
       role = CellRole.continuation;
@@ -748,4 +756,14 @@ final class Cell {
         return 'Cell.overlay';
     }
   }
+}
+
+// A subtype carries provenance without adding a field to every ordinary cell.
+// Visual equality deliberately ignores it: semantic coverage consumes the
+// provenance before transport, while terminal diffing compares visible paint.
+final class _DecorationCell extends Cell {
+  const _DecorationCell({required super.grapheme, super.style = CellStyle.none})
+    : super.leading();
+  @override
+  bool get isDecoration => true;
 }

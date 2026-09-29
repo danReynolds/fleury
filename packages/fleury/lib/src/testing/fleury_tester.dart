@@ -40,6 +40,7 @@ import '../rendering/surface_capabilities.dart';
 import '../rendering/width_policy.dart' show TextPresentationPolicy;
 import '../rendering/render_flex.dart' show RenderFlex;
 import '../runtime/input_dispatcher.dart';
+import '../terminal/input_parser.dart';
 import '../semantics/accessibility.dart';
 import '../semantics/inspection.dart';
 import '../semantics/semantics.dart';
@@ -97,8 +98,10 @@ class FleuryTester {
     TextPresentationPolicy textPolicy = TextPresentationPolicy.spec,
     this.overlayRepaintBoundaries = true,
     Clipboard? clipboard,
+    InputParser? terminalParser,
     FleuryTestFailureHandler failureHandler = _throwFleuryTestFailure,
-  }) : clipboard = clipboard ?? InProcessClipboard(),
+  }) : _terminalParser = terminalParser,
+       clipboard = clipboard ?? InProcessClipboard(),
        _viewportSize = viewportSize,
        _colorMode = colorMode,
        _glyphTier = glyphTier,
@@ -708,6 +711,26 @@ class FleuryTester {
     _owner.flushBuild();
   }
 
+  InputParser? _terminalParser;
+
+  /// Feeds terminal bytes through a persistent parser and the input dispatcher.
+  /// UTF-8, escape sequences and bracketed paste can span calls. Set [flush]
+  /// only when simulating the terminal driver's ambiguity timeout (for example,
+  /// a standalone Escape); read boundaries do not flush automatically.
+  ///
+  /// This does not emulate a terminal driver or negotiate capabilities. Use
+  /// [keyboardCapabilities] for that contract and [pump] to render. A custom
+  /// `terminalParser` constructor argument can set parser limits for probes.
+  void sendTerminalBytes(List<int> bytes, {bool flush = false}) {
+    _assertNotDisposed('sendTerminalBytes');
+    _openFrame();
+    final parser = _terminalParser ??= InputParser();
+    final sink = _TesterTerminalSink((event) => _dispatcher.dispatch(event));
+    parser.feed(bytes, sink);
+    if (flush) parser.flush(sink);
+    _owner.flushBuild();
+  }
+
   /// Dispatches a bracketed [PasteEvent] — the whole blob at once, as a
   /// real paste arrives (so embedded newlines don't act as Enter).
   void paste(String text) {
@@ -1097,6 +1120,7 @@ class FleuryTester {
     _disposed = true;
     _actionFrameTimer?.cancel();
     _actionFrameTimer = null;
+    _terminalParser = null;
     final pendingFailure = _actionFrameFailure;
     if (pendingFailure != null && !pendingFailure.isCompleted) {
       pendingFailure.completeError(
@@ -1310,4 +1334,11 @@ final class _CommandResolution {
 
   final AppCommand command;
   final CommandRegistry registry;
+}
+
+final class _TesterTerminalSink implements TuiEventSink {
+  _TesterTerminalSink(this._dispatch);
+  final void Function(TuiEvent) _dispatch;
+  @override
+  void add(TuiEvent event) => _dispatch(event);
 }

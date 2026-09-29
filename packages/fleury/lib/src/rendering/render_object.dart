@@ -246,6 +246,64 @@ abstract class RenderObject implements ScreenGeometrySource {
   CellConstraints? _constraints;
   CellSize? _size;
   bool _needsLayout = true;
+  bool _paintOverflowDirty = true;
+  CellRect? _paintOverflow;
+
+  /// Conservative local bounds when this subtree can paint outside [size].
+  /// Null means its layout box contains all paint. Containers derive this
+  /// from presented children, their offsets and clips. Results are cached;
+  /// layout or paint invalidation invalidates the enclosing bounds as well.
+  /// Custom painters that draw beyond their box override [computePaintOverflow].
+  CellRect? get paintOverflow {
+    if (!hasLayout) return null;
+    if (_paintOverflowDirty) {
+      _paintOverflow = computePaintOverflow();
+      _paintOverflowDirty = false;
+    }
+    return _paintOverflow;
+  }
+
+  @protected
+  CellRect? computePaintOverflow() {
+    var left = 0;
+    var top = 0;
+    var right = size.cols;
+    var bottom = size.rows;
+    visitRenderChildren((child) {
+      if (!child.hasLayout || !presentsChild(child)) return;
+      final extra = child.paintOverflow;
+      final offset = childOffsetOf(child);
+      var l = offset.col + (extra?.left ?? 0);
+      var t = offset.row + (extra?.top ?? 0);
+      var r = offset.col + (extra?.right ?? child.size.cols);
+      var b = offset.row + (extra?.bottom ?? child.size.rows);
+      final clip = childClipOf(child);
+      if (clip != null) {
+        if (l < clip.left) l = clip.left;
+        if (t < clip.top) t = clip.top;
+        if (r > clip.right) r = clip.right;
+        if (b > clip.bottom) b = clip.bottom;
+      }
+      if (r <= l || b <= t) return;
+      if (l < left) left = l;
+      if (t < top) top = t;
+      if (r > right) right = r;
+      if (b > bottom) bottom = b;
+    });
+    if (left == 0 && top == 0 && right == size.cols && bottom == size.rows) {
+      return null; // No rectangle allocation for ordinary, contained subtrees.
+    }
+    return CellRect(
+      offset: CellOffset(left, top),
+      size: CellSize(right - left, bottom - top),
+    );
+  }
+
+  void _invalidatePaintOverflow() {
+    if (_paintOverflowDirty) return;
+    _paintOverflowDirty = true;
+    _parent?._invalidatePaintOverflow();
+  }
 
   // Cache-invalidation flag, meaningful only at [isRepaintBoundary] render
   // objects. Non-boundary nodes always re-paint, so the flag is just the
@@ -334,6 +392,7 @@ abstract class RenderObject implements ScreenGeometrySource {
 
   void _markNeedsLayoutUp() {
     _needsLayout = true;
+    _paintOverflowDirty = true;
     final parent = _parent;
     if (parent == null) {
       // Terminal node of the invalidation walk: publish frame damage at the
@@ -358,6 +417,7 @@ abstract class RenderObject implements ScreenGeometrySource {
     if (DebugInvalidations.isRecording) {
       DebugInvalidations.recordPaint(_debugInvalidationLabel);
     }
+    _invalidatePaintOverflow();
     _rootFrameDamage?.recordVisualChange();
     _markEnclosingRepaintBoundariesDirty();
   }
@@ -477,6 +537,7 @@ abstract class RenderObject implements ScreenGeometrySource {
       return cachedSize;
     }
     final previousSize = _size;
+    _paintOverflowDirty = true;
     _constraints = constraints;
     final result = performLayout(constraints);
     if (!constraints.isSatisfiedBy(result)) {

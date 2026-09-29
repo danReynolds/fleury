@@ -192,6 +192,46 @@ void main() {
     );
   });
 
+  testWidgets('lazy row focus reads ignore unrelated focus moves', (tester) {
+    final list = FocusNode(debugLabel: 'list');
+    final a = FocusNode();
+    final b = FocusNode();
+    var builds = 0;
+    final focused = <bool>[];
+    tester.pumpWidget(
+      Column(
+        children: [
+          Focus(focusNode: a, autofocus: true, child: const Text('A')),
+          Focus(focusNode: b, child: const Text('B')),
+          Expanded(
+            child: ListView.builder(
+              focusNode: list,
+              itemCount: 10000,
+              itemBuilder: (context, index, highlighted) {
+                builds++;
+                focused.add(Focus.of(context).hasFocus);
+                return Text('row $index');
+              },
+            ),
+          ),
+        ],
+      ),
+    );
+    tester.pump();
+    expect(builds, lessThan(100));
+    builds = 0;
+    focused.clear();
+    for (var i = 0; i < 6; i++) {
+      (i.isEven ? b : a).requestFocus();
+      tester.pump();
+    }
+    expect(builds, 0);
+    list.requestFocus();
+    tester.pump();
+    expect(builds, greaterThan(0));
+    expect(focused, everyElement(isTrue));
+  });
+
   testWidgets('Focus.of in a build rebuilds for its own node only', (tester) {
     final list = FocusNode(debugLabel: 'list');
     final a = FocusNode(debugLabel: 'a');
