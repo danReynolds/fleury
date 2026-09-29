@@ -3,10 +3,11 @@
 Compile-checked source behind the hand-written docs (tutorials and guides under
 `website/src/content/docs/`).
 
-The widget reference pages can't drift — they're generated from `registry.dart`,
-which compiles. The prose docs are the risk: a code sample written by hand can
-quietly reference an API that has since been renamed or removed. This directory
-closes that gap.
+The widget reference pages are generated, but most of their code samples are
+hand-written strings, so `npm run check:snippets` (part of the docs build)
+compiles every Dart block on them against the real packages. The prose docs are
+the other risk: a code sample written by hand can quietly reference an API that
+has since been renamed or removed. This directory closes that gap.
 
 ## The convention
 
@@ -18,12 +19,12 @@ changes underneath a doc, the build goes red instead of the docs going stale.
 
 | Program | Backs |
 |---|---|
-| `app_shell.dart` | [App entry points](../../src/content/docs/concepts/app-entry.md), [Theming](../../src/content/docs/guides/theming.md) |
+| `app_shell.dart` | [App entry points](../../src/content/docs/concepts/app-entry.md), [Theming](../../src/content/docs/guides/theming.mdx) |
 | `terminal_modes/` and `terminal_modes.dart` | [Full-screen and inline UIs](../../src/content/docs/guides/terminal-modes.mdx); runnable mode choices, native resizing, repeated sessions, and subprocess handoff |
-| `getting_started_app.dart`, `status_app.dart`, `status_app_terminal.dart`, `status_app_web.dart` | Native wrapper, shared tree, and native/browser entrypoints in [Getting started](../../src/content/docs/getting-started.mdx) |
+| `getting_started_app.dart`, `status_app_terminal.dart`, `status_app_web.dart` | The finished web-safe `lib/app.dart` and its native and browser entrypoints in [Getting started](../../src/content/docs/getting-started.mdx) |
 | `web_app_shell.dart` | Browser entry snippets in [App entry points](../../src/content/docs/concepts/app-entry.md) and [Coming from Flutter](../../src/content/docs/coming-from-flutter.md) |
 | `coming_from_flutter.dart` | [Coming from Flutter](../../src/content/docs/coming-from-flutter.md) |
-| `filterable_list.dart` | [Tutorial: a filterable list](../../src/content/docs/tutorial.md) |
+| `filterable_list.dart` | [Tutorial: a filterable list](../../src/content/docs/tutorial.mdx) |
 | `keyboard_tour.dart` | [Key handling](../../src/content/docs/guides/focus-and-keyboard.mdx) |
 | `focus_tour.dart` | [Focus management](../../src/content/docs/guides/focus.mdx) |
 | `core_widgets.dart` | Loading data, Input & gestures, Theming (RichText) |

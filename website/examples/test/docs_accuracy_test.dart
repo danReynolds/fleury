@@ -177,11 +177,18 @@ void main() {
       final snippet = File(
         p.join(repo.path, 'website/examples/doc_snippets/web_app_shell.dart'),
       ).readAsStringSync();
+      // Getting started's finished lib/app.dart, which both the terminal and
+      // the browser entrypoints run.
       final sharedTree = File(
-        p.join(repo.path, 'website/examples/doc_snippets/status_app.dart'),
+        p.join(
+          repo.path,
+          'website/examples/doc_snippets/getting_started_app.dart',
+        ),
       ).readAsStringSync();
       expect(snippet, contains("package:fleury/fleury_core.dart"));
       expect(snippet, contains("package:fleury_web/fleury_web.dart"));
+      expect(sharedTree, contains("package:fleury/fleury_core.dart"));
+      expect(sharedTree, isNot(contains("package:fleury/fleury.dart")));
       expect(
         '$snippet\n$sharedTree',
         contains("package:fleury_widgets/fleury_widgets_web.dart"),
@@ -296,6 +303,7 @@ void main() {
       ).readAsStringSync();
       expect(guide, contains('fleury create my_app --dependency-source=git'));
       expect(guide, contains('fleury create my_app'));
+      expect(guide, contains('fleury run'));
       expect(guide, contains('dart run bin/run_app.dart'));
       expect(guide, contains('title="lib/app.dart"'));
       expect(guide, contains('title="test/app_test.dart"'));
@@ -309,8 +317,15 @@ void main() {
 
       expect(guide, contains('path: packages/fleury_web'));
       expect(guide, contains('web: ^1.1.1'));
-      expect(guide, contains('title="lib/status_app.dart"'));
-      expect(guide, contains("package:my_app/status_app.dart"));
+      // The browser bundle reuses the same MyApp once lib/app.dart imports the
+      // web-safe libraries.
+      expect(guide, contains("import 'package:fleury/fleury_core.dart';"));
+      expect(
+        guide,
+        contains("import 'package:fleury_widgets/fleury_widgets_web.dart';"),
+      );
+      expect(guide, contains('() => const MyApp()'));
+      expect(guide, contains('title="web/index.html"'));
     });
 
     test('testing guide uses the current Git package boundary', () {

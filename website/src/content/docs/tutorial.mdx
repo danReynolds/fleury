@@ -9,9 +9,17 @@ In about fifteen minutes you'll build a list that narrows live as you type —
 touching the three things every Fleury app is made of:
 [state](/fleury/concepts/widgets-and-state/), [layout](/fleury/guides/layout/), and input.
 
-You'll need a project with the `fleury` and `fleury_widgets` dependencies; the
-first step of [Getting started](/fleury/getting-started/) sets that up if you haven't
-already.
+Use the `my_app` project from [Getting started](/fleury/getting-started/), or
+create a fresh one:
+
+```sh
+fleury create my_app --dependency-source=git
+```
+
+The code below imports `package:my_app` and names its root widget `MyApp`, the
+class the generated `bin/run_app.dart` starts. With a different project name,
+use your package name in the imports and the class name from your
+`bin/run_app.dart`.
 
 ## What we're building
 
@@ -74,9 +82,13 @@ void main() {
 }
 ```
 
-Run `dart test` to check the smoke. Then press F5 or run
-`dart run bin/run_app.dart`. The list appears one item per row, padded a cell
-off the edge. (`Ctrl-C` quits.) Nothing moves yet — let's make it react.
+Run `dart test` to check the smoke. Then start the app with `fleury run` (or
+press F5 in VS Code). The list appears one item per row, padded a cell off the
+edge. Nothing moves yet — let's make it react.
+
+Leave the app running for the rest of the tutorial. Each time you save, it
+reloads in place and keeps its state, so you see every step as soon as you save
+it. (`Ctrl-C` quits.)
 
 ## 2. Hold state
 
@@ -112,7 +124,12 @@ class _FilterAppState extends State<FilterApp> {
 ```
 
 `_matches` derives the visible list from `_query` every build. `_query` is still
-always `''`, so nothing's filtered — until we wire up the input.
+always `''`, so nothing's filtered — until we wire up the input. (Until then the
+analyzer suggests making `_query` final; step 3 assigns it.)
+
+Turning a stateless widget into a stateful one is a change a reload can't
+apply, so restart after saving this step: press `Ctrl+G` to open the debug
+shell, then `F5`.
 
 ## 3. Add the text field
 
@@ -146,16 +163,17 @@ class _FilterAppState extends State<FilterApp> {
 }
 ```
 
-Run it again and type. `onChanged` calls `setState` on every edit; `build`
-recomputes `_matches` from `_query`, and the framework repaints only the rows
-that changed. That's the whole reactive loop — `autofocus: true` means you can
-type the moment it launches.
+Save, and the field appears above the list; type, and the list narrows.
+`onChanged` calls `setState` on every edit; `build` recomputes `_matches` from
+`_query`, and the framework repaints only the rows that changed. That's the
+whole reactive loop. `autofocus: true` gives the field keyboard focus as soon as
+it appears, so you can type straight away.
 
 ## 4. Layout and polish
 
-Two touches make it feel finished. First, push the list to fill the space below
-the field with `Expanded`, so the field stays pinned at the top. Second, add a
-count and an empty state. Here's the final `build`:
+Two touches make it feel finished: a count of the matches, and an empty state
+when nothing matches. `Expanded` gives the list area the rest of the height
+under the field. Here's the final `build`:
 
 ```dart
 @override
@@ -189,22 +207,26 @@ Widget build(BuildContext context) {
 }
 ```
 
-Run it one more time. The field stays pinned while the list fills the screen,
-the count updates as you type, and a query with no hits (try `zz`) shows the
-empty state.
+Save once more. The count updates as you type, and a query with no hits (try
+`zz`) shows the empty state. In a terminal shorter than the list, the rows that
+don't fit are cut off; a `ListView` scrolls instead, which
+[Lists & scrolling](/fleury/guides/lists-and-scrolling/) covers.
 
 That's a complete, interactive Fleury app: state held in a `State`, an input
 reported through `onChanged`, a derived list, and a layout that fills the screen.
 
 ## Where to go next
 
-- The same **widget tree** runs in a browser with a target-specific host
-  entrypoint and web-safe imports — see [Deployment &
-  distribution](/fleury/guides/deployment/) to compile it with `dart2js` or preview the
-  native app locally with `fleury serve`.
+- Make the list scrollable and selectable with the arrow keys:
+  [Lists & scrolling](/fleury/guides/lists-and-scrolling/) covers `ListView` and
+  `ListController`.
+- Test the filtering: [Testing](/fleury/guides/testing/) shows how to fill a
+  text field from a test and check what renders.
 - Swap the plain `Column` of `Text` for a richer widget — a [`Tree`](/fleury/widgets/tree/),
   [`DataTable`](/fleury/widgets/datatable/), or [`Select`](/fleury/widgets/select/) — from the
   [widget reference](/fleury/widgets/). (Those live in `fleury_widgets`; add
   `import 'package:fleury_widgets/fleury_widgets.dart';` when you reach for them.)
-- Add keyboard navigation (arrow keys to move a selection) with the patterns in
-  [Focus & keyboard](/fleury/guides/focus-and-keyboard/).
+- Open the app in a browser: `fleury serve` streams the running app to a tab,
+  as in step 5 of [Getting started](/fleury/getting-started/).
+- Browse the [guides](/fleury/guides/) for forms, navigation, key handling, and
+  more.

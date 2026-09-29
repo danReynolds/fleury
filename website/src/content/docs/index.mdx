@@ -1,9 +1,12 @@
 ---
 title: Fleury
-description: A fast, retained-mode UI framework for the terminal — and the browser.
+description: A fast Dart UI framework for the terminal — and the browser.
 template: splash
+head:
+  - tag: title
+    content: Fleury — a Dart UI framework for the terminal and the browser
 hero:
-  tagline: A fast, retained-mode UI framework for the terminal — and the browser. One widget tree, two surfaces, and a semantic tree agents can drive.
+  tagline: A fast Dart UI framework for the terminal — and the browser. One widget tree, two surfaces, and a semantic tree agents can drive.
   actions:
     - text: Get started
       link: /fleury/getting-started/
@@ -23,13 +26,15 @@ import InlineShowcase from '../../components/InlineShowcase.astro';
 <HomeSplit files={[{ name: 'clock.dart' }, { name: 'table.dart' }, { name: 'bars.dart' }]}>
 <Fragment slot="code-0">
 ```dart
-// A live world clock — the selected tab's Digits tick every
-// second; click a tab (or press ← / →) to switch zone.
+// A live world clock: Digits tick every second.
+// Click a tab, or press ← / →, to switch zones.
 Tabs(
   tabs: [
     TabItem(label: 'UTC', content: Digits(utcTime)),
     TabItem(label: 'EST', content: Digits(estTime)),
     TabItem(label: 'PST', content: Digits(pstTime)),
+    TabItem(label: 'CET', content: Digits(cetTime)),
+    TabItem(label: 'JST', content: Digits(jstTime)),
   ],
 )
 ```
@@ -72,7 +77,7 @@ JavaScript with `dart2js`, running live in your browser: the clock ticks, the
 bars stream, the table takes your clicks. The same trees also run native in a
 terminal. [How that works →](/fleury/architecture/serving-and-embedding/)
 
-## Why Fleury
+## What you get
 
 <CardGrid>
   <FeatureCard icon="puzzle" title="A Real Widget Tree, for Cells" href="/fleury/architecture/core-and-targets/" cta="How it fits together">
@@ -81,9 +86,10 @@ terminal. [How that works →](/fleury/architecture/serving-and-embedding/)
     emits nothing.
   </FeatureCard>
   <FeatureCard icon="open-book" title="Built for Agents" href="/fleury/guides/driving-with-agents/" cta="Drive it with an agent">
-    Every widget publishes its role, state, and actions to a live semantic tree.
-    Agents drive your app through it over MCP — and your tests assert on the same
-    tree — instead of scraping the screen. Nothing extra to wire up.
+    Controls and content publish their role, state, and actions to a live
+    semantic tree. Agents drive your app through it over MCP — and your tests
+    assert on the same tree — instead of scraping the screen. Nothing extra to
+    wire up.
   </FeatureCard>
   <FeatureCard icon="laptop" title="One App, Multiple Targets" href="/fleury/architecture/serving-and-embedding/" cta="Serving & embedding">
     The same widget tree renders natively to a terminal, or to the browser —
@@ -99,6 +105,31 @@ terminal. [How that works →](/fleury/architecture/serving-and-embedding/)
 </CardGrid>
 
 <p class="home-more"><a href="/fleury/comparison/">Read the full case for Fleury — and how it compares →</a></p>
+
+## Start building
+
+<CardGrid>
+  <LinkCard
+    title="Getting started"
+    href="/fleury/getting-started/"
+    description="Install the CLI, create a project, and run your first app in a few minutes."
+  />
+  <LinkCard
+    title="Tutorial: a filterable list"
+    href="/fleury/tutorial/"
+    description="Build a small interactive app end to end: state, a text input, live filtering, and layout."
+  />
+  <LinkCard
+    title="Guides"
+    href="/fleury/guides/"
+    description="Task-focused guides to layout, state, input, testing, and shipping, with live examples."
+  />
+  <LinkCard
+    title="Widget reference"
+    href="/fleury/widgets/"
+    description="Every widget by category, with live demos and API tables generated from source."
+  />
+</CardGrid>
 
 ## Full-screen apps. Interactive CLI commands.
 

@@ -10,7 +10,7 @@ widget code.
 
 ## Inspect the affected session
 
-With the [Fleury CLI installed](/fleury/getting-started/#1-create-a-project), run
+With the [Fleury CLI installed](/fleury/getting-started/#1-install-the-cli-and-create-a-project), run
 this in the same terminal, SSH connection, and multiplexer pane as the app:
 
 ```sh

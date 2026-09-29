@@ -121,12 +121,11 @@ These transfer with little or no adjustment:
 | Keys | `Key`, `ValueKey`, `UniqueKey`, `GlobalKey` |
 | Layout | `Column`, `Row`, `Expanded`, `Flexible`, `Spacer`, `Stack`, `Positioned`, `Padding`, `Center`, `Align`, `Container`, `ConstrainedBox`, `AspectRatio`, `SizedBox`, `Wrap`, `IntrinsicWidth`, `IntrinsicHeight`, `LayoutBuilder` |
 | Async | `FutureBuilder`, `StreamBuilder`, `AsyncSnapshot`, `ConnectionState` |
-| Navigation | `Navigator.push`, `pop`, `pushReplacement`, `popUntil`, `PopScope`, plus `context.push` / `context.pop` helpers |
+| Navigation guards | `PopScope` |
 | Focus and pointer input | `FocusNode`, `Focus`, `FocusScope`, `GestureDetector`, `MouseRegion` |
 | Lists | `ListView`, `ListView.builder`, `ScrollView` |
 | Inherited data | `Theme.of`, `MediaQuery.of`, `DefaultTextStyle` |
 | Text | `Text`, `RichText`, `TextSpan` |
-| Testing | `testWidgets`, `tester.pumpWidget` via `package:fleury_test`, plus terminal-native helpers like `tester.renderToString` |
 
 The table is intentionally boring: most of the muscle memory is valid.
 
@@ -138,6 +137,8 @@ The table is intentionally boring: most of the muscle memory is valid.
 | `BoxConstraints` | `CellConstraints` | Constraints are integer cells; `null` represents unbounded. |
 | `Offset` / `Size` | `CellOffset` / `CellSize` | Coordinates and dimensions are whole cells. |
 | `ChangeNotifier` / `notifyListeners()` | `Notifier` / `notify()` | An ordinary Dart model announces changes to its consumers. |
+| `Navigator.push(context, MaterialPageRoute(...))`, `pop`, `popUntil(predicate)` | `context.push(screen)`, `context.pop(result)`, `context.popUntil<HomeScreen>()` | Routes are widgets: you push the screen itself, with no `Route` object or route names. `popUntil` takes the widget type of the screen to stop at. |
+| `await tester.pumpWidget(...)`, `find.text(...)`, `findsOneWidget` | `tester.pumpWidget(...)`, `tester.exists(text(...))`, `tester.button('Save')` | `testWidgets` comes from `package:fleury_test` and runs on a fake clock, so mounting is synchronous: no `await`. Find controls by role and label, or assert on the rendered cells with `tester.renderToString()`. |
 | `AnimatedBuilder` / `ListenableBuilder` | `NotifierBuilder` | Rebuild from a typed notifier or any `Listenable`, including an animation. |
 | `ValueListenableBuilder` | `NotifierBuilder` or `context.listen` | Read a `ValueNotifier` through the same APIs as other notifiers. |
 | `TweenAnimationBuilder` | `AnimationBuilder` | Animate a value toward a new target when it changes. |
@@ -206,8 +207,8 @@ Flutter's `Shortcuts` / `Actions` stack is intentionally simpler in Fleury:
 ```dart
 KeyBindings(
   bindings: [
-    KeyBinding(KeySequence.ctrl.s, label: 'Save', onTrigger: save),
-    KeyBinding(KeySequence.escape, label: 'Cancel', onTrigger: cancel),
+    KeyBinding(KeySequence.ctrl.s, label: 'Save', onTrigger: (_) => save()),
+    KeyBinding(KeySequence.escape, label: 'Cancel', onTrigger: (_) => cancel()),
   ],
   child: editor,
 )
@@ -246,7 +247,7 @@ Text('Saved').animate().fadeIn().slideIn();
 AnimatedVisibility(
   visible: open,
   enter: Effects.expand(),
-  child: Panel(),
+  child: Panel(title: 'Details', child: details),
 );
 ```
 
@@ -256,7 +257,7 @@ With `FleuryApp(home: ...)` there is no `MaterialPageRoute` and no named-route
 table. Push the widget you want to show:
 
 ```dart
-context.push(DetailScreen(id: id));
+context.push<void>(DetailScreen(id: id));
 context.popUntil<HomeScreen>();
 ```
 

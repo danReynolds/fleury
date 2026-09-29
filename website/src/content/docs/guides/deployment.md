@@ -41,23 +41,23 @@ macOS or Linux; the Windows driver is a preview.
 ## Run it in a browser (embed)
 
 The *same* widget tree compiles to JavaScript and runs client-side — no server.
-First keep that tree in a web-safe library, as shown in
-[Getting started](/fleury/getting-started/#5-run-the-same-widget-tree-in-a-browser).
+First make the library that holds your app web-safe: it imports
+`package:fleury/fleury_core.dart` and `package:fleury_widgets/fleury_widgets_web.dart`,
+never `dart:io`, as shown in
+[Getting started](/fleury/getting-started/#6-optional-ship-a-browser-bundle).
 Then write a tiny web entry point that mounts your app with
 [`mountApp`](/fleury/concepts/app-entry/):
 
 ```dart
 // web/main.dart
-import 'package:fleury/fleury_core.dart';
 import 'package:fleury_web/fleury_web.dart';
-import 'package:my_app/status_app.dart';
+import 'package:my_app/app.dart';
 import 'package:web/web.dart' as web;
 
 Future<void> main() async {
-  final host = web.document.getElementById('app')!;
   await mountApp(
-    () => const FleuryApp(title: 'My app', home: StatusApp()),
-    into: host,
+    () => const MyApp(),
+    into: web.document.getElementById('app')!,
   );
 }
 ```

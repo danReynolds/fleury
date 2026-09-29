@@ -69,6 +69,92 @@ For fields owned by your `State`, use `setState` to schedule the rebuild.
 Shared models publish changes through `Notifier.notify()`; subscribe with
 `NotifierBuilder` or `context.listen(model)` when your UI reads their state.
 
+## The State lifecycle
+
+The framework owns your `State` object's life. The methods you'll override
+most, in the order they fire:
+
+- **`initState()`** — once, when the state is first inserted. Set up controllers,
+  start subscriptions. Always call `super.initState()`.
+- **`didChangeDependencies()`** — right after `initState`, and again whenever an
+  inherited dependency you read (a `Theme`, a `MediaQuery`) changes. *Not* called
+  for a plain `setState`.
+- **`build(context)`** — whenever this state is marked dirty, an inherited
+  dependency changes, or its parent supplies updated configuration. Keep it
+  pure: no side effects, just describe the tree.
+- **`didUpdateWidget(oldWidget)`** — when the parent rebuilds and hands this state
+  a new widget instance of the same type. Compare `widget` to `oldWidget` and
+  react: if the parent passed a different stream or notifier, unsubscribe from
+  the old one and subscribe to the new. (Callbacks need nothing here; read
+  `widget.onChanged` when you call it.)
+- **`dispose()`** — once, when the widget is removed for good. Tear down anything
+  you started in `initState` — controllers, tickers, stream subscriptions.
+  Always call `super.dispose()`.
+
+```dart
+class _ClockState extends State<Clock> {
+  late final Timer _timer;
+  DateTime _now = DateTime.now();
+
+  @override
+  void initState() {
+    super.initState();
+    _timer = Timer.periodic(const Duration(seconds: 1), (_) {
+      setState(() => _now = DateTime.now());
+    });
+  }
+
+  @override
+  void dispose() {
+    _timer.cancel();   // started in initState → cleaned up here
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) => Text('$_now');
+}
+```
+
+Three more hooks cover rarer cases. `deactivate()` runs when the state leaves
+the tree, and `activate()` runs if it's reinserted in the same frame, which
+happens when a widget with a `GlobalKey` moves to a new parent. `reassemble()`
+runs after a hot reload, for recomputing cached values; see
+[Hot reload](/fleury/guides/hot-reload/#refreshing-caches-on-reload).
+
+Inside a `State` you also have three getters: **`widget`** (the current
+configuration), **`context`** (this widget's location in the tree), and
+**`mounted`** (whether the state is still in the tree — guard async callbacks
+with `if (!mounted) return;` before calling `setState`).
+
+## BuildContext
+
+The `BuildContext` handed to `build` is a handle to *where* this widget sits in
+the tree. Use it to read values provided by ancestors:
+
+```dart
+final theme = Theme.of(context);          // nearest ThemeData
+final size  = MediaQuery.sizeOf(context);  // terminal size, in cells
+```
+
+These walk up the tree to find the nearest ancestor that provides the value, and
+they **subscribe** this widget to it — change the theme and every widget that
+read `Theme.of(context)` rebuilds. That's the mechanism behind theming and
+responsive layout; it's a `Scope` under the hood (see below). There
+are shorthands too: `context.theme` and `context.colors`.
+
+For application state, `context.scope<Model>()` finds the nearest `Scope<Model>`
+and subscribes this widget until it leaves the tree. If you already have a
+model, `context.listen(model)` subscribes directly and returns that same
+object; that subscription lasts while the widget's builds keep reading the
+model. Call these readers during this widget's `build`, and use the captured
+model in event callbacks. Both subscriptions end automatically when the widget
+unmounts.
+
+Note one difference from a render tree: a `BuildContext` has no `.size`. A widget
+doesn't know its own dimensions during `build` (it hasn't been laid out yet).
+Read the *screen* size from `MediaQuery`, and make a subtree adapt to *its* space
+with layout widgets like `Expanded` and `Wrap` (see [Layout](/fleury/guides/layout/)).
+
 ## Who owns a control's value?
 
 With `value` and `onChanged`, your state owns the value. The control asks for a
@@ -115,84 +201,6 @@ Input `onChanged` callbacks report user and semantic edits. Programmatic
 controller writes notify controller listeners, so updating a model does not
 echo through an input callback. Replacing a controller adopts the new one's
 state; omitting it creates fresh internally owned state.
-
-## The State lifecycle
-
-The framework owns your `State` object's life. The methods you can override, in
-the order they fire:
-
-- **`initState()`** — once, when the state is first inserted. Set up controllers,
-  start subscriptions. Always call `super.initState()`.
-- **`didChangeDependencies()`** — right after `initState`, and again whenever an
-  inherited dependency you read (a `Theme`, a `MediaQuery`) changes. *Not* called
-  for a plain `setState`.
-- **`build(context)`** — whenever this state is marked dirty, an inherited
-  dependency changes, or its parent supplies updated configuration. Keep it
-  pure: no side effects, just describe the tree.
-- **`didUpdateWidget(oldWidget)`** — when the parent rebuilds and hands this state
-  a new widget instance of the same type. Compare `widget` to `oldWidget` and
-  react (e.g. re-subscribe if a callback prop changed).
-- **`dispose()`** — once, when the widget is removed for good. Tear down anything
-  you started in `initState` — controllers, tickers, stream subscriptions.
-  Always call `super.dispose()`.
-
-```dart
-class _ClockState extends State<Clock> {
-  late final Timer _timer;
-  DateTime _now = DateTime.now();
-
-  @override
-  void initState() {
-    super.initState();
-    _timer = Timer.periodic(const Duration(seconds: 1), (_) {
-      setState(() => _now = DateTime.now());
-    });
-  }
-
-  @override
-  void dispose() {
-    _timer.cancel();   // started in initState → cleaned up here
-    super.dispose();
-  }
-
-  @override
-  Widget build(BuildContext context) => Text('$_now');
-}
-```
-
-Inside a `State` you also have three getters: **`widget`** (the current
-configuration), **`context`** (this widget's location in the tree), and
-**`mounted`** (whether the state is still in the tree — guard async callbacks
-with `if (!mounted) return;` before calling `setState`).
-
-## BuildContext
-
-The `BuildContext` handed to `build` is a handle to *where* this widget sits in
-the tree. Use it to read values provided by ancestors:
-
-```dart
-final theme = Theme.of(context);          // nearest ThemeData
-final size  = MediaQuery.sizeOf(context);  // terminal size, in cells
-```
-
-These walk up the tree to find the nearest ancestor that provides the value, and
-they **subscribe** this widget to it — change the theme and every widget that
-read `Theme.of(context)` rebuilds. That's the mechanism behind theming and
-responsive layout; it's a `Scope` under the hood (see below). There
-are shorthands too: `context.theme` and `context.colors`.
-
-For application state, `context.scope<Model>()` finds the nearest `Scope<Model>`
-and subscribes this widget until it leaves the tree. If you already have a
-model, `context.listen(model)` subscribes directly and returns that same
-object; that subscription lasts while the widget's builds keep reading the
-model. Call these readers during this widget's `build`, and use the captured
-model in event callbacks. Both subscriptions end automatically when the widget
-unmounts.
-
-Note one difference from a render tree: a `BuildContext` has no `.size`. A widget
-doesn't know its own dimensions during `build` (it hasn't been laid out yet).
-Read the *screen* size from `MediaQuery`, and make a subtree adapt to *its* space
-with layout widgets like `Expanded` and `Wrap` (see [Layout](/fleury/guides/layout/)).
 
 ## Keys
 

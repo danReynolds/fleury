@@ -3,16 +3,18 @@ title: Introduction
 description: What Fleury is, who it's for, and the mental model in two minutes.
 ---
 
-Fleury is a **retained-mode UI framework for the terminal** — and, it turns out,
-the browser.
+Fleury is a **Dart UI framework for the terminal** — and, it turns out, the
+browser. You describe the UI as a tree of widgets, and the framework keeps that
+tree between frames and updates only what changed.
 
 The fastest-growing terminal programs aren't utilities anymore; they're
 *applications* — agent consoles, dev-tool dashboards, LLM chat surfaces, deploy
 monitors — with the screen complexity, input handling, and update rates the word
 implies. Many TUI toolkits still fit utility-style screens best. Fleury is built
 for application-scale terminal UIs: incremental rendering, real input and focus
-management, a widget set deep enough to skip the hand-rolling, and
-untrusted-output handling as first-class framework concerns.
+management, a widget set deep enough to skip the hand-rolling, and safe display
+of untrusted text, such as model output and logs, as first-class framework
+concerns.
 
 ## The mental model
 
@@ -31,7 +33,10 @@ browser DOM, or a streamed session. The
 ## Where to start
 
 - **New here?** [Getting started](/fleury/getting-started/) builds your first app in a
-  few minutes.
+  few minutes, and the [tutorial](/fleury/tutorial/) walks through a complete small
+  app.
+- **Building something?** The [guides](/fleury/guides/) cover one task each, and the
+  [widget reference](/fleury/widgets/) has a live demo for most widgets.
 - **Still deciding?** [Why Fleury](/fleury/comparison/) — what it does that peers
   don't, and when to pick something else.
 - **Coming from Flutter?** [The map](/fleury/coming-from-flutter/) — what's identical,
