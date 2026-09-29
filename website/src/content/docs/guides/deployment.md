@@ -88,12 +88,14 @@ cells misalign. A minimal `web/index.html`:
 ```
 
 The output is a static `.js` file — host it on any CDN or static site, ship it
-offline, and scale it like a normal web asset. The one constraint: a client-side
-bundle can only use **web-safe widgets**. The handful that need the platform
-(file pickers and other surfaces that touch `dart:io`) won't
-compile to JS — import `package:fleury_widgets/fleury_widgets_web.dart` rather
-than the full barrel, and the compiler will hold you to it. To preview those
-widgets in a browser during development, use `serve` instead.
+offline, and scale it like a normal web asset. The one constraint: a
+client-side bundle runs in the browser sandbox, with no local disk, processes,
+or environment. Import `package:fleury_widgets/fleury_widgets_web.dart` rather
+than the full barrel: every widget in it runs in a browser, and `FileBrowser`
+and `FilePicker` read a `FileSource` you pass (such as a `MemoryFileSource`)
+instead of the disk. Code that reaches `dart:io` still compiles with dart2js,
+but throws when it runs. To try an app that needs the local machine in a
+browser, use `serve` instead.
 
 ## Preview a native app with `serve`
 
@@ -103,7 +105,7 @@ CLI — [install it](#installing-the-fleury-cli) first if you haven't.) In spawn
 mode it starts and owns the app process; in bridge mode it attaches to an app
 that you start. It is
 primarily a local preview and debugging bridge. The app keeps full `dart:io`
-access, so every widget works, including the native-only ones:
+access, so file widgets read the real disk and captured output shows up:
 
 ```sh
 # Spawn a fresh app process for each browser session

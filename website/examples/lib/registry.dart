@@ -22,6 +22,7 @@ import 'forms/project_form.dart';
 import 'forms/save_project.dart';
 import 'forms/related_fields.dart';
 import 'forms/custom_field.dart';
+import 'live_previews.dart' as live;
 
 /// Builds the root widget for one live example.
 typedef ExampleBuilder = Widget Function();
@@ -1174,6 +1175,56 @@ NotifierBuilder(
     builder: () => const _AutocompleteExample(),
   ),
   ExampleInfo(
+    id: 'filebrowser.basic',
+    widget: 'FileBrowser',
+    category: 'Inputs & controls',
+    blurb:
+        'A keyboard-driven directory browser with filtering, copy, and '
+        'semantic rows; reads the local disk or any FileSource.',
+    cols: 48,
+    rows: 13,
+    interactive: true,
+    code: '''// In a terminal, FileBrowser reads the local disk:
+FileBrowser(
+  initialDirectory: Directory.current.path,
+  onActivate: (entry) => openFile(entry.path),
+)
+
+// In the browser there is no disk to list, so pass a source, as this demo
+// does. MemoryFileSource holds a fixed tree; implement FileSource to list
+// data your app already has.
+FileBrowser(
+  source: MemoryFileSource([
+    '/my_app/lib/app.dart',
+    '/my_app/pubspec.yaml',
+    '/my_app/README.md',
+  ]),
+  initialDirectory: '/my_app',
+  onActivate: (entry) => openFile(entry.path),
+)''',
+    builder: () => _framed(const live.FileBrowserPreview()),
+  ),
+  ExampleInfo(
+    id: 'filepicker.basic',
+    widget: 'FilePicker',
+    category: 'Inputs & controls',
+    blurb:
+        'A one-directory-at-a-time picker: arrows move, Enter opens a folder '
+        'or picks a file.',
+    cols: 48,
+    rows: 13,
+    interactive: true,
+    code: '''FilePicker(
+  initialDirectory: Directory.current.path,
+  filter: (entry) => entry.isDirectory || entry.name.endsWith('.dart'),
+  onSelect: (file) => openFile(file.path),
+)
+
+// In the browser, pass a source, such as the MemoryFileSource this demo uses:
+// FilePicker(source: projectFiles, initialDirectory: '/my_app', ...)''',
+    builder: () => _framed(const live.FilePickerPreview()),
+  ),
+  ExampleInfo(
     id: 'colorpicker.basic',
     widget: 'ColorPicker',
     category: 'Inputs & controls',
@@ -1306,6 +1357,23 @@ NotifierBuilder(
         child: Button(text: 'Save', autofocus: true, onPressed: () {}),
       ),
     ),
+  ),
+  ExampleInfo(
+    id: 'toaster.basic',
+    widget: 'Toaster',
+    category: 'Navigation & overlays',
+    blurb:
+        'Transient notifications in a screen corner, raised from anywhere '
+        'below the host.',
+    cols: 48,
+    rows: 10,
+    interactive: true,
+    code: '''// Wrap your app once:
+Toaster(child: app)
+
+// …then from anywhere below it:
+Toaster.show(context, 'Saved', severity: ToastSeverity.success);''',
+    builder: () => _framed(const live.ToasterPreview()),
   ),
   ExampleInfo(
     id: 'container.filled',
@@ -1922,6 +1990,75 @@ CommandPalette.open(context);''',
         width: 20,
       ),
     ),
+  ),
+  ExampleInfo(
+    id: 'logregion.basic',
+    widget: 'LogRegion',
+    category: 'Agent surfaces',
+    blurb:
+        'A tail-following log view with severity styling, filtering, and '
+        'copy.',
+    cols: 58,
+    rows: 12,
+    interactive: true,
+    code: '''LogRegion(
+  entries: const [
+    LogEntry(id: 1, message: 'Starting deploy', source: 'deploy'),
+    LogEntry(
+      id: 2,
+      message: 'Health check failed: 503 on /ready',
+      severity: LogSeverity.error,
+      source: 'probe',
+    ),
+  ],
+  // Narrow what's shown without changing the entries:
+  filter: const LogRegionFilterDescriptor(severities: {LogSeverity.error}),
+)''',
+    builder: () => _framed(const live.LogRegionPreview()),
+  ),
+  ExampleInfo(
+    id: 'terminaloutputregion.basic',
+    widget: 'TerminalOutputRegion',
+    category: 'Agent surfaces',
+    blurb:
+        'Captured stdout and stderr as a structured, filterable log; stderr '
+        'lines read as errors.',
+    cols: 64,
+    rows: 12,
+    interactive: true,
+    code:
+        '''// In a terminal app, runApp captures stdout and stderr into the LogBuffer
+// this widget reads by default. Anywhere else, including the browser, feed
+// one yourself; this demo appends a line every 0.7 seconds.
+final buffer = LogBuffer(capacity: 500)
+  ..add(const LogLine(r'\$ dart test', LogSource.stdout))
+  ..add(const LogLine('warning: unused import', LogSource.stderr));
+
+TerminalOutputRegion(buffer: buffer)''',
+    builder: () => _framed(const live.TerminalOutputPreview()),
+  ),
+  ExampleInfo(
+    id: 'workflowsnapshot.basic',
+    widget: 'WorkflowSnapshot',
+    category: 'Agent surfaces',
+    blurb:
+        'A data model that bundles a workflow\'s tasks, tool calls, and logs, '
+        'and derives its health.',
+    cols: 48,
+    rows: 10,
+    interactive: true,
+    code: '''final snapshot = WorkflowSnapshot(
+  title: 'Release',
+  tasks: const [
+    TaskGraphNode(id: 'tests', title: 'Run tests', status: TaskGraphStatus.succeeded),
+    TaskGraphNode(id: 'build', title: 'Build image', status: TaskGraphStatus.running),
+  ],
+);
+
+// Derived, safe aggregate state: health, counts, semantic state.
+final summary = snapshot.summary;
+Text('\${summary.health.name}: \${summary.activeTaskCount} of \${summary.taskCount} tasks remaining')''',
+    builder: () => _framed(const live.WorkflowSnapshotPreview()),
   ),
 
   ExampleInfo(

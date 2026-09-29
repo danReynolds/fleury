@@ -341,16 +341,22 @@ void main() {
     const ids = <String>[
       'canvas.basic',
       'checkbox.basic',
+      'filebrowser.basic',
+      'filepicker.basic',
       'formfield.basic',
       'formcontroller.basic',
       'keyhintbar.basic',
+      'logregion.basic',
       'markdowntext.basic',
       'multiselect.basic',
       'radio.basic',
       'radiogroup.basic',
       'switch.basic',
+      'terminaloutputregion.basic',
+      'toaster.basic',
       'toggle.basic',
       'tokenmeter.basic',
+      'workflowsnapshot.basic',
     ];
 
     expect(examples.keys, containsAll(ids));
@@ -817,6 +823,18 @@ void main() {
       ],
       // The tutorial-page embed: the full language list fits its frame.
       'tutorial.filter': <String>['10 of 10', 'Dart', 'Haskell'],
+      // Widgets whose usual source is native, fed browser-side data.
+      'filebrowser.basic': <String>[
+        '/my_app',
+        'lib/',
+        'README.md',
+        'Enter opens',
+      ],
+      'filepicker.basic': <String>['/my_app', 'lib/', 'Pick a Dart file'],
+      'logregion.basic': <String>['Starting deploy', 'Built in 3.8s'],
+      'terminaloutputregion.basic': <String>['dart compile exe', 'dart test'],
+      'workflowsnapshot.basic': <String>['Deploy', 'health: active', 'Reset'],
+      'toaster.basic': <String>['Raise a toast', 'Save', 'Fail'],
     };
     final missing = <String>[];
     for (final entry in checks.entries) {

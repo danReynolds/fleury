@@ -679,27 +679,16 @@ const seeAlsoLine = (slug) => {
 };
 
 // ── Source-backed pages ─────────────────────────────────────────────────────
-// Public APIs without an embedded registry example still get a full reference
-// page. Keep this list narrow: native-only APIs, supporting models, and APIs
-// that cannot be represented without an imperative call. Web-safe widgets
-// belong in registry.dart with a live example instead.
+// Public APIs documented from source rather than a registry entry, borrowing a
+// guide's live example. Every widget should run live: when one depends on a
+// platform service (the disk, captured output), give it a parameter the
+// browser can satisfy, as FileBrowser takes a FileSource, and add a registry
+// example instead of a page here.
 const DOC_ONLY = [
-  { slug: 'filebrowser', widget: 'FileBrowser', category: 'Inputs & controls', reason: 'native',
-    code: "FileBrowser(\n  initialDirectory: Directory.current.path,\n  onActivate: (entry) => openFile(entry.path),\n)" },
-  { slug: 'filepicker', widget: 'FilePicker', category: 'Inputs & controls', reason: 'native',
-    code: "FilePicker(\n  initialDirectory: Directory.current.path,\n  filter: (entity) => entity is Directory || entity.path.endsWith('.dart'),\n  onSelect: (file) => openFile(file.path),\n)" },
   { slug: 'image', widget: 'Image', category: 'Text & content', reason: 'image-file', example: 'loading.image',
     code: "Image.bytes(logoBytes, fit: ImageFit.contain)\n// Image.file(...) needs dart:io — use bytes/decoded in embeds" },
-  { slug: 'logregion', widget: 'LogRegion', category: 'Agent surfaces', reason: 'native',
-    code: "LogRegion(\n  entries: const [\n    LogEntry(message: 'Starting build', source: 'build'),\n    LogEntry(message: 'Tests failed', severity: LogSeverity.error),\n  ],\n  filter: const LogRegionFilterDescriptor(query: 'build'),\n)" },
-  { slug: 'terminaloutputregion', widget: 'TerminalOutputRegion', category: 'Agent surfaces', reason: 'native',
-    code: "TerminalOutputRegion(\n  buffer: LogBuffer(),\n  semanticLabel: 'Build output',\n  filter: const LogRegionFilterDescriptor(severities: {LogSeverity.error}),\n)" },
-  { slug: 'workflowsnapshot', widget: 'WorkflowSnapshot', category: 'Agent surfaces', reason: 'native-model',
-    code: "final snapshot = WorkflowSnapshot(\n  title: 'Release check',\n  tasks: const [\n    TaskGraphNode(id: 'tests', title: 'Tests', status: TaskGraphStatus.running),\n  ],\n);\n\nfinal health = snapshot.summary.health;" },
-  { slug: 'toaster', widget: 'Toaster', category: 'Navigation & overlays', reason: 'imperative',
-    code: "// Wrap your app once:\nToaster(child: app)\n\n// …then from anywhere below it:\nToaster.show(context, 'Saved', severity: ToastSeverity.success);" },
 ];
-const DOC_ONLY_REASONS = new Set(['native', 'native-model', 'imperative', 'image-file']);
+const DOC_ONLY_REASONS = new Set(['image-file']);
 for (const entry of DOC_ONLY) {
   if (!DOC_ONLY_REASONS.has(entry.reason)) {
     throw new Error(
@@ -707,48 +696,27 @@ for (const entry of DOC_ONLY) {
       `add a live browser example for web-safe widgets`
     );
   }
+  if (!entry.example) {
+    throw new Error(`${entry.widget} needs an example: every reference page runs live`);
+  }
 }
 const docNote = (d) => {
-  const reason = d.reason;
-  if (reason === 'image-file')
+  if (d.reason === 'image-file')
     return (
       `:::note[Embed-safe with bytes]\n\`Image\` itself is web-safe — use ` +
       `\`Image.bytes\` or \`Image.decoded\` in client-side embeds. Only ` +
       `\`Image.file\` needs \`dart:io\` (terminal or ` +
       `[\`fleury serve\`](/fleury/architecture/serving-and-embedding/)).\n:::\n`
     );
-  if (reason === 'native')
-    return (
-      `:::note[Native only]\nThis widget uses \`dart:io\` (filesystem or processes), ` +
-      `so it runs in a terminal or through ` +
-      `[\`fleury serve\`](/fleury/architecture/serving-and-embedding/) — which is ` +
-      `why this page has no live browser demo. The reference below is generated ` +
-      `from the source.\n:::\n`
-    );
-  if (reason === 'native-model')
-    return (
-      `:::note[Supporting model]\nA plain data model, not a widget — it bundles ` +
-      `a workflow's task and process records for widgets to display. Because it ` +
-      `depends on the native-only log library, use it in a terminal or through ` +
-      `[\`fleury serve\`](/fleury/architecture/serving-and-embedding/), not in a ` +
-      `client-side embed.\n:::\n`
-    );
-  if (reason === 'core') {
-    // Point each primitive at the guide that uses it (layout for the box/flex
-    // primitives, loading-data for the async builders, and so on). An entry
-    // with `guide: null` has no guide that teaches it, so it names none.
-    const guide = 'guide' in d ? d.guide : 'layout';
-    return (
-      `:::note[Core widget]\nA framework primitive from \`package:fleury\`. The ` +
-      `reference below is generated from the source.` +
-      (guide ? ` For how it fits with related widgets, see the ${guideLink(guide)} guide.` : '') +
-      `\n:::\n`
-    );
-  }
+  // Point each primitive at the guide that uses it (layout for the box/flex
+  // primitives, loading-data for the async builders, and so on). An entry
+  // with `guide: null` has no guide that teaches it, so it names none.
+  const guide = 'guide' in d ? d.guide : 'layout';
   return (
-    `:::note[Imperative]\nToasts are raised at runtime with ` +
-    `\`Toaster.show(context, …)\`, so there's no static preview on this ` +
-    `page.\n:::\n`
+    `:::note[Core widget]\nA framework primitive from \`package:fleury\`. The ` +
+    `reference below is generated from the source.` +
+    (guide ? ` For how it fits with related widgets, see the ${guideLink(guide)} guide.` : '') +
+    `\n:::\n`
   );
 };
 
@@ -923,20 +891,11 @@ const addToCategory = (category, entry) => {
 };
 // Within a category the framework primitives lead (Text before MarkdownView,
 // ListView before DataTable), then the registry's widgets, then the doc-only
-// native and imperative APIs.
+// pages.
 const catalogEntry = (d) => {
-  // Say only what changes for the reader: whether there is a live demo and
-  // whether the API needs a native process. Core primitives need no tag.
-  const tag = d.reason === 'native'
-    ? ' *(native only)*'
-    : d.reason === 'native-model'
-      ? ' *(data model; native only)*'
-      : d.reason === 'core' || d.example
-        ? ''
-        : ' *(no live demo)*';
-  // One sentence only — several core/native doc comments open with a full
-  // paragraph, which read as walls of text next to the curated one-line blurbs.
-  const blurb = firstSentence(api[d.widget]?.doc ?? '') + tag;
+  // One sentence only — several core doc comments open with a full paragraph,
+  // which read as walls of text next to the curated one-line blurbs.
+  const blurb = firstSentence(api[d.widget]?.doc ?? '');
   return { widget: d.widget, id: d.slug, blurb };
 };
 for (const d of CORE) addToCategory(d.category, catalogEntry(d));
