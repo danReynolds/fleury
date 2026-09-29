@@ -185,6 +185,9 @@ class _TabsState extends State<Tabs> {
   void _onChange() => setState(() {});
 
   KeyEventResult _onKey(KeyEvent event) {
+    // The detector also surrounds the body so explicit tab shortcuts can
+    // bubble through it. Plain navigation belongs to the strip itself.
+    if (!_focusNode.hasFocus) return KeyEventResult.ignored;
     switch (event.code) {
       case KeyCode.arrowLeft:
         _controller.previous();

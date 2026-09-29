@@ -753,6 +753,13 @@ class TreeTableController extends Notifier {
     _list.currentIndex = value;
   }
 
+  void _moveCursor(int index, int rowCount) {
+    _checkNotDisposed();
+    _list.moveCursor(index, itemCount: rowCount);
+  }
+
+  int? _cursorFor(int rowCount) => _list.cursorFor(itemCount: rowCount);
+
   ({int first, int last})? get visibleRange => _list.visibleRange;
 
   Set<Object> get expandedKeys => Set<Object>.unmodifiable(_expandedKeys);
@@ -1079,6 +1086,9 @@ class _TreeTableState<T> extends State<TreeTable<T>> {
       _controller = widget.controller ?? TreeTableController();
       _ownsController = widget.controller == null;
       _controller.addListener(_onControllerChange);
+    } else {
+      // New roots or a new filter: the cursor stays on its node.
+      _followSelectedKey();
     }
     if (widget.focusNode != oldWidget.focusNode) {
       if (_ownsFocusNode) _focusNode.dispose();
@@ -1087,7 +1097,47 @@ class _TreeTableState<T> extends State<TreeTable<T>> {
     }
   }
 
-  void _onControllerChange() => setState(() {});
+  void _onControllerChange() {
+    // An expand or collapse above the cursor moves its node to another row.
+    _followSelectedKey();
+    setState(() {});
+  }
+
+  // The selection is its row's key ([TreeTableNode.key] is the row's
+  // identity), but the ListView keeps an index. When the rows are rebuilt,
+  // move the index to where the selected node now is — or, when the node
+  // left the rows (its parent collapsed, a filter dropped it), to its
+  // nearest ancestor that is still there. Runs before the build that uses
+  // the new rows, so no frame shows the cursor on another node.
+  void _followSelectedKey() {
+    final oldRows = _cachedRows;
+    if (oldRows == null || oldRows.isEmpty) return;
+    // Where the cursor is in those rows, a move from an earlier rebuild this
+    // frame included.
+    final index = _controller._cursorFor(oldRows.length);
+    if (index == null) return;
+    final rows = _ensureRows();
+    if (identical(rows, oldRows) || rows.isEmpty) return;
+    final indexOf = <Object, int>{
+      for (var i = 0; i < rows.length; i++) rows[i].key: i,
+    };
+    TreeTableRow<T>? row = oldRows[index.clamp(0, oldRows.length - 1)];
+    while (row != null) {
+      final next = indexOf[row.key];
+      if (next != null) {
+        if (next != index) _controller._moveCursor(next, rows.length);
+        return;
+      }
+      final parentKey = row.parentKey;
+      row = null;
+      for (final candidate in oldRows) {
+        if (candidate.key == parentKey) {
+          row = candidate;
+          break;
+        }
+      }
+    }
+  }
 
   void _onFocusDetectorChange(bool focused) {
     if (_focusedWithin == focused) return;

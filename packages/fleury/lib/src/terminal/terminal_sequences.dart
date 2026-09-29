@@ -3,7 +3,7 @@ import 'terminal_driver.dart';
 /// Builds the mode-entry escape sequence shared by native terminal drivers.
 String buildTerminalEnterSequences(TerminalMode mode) {
   final buf = StringBuffer();
-  if (mode.alternateScreen) buf.write('\x1B[?1049h');
+  if (mode.isFullScreen) buf.write('\x1B[?1049h');
   // Disable autowrap (DECAWM) while we own the screen. The diff renderer paints
   // full-width rows and positions the cursor with `\r\n`/relative moves that
   // assume writing the last column does NOT advance the cursor. With autowrap
@@ -11,7 +11,7 @@ String buildTerminalEnterSequences(TerminalMode mode) {
   // extra line, and the following `\r\n` over-advances — desyncing every row
   // below it (persistent garble, most visible once long content scrolls into
   // view). Restored on exit.
-  if (mode.alternateScreen) buf.write('\x1B[?7l');
+  buf.write('\x1B[?7l');
   if (mode.hideCursor) buf.write('\x1B[?25l');
   if (mode.bracketedPaste) buf.write('\x1B[?2004h');
   // Focus reporting (DECSET 1004). Opportunistic: it cannot be queried, so
@@ -62,7 +62,7 @@ String buildTerminalExitSequences(TerminalMode mode) {
   if (mode.resetStyleOnExit) buf.write('\x1B[0m');
   // Restore autowrap (DECAWM) before leaving the alt screen, so the shell we
   // hand back behaves normally.
-  if (mode.alternateScreen) buf.write('\x1B[?7h');
-  if (mode.alternateScreen) buf.write('\x1B[?1049l');
+  buf.write('\x1B[?7h');
+  if (mode.isFullScreen) buf.write('\x1B[?1049l');
   return buf.toString();
 }

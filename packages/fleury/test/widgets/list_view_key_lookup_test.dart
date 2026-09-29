@@ -175,6 +175,39 @@ void main() {
     },
   );
 
+  testWidgets('a duplicate in an append fails and leaves the keys intact', (
+    tester,
+  ) {
+    final items = List.generate(100, (i) => i);
+    final controller = ListController(initialIndex: 1);
+    addTearDown(controller.dispose);
+    Widget app() => SizedBox(
+      width: 20,
+      height: 3,
+      child: ListView.builder(
+        controller: controller,
+        itemCount: items.length,
+        itemKeyBuilder: (i) => items[i],
+        itemBuilder: (_, i, _) => _Row(items[i]),
+      ),
+    );
+    tester.pumpWidget(app());
+
+    // A new key, then one that repeats an existing key.
+    items.addAll([100, 50]);
+    expect(() => tester.pumpWidget(app()), throwsStateError);
+
+    // The failed append must not have kept 100: the retry appends it again.
+    items.removeLast();
+    tester.pumpWidget(app());
+    items.add(101);
+    tester.pumpWidget(app());
+    expect(controller.currentIndex, 1);
+    controller.jumpToIndex(99);
+    tester.pump();
+    expect(tester.renderToString().trim(), '99:99\n100:100\n101:101');
+  });
+
   testWidgets('seeded updates match an identity oracle', (tester) {
     var seed = 71;
     int next(int max) {

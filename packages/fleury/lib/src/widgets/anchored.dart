@@ -24,6 +24,7 @@ import 'bounds.dart';
 import 'framework.dart';
 import 'overlay.dart';
 import 'pointer.dart' show AbsorbPointer, PointerTapCallback;
+import 'theme.dart' show Theme, ThemeData;
 
 // ---------------------------------------------------------------------------
 // AnchoredFloat
@@ -170,14 +171,28 @@ class _AnchoredState extends State<Anchored> {
       alignment: widget.alignment,
       anchorAlignment: widget.anchorAlignment,
       gap: widget.gap,
-      child: widget.overlay,
+      child: Theme(data: _theme!, child: widget.overlay),
     ),
   );
+
+  // The overlay builds the float above any Theme the app set, so it carries
+  // the theme where this Anchored sits.
+  ThemeData? _theme;
   late final OverlayMount _mount = OverlayMount(
     entry: _entry,
     overlay: () => Overlay.maybeOf(context),
     mountWhen: () => widget.visible,
   );
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    final theme = Theme.of(context);
+    if (theme != _theme) {
+      _theme = theme;
+      _entry.markNeedsBuild();
+    }
+  }
 
   @override
   void didUpdateWidget(covariant Anchored old) {

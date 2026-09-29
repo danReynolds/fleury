@@ -30,14 +30,12 @@ void main() {
       );
     });
 
-    test('a no-alt-screen mode leaves autowrap untouched', () {
-      const inline = TerminalMode(
-        rawInput: true,
-        alternateScreen: false,
-        hideCursor: false,
-      );
-      expect(buildTerminalEnterSequences(inline), isNot(contains('\x1B[?7')));
-      expect(buildTerminalExitSequences(inline), isNot(contains('\x1B[?7')));
+    test('inline controls autowrap without switching screen buffers', () {
+      const inline = TerminalMode.inline(rows: 10, hideCursor: false);
+      expect(buildTerminalEnterSequences(inline), contains('\x1B[?7l'));
+      expect(buildTerminalEnterSequences(inline), isNot(contains('1049')));
+      expect(buildTerminalExitSequences(inline), contains('\x1B[?7h'));
+      expect(buildTerminalExitSequences(inline), isNot(contains('1049')));
     });
   });
 }

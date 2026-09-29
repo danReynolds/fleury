@@ -309,7 +309,11 @@ void main() {
           t.pump();
           expect(c.isFollowing, isTrue);
           expect(c.unseenCount, 0);
-          expect(c.currentIndex, 0);
+          expect(
+            c.currentIndex,
+            20,
+            reason: 'scrolling back left the cursor riding the tail',
+          );
           t.pumpWidget(app(22));
           expect(c.visibleRange, (first: 17, last: 21));
         },

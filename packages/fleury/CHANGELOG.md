@@ -5,6 +5,267 @@
   styles a held primary pointer press on activatable controls; release,
   cancellation, or disabling clears it. Keyboard and semantic activation remain
   immediate actions. Custom controls can also pass `pressed:` to `CellStyle.resolve`.
+
+- Generated semantic IDs distinguish repeated row keys in separate unkeyed
+  lists and keys with different value types. Keyed rows retain their IDs when
+  reordered within a list; explicit semantic IDs and `Semantics(key:)` IDs are
+  unchanged. Generated positional IDs remain opaque, session-scoped handles.
+- `FleuryTester.invokeCommand` and `invokeSemanticAction` pump requested frames
+  while awaiting a handler, so post-frame validation no longer deadlocks them.
+  Test time remains under the caller's control, and a dialog still needs an
+  explicit answer. Disposal and frame failures release pending invocations.
+
+- **Breaking:** `requestExit()` is now `exitApp()`, the counterpart to
+  `runApp()`. It starts orderly UI shutdown; await `runApp` for terminal
+  restoration to finish. It does not terminate the host process.
+- **Breaking:** Removed `TerminalMode(alternateScreen: ...)`. Choose
+  `TerminalMode.fullScreen()` or `TerminalMode.inline(rows: ...)` instead.
+  The unnamed constructor still defaults to full-screen. Screen choice is
+  reported by `isFullScreen` and `isInline`.
+- Added a shutdown-and-signals guide with an interactive browser illustration
+  and runnable native examples for ordinary exits and app-owned cleanup.
+- **Breaking:** Unhandled Ctrl+C now returns
+  `AppExit.signal(AppSignal.interrupt)` from `runApp`, matching SIGINT, instead
+  of `AppExit.requested`. CLI callers can preserve exit code 130. A widget
+  that handles Ctrl+C, such as copying selected text, still takes precedence.
+- **Breaking:** `BuildOwner.rethrowContainedRenderErrors` is now
+  `rethrowContainedErrors`, and it covers build errors as well as layout and
+  paint. Under `FleuryTester`, a widget whose `build`, `initState`, or
+  `didUpdateWidget` throws now fails the test instead of rendering an error
+  panel. A test of the panel itself sets
+  `tester.owner.rethrowContainedErrors = false`.
+- **Breaking:** `BuildOwner.onBuildError` reports exactly the errors the
+  `errorBuilder` contains. An error that propagates instead, on an owner with
+  no `errorBuilder` or under `rethrowContainedErrors`, is no longer reported
+  before it is rethrown.
+- **Breaking:** `FleuryTester`'s build-only helpers (`mountWidget`, `sendKey`,
+  `type`, `press`, `paste`, `sendMouse` and the other input helpers, and
+  viewport changes) build as part of the next frame, as input does in the
+  runtime. A subtree they remove is disposed when that frame renders (`pump`,
+  `render`, `pumpAndSettle`, `settle`) or when the tester is disposed, not
+  immediately after the helper returns.
+- A child that throws while it mounts or updates (in `initState`,
+  `didUpdateWidget`, a render object's create or update, or on a duplicate
+  key) is contained like a thrown `build`. The nearest building ancestor
+  shows the error panel in its place and the session keeps running. Before,
+  the whole screen became an error, siblings could be lost, and a parent
+  that rebuilt every frame tore the session down. A `LayoutBuilder` whose
+  builder throws shows the panel in its own slot too; an `ErrorBoundary`
+  above it no longer sees that error, as it never saw a thrown `build`.
+- A resize whose root rebuild throws fails that frame and is retried on the
+  next one. Before, the error escaped the frame driver on every later frame.
+- Frames, animation ticks, and the error banner's dismiss timer run in
+  `runApp`'s guarded zone, whoever requested them. A frame requested from a
+  listener created in `main()` used to run outside the guard, so a failing
+  post-frame callback killed the process and left the terminal raw. A host
+  that builds its own runtime builds it inside the zone that guards it.
+- A frame that a frame causes, such as a post-frame callback or a `setState`
+  from a microtask the frame queued, renders when the event-loop turn ends.
+  Input, timers, and signals now run between the frames of such a chain;
+  before, the chain starved the event loop until it ended.
+- Unkeyed children keep their State when siblings around them change. The
+  reconcile keeps the unchanged top and bottom in place and matches the
+  changed middle by type, in order. A `TextInput` draft survives an error
+  line appearing above it, and a spinner above it going away while a hint
+  below it becomes an error. A sliding window of mixed row types updates
+  its rows in place instead of re-creating them.
+- A `GlobalKey`'d subtree that moves into a `LayoutBuilder`, such as a panel
+  maximized into one, keeps its State, whether `setState`, a terminal resize,
+  or a `FleuryTester` helper caused the move. `BuildOwner` gains
+  `beginFrame`/`endFrame`/`runFrame` for hosts whose frame starts with a
+  build of their own; `FrameDriver` runs a resize's root rebuild in the frame
+  it renders.
+- A frame whose layout throws still disposes the subtrees its build removed.
+- `LayoutBuilder` builds what its builder dirtied, such as the readers of a
+  `Scope` fed from constraints, before its child lays out. Those readers show
+  the current size instead of the previous one.
+- `Animation.loop` keeps running through hot reload. Pulse, shimmer, and
+  other repeating effects no longer freeze after the first reload.
+- `TerminalMode.inline(rows: ...)` runs a bounded command UI in the main
+  terminal buffer on macOS/Linux. `TerminalSession.resizeInline` changes its
+  height; mouse/caret offsets, resize, subprocess handoff, suspend/resume, and
+  development restart/crash cleanup share the owned-region lifecycle. Existing
+  full-screen sessions remain the default. See `doc/inline_terminal.md`.
+- Native macOS/Linux TTY applications can await successive `runApp` calls,
+  with ordinary prompts or inherited-stdio children between them. Each call
+  owns fresh input and runtime state; overlapping sessions are rejected.
+  A cleanup timeout keeps new sessions blocked until actual restoration,
+  capture shutdown, and output replay finish. Windows and redirected stdin
+  retain the one-session restriction.
+- Failed terminal entry, handoff, and suspend/resume retain restoration
+  ownership and close the affected session. A child that outlives a cleanup
+  deadline keeps its capture handles until the handoff finishes. A throwing
+  `onStrayOutput` hook is disabled and reported inside the runtime guard;
+  the failed line and later output are retained for replay after exit.
+
+- Wrapped `Text` keeps its lines through a resize. Widening a wrapped text
+  until it fit one line and then narrowing it again showed only its first
+  line.
+- A paragraph's leading spaces are its indentation, and wrapping keeps them.
+  Multi-line help text, `JsonView` nesting, and nested Markdown bullets
+  render indented instead of flush left. An indent that leaves no room for
+  the paragraph's first word gives way to it rather than taking a row of its
+  own.
+- `Row` and `Column` align their children within the space they are given,
+  not within their content. `CrossAxisAlignment.end` in an `Expanded` pane
+  reaches the pane's edge, a row in a taller `SizedBox` centers vertically,
+  and a `mainAxisSize: min` flex that is forced wider centers along its main
+  axis. When the children overflow, `spaceBetween`, `spaceAround`, and
+  `spaceEvenly` leave no gaps instead of painting siblings over each other.
+- A `RepaintBoundary`, and a `ListView` item clipped at the viewport edge,
+  paint over their parent as their child would directly: a cell the child
+  left empty shows what lies beneath it. Ragged text in a filled panel no
+  longer punches holes in the panel's background (every `ListView` item has
+  a boundary). An overlay entry that paints no fill of its own now shows the
+  app beneath its empty cells too; the built-in dialogs, menus, and popups
+  all paint an opaque fill.
+- A `ScrollView` over a `Column` no longer paints the rows of text that are
+  scrolled out of view.
+- Holding Ctrl+C no longer quits an app that handled the press, such as a
+  copy of the selection or the app's own interrupt binding. Only an
+  unhandled press quits; its key repeats do not.
+- The numeric keypad works on kitty-protocol terminals. Digits and operators
+  type, KP Enter submits and activates, and the NumLock-off keys move the
+  caret and delete. A keypad key reports what it means, as it does in the
+  browser, and carries the keypad on its position (`KeyPosition.numpad1`,
+  `KeyPosition.numpadEnter`): a binding for the keypad key itself uses the
+  position.
+- In the browser, a printable key reaches each `KeyDetector` once, and a
+  consumed Shift+letter no longer types its capital as well. `Tree`,
+  `DataTable`, `Select`, and `Menu` type-ahead jump to the first match.
+- A click in a text field while a large paste is still being applied
+  finishes the paste first: it stays whole, undoes in one step, and the
+  caret lands on what was clicked.
+- Shift+Backspace, Shift+Delete, and Shift+Enter work in text fields on
+  kitty-protocol terminals and in the browser. Ctrl+Backspace and
+  Alt+Backspace delete the word before the caret.
+- Tab through a form in a `ScrollView` follows the form's order and scrolls
+  each field into view, however far the form is scrolled. `focusNext` and
+  `focusPrevious` reveal the node they move to, and so does arrow
+  traversal.
+- `TextArea` no longer measures its whole document on every caret move, or
+  on every keystroke unless it sizes to its content's width.
+- A key held on the keypad and the main-block key with the same meaning
+  (KP 4 with NumLock off, and Left) are tracked as two keys.
+- A letter typed after an abandoned key chord reaches `KeyDetector`s, such
+  as a list's type-ahead, on kitty-protocol terminals and in the browser.
+- A command's shortcut asks the command's `visible` and `enabled`
+  predicates when its key is pressed, as the palette, semantics, and
+  `invoke` do. A command that becomes enabled after its scope built fires on
+  its shortcut, and one that becomes disabled lets its key through to an
+  outer binding. A hint bar asks them too: the frame after an answer changes
+  shows the change, even when nothing rebuilt for it.
+- Esc at a navigator's root, where there is nothing to pop, reaches what
+  binds Esc above the navigator: FleuryApp's own Esc commands, the Toaster's
+  Esc dismiss, and an outer navigator. A blocking `PopScope` at the root
+  still intercepts it.
+- **Breaking:** `StatusController` keeps what FleuryApp derives from its
+  `status` builder and extensions apart from items an app or command sets.
+  Status a command reports through `context.status` survives the command's
+  completion, and a later command no longer wipes it. `put` and `remove` set
+  and clear one item beside the items others set. `update` replaces only the
+  set items, so `items` no longer equals what was last passed to it; don't
+  write `items` back through `update`, which would freeze the derived items
+  at their current values. Use `put`.
+- A command that throws is reported. From a shortcut, a button, or a palette
+  row it reaches runApp's error overlay, as a throwing key binding does.
+  `CommandRegistry.dispatch` and `dispatchCommand` start a command this way
+  for custom command surfaces and return whether it started; one that
+  throws before it returns throws from them, and a later failure of its
+  future reaches the zone.
+- A semantic action reports what it did. A handler declines by throwing the
+  new `SemanticActionDeclined`, which reports `unsupported` rather than
+  `completed`.
+  - A command node or a status item runs its command: one that failed
+    reports `failed`, and one that is disabled, hidden or gone reports
+    `unsupported`. `CommandRegistry.invokeFromSemantics` and
+    `invokeCommandFromSemantics` do the same for custom semantic handlers.
+  - A control's `activate` is a press, as Enter or a click is: nothing waits
+    on the work it starts, whose failure reaches the error overlay. A press
+    that throws reports `failed`, a `CommandButton` or palette row whose
+    command throws included; one whose command turned disabled, hidden or
+    gone since it built reports `unsupported`, and a palette stays open.
+  - A route dismissal a `PopScope` refuses reports `unsupported`.
+- runApp stops on a storm of uncaught errors only when they recur with no
+  input between them. Holding a key whose command or async handler fails,
+  typing fast into a field whose async handler fails, or an agent repeating
+  such an action, reported 24 errors inside three seconds and ended the
+  session. Bare pointer motion doesn't count as input, so moving the mouse no
+  longer keeps a genuine error loop alive.
+- `FleuryTester.lastCommandResult` and the app node's `lastCommandId` are
+  the latest command visible from the focused context, scoped or app-level.
+  Both kept reporting the app's last command after a screen command ran.
+- `NavigatorState.topScreen` is the screen widget of the top route, so a
+  screen that closes itself can tell being presented from being shown
+  inline.
+- `FleuryTester.renderToString` trims each row's trailing empty cells rather
+  than trailing copies of the mark. An empty mark no longer hangs the test,
+  a mark of several characters works, and a glyph equal to the mark stays.
+- A focus move rebuilds the controls whose focus changed, not every
+  `TextInput`, `TextArea` and button in the tree (41 elements per Tab in a
+  20-row form). `FocusNode` is a `Listenable` that notifies when its own
+  focus flips, including when its `Focus` unmounts while focused; a control
+  shows a focus cue with `context.listen(node)`. `Focus.of` read in a build
+  rebuilds its caller for that node's focus only. A click in a text field
+  no longer subscribes it to every focus move.
+- `ListController.moveCursor(index, itemCount:)` places the cursor in a list
+  its owner is rebuilding to a new number of items, where `currentIndex`
+  would clamp against the old count; a later `currentIndex` supersedes it,
+  and `cursorFor(itemCount:)` reads it back before the list shows it.
+- An `Anchored` float paints the theme where it sits, not the fallback theme
+  of the overlay above the app's `Theme`.
+- A terminal-only app no longer re-derives the screen geometry of every
+  mounted `Semantics` node (every `Text`) on every paint pass; nothing reads
+  it until a semantics consumer takes a full rebuild.
+- **Breaking:** a served app says why it could not send its semantic tree.
+  The encoder rejects a tree it cannot carry, most often two nodes that
+  derive the same id from one `Key` used under different unkeyed parents,
+  and the serve driver dropped it silently: the browser's accessibility tree
+  and agents over MCP saw nothing, or a tree frozen at the last one sent.
+  runApp now reports it as a developer warning, once per episode.
+  `RemoteSurfaceSink` gained `onDeveloperWarning`, which an implementation
+  must provide.
+- A served semantic action whose handler awaits UI no longer holds up the
+  actions behind it. The `await context.present(Confirm())` idiom in a
+  `Semantics` handler or an `AppCommand` finishes only once a later action
+  answers the dialog, and that action queued behind it forever. The queue
+  now waits for a handler for at most 500 ms, and the handler's RESULT goes
+  out when it finishes. Actions still apply in order when each finishes
+  within that; one slower than it can be overtaken by the next.
+- A framed app no longer floods its served accessibility tree and MCP with
+  its frame. The coverage fallback, which exposes painted text that has no
+  semantics, counted drawing glyphs (box drawing, block elements, braille,
+  sextants, octants) as text: a panel's frame became dozens of `│` nodes,
+  and every framed app kept the semantics pipeline off its fast paths,
+  walking the whole tree and scanning the whole screen every frame. Text
+  inside a frame still falls back, without the frame; an ASCII frame (`+`,
+  `-`, `|`) still reads as text.
+- A semantic patch that only changes content (labels, values, state; no
+  node added or removed, no child list changed) costs its peer about what it
+  changed. `SemanticsWireDecoder` rebuilds only those nodes and their
+  ancestors, reusing the rest of the tree, and names them in
+  `contentReplacements`; `SemanticTreeUpdate` no longer copies the node
+  maps. A one-label patch on a 2,253-node tree now decodes and updates its
+  owner in about 0.2 ms rather than 5.7 ms. A structural patch still
+  rebuilds the tree.
+- Debugger mode changes preserve application state and layout. Opening the
+  shell starts a bounded 60-frame recording that continues while hidden;
+  Rebuilds shows the worst frame's phase costs. Inspector reports scroll with
+  Page Up/Down, Errors includes full traces, and Tree reports hyperlink and
+  input/clipboard policies. Debugger tabs expose semantic activation, and the
+  host SPI exports the optional diagnostics services used by the live guide.
+- A keyed `ListView` that grows by appending validates and indexes only the
+  new keys instead of rebuilding its key index; a duplicate in the append
+  still throws and leaves the previous keys intact.
+- A list that follows its tail keeps its cursor on the newest item:
+  `ListController(followTail: true)` starts on the last item and carries the
+  cursor along as items arrive, until an arrow key, click, or `currentIndex`
+  places it; End, or `jumpToEnd` on a following list (as `LogRegion` and
+  `MessageList`'s `scrollToBottom` do), puts it back on the tail. Previously the cursor stayed on the
+  first item, off-screen, so Ctrl+C in a tailing log copied the oldest line and
+  the first arrow key jumped the view back to the start. The default
+  `initialIndex` is now `ListController.natural` (the first item, or the last
+  for a following list); an explicit index or null behaves as before.
 - **Breaking:** a scope is read one way, as a call or as a widget:
   `context.scope<T>()` or `ScopeBuilder<T>`, which behave the same.
   `Scope.of` and `Scope.maybeOf` are removed; an optional scope is read with a
@@ -17,6 +278,12 @@
   `GlobalKey` move carries the subscription to the same scope type at the new
   position (an `initState` read used to go deaf). `context.listen` in
   `didChangeDependencies` now throws: it subscribes a build.
+- **Breaking:** reading `Animation.value` in build subscribes the widget the
+  way `context.listen` does, so a widget whose build stops reading an
+  animation is no longer rebuilt on every tick. `Element.dependOnExternal` and
+  `Animation.debugDependentCount` are removed; test with `hasListeners`.
+  Widgets that keep reading the same listenables skip the per-build
+  reconcile walk.
 - **Breaking:** compatibility names are gone, with no aliases: `ChangeNotifier`
   (use `Notifier`), `notifyListeners()` (override and call `notify()`),
   `ListenableBuilder` and `ValueListenableBuilder` (use `NotifierBuilder` or

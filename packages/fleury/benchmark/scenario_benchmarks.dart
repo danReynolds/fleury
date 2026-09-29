@@ -898,7 +898,8 @@ Future<_CounterJourneySample> _runCounterJourney(_ScenarioConfig config) async {
   final total = Stopwatch()..start();
   try {
     final mount = Stopwatch()..start();
-    tester.pumpWidget(const _CounterScenarioApp());
+    // Build only: the measured first frame below is the layout and paint.
+    tester.mountWidget(const _CounterScenarioApp());
     mount.stop();
 
     final firstFrame = Stopwatch()..start();
@@ -952,7 +953,8 @@ Future<_LayoutDirtinessJourneySample> _runLayoutDirtinessJourney(
   final memory = _MemoryProbe(enabled: config.profileMemory)..mark('start');
   final total = Stopwatch()..start();
   try {
-    tester.pumpWidget(_LayoutDirtinessScenarioApp(counter: counterModel));
+    // Build only: the measured first frame below is the layout and paint.
+    tester.mountWidget(_LayoutDirtinessScenarioApp(counter: counterModel));
     memory.mark('afterMount');
 
     final firstFrame = Stopwatch()..start();
@@ -979,7 +981,7 @@ Future<_LayoutDirtinessJourneySample> _runLayoutDirtinessJourney(
     memory.mark('afterTextPaintOnlyFrame');
 
     final childListNoOp = Stopwatch()..start();
-    tester.pumpWidget(_LayoutDirtinessScenarioApp(counter: counterModel));
+    tester.mountWidget(_LayoutDirtinessScenarioApp(counter: counterModel));
     final childListNoOpFrameSample = _renderMeasured(tester, config);
     childListNoOp.stop();
     memory.mark('afterChildListNoOpFrame');

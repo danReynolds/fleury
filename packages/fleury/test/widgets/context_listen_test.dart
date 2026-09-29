@@ -96,6 +96,59 @@ void main() {
     expect(builds, 3);
   });
 
+  test('a repeated read cannot keep a dropped source subscribed', () {
+    // A build that reads one source twice and drops another must still
+    // detach the dropped one: repeats are not distinct reads.
+    final kept = _Source();
+    final dropped = _Source();
+    final owner = BuildOwner();
+    var both = true;
+    final root = owner.mountRoot(
+      _Build((context) {
+        context.listen(kept);
+        context.listen(kept);
+        if (both) context.listen(dropped);
+        return const Text('read');
+      }),
+    );
+    addTearDown(root.unmount);
+    both = false;
+    kept.emit();
+    owner.flushBuild();
+    expect(kept.listeners, hasLength(1));
+    expect(dropped.listeners, isEmpty);
+  });
+
+  test('an Animation.value read follows the same per-build rule', () {
+    // Reading an animation in build subscribes like context.listen: once a
+    // build stops reading it, the animation stops rebuilding the widget.
+    final animation = Animation(1);
+    final owner = BuildOwner();
+    var read = true;
+    var builds = 0;
+    Widget consumer() => _Build((context) {
+      builds++;
+      if (read) animation.value;
+      return const Text('read');
+    });
+    final root = owner.mountRoot(consumer());
+    addTearDown(() {
+      root.unmount();
+      animation.dispose();
+    });
+    animation.snap(2);
+    owner.flushBuild();
+    expect(builds, 2);
+
+    read = false;
+    owner.updateRoot(root, consumer());
+    expect(builds, 3);
+    animation.snap(3);
+    owner.flushBuild();
+    expect(builds, 3, reason: 'the build that stopped reading unsubscribed');
+    expect(animation.hasListeners, isFalse);
+  });
+
   test(
     'distinct equal sources have separate identities and replace correctly',
     () {

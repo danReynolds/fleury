@@ -121,6 +121,33 @@ void main() {
     expect(selected?.label, 'README');
   });
 
+  testWidgets('browser Shift+letter type-ahead lands on the first match', (
+    tester,
+  ) {
+    // The DOM reports Shift+D as a keydown (`d` with Shift) and then its text
+    // `D` as a separate event: one press, so type-ahead advances once.
+    tester.keyboardCapabilities = KeyboardCapabilities.full;
+    final selected = <String>[];
+    tester.pumpWidget(
+      Tree<String>(
+        autofocus: true,
+        onSelect: (node) => selected.add(node.label),
+        roots: const [
+          TreeNode<String>('Alpha'),
+          TreeNode<String>('Delta'),
+          TreeNode<String>('Dog'),
+          TreeNode<String>('Echo'),
+        ],
+      ),
+    );
+
+    tester.sendKey(const KeyEvent(KeyCode.d, modifiers: {KeyModifier.shift}));
+    tester.type('D');
+    tester.sendKey(const KeyEvent(KeyCode.enter));
+
+    expect(selected, ['Delta']);
+  });
+
   testWidgets('typeahead: false lets a typed printable bubble to ancestor '
       'bindings', (tester) {
     // A focused tree with type-ahead on consumes every printable, which

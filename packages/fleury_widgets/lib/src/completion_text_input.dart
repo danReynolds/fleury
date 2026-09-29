@@ -1,4 +1,5 @@
 import 'package:fleury/fleury_core.dart';
+import 'package:fleury/fleury_internal.dart' show readScope;
 
 import 'option_label.dart';
 
@@ -197,6 +198,10 @@ class _CompletionTextInputState extends State<CompletionTextInput> {
   final ListController _list = ListController(initialIndex: 0);
   FocusManager? _manager;
   OverlayEntry? _entry;
+
+  // The overlay builds the suggestions above any Theme the app set, so they
+  // carry the theme where this field sits.
+  ThemeData? _theme;
   CellStyle _selectionStyle = const CellStyle(inverse: true);
   BorderStyle _borderStyle = BorderStyle.rounded;
 
@@ -247,11 +252,18 @@ class _CompletionTextInputState extends State<CompletionTextInput> {
   @override
   void didChangeDependencies() {
     super.didChangeDependencies();
-    final manager = FocusManager.maybeOf(context);
+    // Registered with, not depended on: the listener follows focus, and a
+    // dependency would rebuild this widget on every focus move anywhere.
+    final manager = readScope<FocusManager>(context);
     if (!identical(manager, _manager)) {
       _manager?.removeListener(_syncCompletion);
       _manager = manager;
       _manager?.addListener(_syncCompletion);
+    }
+    final theme = Theme.of(context);
+    if (theme != _theme) {
+      _theme = theme;
+      _entry?.markNeedsBuild();
     }
   }
 
@@ -305,10 +317,13 @@ class _CompletionTextInputState extends State<CompletionTextInput> {
     }
     if (_entry == null) {
       final entry = OverlayEntry(
-        builder: (context) => AnchoredFloat(
-          notifier: _bounds,
-          onTapOutside: _dismissOverlay,
-          child: _suggestions(context),
+        builder: (context) => Theme(
+          data: _theme!,
+          child: AnchoredFloat(
+            notifier: _bounds,
+            onTapOutside: _dismissOverlay,
+            child: _suggestions(context),
+          ),
         ),
       );
       _entry = entry;

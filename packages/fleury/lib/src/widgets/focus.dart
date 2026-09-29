@@ -28,6 +28,7 @@ import '../foundation/geometry.dart';
 import '../rendering/cell_buffer.dart';
 import '../rendering/layout.dart';
 import '../rendering/render_object.dart';
+import '../rendering/scroll_reveal.dart';
 import '../input/events.dart';
 import 'framework.dart';
 import 'key_bindings.dart' show KeyBinding;
@@ -149,7 +150,12 @@ abstract interface class TextCompositionClaimant {
 /// A long-lived focus identity. One per [Focus] widget; consumers can
 /// also create their own and pass it into a `Focus` to keep focus
 /// state stable across reparenting.
-class FocusNode {
+///
+/// A node notifies its listeners when [hasFocus] flips. A control that shows
+/// a focus cue listens to its own node — `context.listen(node)` in build —
+/// so a focus move rebuilds the two controls it concerns, not every control
+/// that depends on the [FocusManager].
+class FocusNode implements Listenable {
   FocusNode({
     /// Whether this node can receive focus through traversal, pointer input,
     /// or [requestFocus].
@@ -198,8 +204,9 @@ class FocusNode {
   /// layout of the `Focus` widget that carries it. Null when the node cannot
   /// take input, has no widget, or its widget is not presented or is fully
   /// clipped out of view (scrolled past the viewport): you scroll to such a
-  /// widget, you don't arrow to it. Directional traversal, reading order, and
-  /// click-to-focus read it; nothing writes it.
+  /// widget, you don't arrow to it. Directional traversal and click-to-focus
+  /// read it; nothing writes it. Tab order reads the node's place in its
+  /// scroll viewports instead, which a scrolled-out node still has.
   CellRect? get rect {
     final host = _boundsHost;
     if (host == null) return null;
@@ -208,6 +215,47 @@ class FocusNode {
     final geometry = host.screenGeometry();
     if (geometry == null || geometry.visible == null) return null;
     return geometry.bounds;
+  }
+
+  /// Where Tab finds this node: the scroll viewports it sits in, outermost
+  /// first, then the node itself, each with its unclipped rectangle on
+  /// screen. Null when the node cannot take input or is not presented.
+  ///
+  /// Inside one viewport, rectangles are the content's own layout shifted by
+  /// the scroll, so they order content however far it is scrolled and
+  /// whatever is clipped; a viewport's content is placed among its
+  /// neighbours by the viewport's own rectangle ([_compareTabPlaces]).
+  List<_TabLevel>? get _tabPlace {
+    final host = _boundsHost;
+    if (host == null) return null;
+    final manager = _manager;
+    if (manager != null && !manager._acceptsInput(this)) return null;
+    final geometry = host.screenGeometry();
+    if (geometry == null) return null;
+    if (host is! RenderObject) return [_TabLevel(this, geometry.bounds, 0)];
+    final viewports = <(RenderObject, int)>[];
+    var depth = 0;
+    for (var node = host.parent; node != null; node = node.parent) {
+      depth++;
+      if (node is RenderScrollViewport) viewports.add((node, depth));
+    }
+    return [
+      for (final (viewport, up) in viewports.reversed)
+        _TabLevel(
+          viewport,
+          viewport.screenGeometry()?.bounds ?? geometry.bounds,
+          depth - up,
+        ),
+      _TabLevel(this, geometry.bounds, depth),
+    ];
+  }
+
+  /// Scrolls the viewports above this node's widget until it shows, as Tab
+  /// and the arrow keys do when they move focus here.
+  @internal
+  void reveal() {
+    final host = _boundsHost;
+    if (host is RenderObject) revealInScrollViews(host);
   }
 
   ScreenGeometrySource? _boundsHost;
@@ -277,6 +325,24 @@ class FocusNode {
   /// Whether this node is currently the focused node in its manager.
   bool get hasFocus => _manager?.focusedNode == this;
 
+  List<VoidCallback>? _listeners;
+
+  /// Calls [listener] each time [hasFocus] flips.
+  @override
+  void addListener(VoidCallback listener) =>
+      (_listeners ??= <VoidCallback>[]).add(listener);
+
+  @override
+  void removeListener(VoidCallback listener) => _listeners?.remove(listener);
+
+  void _notifyFocusFlip() {
+    final listeners = _listeners;
+    if (listeners == null || listeners.isEmpty) return;
+    for (final listener in List<VoidCallback>.of(listeners)) {
+      listener();
+    }
+  }
+
   /// Whether the node's mounted subtree currently participates in input.
   ///
   /// A contained render failure keeps the element tree mounted so it can
@@ -324,6 +390,7 @@ class FocusNode {
     textCompositionClaimant = null;
     _boundsHost = null;
     _caretHost = null;
+    _listeners = null;
   }
 
   @override
@@ -442,6 +509,54 @@ class FocusManager extends Notifier {
     _frameInputAborted = false;
   }
 
+  /// What each hint surface — an element that resolved the active bindings
+  /// in its build — saw the live bindings ([KeyBinding.isLive]) answer.
+  final Map<Element, List<(KeyBinding, bool)>> _liveAnswers =
+      Map<Element, List<(KeyBinding, bool)>>.identity();
+
+  /// Framework-internal: records what the live bindings answered a
+  /// resolution made in [Element.current]'s build. A resolution outside a
+  /// build — a key's dispatch, a test reading the bindings — records
+  /// nothing: no surface shows its answers.
+  @internal
+  void recordLiveAnswers(List<(KeyBinding, bool)>? answers) {
+    final surface = Element.current;
+    if (surface == null) return;
+    if (answers == null || answers.isEmpty) {
+      _liveAnswers.remove(surface);
+    } else {
+      _liveAnswers[surface] = answers;
+    }
+  }
+
+  /// Framework-internal: asks the live bindings again, and notifies when one
+  /// answers differently from what a hint surface showed, so the surfaces
+  /// rebuild. A live binding's predicate reads app state that nothing
+  /// rebuilds its scope for. The frame driver calls this at the start of
+  /// every frame, before deciding the frame has nothing to do. A surface
+  /// that left the tree is forgotten, and with it the predicates it asked.
+  @internal
+  void recheckLiveAnswers() {
+    if (_disposed || _liveAnswers.isEmpty) return;
+    var changed = false;
+    _liveAnswers.removeWhere((surface, answers) {
+      if (!surface.mounted) return true;
+      for (final (binding, answer) in answers) {
+        bool now;
+        try {
+          now = binding.enabled;
+        } catch (_) {
+          // The surface's own resolution reports it when it rebuilds.
+          now = !answer;
+        }
+        // The surface records afresh when it rebuilds.
+        if (now != answer) return changed = true;
+      }
+      return false;
+    });
+    if (changed) notify();
+  }
+
   /// Commits the current focus paint transaction.
   @internal
   void endFrame() {
@@ -485,6 +600,8 @@ class FocusManager extends Notifier {
       if (focused != null && _isExcludedFromFocus(focused)) {
         _focusedNode = null;
         _focusedAncestry = null;
+        // Mid-build, like the manager's own notification below.
+        scheduleMicrotask(focused._notifyFocusFlip);
       }
       _notifyManagerScopeChanged();
     }
@@ -731,6 +848,11 @@ class FocusManager extends Notifier {
       _focusedNode = fallback;
       if (fallback != null) _rememberFocusInScopes(fallback);
       notify();
+      fallback?._notifyFocusFlip();
+      // [node] lost focus too. Its listeners may belong to what is unmounting
+      // with it, so they hear once this pass is over, when a disposed owner
+      // has stopped listening.
+      scheduleMicrotask(node._notifyFocusFlip);
     }
   }
 
@@ -768,6 +890,7 @@ class FocusManager extends Notifier {
     _checkNotDisposed();
     if (node != null && !isClickable(node)) return false;
     if (identical(_focusedNode, node)) return false;
+    final previous = _focusedNode;
     _focusedNode = node;
     if (node != null) {
       _rememberFocusInScopes(node);
@@ -775,6 +898,8 @@ class FocusManager extends Notifier {
       _focusedAncestry = null;
     }
     notify();
+    previous?._notifyFocusFlip();
+    node?._notifyFocusFlip();
     return true;
   }
 
@@ -831,8 +956,10 @@ class FocusManager extends Notifier {
   /// whether focus moved. This is the mechanism behind Tab traversal;
   /// the key bindings live in [FocusTraversalGroup].
   ///
-  /// Reading order is derived from each node's painted `rect`, so it
-  /// matches what the user sees regardless of mount order. When a trapping
+  /// Reading order is derived from each node's layout, so it matches what
+  /// the user sees regardless of mount order; inside a scroll view it
+  /// follows the content, including what is scrolled out of view, and the
+  /// node focus moves to is scrolled into view. When a trapping
   /// [FocusScope] is active, traversal is confined to nodes inside it.
   bool focusNext() => _cycleFocus(forward: true);
 
@@ -852,13 +979,19 @@ class FocusManager extends Notifier {
     } else {
       next = (i + (forward ? 1 : -1)) % order.length;
     }
-    return requestFocus(order[next]);
+    final node = order[next];
+    if (!requestFocus(node)) return false;
+    // Tab can reach a field scrolled out of view; bring it into view.
+    node.reveal();
+    return true;
   }
 
-  /// Focusable nodes in reading order (row, then column), with
-  /// attachment order as a stable tiebreak and not-yet-painted nodes
-  /// last. Filtered to the active focus trap when one is open — Tab inside a
-  /// trapped dialog cannot escape it.
+  /// Focusable nodes in reading order (row, then column) of their
+  /// [FocusNode._tabPlace]s, with attachment order as a stable tiebreak and
+  /// unpresented nodes last. A node scrolled out of view keeps its place in
+  /// its viewport's content, so the order does not depend on how far the
+  /// user has scrolled. Filtered to the active focus trap when one is open —
+  /// Tab inside a trapped dialog cannot escape it.
   List<FocusNode> _traversalOrder() {
     final attachIndex = <FocusNode, int>{};
     for (var i = 0; i < _attachedNodes.length; i++) {
@@ -869,23 +1002,45 @@ class FocusManager extends Notifier {
         .where(isTraversable)
         .where((n) => trap == null || _isUnderScopeMarker(n, trap))
         .toList();
-    // Geometry is derived on read; resolve each node's rect once, not once
+    // Geometry is derived on read; resolve each node's place once, not once
     // per comparison.
-    final rects = <FocusNode, CellRect?>{for (final n in nodes) n: n.rect};
+    final places = {for (final n in nodes) n: n._tabPlace};
     nodes.sort((a, b) {
-      final ra = rects[a];
-      final rb = rects[b];
-      if (ra != null && rb != null) {
-        if (ra.top != rb.top) return ra.top - rb.top;
-        if (ra.left != rb.left) return ra.left - rb.left;
-      } else if (ra == null && rb != null) {
+      final pa = places[a];
+      final pb = places[b];
+      if (pa != null && pb != null) {
+        final order = _compareTabPlaces(pa, pb);
+        if (order != 0) return order;
+      } else if (pa == null && pb != null) {
         return 1;
-      } else if (ra != null && rb == null) {
+      } else if (pa != null && pb == null) {
         return -1;
       }
       return attachIndex[a]! - attachIndex[b]!;
     });
     return nodes;
+  }
+
+  /// Orders two Tab places at the first level where they part: past the
+  /// viewports both sit in, compare what each holds there — a viewport it is
+  /// inside, or the node itself — by position, then by depth, so a node
+  /// that encloses a viewport (a scroll view's own node) comes before the
+  /// content inside it. Two different viewports in one place order by
+  /// identity, so each viewport's content stays together.
+  static int _compareTabPlaces(List<_TabLevel> a, List<_TabLevel> b) {
+    var i = 0;
+    while (i < a.length - 1 &&
+        i < b.length - 1 &&
+        identical(a[i].owner, b[i].owner)) {
+      i++;
+    }
+    final x = a[i];
+    final y = b[i];
+    if (x.bounds.top != y.bounds.top) return x.bounds.top - y.bounds.top;
+    if (x.bounds.left != y.bounds.left) return x.bounds.left - y.bounds.left;
+    if (x.depth != y.depth) return x.depth - y.depth;
+    if (x.owner is FocusNode && y.owner is FocusNode) return 0;
+    return identityHashCode(x.owner) - identityHashCode(y.owner);
   }
 
   /// The innermost enclosing focus-trap marker element of [node], or null
@@ -1280,9 +1435,6 @@ class Focus extends StatefulWidget {
   /// The nearest enclosing [FocusNode], or null when the context is not
   /// inside a [Focus]. See [of].
   static FocusNode? maybeOf(BuildContext context) {
-    // Depend on the manager so the caller rebuilds when focus moves; the node
-    // identity alone would not tell it that `hasFocus` flipped.
-    FocusManager.maybeOf(context);
     // Start at the context itself: a Focus's own element is its State's
     // context, so a widget can ask for the node it just installed. Otherwise
     // walk out to the closest enclosing one.
@@ -1291,7 +1443,19 @@ class Focus extends StatefulWidget {
       element != null;
       element = element.elementParent
     ) {
-      if (element is _FocusElement) return element.node;
+      if (element is _FocusElement) {
+        final node = element.node;
+        if (identical(Element.current, context)) {
+          // Read in the caller's own build: it rebuilds when this node's
+          // focus flips, not on every focus move anywhere.
+          context.listen(node);
+        } else {
+          // Read for another element, as a lazy list does when it builds a
+          // row during layout: only a manager dependency can be taken there.
+          FocusManager.maybeOf(context);
+        }
+        return node;
+      }
     }
     return null;
   }
@@ -1989,4 +2153,15 @@ class _FocusDetectorState extends State<FocusDetector> {
 
   @override
   Widget build(BuildContext context) => widget.child;
+}
+
+/// One level of a focus node's place in Tab order: a scroll viewport it sits
+/// in, or the node itself, with its unclipped rectangle on screen and its
+/// depth in the render tree.
+final class _TabLevel {
+  const _TabLevel(this.owner, this.bounds, this.depth);
+
+  final Object owner;
+  final CellRect bounds;
+  final int depth;
 }

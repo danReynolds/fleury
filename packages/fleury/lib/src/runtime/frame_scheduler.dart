@@ -14,15 +14,14 @@ typedef FrameFlushCancellation = void Function();
 /// the whole session until they fire. Injectable so tests drive timing
 /// deterministically.
 ///
-/// A scheduler must never satisfy a zero delay with a microtask when it can
-/// be invoked from inside its own flush — a post-frame callback or a
-/// `setState` during the post-frame drain requests the next frame while the
-/// render is still on the stack. Dart drains the microtask queue to empty
-/// before any timer, I/O, or signal runs, so a frame→frame microtask chain
-/// starves the event loop for the chain's whole duration: no input, no
-/// Ctrl+C, no signal delivery. The default scheduler takes a microtask only
-/// when idle and a `Timer` (a macrotask) when re-entrant; the browser
-/// scheduler uses `requestAnimationFrame`, which is a macrotask already.
+/// A scheduler must never satisfy a zero delay with a microtask when the
+/// request comes from a frame's own microtask drain — a post-frame callback,
+/// or a `setState` from a microtask the frame queued. Dart drains the
+/// microtask queue to empty before any timer, I/O, or signal runs, so a
+/// frame→frame microtask chain starves the event loop for the chain's whole
+/// duration: no input, no Ctrl+C, no signal delivery. The default scheduler
+/// runs a frame that a frame caused when the turn ends; the browser scheduler
+/// uses `requestAnimationFrame`, which is a macrotask already.
 typedef FrameFlushScheduler =
     FrameFlushCancellation? Function(Duration delay, void Function() flush);
 
@@ -47,7 +46,9 @@ class FrameScheduler {
     this.minFrameInterval = Duration.zero,
     FrameFlushScheduler? flushScheduler,
   }) : _clock = clock,
-       _onRender = onRender {
+       _onRender = onRender,
+       _zone = Zone.current {
+    _frameZone = _zone.fork(zoneValues: {_frameZoneKey: this});
     _flushScheduler = flushScheduler ?? _defaultFlush;
   }
 
@@ -55,31 +56,93 @@ class FrameScheduler {
   final FrameRenderCallback _onRender;
   late final FrameFlushScheduler _flushScheduler;
 
-  /// Depth of [_onRender] calls on the stack (a counter, not a bool: a
-  /// synchronous test scheduler can nest a flush inside a render). Non-zero
-  /// means a request arriving now is re-entrant and must not chain a
-  /// microtask — see [_defaultFlush].
-  int _renderDepth = 0;
+  /// The zone this scheduler was built in, which a host makes the zone that
+  /// guards its frames (`runApp` builds its frame driver inside its
+  /// `runZonedGuarded`). Every flush runs here, whoever requested the frame.
+  /// A request from a listener registered in `main()` would otherwise run the
+  /// frame — and every timer it starts — outside the guard that restores the
+  /// terminal.
+  final Zone _zone;
 
-  /// The built-in flush: a microtask when the scheduler is idle (the
-  /// historical "as soon as possible"), a `Timer` when a render is on the
-  /// stack or a cap defers the flush.
+  static final _frameZoneKey = Object();
+
+  /// Where frames render: a child of [_zone] that marks the code a frame
+  /// runs, and every callback that code registers — a microtask, a `.then`, a
+  /// timer — as caused by a frame.
+  late final Zone _frameZone;
+
+  /// Pending from the moment a frame renders until the event loop turns: a
+  /// zero-delay timer, which cannot fire while microtasks are queued, so its
+  /// firing marks the end of the frame's microtask drain.
+  Timer? _turnEnd;
+
+  /// A zero-delay flush requested while [_turnEnd] was pending. It runs when
+  /// [_turnEnd] fires, not as a microtask.
+  void Function()? _flushAtTurnEnd;
+
+  /// Microtask flushes since the turn last ended.
+  int _microtaskFlushes = 0;
+
+  /// The most microtask frames one turn renders, whatever caused them. A
+  /// frame that causes another through a zone this scheduler cannot see (it
+  /// completes a future awaited by a loop started outside every frame) still
+  /// yields after this many.
+  static const _maxMicrotaskFlushesPerTurn = 8;
+
+  /// Whether the running code is a frame, or a callback a frame registered.
+  bool get _inFrameCode => identical(Zone.current[_frameZoneKey], this);
+
+  /// The built-in flush: a microtask (the historical "as soon as
+  /// possible"), except for a frame caused by a frame, which runs when the
+  /// event-loop turn ends, and a `Timer` when a cap defers the flush.
   ///
-  /// `Timer(Duration.zero, …)` is a macrotask: the event loop turns once
-  /// before the next frame, so input, signals, and timers get their turn
-  /// between frames instead of after the whole chain. Without this, a
-  /// chunked paste — one post-frame callback per chunk, each scheduling the
-  /// next — ran to completion as one unbroken microtask sequence: a 512 KiB
-  /// paste held the isolate for ~12 s, and a post-frame callback that
-  /// re-registers itself pinned it forever. SIGINT/SIGTERM are event-loop
-  /// deliveries too, so the only exit was SIGKILL.
+  /// A frame that requests the next frame from its own microtask drain is a
+  /// chain — a post-frame callback per paste chunk, or a `setState` from a
+  /// microtask the frame itself queued — and a chain never yields: a 512 KiB
+  /// paste held the isolate for ~12 s, and a self-renewing chain pinned it
+  /// forever. SIGINT/SIGTERM are event-loop deliveries too, so the only exit
+  /// was SIGKILL. Waiting for the turn to end lets input, signals, and timers
+  /// run between frames. A frame that other code requests after a frame, such
+  /// as an error report mounting its banner or an event handler resuming
+  /// after an `await`, still renders in the same drain.
+  ///
+  /// The chained frame rides the turn-end timer and does not get a new
+  /// `Timer` of its own. Timers fire in deadline order, so a new zero-delay
+  /// timer runs after every timer already due, including ones that fell due
+  /// while the request's own handler ran. The turn-end timer dates from the
+  /// turn's first frame, so the chained frame runs before any timer created
+  /// after the request.
   FrameFlushCancellation? _defaultFlush(Duration delay, void Function() flush) {
-    if (delay <= Duration.zero && _renderDepth == 0) {
-      scheduleMicrotask(flush);
+    final guarded = _zone.bindCallbackGuarded(() {
+      if (!_disposed) {
+        _turnEnd ??= _zone.createTimer(
+          Duration.zero,
+          _zone.bindCallbackGuarded(_endTurn),
+        );
+      }
+      flush();
+    });
+    if (delay > Duration.zero) return _zone.createTimer(delay, guarded).cancel;
+    final chained =
+        _turnEnd != null &&
+        (_inFrameCode || _microtaskFlushes >= _maxMicrotaskFlushesPerTurn);
+    if (!chained) {
+      _microtaskFlushes++;
+      _zone.scheduleMicrotask(guarded);
       return null;
     }
-    final timer = Timer(delay, flush);
-    return timer.cancel;
+    _flushAtTurnEnd = guarded;
+    // Only dispose cancels a flush, and it drops this one with the turn-end
+    // timer that would run it.
+    return null;
+  }
+
+  void _endTurn() {
+    _turnEnd = null;
+    _microtaskFlushes = 0;
+    final flush = _flushAtTurnEnd;
+    _flushAtTurnEnd = null;
+    flush?.call();
   }
 
   /// Minimum time between rendered frames. [Duration.zero] disables the cap.
@@ -144,12 +207,7 @@ class FrameScheduler {
     _lastRenderAt = _clock.now;
     final reason = _reason;
     _reason = 'scheduled';
-    _renderDepth++;
-    try {
-      _onRender(reason);
-    } finally {
-      _renderDepth--;
-    }
+    _frameZone.run(() => _onRender(reason));
   }
 
   void dispose() {
@@ -159,6 +217,9 @@ class FrameScheduler {
     _scheduleToken += 1;
     _cancelScheduledFlush?.call();
     _cancelScheduledFlush = null;
+    _turnEnd?.cancel();
+    _turnEnd = null;
+    _flushAtTurnEnd = null;
   }
 }
 

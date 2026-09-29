@@ -32,6 +32,7 @@ tolerance to clear red.
 | `lib/src/terminal/terminal_image_encoder.dart` | `benchmark image-bench --gate` |
 | `lib/src/remote/**`, `lib/src/serve/**`, plan/semantics wire | `benchmark serve-wire-live` **and** `benchmark serve-semantics-gate` |
 | `web/remote_client.dart` and its imports | `benchmark bundle-size --gate` |
+| `packages/fleury_widgets/lib/**` collection/log/markdown widgets, `ListView`, any `*/benchmark/scenario_benchmarks.dart` | `benchmark scenario-gate` |
 
 All via `dart tool/fleury_dev.dart benchmark <gate> --gate`; each exits non-zero
 on regression. Run the whole fast suite at once with

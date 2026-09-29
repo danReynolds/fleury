@@ -35,7 +35,7 @@ class _ShellCliE2eAppState extends State<_ShellCliE2eApp> {
     if (_activated && !_scheduledExit) {
       _scheduledExit = true;
       TuiBinding.of(context).addPostFrameCallback((_) {
-        if (!requestExit()) {
+        if (!exitApp()) {
           throw StateError('shell E2E app lost its active session');
         }
       });

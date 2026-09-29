@@ -77,7 +77,8 @@ class Button extends StatelessWidget {
   /// An explicit name replaces descendant semantics, not visible content.
   final String? semanticLabel;
 
-  /// Pressed handler, or null to disable the button.
+  /// Pressed handler, or null to disable the button. Nothing waits on work it
+  /// starts; see [FocusableControl.onActivate] for how a press declines.
   final void Function()? onPressed;
 
   /// Called after a completed right-button click, without calling [onPressed].

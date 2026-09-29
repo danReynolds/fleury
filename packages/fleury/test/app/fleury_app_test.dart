@@ -285,6 +285,90 @@ void main() {
       controller.dispose();
     });
 
+    test('put sets one item and remove clears it, leaving the others', () {
+      final controller = StatusController(
+        items: [StatusItem.success('Build', id: 'build', value: 'ok')],
+      );
+      var fires = 0;
+      controller.addListener(() => fires += 1);
+      List<String> shown() => [
+        for (final item in controller.items) item.displayText,
+      ];
+
+      controller.put(StatusItem.text('Deploy', id: 'deploy', value: 'running'));
+      expect(shown(), ['Build: ok', 'Deploy: running']);
+      controller.put(StatusItem.error('Deploy', id: 'deploy', value: 'FAILED'));
+      expect(shown(), ['Build: ok', 'Deploy: FAILED']);
+      controller.put(StatusItem.error('Deploy', id: 'deploy', value: 'FAILED'));
+      controller.remove('deploy');
+      expect(shown(), ['Build: ok']);
+      controller.remove('deploy');
+
+      expect(fires, 3, reason: 'an equal put and an absent remove are no-ops');
+      controller.dispose();
+    });
+
+    test('a put item overrides the derived item with its id', () {
+      final controller = StatusController()
+        ..updateDerived([
+          StatusItem.text('Branch', id: 'branch', value: 'main'),
+          StatusItem.text('Mode', id: 'mode', value: 'dev'),
+        ]);
+
+      controller.put(StatusItem.text('Branch', id: 'branch', value: 'feature'));
+      expect(
+        [for (final item in controller.items) item.displayText],
+        ['Branch: feature', 'Mode: dev'],
+      );
+
+      controller.remove('branch');
+      expect(controller.items.first.displayText, 'Branch: main');
+      controller.dispose();
+    });
+
+    test('derived items come first, then set items with ids of their own', () {
+      final controller = StatusController()
+        ..updateDerived([
+          StatusItem.text('Branch', id: 'branch', value: 'main'),
+          StatusItem.text('Mode', id: 'mode', value: 'dev'),
+        ])
+        ..update([
+          StatusItem.text('Deploy', id: 'deploy', value: 'ok'),
+          StatusItem.text('Mode', id: 'mode', value: 'prod'),
+        ]);
+
+      expect(
+        [for (final item in controller.items) item.displayText],
+        ['Branch: main', 'Mode: prod', 'Deploy: ok'],
+      );
+      controller.dispose();
+    });
+
+    test('put replaces an item where it stands', () {
+      final controller = StatusController()
+        ..update([
+          StatusItem.text('A', id: 'a', value: '1'),
+          StatusItem.text('B', id: 'b', value: '1'),
+          StatusItem.text('C', id: 'c', value: '1'),
+        ])
+        ..put(StatusItem.text('B', id: 'b', value: '2'));
+
+      expect(
+        [for (final item in controller.items) item.displayText],
+        ['A: 1', 'B: 2', 'C: 1'],
+      );
+      controller.dispose();
+    });
+
+    test('items passed to the constructor show before any write', () {
+      final controller = StatusController(
+        items: [StatusItem.text('Ready', id: 'ready', value: 'yes')],
+      );
+
+      expect(controller.items.single.displayText, 'Ready: yes');
+      controller.dispose();
+    });
+
     test('post-dispose status updates throw', () {
       final controller = StatusController();
 
@@ -906,7 +990,9 @@ void main() {
     expect(diagnoses, 1);
   });
 
-  testWidgets('commands can update status through command context', (tester) {
+  testWidgets('commands can update status through command context', (
+    tester,
+  ) async {
     tester.pumpWidget(
       FleuryApp(
         title: 'Ops Console',
@@ -936,6 +1022,9 @@ void main() {
     tester.sendKey(
       const KeyEvent(KeyCode.char('f'), modifiers: {KeyModifier.ctrl}),
     );
+    // Past the command's completion, which re-derives the app's status.
+    await Future<void>.delayed(Duration.zero);
+    tester.pump();
 
     expect(tester.exists(text('Task: done')), isTrue);
     final task = tester.semantics().single(
@@ -944,6 +1033,209 @@ void main() {
     );
     expect(task.state.statusId, 'task');
     expect(task.state.severity, 'success');
+  });
+
+  testWidgets('an async command\'s final status survives beside the derived', (
+    tester,
+  ) async {
+    tester.pumpWidget(
+      FleuryApp(
+        title: 'Ops Console',
+        status: (_) => [StatusItem.text('Branch', value: 'main')],
+        commands: [
+          AppCommand(
+            id: _refresh,
+            title: 'Deploy',
+            run: (context) async {
+              context.status!.update([
+                StatusItem.text('Deploy', value: 'running'),
+              ]);
+              await Future<void>.delayed(const Duration(milliseconds: 10));
+              context.status!.update([
+                StatusItem.error('Deploy', value: 'FAILED'),
+              ]);
+            },
+          ),
+        ],
+        child: const Column(
+          children: [
+            Expanded(child: Focus(autofocus: true, child: Text('Body'))),
+            AppStatusBar(),
+          ],
+        ),
+      ),
+    );
+
+    await tester.invokeCommand(_refresh);
+    tester.pump();
+
+    expect(tester.exists(text('Deploy: FAILED')), isTrue);
+    expect(tester.exists(text('Branch: main')), isTrue);
+  });
+
+  testWidgets('a status set by hand survives an unrelated command', (
+    tester,
+  ) async {
+    late BuildContext context;
+    tester.pumpWidget(
+      FleuryApp(
+        title: 'Ops Console',
+        commands: [AppCommand(id: _refresh, title: 'Refresh', run: (_) {})],
+        child: Column(
+          children: [
+            Expanded(
+              child: _CaptureContext(
+                onBuild: (c) => context = c,
+                child: const Focus(autofocus: true, child: Text('Body')),
+              ),
+            ),
+            const AppStatusBar(emptyText: 'Idle'),
+          ],
+        ),
+      ),
+    );
+    FleuryApp.of(
+      context,
+    ).status.update([StatusItem.success('Build', value: 'ok')]);
+    tester.pump();
+    expect(tester.exists(text('Build: ok')), isTrue);
+
+    await tester.invokeCommand(_refresh);
+    tester.pump();
+
+    expect(tester.exists(text('Build: ok')), isTrue);
+  });
+
+  testWidgets('a command puts its status beside a status set elsewhere', (
+    tester,
+  ) async {
+    late BuildContext context;
+    tester.pumpWidget(
+      FleuryApp(
+        title: 'Ops Console',
+        commands: [
+          AppCommand(
+            id: _refresh,
+            title: 'Deploy',
+            run: (context) => context.status!.put(
+              StatusItem.text('Deploy', value: 'running'),
+            ),
+          ),
+        ],
+        child: Column(
+          children: [
+            Expanded(
+              child: _CaptureContext(
+                onBuild: (c) => context = c,
+                child: const Focus(autofocus: true, child: Text('Body')),
+              ),
+            ),
+            const AppStatusBar(),
+          ],
+        ),
+      ),
+    );
+    FleuryApp.of(
+      context,
+    ).status.update([StatusItem.success('Build', value: 'ok')]);
+
+    await tester.invokeCommand(_refresh);
+    tester.pump();
+
+    expect(tester.exists(text('Build: ok')), isTrue);
+    expect(tester.exists(text('Deploy: running')), isTrue);
+  });
+
+  testWidgets('lastCommandResult is the latest command, scoped or not', (
+    tester,
+  ) async {
+    const palette = CommandId('app.palette');
+    const save = CommandId('editor.save');
+    tester.pumpWidget(
+      FleuryApp(
+        title: 'Editor',
+        commands: [
+          AppCommand(
+            id: palette,
+            title: 'Palette',
+            shortcuts: [KeySequence.ctrl.k],
+            run: (_) {},
+          ),
+        ],
+        home: CommandScope(
+          commands: [
+            AppCommand(
+              id: save,
+              title: 'Save',
+              shortcuts: [KeySequence.ctrl.s],
+              run: (_) {},
+            ),
+          ],
+          child: const Focus(autofocus: true, child: Text('editor')),
+        ),
+      ),
+    );
+    tester.pump();
+
+    for (final (key, expected) in [
+      (KeyCode.k, palette),
+      (KeyCode.s, save),
+      (KeyCode.k, palette),
+    ]) {
+      tester.sendKey(KeyEvent(key, modifiers: const {KeyModifier.ctrl}));
+      await Future<void>.delayed(Duration.zero);
+      tester.pump();
+      expect(tester.lastCommandResult?.id, expected);
+      // Agents and the debug panel read the app node, not the tester.
+      final app = tester.semantics().single(
+        role: SemanticRole.app,
+        label: 'Editor',
+      );
+      expect(app.state['lastCommandId'], expected.value);
+    }
+  });
+
+  testWidgets('the latest command is found through every registry above', (
+    tester,
+  ) async {
+    const palette = CommandId('app.palette');
+    const save = CommandId('editor.save');
+    const format = CommandId('editor.format');
+    tester.pumpWidget(
+      FleuryApp(
+        title: 'Editor',
+        commands: [
+          AppCommand(
+            id: palette,
+            title: 'Palette',
+            shortcuts: [KeySequence.ctrl.k],
+            run: (_) {},
+          ),
+        ],
+        home: CommandScope(
+          commands: [
+            AppCommand(
+              id: save,
+              title: 'Save',
+              shortcuts: [KeySequence.ctrl.s],
+              run: (_) {},
+            ),
+          ],
+          child: CommandScope(
+            commands: [AppCommand(id: format, title: 'Format', run: (_) {})],
+            child: const Focus(autofocus: true, child: Text('editor')),
+          ),
+        ),
+      ),
+    );
+    tester.pump();
+
+    tester.sendKey(const KeyEvent(KeyCode.s, modifiers: {KeyModifier.ctrl}));
+    await Future<void>.delayed(Duration.zero);
+    tester.sendKey(const KeyEvent(KeyCode.k, modifiers: {KeyModifier.ctrl}));
+    await Future<void>.delayed(Duration.zero);
+
+    expect(tester.lastCommandResult?.id, palette);
   });
 
   testWidgets('tester invokes commands by id and records results', (
@@ -1006,4 +1298,18 @@ void main() {
 
     expect(right.hasFocus, isTrue);
   });
+}
+
+/// Hands its build context to [onBuild].
+final class _CaptureContext extends StatelessWidget {
+  const _CaptureContext({required this.onBuild, required this.child});
+
+  final void Function(BuildContext context) onBuild;
+  final Widget child;
+
+  @override
+  Widget build(BuildContext context) {
+    onBuild(context);
+    return child;
+  }
 }

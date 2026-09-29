@@ -68,6 +68,8 @@ export default defineConfig({
         {
           label: 'Guides',
           items: [
+            { label: 'Full-screen & inline', slug: 'guides/terminal-modes' },
+            { label: 'Shutdown & signals', slug: 'guides/shutdown-and-signals' },
             { label: 'Layout', slug: 'guides/layout' },
             { label: 'Lists & scrolling', slug: 'guides/lists-and-scrolling' },
             { label: 'Forms & validation', slug: 'guides/forms' },

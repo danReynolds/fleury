@@ -234,7 +234,7 @@ void main() {
   );
 
   test(
-    'an unacknowledged action times out and reserves the result slot',
+    'an action still running past its wait is pending and holds its slot',
     () async {
       pushCount(0);
       await bridge.ready;
@@ -250,16 +250,16 @@ void main() {
         }),
       );
 
+      // A handler that awaits a dialog it opened is still running, not lost.
       final result = lastResult();
-      expect(result['isError'], isTrue);
-      expect(toolError(result), contains('did not acknowledge'));
-      expect(
-        (result['structuredContent'] as Map<String, Object?>)['code'],
-        'action_timed_out',
-      );
+      expect(result['isError'], isNot(true));
+      final content = result['structuredContent'] as Map<String, Object?>;
+      expect(content['status'], 'pending');
+      expect(content['note'], contains('still running'));
       expect(bridge.isRunning, isTrue);
       expect(transport.sent.whereType<SemanticActionFrame>(), hasLength(1));
 
+      // A repeat could take the running one's late result, so it waits.
       await server.handleLine(
         _rpc(1005, 'tools/call', <String, Object?>{
           'name': 'invoke_action',
@@ -270,14 +270,107 @@ void main() {
         }),
       );
       final busy = lastResult();
-      expect(toolError(busy), contains('still awaiting its late result'));
+      expect(toolError(busy), contains('is still running'));
       expect(
         (busy['structuredContent'] as Map<String, Object?>)['code'],
         'action_busy',
       );
       expect(transport.sent.whereType<SemanticActionFrame>(), hasLength(1));
+
+      // Any other action goes ahead: it may be the one that answers the
+      // dialog.
+      transport.autoCompleteSemanticActions = true;
+      await server.handleLine(
+        _rpc(1006, 'tools/call', <String, Object?>{
+          'name': 'invoke_action',
+          'arguments': <String, Object?>{'id': 'reset', 'action': 'activate'},
+        }),
+      );
+      final other = lastResult();
+      expect(other['isError'], isNot(true));
+      expect(
+        (other['structuredContent'] as Map<String, Object?>)['status'],
+        'completed',
+      );
+      expect(transport.sent.whereType<SemanticActionFrame>(), hasLength(2));
+
+      // The running action's late result frees its slot.
+      transport.addIncoming(
+        const SemanticActionResultFrame(
+          SemanticNodeId('increment'),
+          SemanticAction.activate,
+          SemanticActionInvocationStatus.completed,
+        ),
+      );
+      await Future<void>.delayed(Duration.zero);
+      await server.handleLine(
+        _rpc(1007, 'tools/call', <String, Object?>{
+          'name': 'invoke_action',
+          'arguments': <String, Object?>{
+            'id': 'increment',
+            'action': 'activate',
+          },
+        }),
+      );
+      expect(
+        (lastResult()['structuredContent'] as Map<String, Object?>)['status'],
+        'completed',
+      );
     },
   );
+
+  test('a pending action reports the UI it opened', () async {
+    pushCount(0);
+    await bridge.ready;
+    transport.autoCompleteSemanticActions = false;
+
+    final call = server.handleLine(
+      _rpc(1010, 'tools/call', <String, Object?>{
+        'name': 'invoke_action',
+        'arguments': <String, Object?>{'id': 'increment', 'action': 'activate'},
+      }),
+    );
+    // The handler changes the UI (it opens a dialog, say) and keeps running.
+    await Future<void>.delayed(const Duration(milliseconds: 50));
+    pushCount(7);
+    await call;
+
+    final content = lastResult()['structuredContent'] as Map<String, Object?>;
+    expect(content['status'], 'pending');
+    expect(content['changed'], isTrue);
+    expect(jsonEncode(content['ui']), contains('"value":7'));
+  });
+
+  test('a set_value still running past its wait is pending', () async {
+    pushRoot(<String, Object?>{
+      'id': 'root',
+      'role': 'app',
+      'children': <Object?>[
+        <String, Object?>{
+          'id': 'field',
+          'role': 'textField',
+          'label': 'Name',
+          'actions': <String>['setValue'],
+        },
+      ],
+    });
+    await bridge.ready;
+    transport.autoCompleteSemanticActions = false;
+
+    await server.handleLine(
+      _rpc(1011, 'tools/call', <String, Object?>{
+        'name': 'set_value',
+        'arguments': <String, Object?>{'id': 'field', 'value': 'Ada'},
+      }),
+    );
+
+    final result = lastResult();
+    expect(result['isError'], isNot(true));
+    final content = result['structuredContent'] as Map<String, Object?>;
+    expect(content['status'], 'pending');
+    expect(content['note'], contains('still running'));
+    expect(content['ui'], isNotNull);
+  });
 
   test(
     'initialize identifies the server and constrains the protocol version',

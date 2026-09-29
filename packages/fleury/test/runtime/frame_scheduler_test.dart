@@ -190,6 +190,85 @@ void main() {
         );
       },
     );
+
+    test('a frame a frame requests renders when the turn ends, before the '
+        'timers the turn created', () async {
+      // Timers fire in deadline order. A fresh zero-delay timer for the
+      // second frame would sort after a timer that fell due while the
+      // request's handler ran, so a handler slower than a test's settle
+      // delay (the first error report, a cold JIT path) let the settle win.
+      // The chained frame waits for the end of the turn it was requested in.
+      final order = <String>[];
+      late final FrameScheduler s;
+      s = FrameScheduler(
+        clock: FakeClock(),
+        onRender: (reason) {
+          order.add(reason);
+          if (reason != 'first') return;
+          Timer(const Duration(milliseconds: 1), () => order.add('timer'));
+          final handler = Stopwatch()..start();
+          while (handler.elapsedMilliseconds < 5) {}
+          s.requestFrame('second');
+        },
+      );
+
+      s.requestFrame('first');
+      await Future<void>.delayed(const Duration(milliseconds: 30));
+
+      expect(order, ['first', 'second', 'timer']);
+    });
+
+    test('a frame requested after a frame by code outside it renders in the '
+        'same drain', () async {
+      // An error report mounts its banner from a microtask it queued before
+      // the frame ran. That second frame is not a chain: it renders ahead of
+      // every timer, like the first.
+      final renders = <String>[];
+      var beaconAt = -1;
+      final s = FrameScheduler(clock: FakeClock(), onRender: renders.add);
+
+      s.requestFrame('event');
+      scheduleMicrotask(() => s.requestFrame('follow-up'));
+      Timer.run(() => beaconAt = renders.length);
+      await Future<void>.delayed(const Duration(milliseconds: 20));
+
+      expect(renders, ['event', 'follow-up']);
+      expect(beaconAt, 2);
+    });
+
+    test('a chain through a zone the frame cannot see still yields', () async {
+      // Each frame completes a future that a loop started outside every
+      // frame awaits before it requests the next frame. The continuation
+      // runs in the loop's zone, so only the per-turn bound catches it.
+      const target = 40;
+      var frameDone = Completer<void>();
+      final renders = <int>[];
+      var beaconAt = -1;
+      final s = FrameScheduler(
+        clock: FakeClock(),
+        onRender: (_) {
+          renders.add(renders.length + 1);
+          frameDone.complete();
+        },
+      );
+
+      unawaited(() async {
+        while (renders.length < target) {
+          frameDone = Completer<void>();
+          s.requestFrame('loop');
+          await frameDone.future;
+        }
+      }());
+      Timer.run(() => beaconAt = renders.length);
+      await Future<void>.delayed(const Duration(milliseconds: 50));
+
+      expect(renders, hasLength(target), reason: 'the loop still completes');
+      expect(
+        beaconAt,
+        inInclusiveRange(1, 8),
+        reason: 'the timer ran after at most one turn of frames',
+      );
+    });
   });
 
   test('dispose makes further requests no-ops', () {

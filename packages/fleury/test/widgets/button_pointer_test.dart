@@ -19,6 +19,43 @@ const feedback = CellStyle.interactive(
 );
 
 void main() {
+  testWidgets('a secondary click ignores a declined action', (tester) {
+    var attempts = 0;
+    tester.pumpWidget(
+      Button(
+        text: 'Undo',
+        onPressed: () {},
+        onSecondaryPressed: () {
+          attempts++;
+          throw const SemanticActionDeclined();
+        },
+      ),
+    );
+    pointer(tester, MouseEventKind.down, 2, button: MouseButton.right);
+    pointer(tester, MouseEventKind.up, 2, button: MouseButton.right);
+    expect(attempts, 1);
+    expect(
+      tester.semantics().single(role: SemanticRole.button).focused,
+      isTrue,
+    );
+  });
+
+  testWidgets('a secondary click preserves ordinary action errors', (tester) {
+    final error = StateError('offline');
+    tester.pumpWidget(
+      Button(
+        text: 'Sync',
+        onPressed: () {},
+        onSecondaryPressed: () => throw error,
+      ),
+    );
+    pointer(tester, MouseEventKind.down, 2, button: MouseButton.right);
+    expect(
+      () => pointer(tester, MouseEventKind.up, 2, button: MouseButton.right),
+      throwsA(same(error)),
+    );
+  });
+
   testWidgets('moving a keyed button drops its captured press', (tester) {
     final key = GlobalKey();
     var activations = 0;

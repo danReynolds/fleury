@@ -42,8 +42,8 @@ void main() {
       );
       expect(
         exit.signal,
-        isNull,
-        reason: "exit was the quit guard, not a signal",
+        AppSignal.interrupt,
+        reason: 'the quit guard preserves the Ctrl+C interrupt outcome',
       );
     },
     timeout: const Timeout(Duration(seconds: 20)),

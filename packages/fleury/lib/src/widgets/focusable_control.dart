@@ -36,6 +36,12 @@ class FocusableControl extends StatefulWidget {
     this.style,
   });
 
+  /// Activation — Enter, Space, a click, or a semantic `activate`. Nothing
+  /// waits on work it starts, a semantic activation included: an error from
+  /// that work reaches the zone (runApp's error overlay), as a key's does.
+  /// Throwing [SemanticActionDeclined] declines the activation: a key or a
+  /// click then does nothing, and a semantic activation reports it
+  /// `unsupported`. Anything else it throws reports that activation `failed`.
   final void Function()? onActivate;
   final void Function()? onSecondaryActivate;
   final Widget Function(
@@ -102,7 +108,6 @@ class _FocusableControlState extends State<FocusableControl>
   @override
   void didChangeDependencies() {
     super.didChangeDependencies();
-    FocusManager.maybeOf(context); // rebuild on focus change (focus cue)
     final registration = FormControlScope.maybeOf(context);
     if (!identical(registration, _formRegistration)) {
       _formRegistration?.release(this);
@@ -119,7 +124,17 @@ class _FocusableControlState extends State<FocusableControl>
     enabled: widget.enabled,
   );
 
+  // A key or a click. One that declined (a command that turned out
+  // disabled) does nothing.
   void _activate() {
+    try {
+      _run();
+    } on SemanticActionDeclined {
+      return;
+    }
+  }
+
+  void _run() {
     widget.onActivate!();
     _formRegistration?.controlValueChanged(this);
   }
@@ -173,7 +188,8 @@ class _FocusableControlState extends State<FocusableControl>
   @override
   Widget build(BuildContext context) {
     final validationError = _formRegistration?.error ?? widget.validationError;
-    final focused = _node.hasFocus;
+    // Rebuilds when this control's own focus flips (the focus cue).
+    final focused = context.listen(_node).hasFocus;
     final states = <CellStyleState>{
       if (_hovered) CellStyleState.hovered,
       if (focused) CellStyleState.focused,
@@ -222,7 +238,8 @@ class _FocusableControlState extends State<FocusableControl>
                   return;
                 case SemanticAction.activate:
                   _node.requestFocus();
-                  _activate();
+                  // A decline or a throw reaches the action's result.
+                  _run();
                   return;
                 case _:
                   return;
@@ -243,7 +260,12 @@ class _FocusableControlState extends State<FocusableControl>
                   ? null
                   : () {
                       _node.requestFocus();
-                      widget.onSecondaryActivate!();
+                      try {
+                        widget.onSecondaryActivate!();
+                      } on SemanticActionDeclined {
+                        // A declined right-click is a no-op, like a primary click.
+                        return;
+                      }
                     },
               child: KeyDetector(
                 onKey: (event) {

@@ -19,6 +19,21 @@ class _FixedSize extends RenderObject {
   }
 }
 
+/// A text child that counts its paints. Text is Selectable, and the cull
+/// used to exempt every subtree holding a Selectable, so no text row was
+/// ever culled.
+class _CountingText extends RenderText {
+  _CountingText(String text) : super(text: text);
+
+  int paintCount = 0;
+
+  @override
+  void performPaint(CellBuffer buffer, CellOffset offset) {
+    paintCount++;
+    super.performPaint(buffer, offset);
+  }
+}
+
 class _PaintCountingBox extends RenderObject {
   _PaintCountingBox(this.intrinsic, this.marker);
 
@@ -262,6 +277,27 @@ void main() {
       expect(buffer.atColRow(0, 0).grapheme, 'K');
       expect(buffer.atColRow(0, 1).grapheme, 'L');
       expect(buffer.atColRow(0, 2).grapheme, 'M');
+    });
+
+    test('skips text children outside the paint buffer too', () {
+      final flex = RenderFlex(
+        direction: Axis.vertical,
+        mainAxisSize: MainAxisSize.min,
+      );
+      final children = [for (var i = 0; i < 20; i++) _CountingText('row $i')];
+      flex.replaceAllChildren(children);
+      flex.layout(const CellConstraints(maxCols: 8));
+
+      final buffer = CellBuffer(const CellSize(8, 3));
+      flex.paint(buffer, const CellOffset(0, -10));
+
+      expect(
+        [
+          for (var i = 0; i < children.length; i++)
+            if (children[i].paintCount > 0) i,
+        ],
+        [10, 11, 12],
+      );
     });
 
     test('skips horizontal children outside the paint buffer', () {

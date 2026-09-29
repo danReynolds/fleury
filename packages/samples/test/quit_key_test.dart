@@ -2,7 +2,7 @@
 //
 // The terminal parser emits a typed `q` as a TextInputEvent — never as a
 // bare KeyEvent — so quit must be the widget-level KeyBinding +
-// requestExit() pattern (`withQuitKey` in bin/samples.dart), scoped by the
+// exitApp() pattern (`withQuitKey` in bin/samples.dart), scoped by the
 // dispatcher: a focused text field (the agent sample's prompt) claims the
 // character first and keeps receiving it, while every other sample quits.
 
@@ -95,7 +95,7 @@ void main() {
       reason: "typing 'q' into the prompt must not exit the app",
     );
 
-    requestExit();
+    exitApp();
     final exit = await future;
     expect(exit.signal, isNull);
     await driver.dispose();

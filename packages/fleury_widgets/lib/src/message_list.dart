@@ -121,11 +121,15 @@ final class MessageListCopyResult {
 
 /// Controller for [MessageList] browsing and tail-follow behavior.
 class MessageListController extends Notifier {
-  MessageListController({int? initialIndex = 0, bool followTail = true})
-    : _list = ListController(
-        initialIndex: initialIndex,
-        followTail: followTail,
-      ) {
+  /// Follows the tail by default, with the cursor on the newest entry; see
+  /// [ListController.new] for [initialIndex] and [followTail].
+  MessageListController({
+    int? initialIndex = ListController.natural,
+    bool followTail = true,
+  }) : _list = ListController(
+         initialIndex: initialIndex,
+         followTail: followTail,
+       ) {
     _list.addListener(notify);
   }
 

@@ -1811,7 +1811,32 @@ form.clearErrors();''',
     ),
   ),
 
+  ExampleInfo(
+    id: 'terminal-modes.fullscreen',
+    widget: 'TerminalMode',
+    category: 'Guide examples',
+    blurb:
+        'The setup form fills a simulated alternate screen, then restores the '
+        'shell context on completion. Browser illustration of native behavior.',
+    cols: 84,
+    rows: 29,
+    interactive: true,
+    builder: () => const InlineSetupPreview(fullScreen: true),
+  ),
+
   // ── Showcases (full apps; rendered on the Showcases page, not as widgets) ──
+  ExampleInfo(
+    id: 'showcase.inline',
+    widget: 'Interactive CLI commands',
+    category: 'Showcases',
+    blurb:
+        'A project setup command: choose a template, review the configuration, '
+        'and finish back at the prompt. The same form runs inline in a native terminal.',
+    cols: 84,
+    rows: 29,
+    interactive: true,
+    builder: () => const InlineSetupPreview(),
+  ),
   ExampleInfo(
     id: 'showcase.dashboard',
     widget: 'System monitor',
@@ -2745,11 +2770,11 @@ import 'package:fleury/fleury.dart';
 
 /// A tiny counter — the smallest interesting Fleury program.
 /// Typed printables arrive as TextInputEvents, so the quit key is a
-/// widget-level KeyBinding (requestExit), never an onEvent char match.
+/// widget-level KeyBinding (exitApp), never an onEvent char match.
 void main() => runApp(
       KeyBindings(
         bindings: [
-          KeyBinding(KeySequence.q, onTrigger: (_) => requestExit(), label: 'Quit'),
+          KeyBinding(KeySequence.q, onTrigger: (_) => exitApp(), label: 'Quit'),
         ],
         child: const CounterApp(),
       ),

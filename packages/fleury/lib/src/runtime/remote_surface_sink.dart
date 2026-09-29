@@ -1,5 +1,6 @@
 import 'dart:typed_data';
 
+import '../foundation/fleury_error.dart';
 import '../foundation/geometry.dart';
 import '../rendering/cell_buffer.dart';
 import '../semantics/semantics.dart';
@@ -95,6 +96,11 @@ abstract interface class RemoteSurfaceSink {
   /// action against the live tree. Set to null to clear. Completes the round
   /// trip that [presentSemantics] starts.
   set onSemanticAction(RemoteSemanticActionHandler? handler);
+
+  /// Registers a handler for problems the app's developer should fix — a
+  /// semantic tree that could not be sent to the peer, for one. `runApp`
+  /// reports them like its other developer warnings. Set to null to clear.
+  set onDeveloperWarning(void Function(FleuryError warning)? handler);
 
   /// Registers a handler for the peer's pull-style debug queries ("send me
   /// your recent frame stats / errors"). `runApp` wires this to its debug

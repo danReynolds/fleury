@@ -1,12 +1,5 @@
-// Regression coverage for finding #1: a second Fleury session in the SAME
-// process crashed at enter() because dart:io's `stdin` is a process-global
-// single-subscription stream — restore() cancels its subscription, and it can
-// never be listened to again, so the next runApp's `stdin.listen(...)` threw
-// the opaque 'Stream has already been listened to'. The driver now latches that
-// the global stdin was spent and rejects a second enter() up front with a
-// clear message (a real second-session-with-input feature would need a separate
-// process; that is out of scope here — this makes the limit legible instead of
-// a crash). An injected (test) stdin is exempt: each driver owns its own.
+// Redirected Dart streams remain single-subscription. Native macOS/Linux TTY
+// reuse is covered by tool/check_sequential_sessions.py against a real PTY.
 import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
@@ -90,7 +83,7 @@ void main() {
   );
 
   test(
-    'posix: a second real-stdin session is rejected cleanly and the process '
+    'posix: a second redirected-stdin session is rejected cleanly and the process '
     'still exits',
     () async {
       // Runs the fixture in a child process against the real process-global

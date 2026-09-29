@@ -334,7 +334,24 @@ enum SemanticAction {
   setValue,
 }
 
+/// Carries out a [SemanticAction] on a node.
+///
+/// Returning reports the action `completed` and throwing reports it
+/// `failed`. A handler that did not carry the action out — a command that is
+/// disabled or gone, a dismissal a `PopScope` refused — throws
+/// [SemanticActionDeclined], which reports it `unsupported`.
 typedef SemanticActionCallback = FutureOr<void> Function(SemanticAction action);
+
+/// Thrown by a [SemanticActionCallback] that did not carry out its action,
+/// so the invocation reports `unsupported` instead of `completed`: an agent
+/// or assistive technology is not told that a disabled command ran or that a
+/// refused dismissal happened.
+final class SemanticActionDeclined implements Exception {
+  const SemanticActionDeclined();
+
+  @override
+  String toString() => 'SemanticActionDeclined';
+}
 
 /// Carries a [SemanticAction.setValue] payload to the node it targets. The
 /// payload is a JSON-friendly scalar (string, num, bool, or null); a widget
@@ -1202,14 +1219,11 @@ String escapeSemanticIdSegment(String segment) => segment
     .replaceAll('~', '%7E')
     .replaceAll('/', '%2F');
 
-/// Renders a [Key] compactly for a derived id (already escaped by the caller).
+/// Renders an app-owned `Semantics(key:)` id (escaped by the caller).
 ///
-/// A [ValueKey]'s `toString` wraps its value — `ValueKey<String>(row-3)` — which
-/// is ~17 bytes of boilerplate that says nothing the value (`row-3`) doesn't.
-/// Folded onto *every* descendant's id, that boilerplate dominates the get_ui
-/// token cost, so derived ids carry just the value. An object-valued key (e.g.
-/// the overlay entry, whose `toString` is the verbose `Instance of '…'`) renders
-/// as a short, session-stable identity token instead.
+/// Keep its established compact spelling: scalar value keys carry just the
+/// value, and object-valued keys use a session-stable identity token. Generated
+/// ancestry paths use [_derivedKeySegment] to distinguish key/value types.
 String _renderSemanticKeySegment(Key key) {
   if (key is! ValueKey) return '$key';
   final Object? value = key.value;
@@ -1219,64 +1233,101 @@ String _renderSemanticKeySegment(Key key) {
   return '${value.runtimeType}#${identityHashCode(value).toRadixString(36)}';
 }
 
-/// A stable, position-derived identity anchor for [element], folding the chain
-/// of keyed ancestors (the same `Key`s reconciliation uses) with a positional
-/// `~<index>` segment for each unkeyed step *below* the nearest key.
-///
-/// Returns null when no foldable key exists anywhere above [element] — the
-/// caller then keeps the snapshot-local `element-<hash>` form. Unlike that hash,
-/// this anchor is derived from keys + tree position rather than element
-/// instance identity, so it is identical across rebuilds: a node under a keyed
-/// list row keeps its id wherever the row moves. `GlobalKey`s are treated as
-/// transparent (they have no stable string and survive reparenting on their
-/// own), so anchoring lands on the nearest value key, which is what stays put
-/// under a `GlobalKey` move.
-///
-/// The *full* keyed chain is folded (not just the nearest key) deliberately: it
-/// keeps ids globally unique — no false "ambiguous" rejections — and gives even
-/// unkeyed nodes a session-stable anchor (the runtime/overlay root is keyed), at
-/// the cost of a constant, opaque framework-key prefix on every id. Ids are
-/// opaque handles, so that prefix is harmless; trimming it would trade that
-/// uniqueness and stability for cosmetics.
-///
-/// Privacy: a folded key value is the same identifier the app already chose for
-/// reconciliation, and a keyed ancestor already exposes it as *its own* node id,
-/// so folding it into descendant ids reveals no value the snapshot didn't
-/// already carry. Ids are display-sanitized at the inspection boundary; like the
-/// own-`key:` form, this scheme treats `Key`s as structural identifiers, not a
-/// place to encode secrets.
-String? semanticAnchorOf(Element element) {
-  final anchors = _snapshotAnchors;
-  if (anchors != null) return _snapshotAnchorOf(element, anchors)?.anchor;
-  final scope = <String>[]; // keyed segments, leaf→root
-  // Elements below the nearest key (leaf→root). We only need their POSITIONAL
-  // indices, but `_childIndexOf` is O(siblings), and a fully-unkeyed subtree
-  // discards the tail entirely (`return null`). So defer the index computation
-  // until we know a key exists — otherwise a wide unkeyed parent makes the whole
-  // build O(nodes × siblings) computing indices it then throws away.
-  final tailElements = <Element>[];
-  var sawKey = false;
-  Element? e = element;
-  while (e != null) {
-    final key = e.widget.key;
-    if (key != null && key is! GlobalKey) {
-      scope.add(escapeSemanticIdSegment(_renderSemanticKeySegment(key)));
-      sawKey = true;
-    } else if (!sawKey) {
-      tailElements.add(e);
-    }
-    e = e.elementParent;
+// App-owned `Semantics(key:)` ids retain their existing spelling. Generated
+// paths additionally distinguish key types: integer 1 and string "1" are legal
+// siblings and must not identify the same descendant.
+// Only types are retained, never elements or key values. Less common key types
+// get compact session-stable tags, like object-valued keys themselves.
+final Map<Type, String> _derivedKeyTypes = {
+  ValueKey<String>: 's',
+  ValueKey<int>: 'i',
+  ValueKey<double>: 'd',
+  ValueKey<bool>: 'b',
+};
+String _derivedKeySegment(Key key) {
+  final tag = _derivedKeyTypes.putIfAbsent(
+    key.runtimeType,
+    () => 'k${_derivedKeyTypes.length}',
+  );
+  if (key is! ValueKey) {
+    return '$tag:${escapeSemanticIdSegment('$key')}';
   }
-  if (!sawKey) return null; // no `_childIndexOf` computed for the unkeyed case
-  final tail = <String>[for (final t in tailElements) '~${_childIndexOf(t)}'];
-  return 'auto:${[...scope.reversed, ...tail.reversed].join('/')}';
+  final Object? value = key.value;
+  // Include the value's kind too: ValueKey<Object>(1) and
+  // ValueKey<Object>('1') share a key type but are different keys. For the
+  // concrete scalar key types the short type tag already carries this kind.
+  final encoded = switch (value) {
+    String() => 's${escapeSemanticIdSegment(value)}',
+    num() => 'n$value',
+    bool() => 'b$value',
+    null => 'z',
+    _ => 'o${identityHashCode(value).toRadixString(36)}',
+  };
+  return tag.startsWith('k') ? '$tag:$encoded' : '$tag:${encoded.substring(1)}';
 }
 
-// A keyed child discards its parent's positional tail, but keeps ALL keyed
-// ancestors. Carry both strings so descendants can reuse the common path
-// without changing the public identity scheme. Null also gets memoized: an
-// entirely unkeyed tree must not calculate sibling positions it will discard.
-typedef _SemanticAnchor = ({String scope, String anchor});
+// Most framework ancestors are single-child wrappers. Run-length encoding their
+// zero positions preserves the complete path without charging every semantic
+// node for dozens of identical segments. `~` remains the positional marker.
+String _appendAnchorSegment(String prefix, String segment) {
+  if (segment == '~0') {
+    final slash = prefix.lastIndexOf('/');
+    final start = slash < 0 ? 'auto:'.length : slash + 1;
+    final tail = prefix.substring(start);
+    if (tail == '~0') return '$prefix*2';
+    if (tail.startsWith('~0*')) {
+      final count = int.parse(tail.substring(3));
+      return '${prefix.substring(0, start)}~0*${count + 1}';
+    }
+  }
+  return '$prefix/$segment';
+}
+
+/// A position-derived identity anchor using each ancestor's key or position.
+///
+/// Local keys are unique only among siblings. Keeping unkeyed positions ABOVE
+/// keys distinguishes, for example, recent-files and all-files lists containing
+/// the same file key. A keyed row still keeps its identity when reordered within
+/// its list; moving an unkeyed ancestor changes the positional id, protected by
+/// the action-target token. GlobalKeys occupy positional segments because they
+/// have no stable value encoding.
+///
+/// Returns null for a wholly unkeyed ancestry. Key values are structural
+/// identifiers, not a place to encode secrets; segments are escaped so values
+/// cannot inject separators or the positional marker.
+String? semanticAnchorOf(Element element) {
+  final anchors = _snapshotAnchors;
+  if (anchors != null) return _snapshotAnchorOf(element, anchors);
+  return _deriveSemanticAnchor(element);
+}
+
+String? _deriveSemanticAnchor(Element element) {
+  final path = <Element>[];
+  var sawKey = false;
+  Element? current = element;
+  while (current != null) {
+    path.add(current);
+    final key = current.widget.key;
+    if (key != null && key is! GlobalKey) sawKey = true;
+    current = current.elementParent;
+  }
+  // Avoid sibling scans for a wholly unkeyed tree.
+  if (!sawKey) return null;
+  final segments = <String>[
+    for (final ancestor in path.reversed)
+      if (ancestor.widget.key case final key? when key is! GlobalKey)
+        _derivedKeySegment(key)
+      else
+        '~${_childIndexOf(ancestor)}',
+  ];
+  return segments
+      .skip(1)
+      .fold<String>('auto:${segments.first}', _appendAnchorSegment);
+}
+
+// Snapshot-local prefix sharing keeps tree collection linear in sibling visits.
+// No positional cache survives a structural update or action dispatch.
+typedef _SemanticAnchor = String;
 
 _SemanticAnchor? _snapshotAnchorOf(
   Element element,
@@ -1286,16 +1337,13 @@ _SemanticAnchor? _snapshotAnchorOf(
   final parent = element.elementParent;
   final prefix = parent == null ? null : _snapshotAnchorOf(parent, anchors);
   final key = element.widget.key;
-  final _SemanticAnchor? result;
+  final String? result;
   if (key != null && key is! GlobalKey) {
-    final segment = escapeSemanticIdSegment(_renderSemanticKeySegment(key));
-    final scope = prefix == null ? 'auto:$segment' : '${prefix.scope}/$segment';
-    result = (scope: scope, anchor: scope);
+    result = prefix == null
+        ? _deriveSemanticAnchor(element)
+        : _appendAnchorSegment(prefix, _derivedKeySegment(key));
   } else if (prefix != null) {
-    result = (
-      scope: prefix.scope,
-      anchor: '${prefix.anchor}/~${_childIndexOf(element)}',
-    );
+    result = _appendAnchorSegment(prefix, '~${_childIndexOf(element)}');
   } else {
     result = null;
   }
@@ -1416,6 +1464,11 @@ final class SemanticDirtyTracker {
   /// how a scroll or a relayout reaches the wire as a retained leaf update.
   /// Runs when a paint pass ends; safe to call at any time.
   void refreshGeometry() {
+    // A pending full rebuild re-derives every node's bounds, so refreshing
+    // them first is wasted. In a terminal-only app nothing takes the
+    // snapshot and the rebuild stays pending: without this, every paint pass
+    // walked every mounted Semantics node (every Text) to no effect.
+    if (_requiresFullRebuild) return;
     for (final element in _geometryElements) {
       element.refreshBounds();
     }
@@ -1661,9 +1714,10 @@ final class SemanticsElement extends ComponentElement
   /// rebuilds — the identity a future incremental/observable backend, a remote
   /// mirror, or a durable test selector needs.
   ///
-  /// With neither, the id is *derived from the keyed-ancestor chain*
+  /// With neither, the id is derived from ancestor keys and positions
   /// ([semanticAnchorOf]): a node under a keyed list row gets an `auto:…` id
-  /// that tracks the row wherever it moves, instead of a churning element hash.
+  /// that tracks reordering within that list. Moving an unkeyed ancestor changes
+  /// the positional id, rather than aliasing another list's row.
   /// Only when nothing above the node is keyed does it fall back to the
   /// snapshot-local `element-<hash>` form (still NOT stable across rebuilds;
   /// see [SemanticNodeId]).
@@ -1820,7 +1874,11 @@ final class SemanticsElement extends ComponentElement
     final callback = widget.onAction;
     if (callback == null || target.id != _nodeId) return false;
     if (!widget.enabled || !widget.actions.contains(action)) return false;
-    await callback(action);
+    try {
+      await callback(action);
+    } on SemanticActionDeclined {
+      return false;
+    }
     return true;
   }
 
@@ -2228,9 +2286,9 @@ void _indexOwnedIds(
     if (graftedIds.contains(n.id)) return; // owned by a child contributor
     final existing = elements[n.id];
     if (existing != null && !identical(existing, element)) {
-      // Two DIFFERENT contributors derived the same id — e.g. a reused key under
-      // distinct unkeyed parents, which `semanticAnchorOf` can fold to one
-      // `auto:` id. Drop it so dispatch fails CLOSED (elementById → null →
+      // Two DIFFERENT contributors supplied the same id — for example, an
+      // app-owned id reused by independent controls. Drop it so dispatch fails
+      // CLOSED (elementById → null →
       // "unsupported") instead of silently routing to whichever was walked last.
       // The snapshot's `where(id:)` still sees both nodes, so the MCP layer
       // already rejects the id as ambiguous; this gives the terminal/AT dispatch

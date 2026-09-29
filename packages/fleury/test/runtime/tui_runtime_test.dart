@@ -411,6 +411,10 @@ void main() {
       final log = <String>[];
       final runtime = TuiRuntime();
       addTearDown(runtime.dispose);
+      // The propagating path: production contains the throw by swapping the
+      // subtree for the error panel, an ordinary deactivation. Propagating
+      // leaves the reconcile to clean up after itself.
+      runtime.owner.rethrowContainedErrors = true;
       final router = runtime.pointerRouter;
       runtime.mountRoot(
         PointerRouterScope(

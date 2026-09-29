@@ -7,6 +7,7 @@
 import '../debug/debug_events.dart';
 import '../debug/debug_state.dart';
 import '../foundation/geometry.dart';
+import '../rendering/ansi_render_target.dart';
 import '../rendering/ansi_renderer.dart';
 import '../rendering/cell.dart';
 import '../rendering/cell_buffer.dart';
@@ -22,11 +23,15 @@ final class AnsiFramePresenter implements FramePresenter {
     required DebugController debug,
     TerminalImageEncoder? imageEncoder,
     CellRect? Function()? readCaret,
+    AnsiRenderTarget Function()? readTarget,
+    void Function(CellOffset position)? onCursorPositioned,
   }) : _sink = sink,
        _renderer = renderer,
        _debug = debug,
        _imageEncoder = imageEncoder,
-       _readCaret = readCaret;
+       _readCaret = readCaret,
+       _readTarget = readTarget,
+       _onCursorPositioned = onCursorPositioned;
 
   final AnsiSink _sink;
   final AnsiRenderer _renderer;
@@ -41,6 +46,14 @@ final class AnsiFramePresenter implements FramePresenter {
   /// candidate windows. Reposition it after every diff because rendering (and
   /// inline-image placement) can leave the cursor at an unrelated cell.
   final CellRect? Function()? _readCaret;
+
+  /// The host's current reserved region. Read once per frame so cell, caret,
+  /// and debug output share one origin. The host releases the old region;
+  /// this presenter only clears and paints the current one.
+  final AnsiRenderTarget Function()? _readTarget;
+  final void Function(CellOffset position)? _onCursorPositioned;
+  AnsiRenderTarget? _lastTarget;
+  CellOffset? _lastCursor;
 
   // Cells we tinted green in the previous frame's paint-flash pass.
   // Empty when paint-flash is off; populated each frame the flash is
@@ -59,27 +72,35 @@ final class AnsiFramePresenter implements FramePresenter {
 
   @override
   void presentFrame(TuiRenderedFrame frame, FramePresentInfo info) {
-    final prev = frame.previous;
     final next = frame.next;
     final debugWatching = info.debugWatching;
+    final target = _readTarget?.call() ?? const AnsiRenderTarget.fullScreen();
+    if (target.isInline && _imageEncoder != null) {
+      throw UnsupportedError(
+        'Inline ANSI regions require glyph image rendering. Native image '
+        'placement does not yet support a terminal row offset.',
+      );
+    }
 
     // One switch decides everything this frame needs from its damage, so a new
     // variant cannot be silently ignored the way an optional field could be.
     final damage = frame.damage;
-    final isFullRepaint = damage is FrameFullRepaint;
+    final targetChanged = _lastTarget != null && target != _lastTarget;
+    final isFullRepaint = damage is FrameFullRepaint || targetChanged;
+    // A moved region has no visible previous frame, even if the widget tree
+    // and its buffers are unchanged. Do not mutate the loop's shared buffer.
+    final prev = targetChanged && damage is! FrameFullRepaint
+        ? CellBuffer(next.size)
+        : frame.previous;
     final scrollUpRows = switch (damage) {
       FrameScrolled(:final scrollUpRows) => scrollUpRows,
       FrameFullRepaint() || FrameUnchanged() || FrameChanged() => null,
     };
-    final hasChanges = switch (damage) {
-      FrameUnchanged() => false,
-      FrameFullRepaint() || FrameChanged() || FrameScrolled() => true,
-    };
+    final hasChanges = isFullRepaint || damage is! FrameUnchanged;
 
     if (isFullRepaint) {
-      // Clear screen + home so any stale content (from the alt-screen
-      // switch, terminal scrollback, or a previous size) doesn't leak.
-      _sink.write('\x1B[2J\x1B[H');
+      _sink.write(target.clearSequence(next.size));
+      _lastFlashedCells = const [];
     }
     // renderDiff against an all-empty prev (post-clear) produces the same
     // byte output as renderFull, so the same path handles first frame and
@@ -109,19 +130,30 @@ final class AnsiFramePresenter implements FramePresenter {
     // so an unchanged image contributes zero bytes.
     final imageTrailer =
         _imageEncoder?.encodeFrame(next, fullRepaint: isFullRepaint) ?? '';
-    final caretTrailer = _caretPositionSequence(_readCaret?.call(), next.size);
+    final cursor = _cursorPosition(_readCaret?.call(), next.size, target);
+    final positionCursor =
+        cursor != null &&
+        (!target.isInline ||
+            hasChanges ||
+            cursor != _lastCursor ||
+            _debug.paintFlash ||
+            _lastFlashedCells.isNotEmpty);
+    final caretTrailer = !positionCursor
+        ? ''
+        : '\x1B[${target.top + cursor.row + 1};${cursor.col + 1}H';
     _renderer.renderDiff(
       prev,
       next,
       _sink,
-      dirtyBounds: damage.diffBounds,
-      scrollUpRows: scrollUpRows,
+      dirtyBounds: isFullRepaint ? null : damage.diffBounds,
+      scrollUpRows: isFullRepaint ? null : scrollUpRows,
       hasChanges: hasChanges,
       onDirtyCell: debugWatching ? recordDirtyCell : null,
       // Caret positioning must be last: graphics protocols can move the
       // terminal cursor while placing an image. Both trailers remain inside
       // the renderer's synchronized-output wrapper.
       trailer: '$imageTrailer$caretTrailer',
+      target: target,
     );
     _phaseDiff = diffSw?.elapsed ?? Duration.zero;
     _dirtyCellCount = dirtyCellCount;
@@ -147,6 +179,7 @@ final class AnsiFramePresenter implements FramePresenter {
         next: next,
         currentDirty: _currentDirty,
         lastFlashed: _lastFlashedCells,
+        target: target,
       );
       _lastFlashedCells = _currentDirty;
       // Paint flash writes directly after the synchronized frame and moves
@@ -160,10 +193,14 @@ final class AnsiFramePresenter implements FramePresenter {
         next: next,
         currentDirty: const [],
         lastFlashed: _lastFlashedCells,
+        target: target,
       );
       _lastFlashedCells = const [];
       if (caretTrailer.isNotEmpty) _sink.write(caretTrailer);
     }
+    _lastTarget = target;
+    _lastCursor = cursor;
+    if (cursor != null) _onCursorPositioned?.call(cursor);
   }
 
   @override
@@ -185,11 +222,20 @@ final class AnsiFramePresenter implements FramePresenter {
   void onFrameCommitted(TuiRenderedFrame frame, FramePresentInfo info) {}
 }
 
-String _caretPositionSequence(CellRect? caret, CellSize viewport) {
-  if (caret == null || viewport.isEmpty) return '';
+CellOffset? _cursorPosition(
+  CellRect? caret,
+  CellSize viewport,
+  AnsiRenderTarget target,
+) {
+  if (viewport.isEmpty) return null;
+  if (caret == null) {
+    // A stable resting cursor gives the host an anchor after resize. An
+    // editable's IME caret takes precedence and is tracked in the same way.
+    return target.isInline ? CellOffset(0, viewport.rows - 1) : null;
+  }
   final col = caret.left.clamp(0, viewport.cols - 1);
   final row = caret.top.clamp(0, viewport.rows - 1);
-  return '\x1B[${row + 1};${col + 1}H';
+  return CellOffset(col, row);
 }
 
 /// Emits the paint-flash overlay bytes: un-tints last frame's flashed
@@ -200,6 +246,7 @@ void emitPaintFlash({
   required CellBuffer next,
   required List<int> currentDirty,
   required List<int> lastFlashed,
+  AnsiRenderTarget target = const AnsiRenderTarget.fullScreen(),
 }) {
   if (lastFlashed.isEmpty && currentDirty.isEmpty) return;
   final cols = next.size.cols;
@@ -217,7 +264,7 @@ void emitPaintFlash({
     if (cell.role == CellRole.continuation || cell.role == CellRole.overlay) {
       continue;
     }
-    buf.write('\x1B[${row + 1};${col + 1}H');
+    buf.write('\x1B[${target.top + row + 1};${col + 1}H');
     // Reset to clear any lingering bg, then emit the cell's real style.
     buf.write('\x1B[0m');
     final fg = cell.style.foreground;
@@ -244,7 +291,7 @@ void emitPaintFlash({
     if (cell.role == CellRole.continuation || cell.role == CellRole.overlay) {
       continue;
     }
-    buf.write('\x1B[${row + 1};${col + 1}H');
+    buf.write('\x1B[${target.top + row + 1};${col + 1}H');
     buf.write('\x1B[42m'); // green background
     buf.write(cell.role == CellRole.empty ? ' ' : cell.grapheme!);
   }

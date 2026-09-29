@@ -23,3 +23,5 @@ src/types.json
 
 # Lazily loaded testing-guide runner
 public/fleury-preferences-test.js*
+
+public/fleury-debugger.js*

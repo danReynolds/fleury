@@ -353,7 +353,11 @@ DiffDocument parseUnifiedDiff(String source, {int? maxLineLength = 1000}) {
       if (remainingNew > 0) remainingNew -= 1;
       continue;
     }
-    if (inHunkBody && line.startsWith('-')) {
+    // `git format-patch` ends a patch with an email signature: a `-- ` line,
+    // then the git version. Once the hunk's line counts are spent, that line
+    // ends the hunk below; it does not delete the old file's next line.
+    final signature = line == '-- ' && remainingOld == 0 && remainingNew == 0;
+    if (inHunkBody && line.startsWith('-') && !signature) {
       final currentOld = oldCursor;
       addRow(kind: DiffLineKind.deletion, text: line, oldLine: currentOld);
       if (oldCursor != null) oldCursor += 1;
@@ -518,6 +522,19 @@ class _DiffViewState extends State<DiffView> {
   bool _ownsFocusNode = false;
   bool _focusedWithin = false;
 
+  // The line-number gutter's width, measured once per document: it is the
+  // widest line number, and finding it walks every row.
+  DiffDocument? _gutterDocument;
+  int _gutterWidth = 1;
+
+  int _gutterWidthOf(DiffDocument document) {
+    if (!identical(document, _gutterDocument)) {
+      _gutterDocument = document;
+      _gutterWidth = _diffGutterWidth(document.rows);
+    }
+    return _gutterWidth;
+  }
+
   @override
   void initState() {
     super.initState();
@@ -631,7 +648,9 @@ class _DiffViewState extends State<DiffView> {
     final selected = _selectedRow();
     final visibleRange = _controller.visibleRange;
     final copyEnabled = widget.copySelection && rows.isNotEmpty;
-    final gutterWidth = widget.showLineNumbers ? _diffGutterWidth(rows) : 0;
+    final gutterWidth = widget.showLineNumbers
+        ? _gutterWidthOf(widget.document)
+        : 0;
     Widget list = rows.isEmpty
         ? const Text('  (empty diff)', style: CellStyle(dim: true))
         : ListView.builder(
@@ -798,13 +817,13 @@ String _gutterFor(DiffLine row, int width) {
 }
 
 int _diffGutterWidth(List<DiffLine> rows) {
-  var max = 1;
+  var maxLine = 0;
   for (final row in rows) {
-    final o = row.oldLine, n = row.newLine;
-    if (o != null && o.toString().length > max) max = o.toString().length;
-    if (n != null && n.toString().length > max) max = n.toString().length;
+    final oldLine = row.oldLine ?? 0, newLine = row.newLine ?? 0;
+    if (oldLine > maxLine) maxLine = oldLine;
+    if (newLine > maxLine) maxLine = newLine;
   }
-  return max;
+  return maxLine.toString().length;
 }
 
 final _hunkPattern = RegExp(r'^@@ -(\d+)(?:,(\d+))? \+(\d+)(?:,(\d+))? @@');

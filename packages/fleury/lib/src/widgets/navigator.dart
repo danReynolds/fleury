@@ -317,6 +317,14 @@ class NavigatorState extends State<Navigator> {
     return context != null && context.mounted ? context : null;
   }
 
+  /// The screen widget of the top route, as it was pushed or presented.
+  ///
+  /// Lets a screen that closes itself — a palette after running a command —
+  /// tell being the presented route (`identical(topScreen, widget)`) from
+  /// being shown inline inside another screen, where popping would close
+  /// that screen instead.
+  Widget? get topScreen => _topLive?.screen;
+
   /// The topmost live (non-leaving) route — the one that receives input.
   _Route? get _topLive {
     for (var i = _routes.length - 1; i >= 0; i--) {
@@ -538,7 +546,11 @@ class NavigatorState extends State<Navigator> {
   /// false). Returns whether a pop happened. Unlike [pop], this consults
   /// pop guards — including at the root, so a screen can intercept a
   /// would-be app exit. [pop] itself is unconditional (programmatic).
-  bool maybePop() {
+  bool maybePop() => _tryPop() == _PopAttempt.popped;
+
+  /// [maybePop], reporting why nothing popped: a guard or a non-dismissible
+  /// modal refused, or there is nothing to pop (the root).
+  _PopAttempt _tryPop() {
     final top = _topLive;
     if (top != null && top.guards.isNotEmpty) {
       final blockers = top.guards.where((g) => !g.allowsPop).toList();
@@ -546,17 +558,17 @@ class NavigatorState extends State<Navigator> {
         for (final g in blockers) {
           g.notifyBlocked();
         }
-        return false;
+        return _PopAttempt.refused;
       }
     }
     // A non-dismissible modal refuses semantic/back dismissal on EVERY
     // consult path — the route-level Esc binding alone isn't enough, since
     // app back bindings and semantics drivers route through maybePop.
     // Programmatic pop() stays unconditional.
-    if (top != null && !top.barrierDismissible) return false;
-    if (!canPop) return false;
+    if (top != null && !top.barrierDismissible) return _PopAttempt.refused;
+    if (!canPop) return _PopAttempt.nothingToPop;
     pop();
-    return true;
+    return _PopAttempt.popped;
   }
 
   // ---------------------------------------------------------------
@@ -905,7 +917,15 @@ class _RouteHost extends StatelessWidget {
             ? [
                 KeyBinding(
                   KeySequence.escape,
-                  onTrigger: (_) => navigator.maybePop(),
+                  onTrigger: (event) {
+                    // At the root Esc has nothing to pop, so it is not this
+                    // route's key: it bubbles to what binds Esc above the
+                    // navigator (app commands, a toaster, an outer
+                    // navigator). A guard's refusal still consumes it.
+                    if (navigator._tryPop() == _PopAttempt.nothingToPop) {
+                      event.bubble();
+                    }
+                  },
                   hideFromHintBar: true,
                 ),
               ]
@@ -994,7 +1014,11 @@ class _RouteHost extends StatelessWidget {
               switch (action) {
                 case SemanticAction.close:
                 case SemanticAction.dismiss:
-                  navigator.maybePop();
+                  // A PopScope that refuses keeps the route; the action
+                  // reports that instead of completing.
+                  if (!navigator.maybePop()) {
+                    throw const SemanticActionDeclined();
+                  }
                   return;
                 case SemanticAction.navigate:
                   return;
@@ -1144,3 +1168,6 @@ extension NavigatorContext on BuildContext {
   /// Pops every screen above the root.
   void popToRoot() => Navigator.of(this).popToRoot();
 }
+
+/// Why [NavigatorState.maybePop] did or did not pop.
+enum _PopAttempt { popped, refused, nothingToPop }

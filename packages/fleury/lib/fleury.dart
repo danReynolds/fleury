@@ -38,7 +38,7 @@ export 'src/runtime/run_app.dart'
         EventResponse,
         ExitRequested,
         TuiEventHandler,
-        requestExit,
+        exitApp,
         runApp;
 export 'src/terminal/native_driver.dart' show createNativeTerminalDriver;
 export 'src/terminal/posix_driver.dart' show PosixTerminalDriver;

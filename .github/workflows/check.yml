@@ -48,6 +48,51 @@ jobs:
         run: dart test -x integration
       - name: Perf gates (fast suite)
         run: dart tool/fleury_dev.dart benchmark gates
+      - name: Scenario benchmark oracles
+        run: dart tool/fleury_dev.dart benchmark scenario-gate
+
+  inline-terminal:
+    name: inline terminal (${{ matrix.os }}, Dart ${{ matrix.sdk }})
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 10
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest]
+        sdk: ["3.12.2"]
+        include:
+          - os: ubuntu-latest
+            sdk: "3.10.4"
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dart-lang/setup-dart@v1
+        with:
+          sdk: ${{ matrix.sdk }}
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Resolve the native fixture and terminal emulator
+        run: |
+          cd packages/fleury
+          dart pub get
+          cd ../..
+          python -m pip install -r tool/inline-pty-requirements.txt
+      - name: Exercise native acquisition and restoration failures
+        working-directory: packages/fleury
+        run: >-
+          dart test
+          test/terminal/posix_input_lease_test.dart
+          test/terminal/native_termios_ownership_test.dart
+          test/terminal/posix_driver_lifecycle_test.dart
+          test/runtime/inline_terminal_lease_test.dart
+      - name: Exercise inline rendering and lifecycle over a PTY
+        run: python tool/check_inline_tui.py
+      - name: Exercise sequential native sessions
+        run: |
+          python tool/check_native_input.py
+          python tool/check_sequential_sessions.py
+          dart compile exe packages/fleury/test/fixtures/sequential_native_sessions_fixture.dart --packages=packages/fleury/.dart_tool/package_config.json -o "${{ runner.temp }}/fleury-sequential"
+          python tool/check_sequential_sessions.py --executable "${{ runner.temp }}/fleury-sequential"
 
   create-smoke:
     name: create smoke (${{ matrix.os }}, Dart ${{ matrix.sdk }})

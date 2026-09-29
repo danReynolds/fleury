@@ -4,9 +4,10 @@ import 'framework.dart';
 /// Marks [child]'s subtree as its own paint isolate.
 ///
 /// On frames where nothing inside the boundary has changed, the framework
-/// blits the boundary's cached cells into the frame buffer instead of
-/// walking the subtree's paint methods — a single bulk copy instead of a
-/// recursive paint chain.
+/// composites the boundary's cached cells into the frame buffer instead of
+/// walking the subtree's paint methods — one pass over the cached cells
+/// instead of a recursive paint chain. Cells the subtree left empty show
+/// what lies beneath, as they would painted directly.
 ///
 /// The cache covers the child's layout size. Content outside that rectangle
 /// is clipped, including its focus and semantic bounds. Give overflowing

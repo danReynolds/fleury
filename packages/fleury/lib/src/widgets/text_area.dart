@@ -289,9 +289,6 @@ class _TextAreaState extends State<TextArea>
   @override
   void didChangeDependencies() {
     super.didChangeDependencies();
-    FocusManager.maybeOf(
-      context,
-    ); // rebuild on focus change (cursor visibility)
     final registration = FormControlScope.maybeOf(context);
     if (!identical(registration, _formRegistration)) {
       _formRegistration?.release(this);
@@ -651,7 +648,9 @@ class _TextAreaState extends State<TextArea>
 
   final TextPointerSelection _pointerSelection = TextPointerSelection();
 
-  int? _offsetForPointer(PointerDetails details) {
+  /// The text offset under [details] — measured against the text laid out
+  /// last — and the render object that laid it out.
+  (int, RenderTextArea)? _offsetForPointer(PointerDetails details) {
     RenderTextArea? display;
     void visit(RenderObject object) {
       if (object is RenderTextArea) {
@@ -667,19 +666,26 @@ class _TextAreaState extends State<TextArea>
     final object = display;
     final geometry = object?.screenGeometry();
     if (object == null || geometry == null) return null;
-    return object.textOffsetAt(details.globalPosition - geometry.bounds.offset);
+    final offset = object.textOffsetAt(
+      details.globalPosition - geometry.bounds.offset,
+    );
+    return (offset, object);
   }
 
   void _pointerDown(PointerDetails details) {
     if (!widget.enabled ||
-        !(FocusManager.maybeOf(context)?.isClickable(_focusNode) ?? false)) {
+        !(FocusManager.maybeOfWithoutDependency(
+              context,
+            )?.isClickable(_focusNode) ??
+            false)) {
       return;
     }
-    final offset = _offsetForPointer(details);
-    if (offset == null) return;
+    final hit = _offsetForPointer(details);
+    if (hit == null) return;
+    final at = _finishPasteAround(hit.$1, hit.$2);
     _controller.selection = _pointerSelection.down(
       _controller.value,
-      offset,
+      at,
       details,
       obscured: widget.obscureText,
     );
@@ -688,22 +694,45 @@ class _TextAreaState extends State<TextArea>
 
   void _pointerDrag(PointerDragDetails details) {
     if (!widget.enabled ||
-        !(FocusManager.maybeOf(context)?.isClickable(_focusNode) ?? false)) {
+        !(FocusManager.maybeOfWithoutDependency(
+              context,
+            )?.isClickable(_focusNode) ??
+            false)) {
       return;
     }
-    final offset = _offsetForPointer(details);
-    if (offset == null) return;
+    final hit = _offsetForPointer(details);
+    if (hit == null) return;
+    final at = _finishPasteAround(hit.$1, hit.$2);
     final selection = _pointerSelection.drag(
       _controller.value,
-      offset,
+      at,
       obscured: widget.obscureText,
     );
     if (selection != null) _controller.selection = selection;
   }
 
+  /// Finishes a paste still being applied before a pointer moves the caret,
+  /// as every key does: otherwise its remaining text would land at the
+  /// click, after the part already applied.
+  ///
+  /// [offset] was measured against the text [display] laid out last, which
+  /// predates any part of the paste applied since (steps run after a frame
+  /// is drawn). All of that, and whatever finishing inserts, went in at the
+  /// caret [display] laid out, so an offset at or past it moves past it all.
+  int _finishPasteAround(int offset, RenderTextArea display) {
+    final pasting = _paste.isActive;
+    final pasteAt = display._selection.start;
+    final laidOut = display._text.length;
+    _paste.finish();
+    if (!pasting) return offset;
+    final grown = _controller.text.length - laidOut;
+    return grown > 0 && offset >= pasteAt ? offset + grown : offset;
+  }
+
   @override
   Widget build(BuildContext context) {
-    final focused = _focusNode.hasFocus;
+    // Rebuilds when this field's own focus flips (cursor visibility).
+    final focused = context.listen(_focusNode).hasFocus;
     final validationError = _formRegistration?.error ?? widget.validationError;
     final theme = Theme.of(context);
     final defaultStyle = CellStyle.interactive(
@@ -976,6 +1005,7 @@ class RenderTextArea extends RenderObject implements CaretHost {
   set policy(CellWidthPolicy value) {
     if (_policy == value) return;
     _policy = value;
+    _widestOf = null;
     markNeedsLayout();
   }
 
@@ -1095,12 +1125,12 @@ class RenderTextArea extends RenderObject implements CaretHost {
   @override
   CellSize performLayout(CellConstraints constraints) {
     final lines = _showPlaceholder ? _linesOf(_placeholder) : _lines;
-    var widest = 0;
-    for (final line in lines) {
-      final w = _lineDisplayWidth(line);
-      if (w > widest) widest = w;
-    }
-    final cols = constraints.hasBoundedWidth ? constraints.maxCols! : widest;
+    // Only an unbounded width sizes to the content; a bounded one never
+    // needs the widest line, and measuring it walks every grapheme of the
+    // document on each keystroke and caret move.
+    final cols = constraints.hasBoundedWidth
+        ? constraints.maxCols!
+        : _widestLine(lines);
     int rows;
     if (_maxLines != null) {
       // Auto-grow: height tracks the content between minLines and maxLines.
@@ -1134,6 +1164,23 @@ class RenderTextArea extends RenderObject implements CaretHost {
     _syncHorizontalScroll(lines, nextSize.cols);
     return nextSize;
   }
+
+  /// The widest of [lines], measured once per line list: the split is
+  /// memoized per text, so a caret move reuses the last measure.
+  int _widestLine(List<String> lines) {
+    if (identical(lines, _widestOf)) return _widest;
+    var widest = 0;
+    for (final line in lines) {
+      final w = _lineDisplayWidth(line);
+      if (w > widest) widest = w;
+    }
+    _widestOf = lines;
+    _widest = widest;
+    return widest;
+  }
+
+  List<String>? _widestOf;
+  int _widest = 0;
 
   int _lineDisplayWidth(String line) {
     var width = 0;

@@ -858,6 +858,12 @@ const widgetsUsedIn = (file) => {
 
 for (const e of showcases) {
   const slug = e.id.split('.')[1]; // showcase.dashboard -> dashboard
+  // This command-shaped showcase has an illustrated shell and native recording,
+  // so it owns its presentation instead of using the fullscreen-app template.
+  if (slug === 'inline') {
+    writeFileSync(join(showDir, 'inline.mdx'), readFileSync(join(here, '..', 'showcases', 'inline.mdx'), 'utf8'));
+    continue;
+  }
   const file = SAMPLE_FILES[slug];
   const used = file ? widgetsUsedIn(file) : [];
   writeFileSync(
@@ -886,7 +892,7 @@ for (const e of showcases) {
   );
 }
 const showIndex =
-  `---\ntitle: Showcases\ndescription: Full Fleury apps, each running live in your browser.\n---\n\n` +
+  `---\ntitle: Showcases\ndescription: Full-screen apps and interactive CLI commands, running live in your browser.\n---\n\n` +
   `${showcases.length} complete apps, each built entirely from Fleury widgets and **running ` +
   `live in your browser** — open one and use your keyboard and mouse. Each is ` +
   `also runnable from a Fleury framework checkout with ` +

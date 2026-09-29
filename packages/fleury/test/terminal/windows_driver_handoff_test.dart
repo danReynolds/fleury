@@ -113,6 +113,31 @@ Future<void> _pump() => Future<void>.delayed(Duration.zero);
 
 void main() {
   test(
+    'a restored native driver rejects reentry before touching input',
+    () async {
+      final input = _FakeStdin();
+      final driver = WindowsTerminalDriver(
+        stdinOverride: input,
+        stdoutOverride: _RecordingStdout(),
+        resizePollInterval: Duration.zero,
+      );
+      await driver.enter(TerminalMode.interactive);
+      await driver.restore();
+      await expectLater(
+        driver.enter(TerminalMode.interactive),
+        throwsA(
+          isA<StateError>().having(
+            (e) => e.message,
+            'message',
+            contains('Create a new driver'),
+          ),
+        ),
+      );
+      await input.close();
+    },
+  );
+
+  test(
     'Windows stdin EOF closes events and late parser flush is harmless',
     () async {
       final input = _FakeStdin();

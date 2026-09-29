@@ -8,7 +8,7 @@ import 'package:test/test.dart';
 /// SIGINT/SIGTERM reach the app as [SignalEvent]s through the normal event
 /// stream. An unclaimed signal keeps its POSIX meaning (terminate — runApp
 /// resolves with [AppExit.signal]); a handler that returns [EventHandled]
-/// claims it and finishes via [requestExit]. All orderly exits resolve
+/// claims it and finishes via [exitApp]. All orderly exits resolve
 /// runApp's future so the caller's cleanup actually runs.
 void main() {
   Future<void> pump([int ms = 20]) =>
@@ -34,7 +34,7 @@ void main() {
     });
 
     test(
-      'a claimed signal hands shutdown to the app; requestExit finishes it',
+      'a claimed signal hands shutdown to the app; exitApp finishes it',
       () async {
         final driver = FakeTerminalDriver();
         final seen = <AppSignal>[];
@@ -61,12 +61,12 @@ void main() {
           reason: 'claimed signal must NOT exit the loop',
         );
 
-        expect(requestExit(), isTrue);
+        expect(exitApp(), isTrue);
         final exit = await future;
         expect(exit.signal, isNull, reason: 'app-owned shutdown = requested');
 
         expect(
-          requestExit(),
+          exitApp(),
           isFalse,
           reason: 'no app running once cleanup has cleared the seam',
         );
@@ -82,7 +82,7 @@ void main() {
         enableHotReload: false,
         // A typed printable reaches onEvent as the parser emits it — a
         // TextInputEvent, never a bare KeyEvent(char). (Quit keys should
-        // use a widget-level KeyBinding + requestExit, which respects a
+        // use a widget-level KeyBinding + exitApp, which respects a
         // focused text field; this test pins the raw onEvent mechanism.)
         onEvent: (event) => event is TextInputEvent && event.text == 'q'
             ? const ExitRequested()
@@ -96,26 +96,126 @@ void main() {
       await driver.dispose();
     });
 
-    test('unhandled Ctrl+C resolves AppExit.requested (regression)', () async {
-      final driver = FakeTerminalDriver();
+    for (final mode in [
+      TerminalMode.interactive,
+      const TerminalMode.inline(rows: 10),
+    ]) {
+      test(
+        'unhandled Ctrl+C preserves interrupt in '
+        '${mode.inlineRows == null ? 'full-screen' : 'inline'} mode',
+        () async {
+          final driver = FakeTerminalDriver();
+          final future = runApp(
+            const Text('hi'),
+            driver: driver,
+            mode: mode,
+            enableHotReload: false,
+          );
+          await pump();
+
+          driver.enqueue(
+            const KeyEvent(KeyCode.char('c'), modifiers: {KeyModifier.ctrl}),
+          );
+          final exit = await future;
+          expect(exit.signal, AppSignal.interrupt);
+          expect(driver.isActive, isFalse);
+          await driver.dispose();
+        },
+      );
+    }
+
+    test(
+      'a widget can claim Ctrl+C without interrupting the command',
+      () async {
+        final driver = FakeTerminalDriver();
+        var claimed = 0;
+        final future = runApp(
+          KeyBindings(
+            bindings: [
+              KeyBinding(KeySequence.ctrl.c, onTrigger: (_) => claimed++),
+            ],
+            child: const Focus(autofocus: true, child: Text('working')),
+          ),
+          driver: driver,
+          enableHotReload: false,
+        );
+        try {
+          await pump();
+          driver.enqueue(
+            const KeyEvent(KeyCode.char('c'), modifiers: {KeyModifier.ctrl}),
+          );
+          driver.enqueue(
+            const KeyEvent(
+              KeyCode.char('c'),
+              modifiers: {KeyModifier.ctrl},
+              type: KeyEventType.up,
+            ),
+          );
+          await pump();
+          expect(claimed, 1);
+          expect(driver.isActive, isTrue);
+
+          exitApp();
+          expect((await future).signal, isNull);
+        } finally {
+          exitApp();
+          await future;
+          await driver.dispose();
+        }
+      },
+    );
+
+    test('a handled Ctrl+C held into key repeat does not exit', () async {
+      // A kitty terminal reports a held key's auto-repeat as its own event
+      // type, and bindings skip repeats, so the repeat of a press the app
+      // handled came back unhandled and the guard quit: copying a selection
+      // or an Interrupt binding exited the app if the key stayed down.
+      final driver = FakeTerminalDriver(
+        keyboardCapabilities: KeyboardCapabilities.full,
+      );
+      var interrupts = 0;
       final future = runApp(
-        const Text('hi'),
+        KeyBindings(
+          bindings: [
+            KeyBinding(KeySequence.ctrl.c, onTrigger: (_) => interrupts++),
+          ],
+          child: const Focus(autofocus: true, child: Text('agent running')),
+        ),
         driver: driver,
         enableHotReload: false,
       );
+      var exited = false;
+      unawaited(future.then((_) => exited = true));
       await pump();
 
-      driver.enqueue(
-        const KeyEvent(KeyCode.char('c'), modifiers: {KeyModifier.ctrl}),
-      );
-      final exit = await future;
-      expect(exit.signal, isNull);
+      for (final type in [
+        KeyEventType.down,
+        KeyEventType.repeat,
+        KeyEventType.repeat,
+        KeyEventType.up,
+      ]) {
+        driver.enqueue(
+          KeyEvent(
+            KeyCode.char('c'),
+            modifiers: {KeyModifier.ctrl},
+            type: type,
+          ),
+        );
+        await pump();
+      }
+
+      expect(interrupts, 1);
+      expect(exited, isFalse, reason: 'the handled press keeps the app alive');
+      expect(driver.isActive, isTrue);
+
+      exitApp();
+      await future;
       await driver.dispose();
     });
 
     test("the documented quit pattern: a widget-level 'q' binding + "
-        'requestExit exits on typed text', () async {
-      // run_app.dart documents requestExit as "the programmatic quit for
+        'exitApp exits on typed text', () async {
+      // run_app.dart documents exitApp as "the programmatic quit for
       // `q` keys". The parser emits a typed q as a TextInputEvent; the
       // dispatcher's synthesized-KeyEvent fallback carries it to the
       // binding when no text claimant consumes it.
@@ -125,7 +225,7 @@ void main() {
           bindings: [
             KeyBinding(
               KeySequence.q,
-              onTrigger: (_) => requestExit(),
+              onTrigger: (_) => exitApp(),
               label: 'Quit',
             ),
           ],
@@ -152,7 +252,7 @@ void main() {
             bindings: [
               KeyBinding(
                 KeySequence.q,
-                onTrigger: (_) => requestExit(),
+                onTrigger: (_) => exitApp(),
                 label: 'Quit',
               ),
             ],
@@ -168,7 +268,7 @@ void main() {
         expect(controller.text, 'q', reason: 'typing wins over the quit key');
         expect(driver.isActive, isTrue, reason: 'the app must not exit');
 
-        requestExit();
+        exitApp();
         final exit = await future;
         expect(exit.signal, isNull);
         await driver.dispose();
@@ -195,7 +295,7 @@ void main() {
         await pump();
         expect(driver.isActive, isTrue);
 
-        requestExit();
+        exitApp();
         await future;
         await driver.dispose();
       },

@@ -68,7 +68,7 @@ void main() {
       );
       await Future<void>.delayed(const Duration(milliseconds: 60));
     }
-    requestExit();
+    exitApp();
     await app.timeout(const Duration(seconds: 8));
     print('EDGES-SEEN $seen of 5');
     expect(seen, 5, reason: 'wasPressed must not be a race');

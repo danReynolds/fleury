@@ -72,7 +72,7 @@ void main() {
             samples.add(snapshot);
             if (samples.length > 12 && !done.isCompleted) {
               done.complete();
-              requestExit();
+              exitApp();
             }
           }),
         ),

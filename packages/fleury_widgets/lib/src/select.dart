@@ -99,6 +99,10 @@ class _SelectState<T> extends State<Select<T>> {
   FormControlRegistration? _formRegistration;
   bool _hovered = false;
 
+  // The overlay builds the list above any Theme the app set, so it carries
+  // the theme where this Select sits.
+  ThemeData? _theme;
+
   bool get _isOpen => _entry != null;
 
   @override
@@ -137,7 +141,11 @@ class _SelectState<T> extends State<Select<T>> {
   @override
   void didChangeDependencies() {
     super.didChangeDependencies();
-    FocusManager.maybeOf(context); // rebuild on focus change (focus cue)
+    final theme = Theme.of(context);
+    if (theme != _theme) {
+      _theme = theme;
+      _entry?.markNeedsBuild();
+    }
     final registration = FormControlScope.maybeOf(context);
     if (!identical(registration, _formRegistration)) {
       _formRegistration?.release(this);
@@ -202,13 +210,10 @@ class _SelectState<T> extends State<Select<T>> {
     if (widget.options.isEmpty || _isOpen) return;
     final manager = FocusManager.of(context);
     final overlay = Overlay.of(context);
-    final theme = Theme.of(
-      context,
-    ); // resolved in-tree, threaded into the overlay
     _priorFocus = manager.focusedNode;
     final entry = OverlayEntry(
       builder: (_) => Theme(
-        data: theme,
+        data: _theme!,
         child: AnchoredFloat(
           notifier: _bounds,
           onTapOutside: _dismiss,
@@ -218,9 +223,9 @@ class _SelectState<T> extends State<Select<T>> {
             semanticLabel: widget.semanticLabel,
             initialIndex: _initialIndex(),
             appliedIndex: _appliedIndex(),
-            selectionStyle: theme.selectionStyle,
-            mutedStyle: theme.mutedStyle,
-            borderStyle: theme.borderStyle,
+            selectionStyle: _theme!.selectionStyle,
+            mutedStyle: _theme!.mutedStyle,
+            borderStyle: _theme!.borderStyle,
             onHighlighted: widget.onHighlightChanged,
             onPicked: (value) {
               _close();
@@ -291,12 +296,10 @@ class _SelectState<T> extends State<Select<T>> {
 
   @override
   Widget build(BuildContext context) {
-    FocusManager.maybeOf(
-      context,
-    ); // Rebuild trigger semantics when focus moves.
     final theme = Theme.of(context);
     final enabled = widget.onChanged != null;
-    final focused = _triggerFocus.hasFocus;
+    // Rebuilds when the trigger's own focus flips (cue and semantics).
+    final focused = context.listen(_triggerFocus).hasFocus;
     final validationError = _formRegistration?.error;
     final style = resolveCellStyle(
       cascade: [
@@ -504,7 +507,6 @@ class _MultiSelectState<T> extends State<MultiSelect<T>>
   @override
   void didChangeDependencies() {
     super.didChangeDependencies();
-    FocusManager.maybeOf(context);
     final registration = FormControlScope.maybeOf(context);
     if (!identical(registration, _formRegistration)) {
       _formRegistration?.release(this);
@@ -667,10 +669,9 @@ class _MultiSelectState<T> extends State<MultiSelect<T>>
 
   @override
   Widget build(BuildContext context) {
-    FocusManager.maybeOf(context);
     final theme = Theme.of(context);
     final enabled = _enabled;
-    final focused = enabled && _focusNode.hasFocus;
+    final focused = enabled && context.listen(_focusNode).hasFocus;
     final validationError = _formRegistration?.error;
     final rawChild = widget.options.isEmpty
         ? Text(

@@ -97,7 +97,9 @@ ScopeBuilder<T>(builder: (context, T value) => ...)
   build did not repeat; that dropped reads made in `didChangeDependencies`,
   which a plain `setState` does not call, and it made `initState` reads go deaf
   after a move. Per-build tracking remains for `context.listen`, whose sources
-  are arbitrary objects rather than ancestors.)
+  are arbitrary objects rather than ancestors. Reading `Animation.value` in
+  build is the same per-build subscription as `context.listen`, so a widget
+  that stops reading an animation stops rebuilding on it.)
 - **Framework accessors.** Widget accessors such as `Theme.of` use the same
   subscription through internal plumbing that may also run from handlers and
   element hooks; `fleury_internal.dart` exposes it to first-party packages.
@@ -131,8 +133,10 @@ ScopeBuilder<T>(builder: (context, T value) => ...)
 `notifyDependents()`, `_markDependencyChanged`, the listener, and the
 `_owned` flag. `Element` keeps a nullable `Set<ScopeElement>` of the scopes it
 reads — the only scope-dependency record — and remembers their keys across a
-deactivation so activation can re-resolve them. `context.listen` sources use
-separate, lazily allocated bookkeeping reconciled after each build.
+deactivation so activation can re-resolve them. Listenables read during build
+— `context.listen` and value getters such as `Animation.value` — share
+separate, lazily allocated bookkeeping reconciled after each build; the
+reconcile walk is skipped when every source was read again, the steady state.
 `_detachDependencies` clears both on unmount and deactivate.
 The lookup tests the element class first (a cheap class check on
 every ancestor) and compares the `Type` key only at scope elements; measured

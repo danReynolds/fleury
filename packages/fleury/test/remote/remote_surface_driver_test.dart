@@ -5,6 +5,7 @@
 
 import 'dart:async';
 import 'dart:convert';
+import 'dart:io';
 import 'dart:typed_data';
 
 import 'package:fleury/fleury.dart';
@@ -392,6 +393,176 @@ void main() {
         await done;
       },
     );
+
+    test('repeated peer actions whose work fails keep the session', () async {
+      // An agent or assistive technology activating a control whose work
+      // fails asynchronously, faster than runApp's error-storm limit (24 in
+      // three seconds). Each action is input, like a key: the errors stop
+      // when the actions do, so they are reported and the session survives.
+      final transport = _FakeTransport();
+      final driver = RemoteTerminalDriver(transport);
+      Object? sessionError;
+      var sessionEnded = false;
+      scheduleMicrotask(() => transport.emit(_init));
+      final done =
+          runApp(
+            Semantics(
+              id: const SemanticNodeId('btn:save'),
+              role: SemanticRole.button,
+              label: 'Save',
+              actions: const {SemanticAction.activate},
+              onAction: (_) {
+                unawaited(Future<void>(() => throw StateError('disk full')));
+              },
+              child: const Text('Save'),
+            ),
+            driver: driver,
+            requireInteractiveTerminal: false,
+          ).then<void>(
+            (_) => sessionEnded = true,
+            onError: (Object error) {
+              sessionError = error;
+              sessionEnded = true;
+            },
+          );
+      await Future<void>.delayed(const Duration(milliseconds: 10));
+
+      for (var i = 0; i < 30; i++) {
+        transport.emit(
+          const SemanticActionFrame(
+            SemanticNodeId('btn:save'),
+            SemanticAction.activate,
+          ),
+        );
+        await Future<void>.delayed(const Duration(milliseconds: 2));
+      }
+      await Future<void>.delayed(const Duration(milliseconds: 20));
+
+      expect(sessionEnded, isFalse, reason: 'ended with $sessionError');
+      await transport.disconnect();
+      await done;
+    });
+
+    test('a semantic tree that cannot be sent is reported once', () async {
+      // Two unkeyed lists whose rows share a data id derive the same semantic
+      // ids, which the wire cannot carry. The peer's accessibility tree goes
+      // empty; the developer is told why (runApp's developer warnings reach
+      // stderr), once, not on every frame.
+      final logged = _StderrCapture();
+      await IOOverrides.runZoned(() async {
+        final transport = _FakeTransport();
+        final driver = RemoteTerminalDriver(transport);
+        final shown = ValueNotifier(0);
+        scheduleMicrotask(() => transport.emit(_init));
+        final done = runApp(
+          NotifierBuilder(
+            notifier: shown,
+            builder: (_, shown) => Row(
+              children: [
+                for (final list in ['recent', 'all'])
+                  Expanded(
+                    child: Column(
+                      children: [
+                        Text('$list ${shown.value}'),
+                        for (final name in ['a.txt', 'b.txt'])
+                          Semantics(
+                            key: ValueKey('row-$name'),
+                            role: SemanticRole.listItem,
+                            label: name,
+                            child: Row(
+                              children: [
+                                Semantics(
+                                  role: SemanticRole.button,
+                                  label: 'Open $name',
+                                  actions: const {SemanticAction.activate},
+                                  onAction: (_) {},
+                                  child: Text(name),
+                                ),
+                              ],
+                            ),
+                          ),
+                      ],
+                    ),
+                  ),
+              ],
+            ),
+          ),
+          driver: driver,
+          requireInteractiveTerminal: false,
+        );
+        await Future<void>.delayed(const Duration(milliseconds: 20));
+        for (var i = 1; i <= 3; i++) {
+          shown.value = i;
+          await Future<void>.delayed(const Duration(milliseconds: 10));
+        }
+        await transport.disconnect();
+        await done;
+      }, stderr: () => logged);
+
+      final reports = 'The semantic tree was not sent'
+          .allMatches(logged.text)
+          .length;
+      expect(reports, 1, reason: logged.text);
+      expect(logged.text, contains('is on more than one node'));
+      expect(logged.text, contains('row-a.txt'));
+    });
+
+    test('a tree that cannot be sent again, after one that could, is '
+        'reported again', () async {
+      final logged = _StderrCapture();
+      await IOOverrides.runZoned(() async {
+        final transport = _FakeTransport();
+        final driver = RemoteTerminalDriver(transport);
+        final duplicated = ValueNotifier(true);
+        Widget rows(String list) => Column(
+          children: [
+            for (final name in ['a.txt', 'b.txt'])
+              Semantics(
+                key: ValueKey('row-$name'),
+                role: SemanticRole.listItem,
+                label: '$list $name',
+                child: Row(
+                  children: [
+                    Semantics(
+                      role: SemanticRole.button,
+                      label: 'Open $name',
+                      actions: const {SemanticAction.activate},
+                      onAction: (_) {},
+                      child: Text(name),
+                    ),
+                  ],
+                ),
+              ),
+          ],
+        );
+        scheduleMicrotask(() => transport.emit(_init));
+        final done = runApp(
+          NotifierBuilder(
+            notifier: duplicated,
+            builder: (_, duplicated) => Row(
+              children: [
+                Expanded(child: rows('recent')),
+                if (duplicated.value) Expanded(child: rows('all')),
+              ],
+            ),
+          ),
+          driver: driver,
+          requireInteractiveTerminal: false,
+        );
+        await Future<void>.delayed(const Duration(milliseconds: 20));
+        for (final value in [false, true]) {
+          duplicated.value = value;
+          await Future<void>.delayed(const Duration(milliseconds: 20));
+        }
+        await transport.disconnect();
+        await done;
+      }, stderr: () => logged);
+
+      final reports = 'The semantic tree was not sent'
+          .allMatches(logged.text)
+          .length;
+      expect(reports, 2, reason: logged.text);
+    });
 
     test('a peer SEMANTIC_ACTION activates the live node', () async {
       final transport = _FakeTransport();
@@ -934,6 +1105,175 @@ void main() {
         expect(plan.placements.map((p) => p.col).toSet(), {0, 10});
 
         await driver.restore();
+      },
+    );
+  });
+
+  group('a semantic action that awaits a dialog', () {
+    // The `await context.present(Confirm())` idiom on the semantic channel:
+    // the handler settles only when the dialog is answered, and over the
+    // wire the answer is a later action. It must not queue behind the action
+    // that opened the dialog, and each RESULT goes out when its handler
+    // settles.
+    late BuildContext home;
+    bool? deleted;
+
+    Future<void> askAndDelete({RouteTransition? transition}) async {
+      deleted = await Navigator.of(home).present<bool>(
+        Semantics(
+          id: const SemanticNodeId('confirm'),
+          role: SemanticRole.button,
+          label: 'Confirm',
+          actions: const {SemanticAction.activate},
+          onAction: (_) => Navigator.of(home).pop(true),
+          child: const Text('Delete it?'),
+        ),
+        transition: transition ?? RouteTransition.none,
+      );
+    }
+
+    Future<List<String>> answerThroughSemantics(
+      Widget screen,
+      SemanticNodeId Function(_FakeTransport transport) opener,
+    ) async {
+      deleted = null;
+      final transport = _FakeTransport();
+      scheduleMicrotask(() => transport.emit(_init));
+      final done = runApp(
+        Navigator(
+          transition: RouteTransition.none,
+          home: _ContextProbe((context) => home = context, screen),
+        ),
+        driver: RemoteTerminalDriver(transport),
+        requireInteractiveTerminal: false,
+      );
+      await Future<void>.delayed(const Duration(milliseconds: 20));
+
+      transport.emit(
+        SemanticActionFrame(opener(transport), SemanticAction.activate),
+      );
+      await Future<void>.delayed(const Duration(milliseconds: 50));
+      transport.emit(
+        const SemanticActionFrame(
+          SemanticNodeId('confirm'),
+          SemanticAction.activate,
+        ),
+      );
+      await Future<void>.delayed(const Duration(milliseconds: 900));
+
+      await transport.disconnect();
+      await done;
+      return [
+        for (final frame in transport.sent)
+          if (frame is SemanticActionResultFrame)
+            '${frame.action.name}:${frame.status.name}',
+      ];
+    }
+
+    test('from a Semantics handler', () async {
+      final results = await answerThroughSemantics(
+        Semantics(
+          id: const SemanticNodeId('delete'),
+          role: SemanticRole.button,
+          label: 'Delete',
+          actions: const {SemanticAction.activate},
+          onAction: (_) => askAndDelete(),
+          child: const Text('Delete'),
+        ),
+        (_) => const SemanticNodeId('delete'),
+      );
+
+      expect(deleted, isTrue, reason: 'the dialog was answered');
+      expect(results, ['activate:completed', 'activate:completed']);
+    });
+
+    test('from a command node', () async {
+      final results = await answerThroughSemantics(
+        CommandScope(
+          commands: [
+            AppCommand(
+              id: const CommandId('files.delete'),
+              title: 'Delete',
+              run: (_) => askAndDelete(),
+            ),
+          ],
+          child: const Text('files'),
+        ),
+        (transport) => _latestSemanticTree(
+          transport,
+        ).single(role: SemanticRole.command, label: 'Delete').id,
+      );
+
+      expect(deleted, isTrue, reason: 'the dialog was answered');
+      expect(results, ['activate:completed', 'activate:completed']);
+    });
+
+    test(
+      'an action behind a dismissal does not reach the dismissed route',
+      () async {
+        final transport = _FakeTransport();
+        scheduleMicrotask(() => transport.emit(_init));
+        final done = runApp(
+          Navigator(
+            transition: RouteTransition.none,
+            home: _ContextProbe(
+              (context) => home = context,
+              const Text('home'),
+            ),
+          ),
+          driver: RemoteTerminalDriver(transport),
+          requireInteractiveTerminal: false,
+        );
+        await Future<void>.delayed(const Duration(milliseconds: 20));
+        final navigator = Navigator.of(home);
+        unawaited(navigator.push<void>(const _KeyCounter()));
+        // It fades out, so it stays mounted while it leaves.
+        unawaited(askAndDelete(transition: RouteTransition.fade));
+        await Future<void>.delayed(const Duration(milliseconds: 20));
+        expect(navigator.depth, 3, reason: 'the dialog is up');
+        final dialog = _latestSemanticTree(transport).nodes.lastWhere(
+          (node) =>
+              node.role == SemanticRole.route &&
+              node.selfAndDescendants.any(
+                (child) => child.id == const SemanticNodeId('confirm'),
+              ),
+        );
+
+        // In one burst: a key that renders a frame, then a peer dismissing
+        // the dialog and confirming it. The confirm reaches a dialog that is
+        // leaving, still mounted and before a frame shows it gone. It must
+        // not run: its pop would close the page beneath.
+        transport.emit(
+          const InputEventFrame(InputBatch(key: KeyEvent(KeyCode.char('k')))),
+        );
+        transport.emit(
+          SemanticActionFrame(
+            dialog.id,
+            SemanticAction.dismiss,
+            targetToken: dialog.actionTargetToken,
+          ),
+        );
+        transport.emit(
+          const SemanticActionFrame(
+            SemanticNodeId('confirm'),
+            SemanticAction.activate,
+          ),
+        );
+        await Future<void>.delayed(const Duration(milliseconds: 200));
+
+        expect(navigator.depth, 2, reason: 'the page is still open');
+        expect(deleted, isNull, reason: 'the dialog was dismissed');
+        expect(
+          [
+            for (final frame in transport.sent)
+              if (frame is SemanticActionResultFrame)
+                '${frame.action.name}:${frame.status.name}',
+          ],
+          ['dismiss:completed', 'activate:notFound'],
+        );
+
+        await transport.disconnect();
+        await done;
       },
     );
   });
@@ -1775,6 +2115,38 @@ void main() {
   });
 }
 
+/// Hands its build context to [sink], for a test that acts on the tree.
+final class _ContextProbe extends StatelessWidget {
+  const _ContextProbe(this.sink, this.child);
+
+  final void Function(BuildContext context) sink;
+  final Widget child;
+
+  @override
+  Widget build(BuildContext context) {
+    sink(context);
+    return child;
+  }
+}
+
+// A page that rebuilds on every key, so a key renders a frame.
+final class _KeyCounter extends StatefulWidget {
+  const _KeyCounter();
+
+  @override
+  State<_KeyCounter> createState() => _KeyCounterState();
+}
+
+final class _KeyCounterState extends State<_KeyCounter> {
+  var _keys = 0;
+
+  @override
+  Widget build(BuildContext context) => KeyDetector(
+    onKey: (_) => setState(() => _keys++),
+    child: Focus(autofocus: true, child: Text('page $_keys')),
+  );
+}
+
 /// A minimal server-side producer that mirrors MarkdownText's OSC 8 gate
 /// (markdown_text.dart): it attaches a real [CellStyle.linkUri] ONLY when the
 /// surface reports it can render links. Used to exercise capability propagation
@@ -1902,3 +2274,27 @@ FramePresentationPlan _steadyStatePlan(CellSize size, TuiDirtyRows dirtyRows) =>
       metricsChanged: false,
       spanBuildTime: Duration.zero,
     );
+
+class _StderrCapture implements Stdout {
+  final StringBuffer _buffer = StringBuffer();
+  String get text => _buffer.toString();
+
+  @override
+  void writeln([Object? object = '']) => _buffer.writeln(object);
+  @override
+  void write(Object? object) => _buffer.write(object);
+  @override
+  void writeAll(Iterable<dynamic> objects, [String separator = '']) =>
+      _buffer.writeAll(objects, separator);
+  @override
+  void writeCharCode(int charCode) => _buffer.writeCharCode(charCode);
+  @override
+  Future<void> flush() async {}
+  @override
+  Future<void> close() async {}
+  @override
+  Future<void> get done => Future<void>.value();
+
+  @override
+  dynamic noSuchMethod(Invocation invocation) => null;
+}

@@ -973,9 +973,13 @@ class _TextInputState extends State<TextInput>
     _focusNode =
         widget.focusNode ??
         FocusNode(debugLabel: 'TextInput', canRequestFocus: widget.enabled);
+    _focusNode.addListener(_onFocusFlip);
     _syncClaimants();
     _ownsFocusNode = widget.focusNode == null;
   }
+
+  // Cursor visibility and the blink ticker follow this field's own focus.
+  void _onFocusFlip() => setState(_syncBlinkToFocus);
 
   /// Claim typed text only while [TextInput.enabled]: a disabled field
   /// DECLINES every printable (`onTextInput` returns ignored), so the chars
@@ -1020,12 +1024,15 @@ class _TextInputState extends State<TextInput>
       if (identical(_focusNode.textCompositionClaimant, this)) {
         _focusNode.textCompositionClaimant = null;
       }
+      _focusNode.removeListener(_onFocusFlip);
       if (_ownsFocusNode) _focusNode.dispose();
       _focusNode =
           widget.focusNode ??
           FocusNode(debugLabel: 'TextInput', canRequestFocus: widget.enabled);
+      _focusNode.addListener(_onFocusFlip);
       _syncClaimants();
       _ownsFocusNode = widget.focusNode == null;
+      _syncBlinkToFocus();
     }
     if (widget.enabled != oldWidget.enabled) {
       _syncClaimants();
@@ -1064,9 +1071,6 @@ class _TextInputState extends State<TextInput>
   @override
   void didChangeDependencies() {
     super.didChangeDependencies();
-    // Rebuild on focus change so cursor visibility flips: reading the
-    // manager subscribes us to its scope.
-    FocusManager.maybeOf(context);
     final registration = FormControlScope.maybeOf(context);
     if (!identical(registration, _formRegistration)) {
       _formRegistration?.release(this);
@@ -1595,6 +1599,7 @@ class _TextInputState extends State<TextInput>
     if (identical(_focusNode.textCompositionClaimant, this)) {
       _focusNode.textCompositionClaimant = null;
     }
+    _focusNode.removeListener(_onFocusFlip);
     if (_ownsFocusNode) _focusNode.dispose();
     _formRegistration?.release(this);
     super.dispose();
@@ -1602,7 +1607,9 @@ class _TextInputState extends State<TextInput>
 
   final TextPointerSelection _pointerSelection = TextPointerSelection();
 
-  int? _offsetForPointer(PointerDetails details) {
+  /// The text offset under [details] — measured against the text laid out
+  /// last — and the render object that laid it out.
+  (int, RenderTextInput)? _offsetForPointer(PointerDetails details) {
     RenderTextInput? display;
     void visit(RenderObject object) {
       if (object is RenderTextInput) {
@@ -1618,19 +1625,26 @@ class _TextInputState extends State<TextInput>
     final object = display;
     final geometry = object?.screenGeometry();
     if (object == null || geometry == null) return null;
-    return object.textOffsetAt(details.globalPosition - geometry.bounds.offset);
+    final offset = object.textOffsetAt(
+      details.globalPosition - geometry.bounds.offset,
+    );
+    return (offset, object);
   }
 
   void _pointerDown(PointerDetails details) {
     if (!widget.enabled ||
-        !(FocusManager.maybeOf(context)?.isClickable(_focusNode) ?? false)) {
+        !(FocusManager.maybeOfWithoutDependency(
+              context,
+            )?.isClickable(_focusNode) ??
+            false)) {
       return;
     }
-    final offset = _offsetForPointer(details);
-    if (offset == null) return;
+    final hit = _offsetForPointer(details);
+    if (hit == null) return;
+    final at = _finishPasteAround(hit.$1, hit.$2);
     _controller.selection = _pointerSelection.down(
       _controller.value,
-      offset,
+      at,
       details,
       obscured: widget.obscureText,
     );
@@ -1639,17 +1653,39 @@ class _TextInputState extends State<TextInput>
 
   void _pointerDrag(PointerDragDetails details) {
     if (!widget.enabled ||
-        !(FocusManager.maybeOf(context)?.isClickable(_focusNode) ?? false)) {
+        !(FocusManager.maybeOfWithoutDependency(
+              context,
+            )?.isClickable(_focusNode) ??
+            false)) {
       return;
     }
-    final offset = _offsetForPointer(details);
-    if (offset == null) return;
+    final hit = _offsetForPointer(details);
+    if (hit == null) return;
+    final at = _finishPasteAround(hit.$1, hit.$2);
     final selection = _pointerSelection.drag(
       _controller.value,
-      offset,
+      at,
       obscured: widget.obscureText,
     );
     if (selection != null) _controller.selection = selection;
+  }
+
+  /// Finishes a paste still being applied before a pointer moves the caret,
+  /// as every key does: otherwise its remaining text would land at the
+  /// click, after the part already applied.
+  ///
+  /// [offset] was measured against the text [display] laid out last, which
+  /// predates any part of the paste applied since (steps run after a frame
+  /// is drawn). All of that, and whatever finishing inserts, went in at the
+  /// caret [display] laid out, so an offset at or past it moves past it all.
+  int _finishPasteAround(int offset, RenderTextInput display) {
+    final pasting = _paste.isActive;
+    final pasteAt = display._selection.start;
+    final laidOut = display._text.length;
+    _paste.finish();
+    if (!pasting) return offset;
+    final grown = _controller.text.length - laidOut;
+    return grown > 0 && offset >= pasteAt ? offset + grown : offset;
   }
 
   @override

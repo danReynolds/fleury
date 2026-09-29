@@ -596,7 +596,7 @@ void _secondaryTests() {
   group('implicit boundaries', () {
     testWidgets('(e) a crashing route contains in production mode', (tester) {
       // Production posture: contain instead of the tester's rethrow.
-      tester.owner.rethrowContainedRenderErrors = false;
+      tester.owner.rethrowContainedErrors = false;
       tester.pumpWidget(Navigator(home: const Boom()));
       final out = tester.renderToString(size: const CellSize(30, 8));
       expect(out, contains('layout-boom'), reason: 'route slot shows panel');
@@ -607,7 +607,7 @@ void _secondaryTests() {
   group('root backstop', () {
     test('(i) an unbounded crash yields a full-screen error frame', () {
       final runtime = TuiRuntime();
-      runtime.owner.rethrowContainedRenderErrors = false;
+      runtime.owner.rethrowContainedErrors = false;
       final frameLoop = TuiFrameLoop(renderDamage: runtime.renderDamageTracker);
       final backstopped = <Object>[];
       final presenter = _ProbePresenter();
@@ -636,7 +636,7 @@ void _secondaryTests() {
 
     test('(j) a backstop storm declares the session unrecoverable', () {
       final runtime = TuiRuntime();
-      runtime.owner.rethrowContainedRenderErrors = false;
+      runtime.owner.rethrowContainedErrors = false;
       final frameLoop = TuiFrameLoop(renderDamage: runtime.renderDamageTracker);
       final presenter = _ProbePresenter();
       final driver = FrameDriver(

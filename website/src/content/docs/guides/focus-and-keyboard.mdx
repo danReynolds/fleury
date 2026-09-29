@@ -67,7 +67,7 @@ Put global keyboard behavior near the root:
 runApp(
   KeyBindings(
     bindings: [
-      KeyBinding(.q, label: 'Quit', onTrigger: (_) => requestExit()),
+      KeyBinding(.q, label: 'Quit', onTrigger: (_) => exitApp()),
       KeyBinding(.ctrl.p, label: 'Commands', onTrigger: (_) => openPalette()),
     ],
     child: const MyApp(),
@@ -276,7 +276,7 @@ and should follow the printed letter:
 if (keys.isHeld(KeyPosition.w)) accelerate();
 
 // "q for quit" wants the letter Q on every layout.
-KeyBinding(.q, label: 'Quit', onTrigger: (_) => requestExit());
+KeyBinding(.q, label: 'Quit', onTrigger: (_) => exitApp());
 ```
 
 On AZERTY, the physical position used by QWERTY `W` is labeled `Z`. Fleury's

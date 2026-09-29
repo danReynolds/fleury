@@ -138,12 +138,27 @@ class InputDispatcher {
   /// Whether a sequence is currently pending. Useful for tests.
   bool get hasPendingSequence => _pending != null;
 
-  /// The insertion a consumed printable key half owes suppression to
-  /// (§11): on surfaces that report printables as keys AND deliver their
-  /// text separately, consuming the key must drop the matching text — and
-  /// only that one. A non-matching insertion clears it rather than
-  /// swallowing unrelated input.
-  String? _suppressNextText;
+  /// The printable key half a split surface just walked, whose text is still
+  /// to come (§11): the DOM reports a printable as a keydown and delivers its
+  /// text as a separate `input` event. When the very next event is that
+  /// text, the two are one press, handled as a correlated batch is — the
+  /// text is dropped if the key half was consumed, and otherwise visits
+  /// binding scopes only, so each detector sees the press once. Any other
+  /// event ends the pairing, and text that is not this key's is not paired.
+  KeyEvent? _splitKeyHalf;
+
+  /// Whether a detector, binding or capture consumed [_splitKeyHalf].
+  bool _splitKeyHalfConsumed = false;
+
+  /// Whether [_splitKeyHalf] walked the focus chain. A key half a pending
+  /// prefix held for its text did not, so its text walks it instead.
+  bool _splitKeyHalfWalked = false;
+
+  /// Whether the last [_dispatchKeyEvent] held its key for the text half of
+  /// the same step — a pending prefix the key could not advance — without
+  /// walking the focus chain. Detectors must then see the text's view, or
+  /// they never see the press at all.
+  bool _keyHeldForText = false;
 
   /// Abandons an in-flight sequence as if the user pressed Esc: held events
   /// replay (a shorter binding fires, a text-owed char reaches the field) and
@@ -196,6 +211,9 @@ class InputDispatcher {
       _reportDeadControls();
       return true;
     }());
+    // A split key half pairs only with the event right after it.
+    final keyHalf = _splitKeyHalf;
+    _splitKeyHalf = null;
     if (event is InputBatch) {
       // A correlated key+text report (RFC 0020 §5). The key half feeds the
       // session/observation lanes and key-driven commands (positions, special
@@ -232,20 +250,25 @@ class InputDispatcher {
         }
       }
       if (text != null) {
-        // The key half already walked the routed lanes above.
+        // The key half walked the routed lanes above, unless a pending
+        // prefix held it for this text.
+        final keyView = key != null && key.type != KeyEventType.up ? key : null;
         return _dispatchText(
           TextInputEvent(text),
-          keyAlreadyWalked: key != null && key.type != KeyEventType.up,
-          keyView: key != null && key.type != KeyEventType.up ? key : null,
+          keyAlreadyWalked: keyView != null && !_keyHeldForText,
+          keyView: keyView,
         );
       }
       return KeyEventResult.ignored;
     }
     if (event is TextInputEvent) {
-      final suppressed = _suppressNextText;
-      if (suppressed != null) {
-        _suppressNextText = null;
-        if (event.text == suppressed) return KeyEventResult.handled;
+      if (keyHalf != null && _isTextOfKey(event.text, keyHalf.code)) {
+        if (_splitKeyHalfConsumed) return KeyEventResult.handled;
+        return _dispatchText(
+          event,
+          keyAlreadyWalked: _splitKeyHalfWalked,
+          keyView: keyHalf,
+        );
       }
       return _dispatchText(event);
     }
@@ -260,19 +283,22 @@ class InputDispatcher {
     }
     if (event is KeyEvent) {
       _regularizeAndObserve(event);
-      if (_tryCapture(event)) return KeyEventResult.handled;
       // Stage 5 (§6): the key walk runs before text. Where printables
       // arrive as key events (reportsPrintableKeys — the DOM source), the
-      // committed text follows as a SEPARATE event, so a key consumed here
-      // must suppress it (§11's keydown/input pairing) — otherwise one
-      // press fires a character binding twice. The walk has to run first
-      // regardless: a positional gesture matches an identity the text half
-      // cannot carry.
+      // committed text follows as a SEPARATE event, which pairs with this
+      // key half (§11's keydown/input pairing, [_splitKeyHalf]) — otherwise
+      // one press fires a character binding twice. The walk has to run
+      // first regardless: a positional gesture matches an identity the text
+      // half cannot carry.
       final splitText =
           keyboardSession.capabilities.reportsPrintableKeys &&
           event.code.isCharacter &&
           event.type != KeyEventType.up &&
           event.modifiers.every((m) => m == KeyModifier.shift);
+      if (_tryCapture(event)) {
+        if (splitText) _awaitSplitText(event, consumed: true);
+        return KeyEventResult.handled;
+      }
       final result = _dispatchKeyEvent(
         event,
         lane: splitText ? _BindingLane.key : _BindingLane.all,
@@ -283,16 +309,36 @@ class InputDispatcher {
         preservePendingOnMiss: splitText || _isLoneModifierKey(event.code),
       );
       if (splitText) {
-        if (result == KeyEventResult.handled) {
-          // Drop the paired insertion, and only that one.
-          _suppressNextText = event.code.character;
-        }
-        // Unconsumed: the text half still owns it, exactly as before.
+        // Consumed, the paired insertion is dropped; unconsumed, the text
+        // half still owns it.
+        _awaitSplitText(event, consumed: result == KeyEventResult.handled);
         return KeyEventResult.ignored;
       }
       return result;
     }
     return KeyEventResult.ignored;
+  }
+
+  void _awaitSplitText(KeyEvent keyHalf, {required bool consumed}) {
+    _splitKeyHalf = keyHalf;
+    _splitKeyHalfConsumed = consumed;
+    _splitKeyHalfWalked = !_keyHeldForText;
+  }
+
+  /// Whether [text] is what the printable key [code] typed: its character,
+  /// or an ASCII capital of it. A printable's identity is unshifted (Shift
+  /// and Caps Lock ride the modifiers and the text), so the DOM reports
+  /// Shift+D as `d` and types `D`. This undoes exactly the lowering the DOM
+  /// source applies (`_shortcutChar` in fleury_web's dom_input_source.dart);
+  /// change the two together.
+  static bool _isTextOfKey(String text, KeyCode code) {
+    final character = code.character!;
+    if (text == character) return true;
+    if (text.length != 1 || character.length != 1) return false;
+    final unit = text.codeUnitAt(0);
+    return unit >= 0x41 &&
+        unit <= 0x5A &&
+        unit + 0x20 == character.codeUnitAt(0);
   }
 
   /// Focus and gestures share the visible hit order. Resolve before callbacks
@@ -605,6 +651,7 @@ class InputDispatcher {
     // pending sequence, and means enabling Kitty event-type reporting can't
     // double-fire bindings. (Only reachable when that reporting is on;
     // otherwise every event arrives as `down`.)
+    _keyHeldForText = false;
     if (event.type == KeyEventType.up) return KeyEventResult.ignored;
     // 1. Pending sequence handling.
     if (_matchablePending != null) {
@@ -690,6 +737,7 @@ class InputDispatcher {
       // modifier transition, or a printable key half whose committed text will
       // follow). Observation already saw it; the command lane waits without
       // advancing, cancelling, or extending the original timeout.
+      _keyHeldForText = true;
       return KeyEventResult.ignored;
     }
     // Sequence didn't complete and didn't continue: cancel and
@@ -718,7 +766,7 @@ class InputDispatcher {
       if (source == null) continue;
       if (!pending.sources.any((s) => identical(s, source))) continue;
       for (final binding in source.activeBindings) {
-        if (!binding.enabled || binding.isHold) continue;
+        if (binding.isHold) continue;
         for (final sequence in binding.sequences) {
           if (!sequence.isSequence) continue;
           if (sequence.stepCount <= pending.events.length) continue;
@@ -728,7 +776,9 @@ class InputDispatcher {
             pending.lanes,
             pending.texts,
           )) {
-            out.add(binding);
+            // Asked only of a binding whose sequence is still in play: a live
+            // binding's predicate runs per match, not per binding per step.
+            if (binding.enabled) out.add(binding);
             break;
           }
         }
@@ -1108,12 +1158,14 @@ class InputDispatcher {
     String? textOrigin,
   ) {
     for (final binding in bindings) {
-      if (!binding.enabled) continue;
       if (binding.isHold) continue; // holds ride the observation lane
       if (!_phaseEligible(binding, event)) continue;
       for (final sequence in binding.sequences) {
         if (sequence.isSequence) continue;
         if (_matchesStepInLane(sequence, 0, event, lane, textOrigin)) {
+          // Asked only of a binding the key matches: a live binding's
+          // predicate runs per match, not per key per binding.
+          if (!binding.enabled) break;
           return (binding: binding, sequence: sequence);
         }
       }
@@ -1131,7 +1183,6 @@ class InputDispatcher {
     String? textOrigin,
   ) {
     for (final binding in bindings) {
-      if (!binding.enabled) continue;
       if (binding.isHold) continue;
       // A repeat never ADVANCES or starts a sequence (§14.4): holding `g`
       // must not arm `gg`.
@@ -1139,7 +1190,7 @@ class InputDispatcher {
       for (final sequence in binding.sequences) {
         if (!sequence.isSequence) continue;
         if (_matchesStepInLane(sequence, 0, event, lane, textOrigin)) {
-          out.add(binding);
+          if (binding.enabled) out.add(binding);
           break;
         }
       }

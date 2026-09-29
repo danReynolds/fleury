@@ -1,4 +1,5 @@
 import 'package:fleury/fleury_core.dart';
+import 'package:fleury/fleury_internal.dart' show readScope;
 
 import 'option_label.dart';
 
@@ -126,6 +127,10 @@ class _AutocompleteState<T extends Object> extends State<Autocomplete<T>> {
   FocusManager? _manager;
   OverlayEntry? _entry;
   List<T> _filtered = const [];
+
+  // The overlay builds the suggestions above any Theme the app set, so they
+  // carry the theme where this field sits.
+  ThemeData? _theme;
   String _lastQuery = '';
 
   /// The text just filled in by a pick; suppresses suggestions until the
@@ -191,11 +196,18 @@ class _AutocompleteState<T extends Object> extends State<Autocomplete<T>> {
   @override
   void didChangeDependencies() {
     super.didChangeDependencies();
-    final manager = FocusManager.maybeOf(context);
+    // Registered with, not depended on: the listener follows focus, and a
+    // dependency would rebuild this widget on every focus move anywhere.
+    final manager = readScope<FocusManager>(context);
     if (!identical(manager, _manager)) {
       _manager?.removeListener(_sync);
       _manager = manager;
       _manager?.addListener(_sync);
+    }
+    final theme = Theme.of(context);
+    if (theme != _theme) {
+      _theme = theme;
+      _entry?.markNeedsBuild();
     }
   }
 
@@ -254,10 +266,13 @@ class _AutocompleteState<T extends Object> extends State<Autocomplete<T>> {
     }
     if (_entry == null) {
       final entry = OverlayEntry(
-        builder: (context) => AnchoredFloat(
-          notifier: _bounds,
-          onTapOutside: _dismiss,
-          child: _suggestions(context),
+        builder: (context) => Theme(
+          data: _theme!,
+          child: AnchoredFloat(
+            notifier: _bounds,
+            onTapOutside: _dismiss,
+            child: _suggestions(context),
+          ),
         ),
       );
       _entry = entry;

@@ -269,9 +269,14 @@ class _SearchPanelState extends State<SearchPanel> {
   bool _ownsList = false;
   bool _ownsQueryFocusNode = false;
   bool _ownsResultsFocusNode = false;
-  FocusManager? _focusManager;
   List<SearchResult>? _indexedResults;
   SearchResultIndex? _searchIndex;
+
+  // The ranked order, kept until the index, the query or the matcher
+  // changes: navigation, activation and copy read it, and each used to rank
+  // every result again (two passes per arrow key).
+  List<int>? _order;
+  (SearchResultIndex, String, SearchResultMatcher?)? _orderKey;
 
   @override
   void initState() {
@@ -289,16 +294,6 @@ class _SearchPanelState extends State<SearchPanel> {
     _ownsResultsFocusNode = widget.resultsFocusNode == null;
     _resetSelectionForOrder(_currentOrder, preserveCurrent: true);
     _list.addListener(_onListChange);
-  }
-
-  @override
-  void didChangeDependencies() {
-    super.didChangeDependencies();
-    final manager = FocusManager.maybeOf(context);
-    if (identical(manager, _focusManager)) return;
-    _focusManager?.removeListener(_onFocusChange);
-    _focusManager = manager;
-    _focusManager?.addListener(_onFocusChange);
   }
 
   @override
@@ -332,11 +327,11 @@ class _SearchPanelState extends State<SearchPanel> {
     }
     if (widget.results != oldWidget.results ||
         widget.matcher != oldWidget.matcher) {
+      // The index still holds the old results, so this reuses it (and the
+      // cached order) rather than indexing the old list again.
       final previousResult = _selectedResultFor(
         oldWidget.results,
-        SearchResultIndex(
-          oldWidget.results,
-        ).order(query: _query.text, matcher: oldWidget.matcher),
+        _orderFor(oldWidget.results, oldWidget.matcher),
       )?.result;
       if (widget.results != oldWidget.results) {
         _indexedResults = null;
@@ -358,8 +353,6 @@ class _SearchPanelState extends State<SearchPanel> {
 
   void _onListChange() => setState(() {});
 
-  void _onFocusChange() => setState(() {});
-
   SearchResultIndex get _resultIndex {
     final index = _searchIndex;
     if (index != null && identical(_indexedResults, widget.results)) {
@@ -371,8 +364,29 @@ class _SearchPanelState extends State<SearchPanel> {
     return next;
   }
 
-  List<int> get _currentOrder =>
-      _resultIndex.order(query: _query.text, matcher: widget.matcher);
+  List<int> get _currentOrder => _orderFor(widget.results, widget.matcher);
+
+  List<int> _orderFor(
+    List<SearchResult> results,
+    SearchResultMatcher? matcher,
+  ) {
+    final index = identical(results, widget.results)
+        ? _resultIndex
+        : (identical(results, _indexedResults) ? _searchIndex! : null) ??
+              SearchResultIndex(results);
+    final query = _query.text;
+    final key = _orderKey;
+    final cached = _order;
+    if (cached != null &&
+        key != null &&
+        identical(key.$1, index) &&
+        key.$2 == query &&
+        identical(key.$3, matcher)) {
+      return cached;
+    }
+    _orderKey = (index, query, matcher);
+    return _order = index.order(query: query, matcher: matcher);
+  }
 
   void _resetSelectionForOrder(
     List<int> order, {
@@ -510,7 +524,6 @@ class _SearchPanelState extends State<SearchPanel> {
     if (_ownsQuery) _query.dispose();
     _list.removeListener(_onListChange);
     if (_ownsList) _list.dispose();
-    _focusManager?.removeListener(_onFocusChange);
     if (_ownsQueryFocusNode) _queryFocusNode.dispose();
     if (_ownsResultsFocusNode) _resultsFocusNode.dispose();
     super.dispose();
@@ -664,7 +677,10 @@ class _SearchPanelState extends State<SearchPanel> {
         role: SemanticRole.region,
         label: widget.semanticLabel,
         value: _query.text,
-        focused: _queryFocusNode.hasFocus || _resultsFocusNode.hasFocus,
+        // `|`, not `||`: each read subscribes to its node.
+        focused:
+            context.listen(_queryFocusNode).hasFocus |
+            context.listen(_resultsFocusNode).hasFocus,
         actions: {
           SemanticAction.focus,
           if (canActivate) SemanticAction.submit,

@@ -1,4 +1,5 @@
 ---
+import ExamplesBundle from './ExamplesBundle.astro';
 // Embeds a live, client-side Fleury widget. The widget identified by `id` is
 // mounted from the dart2js examples bundle (public/fleury-examples.js) into a
 // host sized to a cell grid (cols × rows). A header bar marks it as live; the
@@ -20,6 +21,8 @@ interface Props {
   rows?: number;
   /** Whether the widget responds to keyboard/mouse input. */
   interactive?: boolean;
+  /** Inline command scenes keep their shell context instead of expanding. */
+  expandable?: boolean;
   /** Visual theme for the embedded widget. `site` follows Starlight light/dark. */
   surfaceTheme?: 'dark' | 'light' | 'site';
 }
@@ -31,6 +34,7 @@ const {
   cols = 60,
   rows = 12,
   interactive = false,
+  expandable = true,
   surfaceTheme = 'dark',
 } = Astro.props;
 // ch ≈ one monospace column; 1 row = line-height (1.25) em at the host font size.
@@ -40,7 +44,6 @@ const badgeTitle = interactive
   ? 'The real widget, running live in your browser (dart2js) — click it and use your keyboard/mouse to interact.'
   : 'The real widget, running live in your browser, compiled with dart2js.';
 const servingGuide = '/fleury/architecture/serving-and-embedding/';
-const examplesBundle = '/fleury/fleury-examples.js';
 ---
 
 <figure class="fleury-example">
@@ -57,7 +60,7 @@ const examplesBundle = '/fleury/fleury-examples.js';
           href={servingGuide}
           title="The real widget, running live in your browser — compiled to JavaScript with dart2js, no server. Click to learn how."
         >ⓘ how it works</a>
-        <button
+        {expandable && <button
           class="fleury-expand"
           type="button"
           data-id={id}
@@ -68,7 +71,7 @@ const examplesBundle = '/fleury/fleury-examples.js';
           data-practice={practice ? 'true' : undefined}
           style={test ? "display: none" : undefined}
           aria-label="Expand this example to full screen"
-        >⛶ Expand</button>
+        >⛶ Expand</button>}
       </div>
     </div>
     <div class="fleury-host-wrap">
@@ -86,21 +89,11 @@ const examplesBundle = '/fleury/fleury-examples.js';
   </div>
 </figure>
 
-<script is:inline define:vars={{ examplesBundle }}>
+<ExamplesBundle />
+<script is:inline>
   (function () {
     if (window.__fleuryExamplesBoot) return;
     window.__fleuryExamplesBoot = true;
-
-    if (!document.getElementById('fleury-examples-bundle')) {
-      const s = document.createElement('script');
-      s.id = 'fleury-examples-bundle';
-      s.src = examplesBundle;
-      s.defer = true;
-      document.head.appendChild(s);
-    }
-    document.addEventListener('astro:page-load', () => {
-      if (window.fleuryMountExamples) window.fleuryMountExamples();
-    });
 
     function expand(id, cols, rows, theme, practice) {
       const fc = Math.min(Math.round(cols * 1.5), 160);

@@ -114,7 +114,6 @@ class _StepperState extends State<Stepper> implements TextInputClaimant {
   @override
   void didChangeDependencies() {
     super.didChangeDependencies();
-    FocusManager.maybeOf(context); // rebuild on focus change
     final registration = FormControlScope.maybeOf(context);
     if (!identical(registration, _formRegistration)) {
       _formRegistration?.release(this);
@@ -282,7 +281,7 @@ class _StepperState extends State<Stepper> implements TextInputClaimant {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final enabled = _enabled;
-    final focused = _node.hasFocus;
+    final focused = context.listen(_node).hasFocus;
     final canDec =
         enabled && (widget.min == null || widget.value > widget.min!);
     final canInc =

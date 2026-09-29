@@ -95,22 +95,27 @@ class _LayoutBuilderElement extends RenderObjectElement {
   // Invoked by RenderLayoutBuilder.performLayout with the live constraints.
   void _buildChild(CellConstraints constraints) {
     // Run the builder with this element as the active build target (as
-    // ComponentElement.performRebuild does) so ElementDependency sources
-    // (e.g. Animation.value) read inside it auto-subscribe this element —
-    // their notifications then invalidate the memoized child. Without this,
+    // ComponentElement.performRebuild does) so listenables read inside it
+    // (e.g. Animation.value) subscribe this element — their notifications
+    // then invalidate the memoized child. Without this,
     // a listenable read in a layout-time builder never registers anywhere
     // and the memo would freeze it. Restored before updateChild so children
     // attribute their own reads.
-    final built = runWithBuildTarget(() => widget.builder(this, constraints));
+    //
+    // A throw from the builder or from the child's mount or update is
+    // contained like ComponentElement's: the error widget takes the slot.
+    // Letting it escape into layout would hand it to the route's
+    // ErrorBoundary, which blanks the whole route.
     try {
+      final built = runWithBuildTarget(() => widget.builder(this, constraints));
       _child = updateChild(_child, built);
-    } catch (_) {
-      final child = _child;
-      if (child != null &&
-          (!child.mounted || !identical(child.elementParent, this))) {
-        _child = null;
+      rebuildDirtyDescendants();
+    } catch (error, stack) {
+      try {
+        _child = replaceChildWithError(_child, error, stack);
+      } finally {
+        _child = activeChildOrNull(_child);
       }
-      rethrow;
     }
   }
 

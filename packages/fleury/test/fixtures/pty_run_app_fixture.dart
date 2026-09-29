@@ -109,7 +109,7 @@ class _StrayOutputAppState extends State<_StrayOutputApp> {
     if (!_scheduled) {
       _scheduled = true;
       // Emit only after the first frame is presented so the proof never races
-      // terminal setup. requestExit then drives the normal restoration path;
+      // terminal setup. exitApp then drives the normal restoration path;
       // fd capture drains every write before replaying it.
       TuiBinding.of(context).addPostFrameCallback((_) {
         // Both classes of stray writer: Dart print (zone-visible) and a raw
@@ -119,7 +119,7 @@ class _StrayOutputAppState extends State<_StrayOutputApp> {
         stderr.writeln('STRAY-STDERR-MARKER');
         // Hostile terminal payload (OSC title set) — replay is sanitized.
         print('STRAY-HOSTILE \x1B]0;pwned\x07END');
-        if (!requestExit()) {
+        if (!exitApp()) {
           throw StateError(
             'Stray-output proof completed without an active app.',
           );
@@ -158,7 +158,7 @@ class _StrayHookAppState extends State<_StrayHookApp> {
       TuiBinding.of(context).addPostFrameCallback((_) {
         print('HOOKED-PRINT');
         _nativeWrite('HOOKED-NATIVE\n');
-        if (!requestExit()) {
+        if (!exitApp()) {
           throw StateError('Stray-hook proof completed without an active app.');
         }
       });
@@ -200,7 +200,7 @@ class _PtyHandoffAppState extends State<_PtyHandoffApp> {
     // The handoff future resolves only after Fleury has re-entered its raw and
     // alternate-screen modes. End from that proof point instead of racing a
     // separately timed Ctrl+C against the child-terminal window.
-    if (!requestExit()) {
+    if (!exitApp()) {
       throw StateError('PTY handoff completed without an active app.');
     }
   }
@@ -287,7 +287,7 @@ class _PtyPointerAppState extends State<_PtyPointerApp> {
             widget.result['updates'] = (widget.result['updates'] as int) + 1,
         onDragCancel: () {
           widget.result['cancelled'] = true;
-          requestExit();
+          exitApp();
         },
         child: const SizedBox(width: 8, height: 1, child: Text('Drag me')),
       ),

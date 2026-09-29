@@ -26,12 +26,15 @@ void main() => runApp(
 
 `runApp` takes a **widget instance** and returns a `Future<AppExit>` that completes
 after the app exits and the terminal has been restored. `AppExit` distinguishes
-an orderly request from an unclaimed process signal so the caller can choose its
-own exit code. On startup `runApp` acquires the terminal and switches it into
-interactive mode (raw input, the alternate screen, hidden cursor), mounts your
+an orderly request from an unclaimed process signal or unhandled Ctrl+C so the
+caller can choose its own exit code. On startup `runApp` acquires the terminal and, by default, switches
+to raw input and the alternate screen with a hidden cursor. It mounts your
 tree, paints the first frame, and then renders again after every input event and
-every `setState`. On exit — `Ctrl-C`, or your handler asking to stop — it restores
-the terminal to exactly how it found it.
+every `setState`. On exit — unhandled `Ctrl+C` or `exitApp()` — it restores
+terminal modes and returns control to the caller.
+
+[Shutdown and signals](/fleury/guides/shutdown-and-signals/) shows how to finish
+the UI, clean up resources, and preserve interrupt exit codes.
 
 The options you'll actually reach for:
 
@@ -39,21 +42,44 @@ The options you'll actually reach for:
 runApp(
   const FleuryApp(title: 'My app', home: MyHomeScreen()),
   onEvent: (event) {
-    // Inspect every input event before the framework re-renders.
-    // Return an ExitRequested to quit cleanly; null lets it through.
+    // Observe events after widget dispatch and default Ctrl+C handling.
+    // Return EventHandled to claim a signal, or ExitRequested to finish.
     return null;
   },
 )
 ```
 
-`mode` (a `TerminalMode`, default `TerminalMode.interactive`) controls the raw-
-mode/alt-screen/mouse setup; `enableHotReload` (default `true`) wires up state-
+`mode` chooses `TerminalMode.fullScreen()` (the default) or
+`TerminalMode.inline(rows: ...)`, with optional mouse input.
+`enableHotReload` (default `true`) wires up state-
 preserving hot reload under the Dart VM. Because `runApp` depends on `dart:io`,
 it's exported from `fleury.dart` — *not* from the web-safe `fleury_core`.
 
 For a small one-screen program, passing the screen directly is still valid:
 `runApp(const StatusScreen())`. Use `FleuryApp` as soon as the program has an
 app-wide theme, commands/status, extensions, or more than one screen.
+
+## Full-screen or inline?
+
+Full-screen is the default: the UI fills the terminal viewport and earlier
+shell output reappears when it exits. It suits editors, dashboards, and other
+workspaces. For a picker or setup step within a command, inline reserves rows in
+the main buffer so earlier output remains available:
+
+```dart
+await runApp(
+  app, // Your root widget.
+  mode: const TerminalMode.inline(rows: 14, mouse: true),
+  enableHotReload: false,
+);
+// Print the result here, after the live region has been cleared.
+```
+
+Both modes use the same widgets and input model. Inline currently supports
+native macOS/Linux terminals with cursor reporting; its height is explicit.
+[Full-screen and inline UIs](/fleury/guides/terminal-modes/) compares the live
+experience, explains the terminal buffers, and covers sizing, results, and
+subprocess handoff.
 
 ## Host services and the app shell
 

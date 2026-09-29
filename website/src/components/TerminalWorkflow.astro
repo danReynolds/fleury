@@ -1,0 +1,42 @@
+---
+interface Props { flow: 'resize' | 'repeat'; }
+const { flow } = Astro.props;
+---
+
+<div class="terminal-workflow" data-terminal-demo={flow}>
+  <div class="workflow-bar">
+    <span><span class="live-dot"></span> Live · interactive</span>
+    <output data-terminal-status aria-live="polite">Ready</output>
+    <button type="button" data-terminal-reset>Run setup</button>
+  </div>
+  <div class="workflow-body">
+    <div class="shell-context">~/projects $ project-setup{flow === 'repeat' ? ' --repeat' : ''}</div>
+    <div data-terminal-history class="transcript" role="log" aria-label="Command output"></div>
+    <div data-terminal-surface class="fleury-host" data-fleury-theme="site" role="group" aria-label={flow === 'resize' ? 'Resizable setup form' : 'Current setup session'} hidden></div>
+    <form data-terminal-prompt hidden>
+      <label>Open setup again? [y/N] <input name="answer" aria-label="Open setup again?" autocomplete="off" maxlength="3" /></label>
+      <button type="submit">Continue ↵</button>
+    </form>
+    <div data-terminal-shell hidden>~/projects $ ▌</div>
+  </div>
+</div>
+
+<style>
+  .terminal-workflow { margin-block: 1.5rem; border: 1px solid var(--sl-color-gray-5); border-radius: .5rem; overflow: hidden; background: var(--sl-color-bg); color: var(--sl-color-text); }
+  .workflow-bar { display: flex; align-items: center; gap: 1rem; padding: .65rem .85rem; border-bottom: 1px solid var(--sl-color-gray-5); font-size: .8rem; }
+  .workflow-bar > span { white-space: nowrap; }
+  .live-dot { display: inline-block; width: .45rem; height: .45rem; border-radius: 50%; background: var(--sl-color-text-accent); margin-right: .4rem; }
+  output { margin-left: auto; color: var(--sl-color-gray-2); }
+  button { border: 1px solid var(--sl-color-gray-4); border-radius: .25rem; background: transparent; color: var(--sl-color-text); padding: .25rem .55rem; cursor: pointer; font: inherit; }
+  button:hover, button:focus-visible { color: var(--sl-color-text-accent); border-color: var(--sl-color-text-accent); }
+  .workflow-body { padding: 1rem; font: 14px/1.25 var(--sl-font-mono, ui-monospace, monospace); }
+  .shell-context { color: var(--sl-color-gray-2); margin-bottom: .8rem; }
+  .transcript { white-space: pre-wrap; overflow-wrap: anywhere; max-height: 12rem; overflow-y: auto; }
+  .transcript:empty { display: none; }
+  .terminal-workflow :global(.fleury-host) { width: 100%; font-size: inherit; line-height: 1.25; margin-block: .6rem; }
+  form { display: flex; flex-wrap: wrap; gap: .6rem; align-items: center; padding-block: .8rem; }
+  input { width: 3ch; background: var(--sl-color-gray-6); border: none; border-bottom: 1px solid var(--sl-color-text-accent); color: var(--sl-color-text); font: inherit; }
+  input:focus-visible { outline: 1px solid var(--sl-color-text-accent); outline-offset: 2px; }
+  [hidden] { display: none !important; }
+  @media (max-width: 40rem) { .workflow-body { font-size: 12px; padding: .5rem; } .workflow-bar { gap: .5rem; flex-wrap: wrap; } }
+</style>

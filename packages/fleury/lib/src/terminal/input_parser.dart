@@ -264,6 +264,24 @@ class InputParser {
     flush(sink);
   }
 
+  /// Ends a deliberate input borrow, without pretending the source reached EOF.
+  ///
+  /// Complete already-consumed paste data as one transaction. Discard partial
+  /// key/UTF-8/protocol prefixes so input after a child or suspend cannot finish
+  /// an earlier key. This does not flush bytes still queued in the OS.
+  void endInputOwnership(TuiEventSink sink) {
+    if (_state == _State.paste) _finishPaste(sink);
+    _legacyCandidate.clear();
+    _pendingUtf8.clear();
+    _pendingUtf8Alt = false;
+    _swallowNextLf = false;
+    _resetCsi();
+    _clearEscapeSequence();
+    _responseSink = null;
+    responseExpectation = TerminalResponseExpectation.none;
+    _state = _State.ground;
+  }
+
   /// Resolves any pending parser state when the byte stream reaches EOF.
   ///
   /// Unlike [flush], this is a hard boundary: an incomplete UTF-8 scalar is
@@ -787,7 +805,21 @@ class InputParser {
       _ => null,
     };
     if (key != null) {
-      sink.add(KeyEvent(key, position: _positionFor(key)));
+      final position = _positionFor(key);
+      // An application-mode keypad key folds as a Kitty one does: a digit
+      // types, KP Enter is Enter ([keypadMeaning]).
+      final code = keypadMeaning[key.special] ?? key;
+      final character = code.character;
+      sink.add(
+        character == null
+            ? KeyEvent(code, position: position)
+            : InputBatch(
+                key: KeyEvent(code, position: position),
+                committedText: character,
+                timeStamp: _clock.elapsed,
+                sequence: _nextSequence++,
+              ),
+      );
     }
     _clearEscapeSequence();
     _state = _State.ground;
@@ -971,15 +1003,30 @@ class InputParser {
     // form — this is the disambiguation win (lone Esc, Ctrl+I vs Tab,
     // Ctrl+M vs Enter all become distinct, modifier-bearing events). The
     // functional PUA table extends this to the complete vocabulary,
-    // including lone modifier keys and the keypad — KP Enter is
-    // [KeyCode.keypadEnter], deliberately distinct from Enter (§8.7:
-    // nothing silently folded).
+    // including lone modifier keys and the keypad.
     final kc = _kittyFunctionalKey(codepoint);
     if (kc != null) {
       // Flag-4 data still wins when present (kitty could someday remap).
       position ??= _positionFor(kc);
+      // A keypad key means what it types or stands for, as on the DOM
+      // surface: KP_1 types a 1 and KP Enter is Enter, with the keypad kept
+      // on the position (§8.7's keypad distinction) rather than on a code
+      // no text field, button or list treats as its key.
+      final code = keypadMeaning[kc.special] ?? kc;
+      final character = code.character;
+      if (character != null) {
+        _emitCharacterKey(
+          sink,
+          code,
+          character.codeUnitAt(0),
+          modifiers,
+          type,
+          position,
+        );
+        return;
+      }
       sink.add(
-        KeyEvent(kc, modifiers: modifiers, type: type, position: position),
+        KeyEvent(code, modifiers: modifiers, type: type, position: position),
       );
       return;
     }
@@ -987,68 +1034,77 @@ class InputParser {
     // A well-formed functional codepoint outside the mapped table (the PUA
     // block 57344–63743) is diagnosable unsupported input — never text
     // (§8.7). Dropping beats emitting private-use garbage as typing.
-    if (codepoint >= 0xE000 && codepoint <= 0xF8FF) return;
+    if (_isPrivateUse(codepoint)) return;
 
-    // A text-producing key with no actionable modifier (only Shift, or
-    // none) is plain input on down/repeat. Its release is a key event with
-    // no text — phase retention (§8.7): the dispatcher fences `up` from
-    // commands; the regularizer and observation lanes consume it.
-    final actionable = modifiers.any((m) => m != KeyModifier.shift);
-    if (!actionable) {
-      if (type == KeyEventType.up) {
-        sink.add(
-          KeyEvent(
-            KeyCode.forCharacter(String.fromCharCode(codepoint)),
-            modifiers: modifiers,
-            type: KeyEventType.up,
-            position: position,
-          ),
-        );
-        return;
-      }
-      var cp = codepoint;
-      // Prefer the shifted codepoint the terminal reports (group 0's
-      // second sub-param) when Shift is held. 0 means absent.
-      if (modifiers.contains(KeyModifier.shift) &&
-          _csiGroups[0].length >= 2 &&
-          _csiGroups[0][1] > 0) {
-        cp = _csiGroups[0][1];
-      }
-      if (!_isUnicodeScalar(cp) || !_kittyAssociatedTextIsValid()) return;
-      final text = _kittyAssociatedText() ?? String.fromCharCode(cp);
-      // The report carried key identity AND produced text — one physical
-      // fact, one correlated batch (RFC 0020 §5). This is where positional
-      // identity survives for printables; the pre-batch pipeline threw the
-      // key half away.
-      sink.add(
-        InputBatch(
-          key: KeyEvent(
-            KeyCode.forCharacter(String.fromCharCode(codepoint)),
-            modifiers: modifiers,
-            type: type,
-            position: position,
-          ),
-          committedText: text,
-          timeStamp: _clock.elapsed,
-          sequence: _nextSequence++,
-        ),
-      );
-      return;
-    }
+    _emitCharacterKey(
+      sink,
+      KeyCode.forCharacter(String.fromCharCode(codepoint)),
+      codepoint,
+      modifiers,
+      type,
+      position,
+    );
+  }
 
+  /// Emits a Kitty report of a key that types [code]'s character, whose
+  /// codepoint is [codepoint].
+  void _emitCharacterKey(
+    TuiEventSink sink,
+    KeyCode code,
+    int codepoint,
+    Set<KeyModifier> modifiers,
+    KeyEventType type,
+    KeyPosition? position,
+  ) {
     // A modified key (Ctrl/Alt/Super/Meta + key): report the base
     // character so bindings like Ctrl+C match regardless of layout. The
     // base-layout position rides along — it is the §13.3 non-Latin
     // matching fallback's data source (Ctrl+С carrying base 'c').
+    //
+    // With no actionable modifier (only Shift, or none) the key is plain
+    // input on down/repeat. Its release is a key event with no text — phase
+    // retention (§8.7): the dispatcher fences `up` from commands; the
+    // regularizer and observation lanes consume it.
+    final actionable = modifiers.any((m) => m != KeyModifier.shift);
+    if (actionable || type == KeyEventType.up) {
+      sink.add(
+        KeyEvent(code, modifiers: modifiers, type: type, position: position),
+      );
+      return;
+    }
+    var cp = codepoint;
+    // Prefer the shifted codepoint the terminal reports (group 0's second
+    // sub-param) when Shift is held. 0 means absent, and a functional code
+    // (a keypad key's shifted alternate, KP_1 to KP_END) is a key, not text.
+    if (modifiers.contains(KeyModifier.shift) &&
+        _csiGroups[0].length >= 2 &&
+        _csiGroups[0][1] > 0 &&
+        !_isPrivateUse(_csiGroups[0][1])) {
+      cp = _csiGroups[0][1];
+    }
+    if (!_isUnicodeScalar(cp) || !_kittyAssociatedTextIsValid()) return;
+    final text = _kittyAssociatedText() ?? String.fromCharCode(cp);
+    // The report carried key identity AND produced text — one physical
+    // fact, one correlated batch (RFC 0020 §5). This is where positional
+    // identity survives for printables; the pre-batch pipeline threw the
+    // key half away.
     sink.add(
-      KeyEvent(
-        KeyCode.forCharacter(String.fromCharCode(codepoint)),
-        modifiers: modifiers,
-        type: type,
-        position: position,
+      InputBatch(
+        key: KeyEvent(
+          code,
+          modifiers: modifiers,
+          type: type,
+          position: position,
+        ),
+        committedText: text,
+        timeStamp: _clock.elapsed,
+        sequence: _nextSequence++,
       ),
     );
   }
+
+  static bool _isPrivateUse(int codepoint) =>
+      codepoint >= 0xE000 && codepoint <= 0xF8FF;
 
   KeyEventType _eventType(int code) => switch (code) {
     2 => KeyEventType.repeat,

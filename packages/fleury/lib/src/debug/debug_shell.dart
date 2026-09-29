@@ -1,9 +1,8 @@
 // DebugShell — the top-level wrapper installed by runApp. Composes
 // the user app with the debug panel according to controller.mode:
 //
-//   off        → child verbatim (short-circuit; zero overhead)
-//   docked     → Row(or Column) with the app reflowed into the
-//                remaining cells and DebugPanel pinned to one edge
+//   off        → only the app is visible; an existing recording continues
+//   docked     → panel floats over one edge of the full-size app
 //   fullscreen → Stack with the app still mounted underneath and
 //                the panel covering it (state preserved, only
 //                visibility flipped)
@@ -19,6 +18,8 @@
 
 import '../animation/clock.dart';
 import '../input/events.dart';
+import '../rendering/render_stack.dart';
+import '../widgets/align.dart';
 import '../widgets/basic.dart';
 import '../widgets/framework.dart';
 import '../widgets/layout_builder.dart';
@@ -59,74 +60,39 @@ class _DebugShellState extends State<DebugShell> {
 
   Widget _layout(BuildContext context) {
     final mode = widget.controller.mode;
-    if (mode == DebugMode.off) {
-      // Pure pass-through — no extra widgets, no MediaQuery override,
-      // no DebugPanel mounted. The whole debug system has zero
-      // structural cost in this branch.
-      return widget.child;
-    }
-
-    if (mode == DebugMode.fullscreen) {
-      // Stack: app stays mounted at full size (state + tickers
-      // preserved), panel paints on top covering everything.
-      return Stack(
-        children: [
-          widget.child,
-          DebugPanel(controller: widget.controller, clock: widget.clock),
-        ],
-      );
-    }
-
-    // Docked. The panel FLOATS over one edge of the full-size app — a Stack
-    // with the panel Positioned on top — instead of reflowing the app into
-    // fewer cells. The app keeps its full viewport and is simply covered where
-    // the panel sits, like a real docked devtools pane.
     final config = widget.controller.config;
-    return LayoutBuilder(
-      builder: (context, constraints) {
-        final totalCols = constraints.maxCols ?? config.panelWidth + 1;
-        final totalRows = constraints.maxRows ?? config.panelHeight + 1;
-        // Pin the app to the full viewport so the Stack is full-size and the
-        // Positioned panel lands at the real edge — a Stack otherwise shrinks
-        // to its largest non-positioned child.
-        final app = SizedBox(
-          width: totalCols,
-          height: totalRows,
-          child: widget.child,
-        );
-        if (config.side == DebugPanelSide.right) {
-          final panelW = config.panelWidth.clamp(1, totalCols);
-          return Stack(
-            children: [
-              app,
-              Positioned(
-                left: totalCols - panelW,
-                width: panelW,
-                height: totalRows,
-                child: DebugPanel(
-                  controller: widget.controller,
-                  clock: widget.clock,
-                ),
-              ),
-            ],
-          );
-        }
-        final panelH = config.panelHeight.clamp(1, totalRows);
-        return Stack(
-          children: [
-            app,
-            Positioned(
-              top: totalRows - panelH,
-              width: totalCols,
-              height: panelH,
-              child: DebugPanel(
-                controller: widget.controller,
-                clock: widget.clock,
-              ),
+    // Keep the app at one element path and mount it during build, not inside
+    // LayoutBuilder: startup input can arrive before the first layout. The
+    // overlay expands independently and never changes the app's constraints.
+    return Stack(
+      fit: StackFit.passthrough,
+      children: [
+        widget.child,
+        if (mode != DebugMode.off)
+          Align(
+            alignment: Alignment.bottomRight,
+            child: LayoutBuilder(
+              builder: (context, constraints) {
+                final cols = constraints.maxCols ?? config.panelWidth;
+                final rows = constraints.maxRows ?? config.panelHeight;
+                final fullscreen = mode == DebugMode.fullscreen;
+                final right = config.side == DebugPanelSide.right;
+                return SizedBox(
+                  width: fullscreen || !right
+                      ? cols
+                      : config.panelWidth.clamp(1, cols),
+                  height: fullscreen || right
+                      ? rows
+                      : config.panelHeight.clamp(1, rows),
+                  child: DebugPanel(
+                    controller: widget.controller,
+                    clock: widget.clock,
+                  ),
+                );
+              },
             ),
-          ],
-        );
-      },
+          ),
+      ],
     );
   }
 }
@@ -151,6 +117,7 @@ class _DebugShellState extends State<DebugShell> {
 ///                       already on Logs, switch tab otherwise)
 ///   Enter / Backspace   commit / edit the Logs search (while searching)
 ///   ↑/↓/Home            move semantic cursor while Tree tab is active
+///   PageUp / PageDown   scroll non-Logs reports without moving app focus
 bool tryConsumeDebugKey(DebugController controller, KeyEvent event) {
   if (!controller.config.enabled) return false;
   // Hotkeys act once per physical press. This runs UPSTREAM of the
@@ -243,6 +210,16 @@ bool tryConsumeDebugKey(DebugController controller, KeyEvent event) {
       !(controller.tab == DebugTab.logs && controller.logSearching) &&
       (event.code == KeyCode.arrowLeft || event.code == KeyCode.arrowRight)) {
     controller.nextTab(event.code == KeyCode.arrowLeft ? -1 : 1);
+    return true;
+  }
+  if (controller.mode != DebugMode.off &&
+      controller.tab != DebugTab.logs &&
+      !event.hasCtrl &&
+      !event.hasAlt &&
+      (event.code == KeyCode.pageUp || event.code == KeyCode.pageDown)) {
+    final scroll = controller.detailScrollController;
+    final page = scroll.viewportExtent > 1 ? scroll.viewportExtent - 1 : 1;
+    scroll.scrollBy(event.code == KeyCode.pageUp ? -page : page);
     return true;
   }
   if (controller.mode != DebugMode.off && controller.tab == DebugTab.tree) {

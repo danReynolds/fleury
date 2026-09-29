@@ -14,7 +14,7 @@ import 'scaffold.dart';
 /// reliable toggle.)
 ///
 /// Every trigger is a plain [Button], so its role/label reach the semantic tree
-/// — which makes this app the agent-devtools dogfood too. Point `fleury mcp` at
+/// — which makes this app the agent-devtools dogfood too. Point `fleury_mcp` at
 /// it and an agent can `invoke_action` a scenario, then `read_errors` /
 /// `read_frames` / `read_logs` to see what it just caused: your AI reading your
 /// debugger while it drives the app.
@@ -120,7 +120,7 @@ class _DebugPlaygroundBodyState extends State<_DebugPlaygroundBody>
   void _spikeSlowFrame() => setState(() {
     _janks++;
     _jankNextFrame = true;
-    _lastAction = 'spiked a slow frame → see the Live tab (build µs)';
+    _lastAction = 'slow build recorded → Rebuilds: Worst build';
   });
 
   void _throwInHandler() {
@@ -229,52 +229,55 @@ class _DebugPlaygroundBodyState extends State<_DebugPlaygroundBody>
     return Panel(
       title: 'Scenarios',
       trailing: Text('↑↓ / Tab · Enter', style: theme.mutedStyle),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: <Widget>[
-          _scenario(
-            theme,
-            Button(
-              text: 'Spike a slow frame',
-              variant: ButtonVariant.warning,
-              autofocus: true,
-              onPressed: _spikeSlowFrame,
+      child: ScrollView(
+        scrollbar: true,
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: <Widget>[
+            _scenario(
+              theme,
+              Button(
+                text: 'Spike a slow frame',
+                variant: ButtonVariant.warning,
+                autofocus: true,
+                onPressed: _spikeSlowFrame,
+              ),
+              'adds ~120ms in build → Rebuilds: Worst build',
             ),
-            'burns ~120ms in build → Live: build µs spikes',
-          ),
-          _scenario(
-            theme,
-            Button(
-              text: 'Throw in a handler',
-              variant: ButtonVariant.error,
-              onPressed: _throwInHandler,
+            _scenario(
+              theme,
+              Button(
+                text: 'Throw in a handler',
+                variant: ButtonVariant.error,
+                onPressed: _throwInHandler,
+              ),
+              'throws (caught) → Errors: logged, app keeps running',
             ),
-            'throws (caught) → Errors: logged, app keeps running',
-          ),
-          _scenario(
-            theme,
-            Button(text: 'Emit a log burst', onPressed: _emitLogBurst),
-            'prints 40 lines → Logs: press / to search',
-          ),
-          _scenario(
-            theme,
-            Button(
-              text: _streaming ? 'Stop live stream' : 'Toggle live stream',
-              variant: ButtonVariant.success,
-              onPressed: _toggleStream,
+            _scenario(
+              theme,
+              Button(text: 'Emit a log burst', onPressed: _emitLogBurst),
+              'prints 40 lines → Logs: press / to search',
             ),
-            '~10 updates/s → Live: FPS climbs off 0',
-          ),
-          _scenario(
-            theme,
-            Button(
-              text: 'Rebuild storm',
-              variant: ButtonVariant.primary,
-              onPressed: _rebuildStorm,
+            _scenario(
+              theme,
+              Button(
+                text: _streaming ? 'Stop live stream' : 'Toggle live stream',
+                variant: ButtonVariant.success,
+                onPressed: _toggleStream,
+              ),
+              '~10 updates/s → Live: FPS climbs off 0',
             ),
-            '120 forced rebuilds → Rebuilds: invalidation count',
-          ),
-        ],
+            _scenario(
+              theme,
+              Button(
+                text: 'Rebuild storm',
+                variant: ButtonVariant.primary,
+                onPressed: _rebuildStorm,
+              ),
+              '120 forced rebuilds → Rebuilds: invalidation count',
+            ),
+          ],
+        ),
       ),
     );
   }
@@ -295,36 +298,39 @@ class _DebugPlaygroundBodyState extends State<_DebugPlaygroundBody>
   Widget _readoutPanel(ThemeData theme) {
     return Panel(
       title: 'What just happened',
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: <Widget>[
-          Text('Last action', style: theme.mutedStyle),
-          Text(
-            _lastAction,
-            style: CellStyle(foreground: theme.colorScheme.info),
-          ),
-          const SizedBox(height: 1),
-          Text(
-            'Live activity  (the cause — watch the shell for the effect)',
-            style: theme.mutedStyle,
-          ),
-          _activityStrip(theme),
-          const SizedBox(height: 1),
-          _stat(theme, 'errors thrown', _errors),
-          _stat(theme, 'log bursts', _logBursts),
-          _stat(theme, 'slow frames', _janks),
-          _stat(theme, 'rebuild storms', _rebuildStorms),
-          const SizedBox(height: 1),
-          Text('Where to look', style: theme.mutedStyle),
-          Text(
-            'Ctrl+G opens the shell (F12 jumps to Logs, when macOS lets it '
-            'through) — Tab cycles Live · Rebuilds · Logs · Errors · Tree. '
-            'The Tree tab is the semantic view an agent reads over fleury '
-            'mcp; it can invoke these same buttons, then read_errors / '
-            'read_frames / read_logs to see what it caused.',
-            style: theme.mutedStyle,
-          ),
-        ],
+      child: ScrollView(
+        scrollbar: true,
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: <Widget>[
+            Text('Last action', style: theme.mutedStyle),
+            Text(
+              _lastAction,
+              style: CellStyle(foreground: theme.colorScheme.info),
+            ),
+            const SizedBox(height: 1),
+            Text(
+              'Live activity  (the cause — watch the shell for the effect)',
+              style: theme.mutedStyle,
+            ),
+            _activityStrip(theme),
+            const SizedBox(height: 1),
+            _stat(theme, 'errors thrown', _errors),
+            _stat(theme, 'log bursts', _logBursts),
+            _stat(theme, 'slow frames', _janks),
+            _stat(theme, 'rebuild storms', _rebuildStorms),
+            const SizedBox(height: 1),
+            Text('Where to look', style: theme.mutedStyle),
+            Text(
+              'Ctrl+G opens the shell (F12 jumps to Logs, when macOS lets it '
+              'through) — Tab cycles Live · Tree · Rebuilds · Logs · Errors. '
+              'Close the shell to use the app keys; reopen it to inspect the recording. '
+              'The Tree tab is the semantic view an agent reads over fleury_mcp; it can invoke these same buttons, then read_errors / '
+              'read_frames / read_logs to see what it caused.',
+              style: theme.mutedStyle,
+            ),
+          ],
+        ),
       ),
     );
   }
@@ -377,7 +383,7 @@ class _DebugPlaygroundBodyState extends State<_DebugPlaygroundBody>
   Widget _footer(ThemeData theme) {
     return Text(
       ' Ctrl+G debug shell · ↑↓/Tab move · Enter run · q quit · '
-      'drive me: fleury mcp -> invoke_action',
+      'drive me: fleury_mcp -> invoke_action',
       style: theme.mutedStyle,
     );
   }

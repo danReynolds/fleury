@@ -167,6 +167,101 @@ Future<MountedApp> runTuiSurface(
   WebHostInstrumentation instrumentation = const NoopWebHostInstrumentation(),
   WebFocusCoordinator? focusCoordinator,
   FutureOr<void> Function()? disposeHostResources,
+  // Internal host hooks for the isolated docs debugger. The caller owns these
+  // services and disposes them after the surface. The native debug event bus
+  // is isolate-wide, so this must run in its own browser context, not alongside
+  // unrelated local runtimes. Public mountApp keeps debug/log capture disabled;
+  // a missing errorReporter gets a host-owned reporter and error overlay.
+  DebugController? debugController,
+  LogBuffer? logBuffer,
+  RuntimeErrorReporter? errorReporter,
+}) async {
+  final errors =
+      errorReporter ??
+      RuntimeErrorReporter(onLog: (message) => web.console.error(message.toJS));
+  final ready = Completer<MountedApp>();
+  var active = true;
+  void releaseReporter() {
+    active = false;
+    if (errorReporter == null) errors.dispose();
+  }
+
+  // Complete `ready` explicitly inside the error zone: an error future cannot
+  // cross a runZonedGuarded boundary by itself. Setup failures must still reach
+  // the caller, while later unawaited handlers surface in the error overlay.
+  runZonedGuarded(
+    () async {
+      // The web surface is a framework host, like core runApp, and owns the
+      // reporter's scheduling zone for this session.
+      // ignore: invalid_use_of_internal_member
+      errors.bindZone(Zone.current);
+      try {
+        ready.complete(
+          await _runTuiSurface(
+            rootFactory,
+            surface: surface,
+            cellMetrics: cellMetrics,
+            inputSource: inputSource,
+            imageOverlay: imageOverlay,
+            semanticPresenter: semanticPresenter,
+            semanticFlushScheduler: semanticFlushScheduler,
+            clipboard: clipboard,
+            frameInterval: frameInterval,
+            flushScheduler: flushScheduler,
+            planner: planner,
+            instrumentation: instrumentation,
+            focusCoordinator: focusCoordinator,
+            debugController: debugController,
+            logBuffer: logBuffer,
+            errorReporter: errors,
+            disposeHostResources: () async {
+              try {
+                await disposeHostResources?.call();
+              } finally {
+                releaseReporter();
+              }
+            },
+          ),
+        );
+      } catch (error, stack) {
+        releaseReporter();
+        ready.completeError(error, stack);
+      }
+    },
+    (error, stack) {
+      if (!active || errors.isDisposed) {
+        Zone.current.handleUncaughtError(error, stack);
+        return;
+      }
+      errors.report(error, stack);
+    },
+  );
+  return ready.future;
+}
+
+Future<MountedApp> _runTuiSurface(
+  Widget Function() rootFactory, {
+  required FrameSurface surface,
+  CellMetrics? cellMetrics,
+  TuiInputSource? inputSource,
+  InlineImageOverlay? imageOverlay,
+  SemanticFramePresenter? semanticPresenter,
+  SemanticFlushScheduler? semanticFlushScheduler,
+  Clipboard? clipboard,
+  Duration frameInterval = Duration.zero,
+  FrameFlushScheduler? flushScheduler,
+  FramePresentationPlanner planner = const FramePresentationPlanner(),
+  WebHostInstrumentation instrumentation = const NoopWebHostInstrumentation(),
+  WebFocusCoordinator? focusCoordinator,
+  FutureOr<void> Function()? disposeHostResources,
+  // Internal host hooks for the isolated docs debugger. The caller owns these
+  // services and disposes them after the surface. The native debug event bus
+  // is isolate-wide, so this must run in its own browser context, not alongside
+  // unrelated local runtimes. Public mountApp keeps debug/log capture disabled;
+  // a missing errorReporter gets a host-owned reporter and error overlay.
+  DebugController? debugController,
+  LogBuffer? logBuffer,
+  RuntimeErrorReporter? errorReporter,
 }) async {
   // The clipboard is a host service shared via ClipboardScope in
   // buildRoot — no process-global mutation, no restore-on-dispose dance.
@@ -174,11 +269,18 @@ Future<MountedApp> runTuiSurface(
   final runtime = TuiRuntime();
   // Contained layout/paint failures surface in the console (the boundary
   // renders the in-place presentation; without this they'd be silent).
-  runtime.owner.onContainedRenderError = (contained) => web.console.error(
-    'fleury: contained render failure (${contained.phase.name}): '
-            '${contained.error}\n${contained.stack}'
-        .toJS,
-  );
+  runtime.owner.onContainedRenderError = (contained) {
+    if (errorReporter != null) {
+      errorReporter.report(contained.error, contained.stack);
+    } else {
+      web.console.error(
+        'fleury: contained render failure (${contained.phase.name}): '
+                '${contained.error}\n${contained.stack}'
+            .toJS,
+      );
+    }
+  };
+  runtime.owner.onBuildError = errorReporter?.report;
   final owner = runtime.owner;
   final focusManager = runtime.focusManager;
   final binding = runtime.binding;
@@ -234,10 +336,18 @@ Future<MountedApp> runTuiSurface(
 
   final rootEntry = OverlayEntry(builder: (_) => rootFactory());
   final overlayKey = GlobalKey<OverlayState>();
+  final errorEntry = errorReporter == null
+      ? null
+      : OverlayEntry(
+          builder: (_) => RuntimeErrorOverlay(reporter: errorReporter),
+        );
+  debugController?.setErrorHistoryProvider(() => errorReporter?.history ?? []);
+  debugController?.setSemanticTreeProvider(() {
+    final root = frameDriver?.rootElement;
+    return root == null ? null : SemanticTree.fromElement(root);
+  });
 
-  // The shared scope stack (see buildTuiRoot). The browser embed has neither a
-  // captured-output log buffer nor a debug shell yet, so it passes those layers
-  // as null explicitly — the omission is visible here, not a silent gap.
+  // Public embeds omit debug services; the isolated debugger demo supplies them.
   Widget buildRoot() => buildTuiRoot(
     binding: binding,
     size: surface.size,
@@ -257,9 +367,9 @@ Future<MountedApp> runTuiSurface(
     pointerRouter: pointerRouter,
     clipboard: effectiveClipboard,
     overlayKey: overlayKey,
-    overlayEntries: [rootEntry],
-    logBuffer: null,
-    debugController: null,
+    overlayEntries: [rootEntry, if (errorEntry != null) errorEntry],
+    logBuffer: logBuffer,
+    debugController: debugController,
     pendingSequenceNotifier: inputDispatcher.pendingSequenceNotifier,
     keyboardNotifier: keyboardNotifier,
   );
@@ -360,7 +470,29 @@ Future<MountedApp> runTuiSurface(
       final input = List<TuiEvent>.of(pendingInput);
       pendingInput.clear();
       for (final event in input) {
-        inputDispatcher.dispatch(event);
+        try {
+          final debug = debugController;
+          if (debug != null) {
+            final key = event is InputBatch
+                ? event.key
+                : event is KeyEvent
+                ? event
+                : null;
+            final text = event is InputBatch
+                ? event.committedText
+                : event is TextInputEvent
+                ? event.text
+                : null;
+            if (key != null && tryConsumeDebugKey(debug, key)) continue;
+            if (text != null &&
+                tryConsumeDebugText(debug, TextInputEvent(text)))
+              continue;
+          }
+          inputDispatcher.dispatch(event);
+        } catch (error, stack) {
+          if (errorReporter == null) rethrow;
+          errorReporter.report(error, stack);
+        }
       }
     }
     if (pendingSemanticActions.isNotEmpty) {
@@ -401,6 +533,9 @@ Future<MountedApp> runTuiSurface(
               action: request.action,
             ).then((result) {
               if (disposed) return;
+              if (result.error != null && result.stackTrace != null) {
+                errorReporter?.report(result.error!, result.stackTrace!);
+              }
               if (focusCoordinator
                       ?.shouldRestoreKeyboardCaptureAfterSemanticActivation() ??
                   true) {
@@ -460,6 +595,8 @@ Future<MountedApp> runTuiSurface(
         },
       ),
       planner: planner,
+      isDebugWatching: () =>
+          debugController?.config.enabled == true && DebugEvents.hasListeners,
       onBeforeFrame: dispatchPendingWork,
       // Input bookkeeping runs ahead of every production gate so per-frame
       // edges expire even on frames that render nothing (RFC 0020 §5.6/§7).
@@ -494,11 +631,13 @@ Future<MountedApp> runTuiSurface(
       // Backstop errors keep the session (the driver substitutes a
       // full-screen error frame); surface them in the console so they
       // don't vanish.
-      onBackstopError: (error, stack) => web.console.error(
-        'fleury: render crashed outside all error boundaries: '
-                '$error\n$stack'
-            .toJS,
-      ),
+      onBackstopError:
+          errorReporter?.report ??
+          (error, stack) => web.console.error(
+            'fleury: render crashed outside all error boundaries: '
+                    '$error\n$stack'
+                .toJS,
+          ),
       // Only unrecoverable failures escape the driver now (backstop
       // storm): tear the host down.
       onFrameError: (error, stack) {

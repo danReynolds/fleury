@@ -1,5 +1,6 @@
 import '../foundation/geometry.dart';
 import '../terminal/capabilities.dart';
+import 'ansi_render_target.dart';
 import 'cell.dart';
 import 'cell_buffer.dart';
 import 'scroll_detection.dart';
@@ -145,6 +146,11 @@ final class AnsiRenderer {
   /// ride here so pixels and text land atomically. A non-empty trailer is
   /// written even when no cell changed (an animation frame can swap image
   /// content without touching a single cell).
+  ///
+  /// [target] maps local buffer rows into a host-owned terminal region. Inline
+  /// targets patch cells instead of scrolling the whole terminal, including
+  /// when [scrollUpRows] explicitly requests the scroll optimization. Trailers
+  /// are trusted host output and must use the same coordinate mapping.
   void renderDiff(
     CellBuffer previous,
     CellBuffer next,
@@ -154,6 +160,7 @@ final class AnsiRenderer {
     bool hasChanges = true,
     void Function(int col, int row)? onDirtyCell,
     String trailer = '',
+    AnsiRenderTarget target = const AnsiRenderTarget.fullScreen(),
   }) {
     assert(
       previous.size == next.size,
@@ -166,7 +173,7 @@ final class AnsiRenderer {
       if (trailer.isNotEmpty) sink.write(_wrapSync(trailer));
       return;
     }
-    if (scrollUpRows != null && scrollUpRows > 0) {
+    if (!target.isInline && scrollUpRows != null && scrollUpRows > 0) {
       _renderScrollUp(previous, next, sink, scrollUpRows, onDirtyCell, trailer);
       return;
     }
@@ -185,6 +192,7 @@ final class AnsiRenderer {
         buf,
         bounds: diffBounds,
         onDirtyCell: onDirtyCell,
+        target: target,
       );
       if (!anyDirty && trailer.isEmpty) return;
       buf.write(trailer);
@@ -196,7 +204,9 @@ final class AnsiRenderer {
       if (trailer.isNotEmpty) sink.write(_wrapSync(trailer));
       return;
     }
-    final detected = detectBeneficialScrollUp(previous, next, screenStats);
+    final detected = target.isInline
+        ? null
+        : detectBeneficialScrollUp(previous, next, screenStats);
     if (detected != null) {
       _renderScrollUp(previous, next, sink, detected, onDirtyCell, trailer);
       return;
@@ -208,6 +218,7 @@ final class AnsiRenderer {
       next,
       buf,
       onDirtyCell: onDirtyCell,
+      target: target,
     );
     if (!anyDirty && trailer.isEmpty) return;
     buf.write(trailer);
@@ -247,6 +258,7 @@ final class AnsiRenderer {
     StringBuffer buf, {
     CellRect? bounds,
     void Function(int col, int row)? onDirtyCell,
+    AnsiRenderTarget target = const AnsiRenderTarget.fullScreen(),
   }) {
     final size = next.size;
     final top = bounds?.top ?? 0;
@@ -313,7 +325,7 @@ final class AnsiRenderer {
           emittedLink,
         );
         if (gap != null) {
-          final move = _cursorMove(cursorRow, cursorCol, row, col);
+          final move = _cursorMove(cursorRow, cursorCol, row, col, target.top);
           if (gap.bytes.length < move.length) {
             buf.write(gap.bytes);
             cursorCol = col;
@@ -325,7 +337,7 @@ final class AnsiRenderer {
         }
       }
       if (cursorRow != row || cursorCol != col) {
-        buf.write(_cursorMove(cursorRow, cursorCol, row, col));
+        buf.write(_cursorMove(cursorRow, cursorCol, row, col, target.top));
         cursorRow = row;
         cursorCol = col;
       }
@@ -480,9 +492,13 @@ final class AnsiRenderer {
   ///
   /// Use on first paint and after a resize. For ongoing updates, prefer
   /// `renderDiff` so unchanged regions cost zero bytes.
-  void renderFull(CellBuffer buffer, AnsiSink sink) {
+  void renderFull(
+    CellBuffer buffer,
+    AnsiSink sink, {
+    AnsiRenderTarget target = const AnsiRenderTarget.fullScreen(),
+  }) {
     final empty = CellBuffer(buffer.size);
-    renderDiff(empty, buffer, sink);
+    renderDiff(empty, buffer, sink, target: target);
   }
 
   // ---- Cursor encoding ---------------------------------------------------
@@ -510,8 +526,14 @@ final class AnsiRenderer {
   ///
   /// Absolute positions omit defaults: `CSI H` at home, and `CSI row H` when
   /// the column is 1.
-  static String _cursorMove(int? fromRow, int? fromCol, int row, int col) {
-    final absolute = _absolutePosition(row, col);
+  static String _cursorMove(
+    int? fromRow,
+    int? fromCol,
+    int row,
+    int col,
+    int rowOffset,
+  ) {
+    final absolute = _absolutePosition(row + rowOffset, col);
     // Same-row moves are column-relative (CUF/CUB) and safe: the tracked column
     // is kept exact (last-column and ambiguous-width writes invalidate it, so a
     // following move re-pins absolutely). CROSS-ROW relative moves (`\r\n`, CNL,
