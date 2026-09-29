@@ -158,7 +158,8 @@ final List<ExampleInfo> exampleList = <ExampleInfo>[
     widget: 'Gauge',
     category: 'Charts & meters',
     blurb:
-        'A labelled progress meter with colored warning/critical thresholds.',
+        'A labelled status meter (CPU, memory, disk) that changes color at '
+        'thresholds you set.',
     cols: 40,
     rows: 3,
     builder: () => _framed(
@@ -402,6 +403,8 @@ final List<ExampleInfo> exampleList = <ExampleInfo>[
     blurb: 'A frequency-distribution chart that bins raw samples for you.',
     cols: 52,
     rows: 12,
+    code: '''// Pass raw samples; the chart buckets them into equal-width bins.
+Histogram(values: latenciesMs, bins: 7, showValues: true)''',
     builder: () => _framed(
       const Histogram(
         values: <num>[
@@ -458,7 +461,21 @@ final List<ExampleInfo> exampleList = <ExampleInfo>[
     blurb: 'A sub-cell drawing surface for custom plots and diagrams.',
     cols: 52,
     rows: 11,
-    code: '''Canvas(
+    code: '''// import 'dart:math' show sin;
+class SineWavePainter extends CanvasPainter {
+  @override
+  void paint(CanvasContext ctx) {
+    const segments = 96;
+    for (var i = 0; i < segments; i++) {
+      final x1 = 6.28 * i / segments;
+      final x2 = 6.28 * (i + 1) / segments;
+      ctx.drawLine(x1, sin(x1), x2, sin(x2));
+    }
+  }
+}
+
+// In build:
+Canvas(
   painter: SineWavePainter(),
   bounds: const CanvasBounds(minX: 0, maxX: 6.28, minY: -1, maxY: 1),
   semanticRole: SemanticRole.chart,
@@ -513,7 +530,9 @@ final List<ExampleInfo> exampleList = <ExampleInfo>[
     id: 'progressbar.basic',
     widget: 'ProgressBar',
     category: 'Charts & meters',
-    blurb: 'A determinate or indeterminate progress indicator.',
+    blurb:
+        'A task progress bar: a fraction fills it; null shows an indeterminate '
+        'sweep.',
     cols: 44,
     // 1-row widget + `_framed` padding needs 3 rows; rows: 2 rendered blank.
     rows: 3,
@@ -523,18 +542,17 @@ final List<ExampleInfo> exampleList = <ExampleInfo>[
     id: 'digits.basic',
     widget: 'Digits',
     category: 'Charts & meters',
-    blurb: 'Seven-segment-style large digits for clocks and counters.',
+    blurb: 'Large block-character numerals for clocks, timers, and counters.',
     cols: 56,
     rows: 11,
     interactive: true,
-    code:
-        '''// A live world clock: Tabs pick the zone, Digits show the ticking time.
-// Switch zones with ← / → (or click a tab); the clock ticks every second.
+    code: '''Digits('12:34', color: theme.colorScheme.primary)
+
+// The demo is a world clock: one zone per tab, rebuilt every second.
 Tabs(
   tabs: <TabItem>[
     TabItem(label: 'UTC', content: Digits(utcTime)),
     TabItem(label: 'EST', content: Digits(estTime)),
-    // …one tab per zone — the selected tab's clock updates each second.
   ],
 )''',
     builder: () => _framed(const _WorldClock()),
@@ -544,7 +562,7 @@ Tabs(
   ExampleInfo(
     id: 'datatable.basic',
     widget: 'DataTable',
-    category: 'Data & lists',
+    category: 'Lists & data',
     blurb: 'A columnar table with flex/fixed widths and row/cell selection.',
     cols: 48,
     rows: 8,
@@ -604,7 +622,7 @@ Tabs(
   ExampleInfo(
     id: 'tree.basic',
     widget: 'Tree',
-    category: 'Data & lists',
+    category: 'Lists & data',
     blurb: 'An expandable hierarchy with keyboard navigation and type-ahead.',
     cols: 40,
     rows: 9,
@@ -638,7 +656,7 @@ Tabs(
   ExampleInfo(
     id: 'markdown.basic',
     widget: 'MarkdownView',
-    category: 'Documents',
+    category: 'Text & content',
     blurb:
         'A scrollable, keyboard-navigable viewer for full Markdown documents.',
     cols: 60,
@@ -649,7 +667,7 @@ Tabs(
   ExampleInfo(
     id: 'markdowntext.basic',
     widget: 'MarkdownText',
-    category: 'Documents',
+    category: 'Text & content',
     blurb:
         'Lightweight inline Markdown for short strings — help text, labels, '
         'captions.',
@@ -674,7 +692,7 @@ Tabs(
   ExampleInfo(
     id: 'codeview.basic',
     widget: 'CodeView',
-    category: 'Documents',
+    category: 'Text & content',
     blurb: 'Source with line numbers, comment dimming, and copy support.',
     cols: 58,
     rows: 12,
@@ -684,7 +702,7 @@ Tabs(
   ExampleInfo(
     id: 'jsonview.basic',
     widget: 'JsonView',
-    category: 'Documents',
+    category: 'Text & content',
     blurb: 'A collapsible, type-colored tree view of a JSON value.',
     cols: 48,
     rows: 10,
@@ -862,7 +880,7 @@ TextArea(
   ExampleInfo(
     id: 'form.basic',
     widget: 'Form',
-    category: 'Inputs & controls',
+    category: 'Forms',
     blurb:
         'A composable validation and submission boundary that leaves values '
         'and layout in application code.',
@@ -885,38 +903,51 @@ TextArea(
   ExampleInfo(
     id: 'formfield.basic',
     widget: 'FormField',
-    category: 'Inputs & controls',
+    category: 'Forms',
     blurb:
         'One validated value with automatic control styling, semantics, and '
         'first-invalid focus.',
-    cols: 54,
-    rows: 14,
+    // The ordinary constructor is on every other form demo; this one shows
+    // FormField.builder joining two steppers into one validated value.
+    cols: 40,
+    rows: 12,
     interactive: true,
-    code: '''FormField(
-  validator: () => slug.text.isEmpty ? 'Enter a slug.' : null,
-  child: TextInput(
-    controller: slug,
-    semanticLabel: 'Slug',
-  ),
-)''',
-    builder: () => const ProjectForm(),
+    builder: () => const CustomField(),
   ),
   ExampleInfo(
     id: 'formcontroller.basic',
     widget: 'FormController',
-    category: 'Inputs & controls',
+    category: 'Forms',
     blurb:
         'An optional command surface for validating, submitting, clearing '
         'errors, and observing submission progress.',
-    cols: 54,
-    rows: 14,
+    cols: 40,
+    rows: 16,
     interactive: true,
-    code: '''final form = FormController();
+    code: '''// A State field; dispose it with the state.
+final form = FormController();
 
-await form.submit();
-await form.validate();
-form.clearErrors();''',
-    builder: () => const ProjectForm(),
+// In build: rebuild on submission progress and submit from the button.
+NotifierBuilder(
+  notifier: form,
+  builder: (context, form) => Form(
+    controller: form,
+    onSubmit: save, // async: the form stays busy until it completes
+    child: Column(
+      children: [
+        FormField(
+          validator: () => name.text.trim().isEmpty ? 'Enter a name.' : null,
+          child: TextInput(controller: name),
+        ),
+        Button(
+          text: form.isBusy ? 'Saving…' : 'Save',
+          onPressed: form.isBusy ? null : form.submit,
+        ),
+      ],
+    ),
+  ),
+)''',
+    builder: () => const SaveProject(),
   ),
   ExampleInfo(
     id: 'button.basic',
@@ -1072,7 +1103,9 @@ form.clearErrors();''',
     id: 'stepper.basic',
     widget: 'Stepper',
     category: 'Inputs & controls',
-    blurb: 'A compact number spinner; ↑/↓ adjust the value (×10 with Shift).',
+    blurb:
+        'A compact number spinner: ↑/↓ or +/− step the value, PageUp/PageDown '
+        'take large steps, and typed digits set it directly.',
     cols: 40,
     rows: 3,
     interactive: true,
@@ -1090,10 +1123,18 @@ form.clearErrors();''',
     widget: 'NumberInput',
     category: 'Inputs & controls',
     blurb:
-        'A numeric text field with min/max clamping; type or wheel to change.',
+        'A numeric text field that rejects non-numeric keys and clamps to '
+        'min/max when you press Enter.',
     cols: 36,
     rows: 3,
     interactive: true,
+    code: '''NumberInput(
+  initialValue: 42,
+  min: 0,
+  max: 100,
+  // null while the field is empty or mid-edit ("-", "1.").
+  onChanged: (value) => setState(() => count = value),
+)''',
     builder: () =>
         _framed(const NumberInput(initialValue: 42, min: 0, max: 100)),
   ),
@@ -1101,14 +1142,14 @@ form.clearErrors();''',
     id: 'passwordinput.basic',
     widget: 'PasswordInput',
     category: 'Inputs & controls',
-    blurb: 'An obscured text field with a reveal shortcut (Ctrl-R).',
+    blurb: 'A masked text field for secrets; Ctrl+R shows or hides the text.',
     cols: 40,
     rows: 3,
     interactive: true,
     code: '''PasswordInput(
   controller: controller,
   semanticLabel: 'Password',
-  // Ctrl-R briefly reveals the obscured value.
+  // Ctrl+R shows or hides the value while the field has focus.
 )''',
     // Seeded with a value so the demo shows the obscuring dots (the widget's
     // point) rather than a bare "Password" placeholder.
@@ -1178,6 +1219,13 @@ form.clearErrors();''',
     cols: 48,
     rows: 6,
     interactive: true,
+    code: '''Tabs(
+  tabs: const <TabItem>[
+    TabItem(label: 'Overview', content: Text('Project at a glance.')),
+    TabItem(label: 'Logs', content: Text('› build finished in 1.8s')),
+    TabItem(label: 'Settings', content: Text('Theme · keybindings · …')),
+  ],
+)''',
     builder: () => _framed(
       Tabs(
         tabs: <TabItem>[
@@ -1246,7 +1294,7 @@ form.clearErrors();''',
     id: 'tooltip.basic',
     widget: 'Tooltip',
     category: 'Navigation & overlays',
-    blurb: 'A hover/focus hint attached to any child.',
+    blurb: 'A hint that appears below a widget while focus is inside it.',
     cols: 40,
     // A TUI tooltip triggers on focus (no hover), so the child is an autofocused
     // Button — the hint renders beneath it on mount instead of an inert label.
@@ -1264,9 +1312,9 @@ form.clearErrors();''',
     widget: 'Container',
     category: 'Layout',
     blurb:
-        'Container is transparent by default; .filled paints the theme '
-        'surface and .framed adds the theme border. Enter and Esc toggle a '
-        'framed layer over live content.',
+        'One visual region: size, padding, margin, background, border, and '
+        'alignment. Container.filled and Container.framed apply the theme\'s '
+        'surface and border.',
     cols: 44,
     rows: 11,
     interactive: true,
@@ -1281,27 +1329,65 @@ form.clearErrors();''',
     category: 'Navigation & overlays',
     blurb: 'A bordered, titled modal surface.',
     cols: 44,
-    rows: 6,
+    rows: 10,
+    code: '''// Present it over the current screen and await the result:
+final confirmed = await context.present<bool>(const DeleteDialog());
+
+// DeleteDialog's build returns the frame and pops with a result:
+Dialog(
+  title: 'Confirm',
+  child: Column(
+    mainAxisSize: MainAxisSize.min,
+    children: [
+      const Text('Delete 3 files? This cannot be undone.'),
+      Row(
+        children: [
+          Button(text: 'Cancel', onPressed: () => context.pop(false)),
+          const SizedBox(width: 1),
+          Button(text: 'Delete', onPressed: () => context.pop(true)),
+        ],
+      ),
+    ],
+  ),
+)''',
     builder: () => _framed(
-      const Dialog(
+      Dialog(
         title: 'Confirm',
-        child: Text('Delete 3 files? This cannot be undone.'),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: <Widget>[
+            const Text('Delete 3 files? This cannot be undone.'),
+            Row(
+              children: <Widget>[
+                Button(text: 'Cancel', autofocus: true, onPressed: () {}),
+                const SizedBox(width: 1),
+                Button(text: 'Delete', onPressed: () {}),
+              ],
+            ),
+          ],
+        ),
       ),
     ),
   ),
   ExampleInfo(
     id: 'keyhintbar.basic',
     widget: 'KeyHintBar',
-    category: 'Navigation & overlays',
+    category: 'Input handling & focus',
     blurb: 'A bar listing the keyboard shortcuts active for the current focus.',
     cols: 52,
     rows: 6,
     code: '''KeyBindings(
   bindings: <KeyBinding>[
-    KeyBinding(KeyCode.char('s'), label: 'Save', onTrigger: save),
-    KeyBinding(KeyCode.char('q'), label: 'Quit', onTrigger: quit),
+    KeyBinding(KeyCode.char('s'), label: 'Save', onTrigger: (_) => save()),
+    KeyBinding(KeyCode.char('q'), label: 'Quit', onTrigger: (_) => quit()),
   ],
-  child: const KeyHintBar(),
+  child: Column(
+    children: [
+      // The bar lists the bindings above whatever holds focus.
+      Expanded(child: Focus(autofocus: true, child: editor)),
+      const KeyHintBar(),
+    ],
+  ),
 )''',
     builder: () => _framed(
       KeyBindings(
@@ -1325,7 +1411,7 @@ form.clearErrors();''',
   ExampleInfo(
     id: 'whichkey.basic',
     widget: 'WhichKey',
-    category: 'Navigation & overlays',
+    category: 'Input handling & focus',
     blurb:
         'A which-key popup: press the leader (Space) and the shortcuts that '
         'continue the sequence appear.',
@@ -1412,6 +1498,32 @@ form.clearErrors();''',
     cols: 66,
     rows: 10,
     interactive: true,
+    code:
+        '''// Present it over the app; choosing a command closes it and runs it.
+context.present<void>(
+  CommandPalette(
+    commands: [
+      CommandPaletteItem(
+        label: 'Open file…',
+        shortcut: 'Ctrl-P',
+        onInvoke: openFile,
+      ),
+      CommandPaletteItem(
+        label: 'Toggle theme',
+        category: 'View',
+        onInvoke: toggleTheme,
+      ),
+      CommandPaletteItem(
+        label: 'Run tests',
+        shortcut: 'Ctrl-T',
+        onInvoke: runTests,
+      ),
+    ],
+  ),
+);
+
+// Or list the commands the app registered as AppCommands:
+CommandPalette.open(context);''',
     builder: () => _framed(
       CommandPalette(
         commands: <CommandPaletteItem>[
@@ -1520,7 +1632,7 @@ form.clearErrors();''',
   ExampleInfo(
     id: 'table.basic',
     widget: 'Table',
-    category: 'Data & lists',
+    category: 'Lists & data',
     blurb:
         'A column-aligned grid of widget cells, with optional row selection.',
     cols: 44,
@@ -1543,7 +1655,7 @@ form.clearErrors();''',
   ExampleInfo(
     id: 'treetable.basic',
     widget: 'TreeTable',
-    category: 'Data & lists',
+    category: 'Lists & data',
     blurb: 'A hierarchical, expandable table; ←/→ collapse and expand rows.',
     cols: 48,
     rows: 9,
@@ -1588,7 +1700,7 @@ form.clearErrors();''',
   ExampleInfo(
     id: 'calendarheatmap.basic',
     widget: 'CalendarHeatmap',
-    category: 'Data & lists',
+    category: 'Charts & meters',
     blurb: 'A GitHub-style contribution grid keyed by date.',
     cols: 56,
     rows: 9,
@@ -1641,7 +1753,9 @@ form.clearErrors();''',
     id: 'diffview.basic',
     widget: 'DiffView',
     category: 'Agent surfaces',
-    blurb: 'A unified diff with line numbers and word-level highlighting.',
+    blurb:
+        'A unified diff with styled additions and deletions, hunk headers, and '
+        'an old/new line-number gutter.',
     cols: 56,
     rows: 9,
     interactive: true,
@@ -1919,7 +2033,7 @@ form.clearErrors();''',
   ),
   ExampleInfo(
     id: 'showcase.forms',
-    widget: 'Service deployment',
+    widget: 'Deployment form',
     category: 'Showcases',
     blurb:
         'A multi-screen service deployment flow with app-owned values, '
@@ -1932,7 +2046,7 @@ form.clearErrors();''',
   ),
   ExampleInfo(
     id: 'showcase.state',
-    widget: 'State management',
+    widget: 'Shared state',
     category: 'Showcases',
     blurb:
         'Local fields, a shared project scope, and an application-owned cart, '
@@ -2457,11 +2571,20 @@ form.clearErrors();''',
     widget: 'Navigator',
     category: 'Navigation & overlays',
     blurb:
-        'Push a screen, present a dialog, and pop with or without a typed '
-        'result in one deliberately small flow.',
+        'A stack of screens: push screens, present dialogs, and pop them with '
+        'typed results.',
     cols: 58,
     rows: 14,
     interactive: true,
+    code:
+        '''// FleuryApp(home: ...) creates the root navigator. Nest another Navigator
+// to keep a flow inside one pane:
+Navigator(home: const SetupStep())
+
+// From any screen below a navigator:
+final result = await context.push<String>(const DetailsScreen());
+final confirmed = await context.present<bool>(const ConfirmDialog());
+context.pop('done'); // completes the push that opened this screen''',
     builder: () => Navigator(
       transition: RouteTransition.none,
       home: const _NavigationBasicsTour(),
@@ -2530,62 +2653,146 @@ form.clearErrors();''',
   ExampleInfo(
     id: 'focus.explorer',
     widget: 'Focus',
-    category: 'Inputs & controls',
+    category: 'Input handling & focus',
     blurb:
-        'A visible focus path across two panes, with Tab and directional '
-        'traversal plus a dialog that traps and restores focus automatically.',
+        'Makes a custom widget focusable, so it receives keys and joins Tab '
+        'and arrow traversal.',
     cols: 70,
     rows: 18,
     interactive: true,
+    code:
+        '''// A custom control becomes one focus stop. Handle its keys outside the
+// Focus: keys travel from the focused node up through its ancestors.
+KeyBindings(
+  bindings: [
+    KeyBinding(KeySequence.enter, label: 'Play', onTrigger: (_) => play()),
+  ],
+  child: const Focus(child: TrackRow()),
+)
+
+// In TrackRow's build, reading Focus.of rebuilds it when focus changes:
+final focused = Focus.of(context).hasFocus;
+return Text(focused ? '▸ Track 1' : '  Track 1');''',
     builder: () => const Navigator(home: _FocusExplorerTour()),
   ),
   ExampleInfo(
     id: 'focusnode.programmatic',
     widget: 'FocusNode',
-    category: 'Inputs & controls',
+    category: 'Input handling & focus',
     blurb:
-        'An action moves focus directly to a search field while the visible '
-        'cursor and status line confirm the handoff.',
+        'A focus target you own: move focus to it from code, check whether it '
+        'has focus, and dispose it with its state.',
     cols: 60,
     rows: 10,
     interactive: true,
+    code: '''class _WorkspaceState extends State<Workspace> {
+  final _searchFocus = FocusNode(debugLabel: 'search');
+
+  void focusSearch() => _searchFocus.requestFocus();
+
+  @override
+  Widget build(BuildContext context) => Row(
+    children: [
+      Button(text: 'Focus search', onPressed: focusSearch),
+      SizedBox(
+        width: 24,
+        child: TextInput(focusNode: _searchFocus, onChanged: search),
+      ),
+    ],
+  );
+
+  @override
+  void dispose() {
+    _searchFocus.dispose();
+    super.dispose();
+  }
+}''',
     builder: () => const _ProgrammaticFocusTour(),
   ),
   ExampleInfo(
     id: 'focusdetector.basic',
     widget: 'FocusDetector',
-    category: 'Inputs & controls',
+    category: 'Input handling & focus',
     blurb:
-        'A visible boundary counter shows that moving between children stays '
-        'inside one focused region.',
+        'Reports when keyboard focus enters or leaves a subtree, the signal '
+        'for styling the active pane.',
     cols: 62,
     rows: 14,
     interactive: true,
+    code: '''FocusDetector(
+  onFocusChange: (hasFocus) => setState(() => editorActive = hasFocus),
+  child: Panel(
+    title: 'Editor',
+    focused: editorActive,
+    child: editor,
+  ),
+)''',
     builder: () => const _FocusDetectorTour(),
   ),
   ExampleInfo(
     id: 'keybindings.basic',
     widget: 'KeyBindings',
-    category: 'Inputs & controls',
+    category: 'Input handling & focus',
     blurb:
-        'The key-binding surface in one screen: dot-shorthand gestures, an '
-        'alias, a repeat-reliant mover, a two-key sequence, a Space leader — '
-        'and the hint bar teaching all of it, for free.',
+        'Declares keyboard shortcuts and multi-key sequences for a subtree; '
+        'the nearest match wins and its label feeds shortcut hints.',
     cols: 64,
     rows: 14,
     interactive: true,
+    code: '''KeyBindings(
+  bindings: [
+    KeyBinding(.ctrl.s, label: 'Bookmark', onTrigger: (_) => toggleBookmark()),
+    // Movement keys opt in to key repeat, so holding j keeps moving.
+    KeyBinding(
+      .j,
+      aliases: [.down],
+      label: 'Down',
+      includeRepeats: true,
+      onTrigger: (_) => move(1),
+    ),
+    KeyBinding(
+      .k,
+      aliases: [.up],
+      label: 'Up',
+      includeRepeats: true,
+      onTrigger: (_) => move(-1),
+    ),
+    KeyBinding(.g.g, label: 'Top', onTrigger: (_) => jumpToTop()),
+    KeyBinding(.space.c, label: 'Clear ★', onTrigger: (_) => clearBookmarks()),
+  ],
+  child: Focus(
+    autofocus: true,
+    child: Column(
+      children: [
+        Expanded(child: list),
+        const KeyHintBar(), // lists the labelled bindings above
+      ],
+    ),
+  ),
+)''',
     builder: () => const _KeyBindingsTour(),
   ),
   ExampleInfo(
     id: 'keydetector.basic',
     widget: 'KeyDetector',
-    category: 'Inputs & controls',
+    category: 'Input handling & focus',
     blurb:
-        'A visible event trace shows the pane consuming arrows while it can '
-        'move, then passing the same key to its ancestor at the edge.',
+        'Low-level key handling inside a custom control: inspect each key and '
+        'consume only the ones the control handles.',
     cols: 64,
     rows: 12,
     interactive: true,
+    code: '''KeyDetector(
+  onKey: (event) {
+    if (event.code == KeyCode.arrowDown && cursor < rows.length - 1) {
+      setState(() => cursor++);
+      event.consume(); // handled inside the pane
+    }
+    // At the last row the arrow is not consumed, so it reaches the
+    // ancestors' key bindings.
+  },
+  child: Focus(child: pane),
+)''',
     builder: () => const _KeyDetectorTour(),
   ),
   ExampleInfo(

@@ -1,0 +1,35 @@
+---
+// The guides overview: every guide, in the sidebar's groups, with the
+// description from its own frontmatter. The grouping lives in src/guides.mjs.
+import { getCollection } from 'astro:content';
+import { CardGrid, LinkCard } from '@astrojs/starlight/components';
+import { GUIDE_GROUPS } from '../guides.mjs';
+
+const guides = await getCollection('docs', (entry) => entry.id.startsWith('guides/'));
+const bySlug = new Map(guides.map((entry) => [entry.id.replace(/\.mdx?$/, ''), entry]));
+const base = import.meta.env.BASE_URL.replace(/\/$/, '');
+
+const grouped = new Set(GUIDE_GROUPS.flatMap((group) => group.items.map((item) => item.slug)));
+const ungrouped = [...bySlug.keys()].filter((slug) => slug !== 'guides/index' && !grouped.has(slug));
+if (ungrouped.length) {
+  throw new Error(`Add these guides to src/guides.mjs: ${ungrouped.join(', ')}`);
+}
+---
+{GUIDE_GROUPS.map((group) => (
+  <section class="guide-group">
+    <h2>{group.label}</h2>
+    <CardGrid>
+      {group.items.map((item) => {
+        const entry = bySlug.get(item.slug);
+        if (!entry) throw new Error(`Guide listed in src/guides.mjs is missing: ${item.slug}`);
+        return (
+          <LinkCard
+            title={entry.data.title}
+            description={entry.data.description}
+            href={`${base}/${item.slug}/`}
+          />
+        );
+      })}
+    </CardGrid>
+  </section>
+))}

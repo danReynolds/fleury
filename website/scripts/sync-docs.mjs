@@ -75,7 +75,9 @@ const DOCS = [
 
 const rewriteLinks = (md) =>
   md
-    .replace(/\]\(([\w-]+)\.md(#[^)]*)?\)/g, (_m, file, anchor) => {
+    // Synced docs become site routes; any other doc under docs/ (an RFC in
+    // rfcs/, say) isn't published here, so point at it on GitHub.
+    .replace(/\]\(((?:[\w-]+\/)*[\w.-]+)\.md(#[^)]*)?\)/g, (_m, file, anchor) => {
       const dest = ROUTES[`${file}.md`] ?? `${GITHUB}/${file}.md`;
       return `](${dest}${anchor ?? ''})`;
     })
