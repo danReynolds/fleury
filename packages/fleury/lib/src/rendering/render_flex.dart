@@ -498,31 +498,8 @@ class RenderFlex extends RenderObject implements RenderObjectWithChildren {
     for (final c in _children) {
       c.paint(scratch, _childOffsets[c] ?? CellOffset.zero);
     }
-    for (var r = 0; r < size.rows; r++) {
-      final tr = offset.row + r;
-      if (tr < 0 || tr >= buffer.size.rows) continue;
-      for (var col = 0; col < size.cols; col++) {
-        final cell = scratch.atColRow(col, r);
-        if (cell.role != CellRole.leading) continue;
-        // A wide glyph whose continuation falls outside the box would spill
-        // one column past `size.cols`, evicting the sibling there. Drop it
-        // rather than split it — wide graphemes are dropped, never split.
-        if (col + 1 >= size.cols &&
-            col + 1 < scratch.size.cols &&
-            scratch.atColRow(col + 1, r).role == CellRole.continuation) {
-          continue;
-        }
-        final tc = offset.col + col;
-        if (tc < 0 || tc >= buffer.size.cols) continue;
-        // Replay, not re-measure — see [CellBuffer.replayCellFrom].
-        buffer.replayCellFrom(scratch, col, r, tc, tr);
-      }
-    }
-    // Carry only the Flex box's visible image windows. The scratch may be
-    // larger than [size] to accommodate overflowing children; replaying every
-    // full placement would let true-pixel content escape the same clip the
-    // cell loop applies.
-    buffer.compositeImageRectFrom(
+    // Share the viewport compositor's clipping of wide glyphs and images.
+    buffer.compositeRectFrom(
       scratch,
       CellRect(offset: CellOffset.zero, size: size),
       offset,

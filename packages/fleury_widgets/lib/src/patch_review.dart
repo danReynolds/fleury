@@ -2,6 +2,7 @@ import 'dart:async' show scheduleMicrotask, unawaited;
 
 import 'package:fleury/fleury_core.dart';
 
+import 'internal/collection_notifications.dart';
 import 'diff_view.dart';
 import 'semantic_roles.dart';
 
@@ -82,10 +83,18 @@ class PatchReviewController extends Notifier {
     /// Initial browsing row. Null starts without a current row.
     int? initialIndex = 0,
   }) : _list = ListController(initialIndex: initialIndex) {
-    _list.addListener(notify);
+    _notifications = CollectionNotifications(
+      _list,
+      dispatch: notify,
+      publish: super.notify,
+    );
   }
 
   final ListController _list;
+  late final CollectionNotifications _notifications;
+
+  @override
+  void notify() => _notifications.publish();
   bool _disposed = false;
 
   ListController get _listController => _list;
@@ -113,7 +122,7 @@ class PatchReviewController extends Notifier {
   void dispose() {
     if (_disposed) return;
     _disposed = true;
-    _list.removeListener(notify);
+    _notifications.dispose();
     _list.dispose();
     super.dispose();
   }
@@ -392,7 +401,7 @@ class _PatchReviewState extends State<PatchReview> {
     super.initState();
     _controller = widget.controller ?? PatchReviewController();
     _ownsController = widget.controller == null;
-    _controller.addListener(_onControllerChange);
+    _controller._notifications.viewChanges.addListener(_onControllerChange);
     _diffController = widget.diffController ?? DiffViewController();
     _ownsDiffController = widget.diffController == null;
     _focusNode = widget.focusNode ?? FocusNode(debugLabel: 'PatchReview');
@@ -403,11 +412,13 @@ class _PatchReviewState extends State<PatchReview> {
   void didUpdateWidget(covariant PatchReview oldWidget) {
     super.didUpdateWidget(oldWidget);
     if (widget.controller != oldWidget.controller) {
-      _controller.removeListener(_onControllerChange);
+      _controller._notifications.viewChanges.removeListener(
+        _onControllerChange,
+      );
       if (_ownsController) _controller.dispose();
       _controller = widget.controller ?? PatchReviewController();
       _ownsController = widget.controller == null;
-      _controller.addListener(_onControllerChange);
+      _controller._notifications.viewChanges.addListener(_onControllerChange);
     }
     if (widget.diffController != oldWidget.diffController) {
       if (_ownsDiffController) _diffController.dispose();
@@ -576,7 +587,7 @@ class _PatchReviewState extends State<PatchReview> {
 
   @override
   void dispose() {
-    _controller.removeListener(_onControllerChange);
+    _controller._notifications.viewChanges.removeListener(_onControllerChange);
     if (_ownsController) _controller.dispose();
     if (_ownsDiffController) _diffController.dispose();
     if (_ownsFocusNode) _focusNode.dispose();
@@ -585,14 +596,17 @@ class _PatchReviewState extends State<PatchReview> {
 
   @override
   Widget build(BuildContext context) {
-    final currentIndex = _controller.currentIndex;
-    final selectedFile =
-        currentIndex == null ||
-            currentIndex < 0 ||
-            currentIndex >= widget.files.length
-        ? null
-        : widget.files[currentIndex];
-    final visibleRange = _controller.visibleRange;
+    final additionCount = _totalAdditions(widget.files);
+    final deletionCount = _totalDeletions(widget.files);
+    final hunkCount = _totalHunks(widget.files);
+    final approvedCount = _statusCount(
+      widget.files,
+      PatchReviewStatus.approved,
+    );
+    final changesRequestedCount = _statusCount(
+      widget.files,
+      PatchReviewStatus.changesRequested,
+    );
     final copyEnabled = widget.copySelection && widget.files.isNotEmpty;
     final canSelect = widget.onSelectFile != null;
     final visible = widget.files.isEmpty
@@ -673,31 +687,36 @@ class _PatchReviewState extends State<PatchReview> {
           if (copyEnabled) SemanticAction.copy,
         },
         onAction: _handleReviewAction,
-        state: SemanticState({
-          if (widget.patchId != null)
-            'patchId': _sanitizePatchText(widget.patchId!.toString()),
-          'patchStatus': widget.status.name,
-          'patchFileCount': widget.files.length,
-          'patchAdditionCount': _totalAdditions(widget.files),
-          'patchDeletionCount': _totalDeletions(widget.files),
-          'patchHunkCount': _totalHunks(widget.files),
-          'approvedPatchFileCount': _statusCount(
-            widget.files,
-            PatchReviewStatus.approved,
-          ),
-          'changesRequestedPatchFileCount': _statusCount(
-            widget.files,
-            PatchReviewStatus.changesRequested,
-          ),
-          'copyEnabled': copyEnabled,
-          'clipboardPolicy': widget.copyOptions.clipboardPolicy.name,
-          if (visibleRange != null && widget.files.isNotEmpty) ...{
-            'visibleRangeStart': visibleRange.first,
-            'visibleRangeEnd': visibleRange.last,
-          },
-          'currentIndex': ?currentIndex,
-          if (selectedFile != null) ..._selectedFileState(selectedFile),
-        }),
+        stateListenable: _controller,
+        stateBuilder: () {
+          final currentIndex = _controller.currentIndex;
+          final selectedFile =
+              currentIndex == null ||
+                  currentIndex < 0 ||
+                  currentIndex >= widget.files.length
+              ? null
+              : widget.files[currentIndex];
+          final visibleRange = _controller.visibleRange;
+          return SemanticState({
+            if (widget.patchId != null)
+              'patchId': _sanitizePatchText(widget.patchId!.toString()),
+            'patchStatus': widget.status.name,
+            'patchFileCount': widget.files.length,
+            'patchAdditionCount': additionCount,
+            'patchDeletionCount': deletionCount,
+            'patchHunkCount': hunkCount,
+            'approvedPatchFileCount': approvedCount,
+            'changesRequestedPatchFileCount': changesRequestedCount,
+            'copyEnabled': copyEnabled,
+            'clipboardPolicy': widget.copyOptions.clipboardPolicy.name,
+            if (visibleRange != null && widget.files.isNotEmpty) ...{
+              'visibleRangeStart': visibleRange.first,
+              'visibleRangeEnd': visibleRange.last,
+            },
+            'currentIndex': ?currentIndex,
+            if (selectedFile != null) ..._selectedFileState(selectedFile),
+          });
+        },
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: children,

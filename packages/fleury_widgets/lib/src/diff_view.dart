@@ -4,6 +4,7 @@ import 'package:characters/characters.dart';
 import 'package:fleury/fleury_core.dart';
 
 import 'component_theme.dart';
+import 'internal/collection_notifications.dart';
 
 /// Logical row type in a [DiffView].
 enum DiffLineKind {
@@ -128,10 +129,18 @@ class DiffViewController extends Notifier {
     /// Initial browsing row. Null starts without a current row.
     int? initialIndex = 0,
   }) : _list = ListController(initialIndex: initialIndex) {
-    _list.addListener(notify);
+    _notifications = CollectionNotifications(
+      _list,
+      dispatch: notify,
+      publish: super.notify,
+    );
   }
 
   final ListController _list;
+  late final CollectionNotifications _notifications;
+
+  @override
+  void notify() => _notifications.publish();
   bool _disposed = false;
 
   ListController get _listController => _list;
@@ -159,7 +168,7 @@ class DiffViewController extends Notifier {
   void dispose() {
     if (_disposed) return;
     _disposed = true;
-    _list.removeListener(notify);
+    _notifications.dispose();
     _list.dispose();
     super.dispose();
   }
@@ -540,7 +549,7 @@ class _DiffViewState extends State<DiffView> {
     super.initState();
     _controller = widget.controller ?? DiffViewController();
     _ownsController = widget.controller == null;
-    _controller.addListener(_onControllerChange);
+    _controller._notifications.viewChanges.addListener(_onControllerChange);
     _focusNode = widget.focusNode ?? FocusNode(debugLabel: 'DiffView');
     _ownsFocusNode = widget.focusNode == null;
   }
@@ -549,11 +558,13 @@ class _DiffViewState extends State<DiffView> {
   void didUpdateWidget(covariant DiffView oldWidget) {
     super.didUpdateWidget(oldWidget);
     if (widget.controller != oldWidget.controller) {
-      _controller.removeListener(_onControllerChange);
+      _controller._notifications.viewChanges.removeListener(
+        _onControllerChange,
+      );
       if (_ownsController) _controller.dispose();
       _controller = widget.controller ?? DiffViewController();
       _ownsController = widget.controller == null;
-      _controller.addListener(_onControllerChange);
+      _controller._notifications.viewChanges.addListener(_onControllerChange);
     }
     if (widget.focusNode != oldWidget.focusNode) {
       if (_ownsFocusNode) _focusNode.dispose();
@@ -573,7 +584,7 @@ class _DiffViewState extends State<DiffView> {
 
   @override
   void dispose() {
-    _controller.removeListener(_onControllerChange);
+    _controller._notifications.viewChanges.removeListener(_onControllerChange);
     if (_ownsController) _controller.dispose();
     if (_ownsFocusNode) _focusNode.dispose();
     super.dispose();
@@ -645,8 +656,6 @@ class _DiffViewState extends State<DiffView> {
   @override
   Widget build(BuildContext context) {
     final rows = widget.document.rows;
-    final selected = _selectedRow();
-    final visibleRange = _controller.visibleRange;
     final copyEnabled = widget.copySelection && rows.isNotEmpty;
     final gutterWidth = widget.showLineNumbers
         ? _gutterWidthOf(widget.document)
@@ -697,32 +706,37 @@ class _DiffViewState extends State<DiffView> {
           if (copyEnabled) SemanticAction.copy,
         },
         onAction: _handleDiffAction,
-        state: SemanticState({
-          'collectionRowCount': rows.length,
-          'fileCount': widget.document.fileCount,
-          'hunkCount': widget.document.hunkCount,
-          'additionCount': widget.document.additionCount,
-          'deletionCount': widget.document.deletionCount,
-          'copyEnabled': copyEnabled,
-          'copyMode': widget.copyOptions.mode.name,
-          'clipboardPolicy': widget.copyOptions.clipboardPolicy.name,
-          if (visibleRange != null) ...{
-            'visibleRangeStart': visibleRange.first,
-            'visibleRangeEnd': visibleRange.last,
-          },
-          if (_controller.currentIndex != null)
-            'currentIndex': _controller.currentIndex,
-          if (selected != null) ...{
-            'selectedKey': selected.index,
-            'selectedDiffKind': selected.kind.name,
-            if (selected.filePath != null)
-              'selectedFilePath': selected.filePath,
-            if (selected.hunkIndex != null)
-              'selectedHunkIndex': selected.hunkIndex,
-            if (selected.oldLine != null) 'selectedOldLine': selected.oldLine,
-            if (selected.newLine != null) 'selectedNewLine': selected.newLine,
-          },
-        }),
+        stateListenable: _controller,
+        stateBuilder: () {
+          final selected = _selectedRow();
+          final visibleRange = _controller.visibleRange;
+          return SemanticState({
+            'collectionRowCount': rows.length,
+            'fileCount': widget.document.fileCount,
+            'hunkCount': widget.document.hunkCount,
+            'additionCount': widget.document.additionCount,
+            'deletionCount': widget.document.deletionCount,
+            'copyEnabled': copyEnabled,
+            'copyMode': widget.copyOptions.mode.name,
+            'clipboardPolicy': widget.copyOptions.clipboardPolicy.name,
+            if (visibleRange != null) ...{
+              'visibleRangeStart': visibleRange.first,
+              'visibleRangeEnd': visibleRange.last,
+            },
+            if (_controller.currentIndex != null)
+              'currentIndex': _controller.currentIndex,
+            if (selected != null) ...{
+              'selectedKey': selected.index,
+              'selectedDiffKind': selected.kind.name,
+              if (selected.filePath != null)
+                'selectedFilePath': selected.filePath,
+              if (selected.hunkIndex != null)
+                'selectedHunkIndex': selected.hunkIndex,
+              if (selected.oldLine != null) 'selectedOldLine': selected.oldLine,
+              if (selected.newLine != null) 'selectedNewLine': selected.newLine,
+            },
+          });
+        },
         child: list,
       ),
     );

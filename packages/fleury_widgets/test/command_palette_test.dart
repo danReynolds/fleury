@@ -603,6 +603,26 @@ void main() {
       expect(Navigator.of(ctx).depth, 2);
     });
 
+    testWidgets('registry decline after closing the palette is reported', (
+      tester,
+    ) async {
+      var runs = 0;
+      var checkRoute = false;
+      openSave(
+        tester,
+        save(
+          () => runs++,
+          enabled: () => !checkRoute || Navigator.of(ctx).depth == 2,
+        ),
+      );
+      checkRoute = true;
+      final result = await pressRow(tester);
+      await _settleClose(tester);
+      expect(result.status, SemanticActionInvocationStatus.unsupported);
+      expect(runs, 0);
+      expect(Navigator.of(ctx).depth, 1);
+    });
+
     testWidgets('Enter on a row whose command turned disabled does nothing, '
         'and the palette stays open', (tester) async {
       var allowed = true;

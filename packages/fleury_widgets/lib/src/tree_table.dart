@@ -5,6 +5,7 @@ import 'package:fleury/fleury_core.dart';
 
 import 'component_theme.dart';
 import 'data_table.dart' show DataTableColumn, DataTableExportFormat;
+import 'internal/collection_notifications.dart';
 import 'table.dart' show FixedColumnWidth, FlexColumnWidth;
 
 /// One durable node in a [TreeTable].
@@ -731,10 +732,18 @@ class TreeTableController extends Notifier {
     Iterable<Object> expandedKeys = const <Object>[],
   }) : _list = ListController(initialIndex: initialIndex),
        _expandedKeys = Set<Object>.of(expandedKeys) {
-    _list.addListener(notify);
+    _notifications = CollectionNotifications(
+      _list,
+      dispatch: notify,
+      publish: super.notify,
+    );
   }
 
   final ListController _list;
+  late final CollectionNotifications _notifications;
+
+  @override
+  void notify() => _notifications.publish();
   final Set<Object> _expandedKeys;
 
   /// Monotonic revision of the expansion state. Bumped by every effective
@@ -807,7 +816,7 @@ class TreeTableController extends Notifier {
   void dispose() {
     if (_disposed) return;
     _disposed = true;
-    _list.removeListener(notify);
+    _notifications.dispose();
     _list.dispose();
     super.dispose();
   }
@@ -1072,7 +1081,7 @@ class _TreeTableState<T> extends State<TreeTable<T>> {
     super.initState();
     _controller = widget.controller ?? TreeTableController();
     _ownsController = widget.controller == null;
-    _controller.addListener(_onControllerChange);
+    _controller._notifications.viewChanges.addListener(_onControllerChange);
     _focusNode = widget.focusNode ?? FocusNode(debugLabel: 'TreeTable');
     _ownsFocusNode = widget.focusNode == null;
   }
@@ -1081,11 +1090,13 @@ class _TreeTableState<T> extends State<TreeTable<T>> {
   void didUpdateWidget(covariant TreeTable<T> oldWidget) {
     super.didUpdateWidget(oldWidget);
     if (widget.controller != oldWidget.controller) {
-      _controller.removeListener(_onControllerChange);
+      _controller._notifications.viewChanges.removeListener(
+        _onControllerChange,
+      );
       if (_ownsController) _controller.dispose();
       _controller = widget.controller ?? TreeTableController();
       _ownsController = widget.controller == null;
-      _controller.addListener(_onControllerChange);
+      _controller._notifications.viewChanges.addListener(_onControllerChange);
     } else {
       // New roots or a new filter: the cursor stays on its node.
       _followSelectedKey();
@@ -1148,7 +1159,7 @@ class _TreeTableState<T> extends State<TreeTable<T>> {
 
   @override
   void dispose() {
-    _controller.removeListener(_onControllerChange);
+    _controller._notifications.viewChanges.removeListener(_onControllerChange);
     if (_ownsController) _controller.dispose();
     if (_ownsFocusNode) _focusNode.dispose();
     super.dispose();
@@ -1369,11 +1380,11 @@ class _TreeTableState<T> extends State<TreeTable<T>> {
         ? 1
         : (rows.length > widget.maxVisible ? widget.maxVisible : rows.length);
     final selected = _selectedRow(rows);
-    final visibleRange = _controller.visibleRange;
     final filter = widget.filter;
     final filterText = filter == null
         ? ''
         : _sanitizeTreeTableText(filter.query);
+    final expandedCount = _controller.expandedKeys.length;
     final copyEnabled =
         widget.copySelectedRow && rows.isNotEmpty && widget.columns.isNotEmpty;
     final selectedStyle =
@@ -1463,28 +1474,33 @@ class _TreeTableState<T> extends State<TreeTable<T>> {
           if (copyEnabled) SemanticAction.copy,
         },
         onAction: (action) => _handleTreeAction(action, rows),
-        state: SemanticState({
-          'collectionRowCount': rows.length,
-          'collectionColumnCount': widget.columns.length,
-          'rootCount': widget.roots.length,
-          'expandedCount': _controller.expandedKeys.length,
-          'treeColumnId': _treeColumnId,
-          'copyEnabled': copyEnabled,
-          'clipboardPolicy': widget.copyOptions.clipboardPolicy.name,
-          if (filterText.isNotEmpty) 'filterText': filterText,
-          if (filter != null) 'filterCaseSensitive': filter.caseSensitive,
-          if (visibleRange != null && rows.isNotEmpty) ...{
-            'visibleRangeStart': visibleRange.first,
-            'visibleRangeEnd': visibleRange.last,
-          },
-          if (_controller.currentIndex != null)
-            'currentIndex': _controller.currentIndex,
-          if (selected != null) ...{
-            'selectedKey': selected.key,
-            'selectedDepth': selected.depth,
-            'selectedIsBranch': selected.node.isBranch,
-          },
-        }),
+        stateListenable: _controller,
+        stateBuilder: () {
+          final selected = _selectedRow(rows);
+          final visibleRange = _controller.visibleRange;
+          return SemanticState({
+            'collectionRowCount': rows.length,
+            'collectionColumnCount': widget.columns.length,
+            'rootCount': widget.roots.length,
+            'expandedCount': expandedCount,
+            'treeColumnId': _treeColumnId,
+            'copyEnabled': copyEnabled,
+            'clipboardPolicy': widget.copyOptions.clipboardPolicy.name,
+            if (filterText.isNotEmpty) 'filterText': filterText,
+            if (filter != null) 'filterCaseSensitive': filter.caseSensitive,
+            if (visibleRange != null && rows.isNotEmpty) ...{
+              'visibleRangeStart': visibleRange.first,
+              'visibleRangeEnd': visibleRange.last,
+            },
+            if (_controller.currentIndex != null)
+              'currentIndex': _controller.currentIndex,
+            if (selected != null) ...{
+              'selectedKey': selected.key,
+              'selectedDepth': selected.depth,
+              'selectedIsBranch': selected.node.isBranch,
+            },
+          });
+        },
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [

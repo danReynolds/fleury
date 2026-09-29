@@ -158,7 +158,316 @@ class _DecliningFieldState extends State<_DecliningField>
   }
 }
 
+class _PasteLog implements TextInputClaimant, PasteEventClaimant {
+  _PasteLog({this.onEvent});
+  final KeyEventResult Function(PasteEvent event)? onEvent;
+  final events = <PasteEvent>[];
+  @override
+  KeyEventResult onPasteEvent(PasteEvent event) {
+    events.add(event);
+    return onEvent?.call(event) ?? KeyEventResult.handled;
+  }
+
+  @override
+  KeyEventResult onPaste(String text) => onPasteEvent(PasteEvent(text));
+  @override
+  KeyEventResult onTextInput(String text) => KeyEventResult.ignored;
+}
+
 void main() {
+  group('segmented paste ownership', () {
+    for (final outerSegmented in [false, true]) {
+      for (final nestedSegmented in [false, true]) {
+        test(
+          'nested paste supersedes its declining caller, outerSegmented=$outerSegmented nestedSegmented=$nestedSegmented',
+          () {
+            final h = _TestHarness();
+            final parentLog = _PasteLog();
+            final childLog = _PasteLog(
+              onEvent: (event) {
+                if (event.text != 'outer') return KeyEventResult.handled;
+                h.dispatcher.dispatch(
+                  nestedSegmented
+                      ? const PasteEvent.segment(
+                          'nested',
+                          pasteId: 2,
+                          phase: PasteEventPhase.start,
+                        )
+                      : const PasteEvent('nested'),
+                );
+                return KeyEventResult.ignored;
+              },
+            );
+            final parent = FocusNode()..textInputClaimant = parentLog;
+            final child = FocusNode()..textInputClaimant = childLog;
+            addTearDown(() {
+              h.dispatcher.dispose();
+              child.dispose();
+              parent.dispose();
+              h.manager.dispose();
+            });
+            h.mountRoot(
+              Focus(
+                focusNode: parent,
+                child: Focus(
+                  focusNode: child,
+                  autofocus: true,
+                  child: const EmptyBox(),
+                ),
+              ),
+            );
+            h.dispatcher.dispatch(
+              outerSegmented
+                  ? const PasteEvent.segment(
+                      'outer',
+                      pasteId: 1,
+                      phase: PasteEventPhase.start,
+                    )
+                  : const PasteEvent('outer'),
+            );
+            h.dispatcher.dispatch(
+              const PasteEvent.segment(
+                'old tail',
+                pasteId: 1,
+                phase: PasteEventPhase.end,
+              ),
+            );
+            if (nestedSegmented) {
+              h.dispatcher.dispatch(
+                const PasteEvent.segment(
+                  'new tail',
+                  pasteId: 2,
+                  phase: PasteEventPhase.end,
+                ),
+              );
+            }
+            expect(parentLog.events, isEmpty);
+            expect(childLog.events.map((event) => event.text), [
+              'outer',
+              'nested',
+              if (nestedSegmented) 'new tail',
+            ]);
+          },
+        );
+      }
+    }
+
+    test(
+      'declined first segment falls back to an ancestor for the whole paste',
+      () {
+        final h = _TestHarness();
+        final parentLog = _PasteLog();
+        final childLog = _PasteLog(onEvent: (_) => KeyEventResult.ignored);
+        final parent = FocusNode()..textInputClaimant = parentLog;
+        final child = FocusNode()..textInputClaimant = childLog;
+        addTearDown(() {
+          h.dispatcher.dispose();
+          child.dispose();
+          parent.dispose();
+          h.manager.dispose();
+        });
+        h.mountRoot(
+          Focus(
+            focusNode: parent,
+            child: Focus(
+              focusNode: child,
+              autofocus: true,
+              child: const EmptyBox(),
+            ),
+          ),
+        );
+        const start = PasteEvent.segment(
+          'start',
+          pasteId: 1,
+          phase: PasteEventPhase.start,
+        );
+        const end = PasteEvent.segment(
+          'end',
+          pasteId: 1,
+          phase: PasteEventPhase.end,
+        );
+        h.dispatcher.dispatch(start);
+        h.dispatcher.dispatch(end);
+        expect(childLog.events, [start]);
+        expect(parentLog.events, [start, end]);
+      },
+    );
+
+    test('a throwing first claimant cannot retain the paste tail', () {
+      final h = _TestHarness();
+      final log = _PasteLog(
+        onEvent: (event) {
+          if (event.isFirst) throw StateError('paste rejected');
+          return KeyEventResult.handled;
+        },
+      );
+      final node = FocusNode()..textInputClaimant = log;
+      addTearDown(() {
+        h.dispatcher.dispose();
+        node.dispose();
+        h.manager.dispose();
+      });
+      h.mountRoot(
+        Focus(focusNode: node, autofocus: true, child: const EmptyBox()),
+      );
+      const start = PasteEvent.segment(
+        'start',
+        pasteId: 1,
+        phase: PasteEventPhase.start,
+      );
+      const end = PasteEvent.segment(
+        'end',
+        pasteId: 1,
+        phase: PasteEventPhase.end,
+      );
+      expect(() => h.dispatcher.dispatch(start), throwsStateError);
+      expect(h.dispatcher.dispatch(end), KeyEventResult.ignored);
+      expect(log.events, [start]);
+    });
+
+    for (final invalidation in ['focus', 'detach', 'replace claimant']) {
+      test('paste tail never retargets after $invalidation', () {
+        final h = _TestHarness();
+        final firstLog = _PasteLog();
+        final secondLog = _PasteLog();
+        final first = FocusNode()..textInputClaimant = firstLog;
+        final second = FocusNode()..textInputClaimant = secondLog;
+        addTearDown(() {
+          h.dispatcher.dispose();
+          first.dispose();
+          second.dispose();
+          h.manager.dispose();
+        });
+        h.mountRoot(
+          Column(
+            children: [
+              Focus(focusNode: first, autofocus: true, child: const EmptyBox()),
+              Focus(focusNode: second, child: const EmptyBox()),
+            ],
+          ),
+        );
+        const start = PasteEvent.segment(
+          'first',
+          pasteId: 1,
+          phase: PasteEventPhase.start,
+        );
+        const end = PasteEvent.segment(
+          'last',
+          pasteId: 1,
+          phase: PasteEventPhase.end,
+        );
+        h.dispatcher.dispatch(start);
+        second.requestFocus();
+        if (invalidation == 'detach') first.dispose();
+        if (invalidation == 'replace claimant') {
+          first.textInputClaimant = secondLog;
+        }
+        h.dispatcher.dispatch(end);
+        expect(
+          firstLog.events,
+          invalidation == 'focus' ? [start, end] : [start],
+        );
+        expect(secondLog.events, isEmpty);
+        h.dispatcher.dispatch(const PasteEvent('new'));
+        expect(secondLog.events, [const PasteEvent('new')]);
+      });
+    }
+
+    for (final multiline in [false, true]) {
+      test(
+        'field keeps one paste undo across focus changes, multiline=$multiline',
+        () {
+          final h = _TestHarness();
+          final first = FocusNode();
+          final second = FocusNode();
+          final text = TextEditingController();
+          final other = TextEditingController();
+          addTearDown(() {
+            h.dispatcher.dispose();
+            first.dispose();
+            second.dispose();
+            text.dispose();
+            other.dispose();
+            h.manager.dispose();
+          });
+          h.mountRoot(
+            Column(
+              children: [
+                if (multiline)
+                  TextArea(
+                    controller: text,
+                    focusNode: first,
+                    autofocus: true,
+                    pastePolicy: const TextPastePolicy.immediate(),
+                  )
+                else
+                  TextInput(
+                    controller: text,
+                    focusNode: first,
+                    autofocus: true,
+                    pastePolicy: const TextPastePolicy.immediate(),
+                  ),
+                TextInput(controller: other, focusNode: second),
+              ],
+            ),
+          );
+          h.dispatcher.dispatch(
+            const PasteEvent.segment(
+              'first',
+              pasteId: 7,
+              phase: PasteEventPhase.start,
+            ),
+          );
+          second.requestFocus();
+          h.dispatcher.dispatch(
+            const PasteEvent.segment(
+              'last',
+              pasteId: 7,
+              phase: PasteEventPhase.end,
+            ),
+          );
+          expect(text.text, 'firstlast');
+          expect(other.text, isEmpty);
+          first.requestFocus();
+          h.dispatch(_char('z', ctrl: true));
+          expect(text.text, isEmpty, reason: 'the paste remains a single undo');
+        },
+      );
+    }
+
+    test('orphaned or mismatched segments cannot acquire a focused field', () {
+      final h = _TestHarness();
+      final events = <String>[];
+      addTearDown(h.dispatcher.dispose);
+      h.mountRoot(_ClaimLog(events: events));
+      h.dispatcher.dispatch(
+        const PasteEvent.segment(
+          'orphan',
+          pasteId: 1,
+          phase: PasteEventPhase.end,
+        ),
+      );
+      h.dispatcher.dispatch(
+        const PasteEvent.segment(
+          'start',
+          pasteId: 2,
+          phase: PasteEventPhase.start,
+        ),
+      );
+      h.dispatcher.dispatch(
+        const PasteEvent.segment(
+          'wrong',
+          pasteId: 1,
+          phase: PasteEventPhase.end,
+        ),
+      );
+      h.dispatcher.dispatch(
+        const PasteEvent.segment('end', pasteId: 2, phase: PasteEventPhase.end),
+      );
+      expect(events, ['paste:start', 'paste:end']);
+    });
+  });
+
   group('InputDispatcher lifecycle', () {
     test('dispose clears pending state and blocks further dispatch', () {
       final h = _TestHarness(

@@ -1,3 +1,5 @@
+import 'dart:collection';
+
 import 'package:fleury/fleury.dart';
 import 'package:fleury_test/fleury_test.dart';
 import 'package:fleury_widgets/fleury_widgets.dart';
@@ -21,7 +23,182 @@ Matcher _stateError(String message) {
   );
 }
 
+class _CountingLines extends ListBase<CodeLine> {
+  _CountingLines(this.lines);
+  final List<CodeLine> lines;
+  int reads = 0;
+  @override
+  int get length => lines.length;
+  @override
+  set length(int value) => throw UnsupportedError('read-only');
+  @override
+  CodeLine operator [](int index) {
+    reads++;
+    return lines[index];
+  }
+
+  @override
+  void operator []=(int index, CodeLine value) =>
+      throw UnsupportedError('read-only');
+}
+
+class _RecordingController extends CodeViewController {
+  int notifications = 0;
+  @override
+  void notify() {
+    notifications++;
+    super.notify();
+  }
+}
+
 void main() {
+  testWidgets('metrics retain subclass dispatch and nested explicit refresh', (
+    tester,
+  ) {
+    final controller = _RecordingController();
+    addTearDown(controller.dispose);
+    var refresh = false;
+    var delivered = 0;
+    controller.addListener(() {
+      delivered++;
+      if (refresh) {
+        refresh = false;
+        controller.notify();
+      }
+    });
+    tester.pumpWidget(
+      SizedBox(
+        height: 8,
+        child: CodeView(
+          controller: controller,
+          source: List.generate(100, (i) => 'line $i').join('\n'),
+        ),
+      ),
+    );
+    tester.pump();
+    tester.pump();
+    tester.sendMouse(
+      const MouseEvent(
+        kind: MouseEventKind.scrollDown,
+        button: MouseButton.none,
+        col: 2,
+        row: 2,
+      ),
+    );
+    // The wheel request is a view change. Trigger the nested refresh only
+    // when the completed frame subsequently reports its metrics.
+    delivered = controller.notifications = 0;
+    refresh = true;
+    tester.pump();
+    expect(delivered, 2);
+    expect(controller.notifications, 2);
+    expect(
+      tester.owner.flushBuild().rebuiltElementCount,
+      greaterThan(0),
+      reason: 'nested explicit refresh must still rebuild content',
+    );
+  });
+
+  testWidgets(
+    'controller replacement detaches old view and semantic subscriptions',
+    (tester) {
+      final first = CodeViewController();
+      final second = CodeViewController();
+      addTearDown(first.dispose);
+      addTearDown(second.dispose);
+      Widget view(CodeViewController source) =>
+          CodeView(source: 'one\ntwo', controller: source);
+      tester.pumpWidget(view(first));
+      tester.pumpWidget(view(second));
+      tester.pump();
+      tester.pump();
+      tester.owner.semanticDirtyTracker.takeDirtySnapshot();
+      first.notify();
+      expect(tester.owner.flushBuild().rebuiltElementCount, 0);
+      expect(tester.owner.semanticDirtyTracker.hasDirt, isFalse);
+      second.notify();
+      expect(tester.owner.flushBuild().rebuiltElementCount, greaterThan(0));
+      tester.pumpWidget(const SizedBox());
+      expect(second.hasListeners, isFalse);
+    },
+  );
+
+  testWidgets(
+    'scroll metrics update semantics without rebuilding source rows',
+    (tester) {
+      final parsed = parseCodeDocument(
+        List.generate(300, (i) => 'line $i').join('\n'),
+      );
+      final lines = _CountingLines(parsed.lines);
+      final document = CodeDocument(
+        lines: lines,
+        language: null,
+        filePath: null,
+        lineCount: 300,
+        nonEmptyLineCount: 300,
+        commentCount: 0,
+        blankCount: 0,
+        showLineNumbers: true,
+        tabSize: 2,
+      );
+      final controller = CodeViewController();
+      addTearDown(controller.dispose);
+      tester.pumpWidget(
+        SizedBox(
+          height: 8,
+          child: CodeView.document(
+            document: document,
+            controller: controller,
+            autofocus: true,
+          ),
+        ),
+      );
+      tester.pump();
+      tester.pump();
+      var followUpReads = 0;
+      for (var i = 0; i < 20; i++) {
+        tester.sendMouse(
+          const MouseEvent(
+            kind: MouseEventKind.scrollDown,
+            button: MouseButton.none,
+            col: 2,
+            row: 2,
+          ),
+        );
+        tester.pump();
+        lines.reads = 0;
+        tester.pump();
+        followUpReads += lines.reads;
+      }
+      expect(followUpReads, 0);
+      expect(
+        tester
+            .semantics()
+            .single(role: SemanticRole.code)
+            .state['visibleRangeStart'],
+        greaterThan(0),
+      );
+      controller.currentIndex = 90;
+      tester.pump();
+      tester.pump();
+      expect(
+        tester
+            .semantics()
+            .single(role: SemanticRole.code)
+            .state['selectedLineNumber'],
+        91,
+      );
+      lines.reads = 0;
+      controller.notify();
+      tester.pump();
+      expect(
+        lines.reads,
+        greaterThan(0),
+        reason: 'explicit refresh still rebuilds content',
+      );
+    },
+  );
+
   group('CodeViewController lifecycle', () {
     test('dispose is idempotent and keeps final readable state', () {
       final controller = CodeViewController(initialIndex: 2);

@@ -2,6 +2,7 @@ import 'dart:async' show scheduleMicrotask, unawaited;
 
 import 'package:fleury/fleury_core.dart';
 
+import 'internal/collection_notifications.dart';
 import 'semantic_roles.dart';
 
 /// Protocol-neutral status for a node in a [TaskGraph].
@@ -51,10 +52,18 @@ final class TaskGraphNode {
 class TaskGraphController extends Notifier {
   TaskGraphController({int? initialIndex = 0})
     : _list = ListController(initialIndex: initialIndex) {
-    _list.addListener(notify);
+    _notifications = CollectionNotifications(
+      _list,
+      dispatch: notify,
+      publish: super.notify,
+    );
   }
 
   final ListController _list;
+  late final CollectionNotifications _notifications;
+
+  @override
+  void notify() => _notifications.publish();
   bool _disposed = false;
 
   ListController get _listController => _list;
@@ -82,7 +91,7 @@ class TaskGraphController extends Notifier {
   void dispose() {
     if (_disposed) return;
     _disposed = true;
-    _list.removeListener(notify);
+    _notifications.dispose();
     _list.dispose();
     super.dispose();
   }
@@ -204,7 +213,7 @@ class _TaskGraphState extends State<TaskGraph> {
     super.initState();
     _controller = widget.controller ?? TaskGraphController();
     _ownsController = widget.controller == null;
-    _controller.addListener(_onControllerChange);
+    _controller._notifications.viewChanges.addListener(_onControllerChange);
     _focusNode = widget.focusNode ?? FocusNode(debugLabel: 'TaskGraph');
     _ownsFocusNode = widget.focusNode == null;
   }
@@ -213,11 +222,13 @@ class _TaskGraphState extends State<TaskGraph> {
   void didUpdateWidget(covariant TaskGraph oldWidget) {
     super.didUpdateWidget(oldWidget);
     if (widget.controller != oldWidget.controller) {
-      _controller.removeListener(_onControllerChange);
+      _controller._notifications.viewChanges.removeListener(
+        _onControllerChange,
+      );
       if (_ownsController) _controller.dispose();
       _controller = widget.controller ?? TaskGraphController();
       _ownsController = widget.controller == null;
-      _controller.addListener(_onControllerChange);
+      _controller._notifications.viewChanges.addListener(_onControllerChange);
     }
     if (widget.focusNode != oldWidget.focusNode) {
       if (_ownsFocusNode) _focusNode.dispose();
@@ -300,7 +311,7 @@ class _TaskGraphState extends State<TaskGraph> {
 
   @override
   void dispose() {
-    _controller.removeListener(_onControllerChange);
+    _controller._notifications.viewChanges.removeListener(_onControllerChange);
     if (_ownsController) _controller.dispose();
     if (_ownsFocusNode) _focusNode.dispose();
     super.dispose();
@@ -358,15 +369,7 @@ class _TaskGraphState extends State<TaskGraph> {
 
   @override
   Widget build(BuildContext context) {
-    final currentIndex = _controller.currentIndex;
-    final visibleRange = _controller.visibleRange;
     final copyEnabled = widget.copySelection && widget.nodes.isNotEmpty;
-    final selectedNode =
-        currentIndex == null ||
-            currentIndex < 0 ||
-            currentIndex >= widget.nodes.length
-        ? null
-        : widget.nodes[currentIndex];
 
     Widget list = ListView.builder(
       controller: _controller._listController,
@@ -414,27 +417,38 @@ class _TaskGraphState extends State<TaskGraph> {
           if (copyEnabled) SemanticAction.copy,
         },
         onAction: _handleGraphAction,
-        state: SemanticState({
-          'collectionRowCount': widget.nodes.length,
-          'taskCount': widget.nodes.length,
-          'pendingTaskCount': counts[TaskGraphStatus.pending] ?? 0,
-          'runningTaskCount': counts[TaskGraphStatus.running] ?? 0,
-          'succeededTaskCount': counts[TaskGraphStatus.succeeded] ?? 0,
-          'failedTaskCount': counts[TaskGraphStatus.failed] ?? 0,
-          'cancelledTaskCount': counts[TaskGraphStatus.cancelled] ?? 0,
-          'skippedTaskCount': counts[TaskGraphStatus.skipped] ?? 0,
-          'copyEnabled': copyEnabled,
-          'clipboardPolicy': widget.copyOptions.clipboardPolicy.name,
-          if (visibleRange != null) ...{
-            'visibleRangeStart': visibleRange.first,
-            'visibleRangeEnd': visibleRange.last,
-          },
-          'currentIndex': ?currentIndex,
-          if (selectedNode != null) ...{
-            'selectedTaskId': selectedNode.id,
-            'selectedTaskStatus': selectedNode.status.name,
-          },
-        }),
+        stateListenable: _controller,
+        stateBuilder: () {
+          final currentIndex = _controller.currentIndex;
+          final selectedNode =
+              currentIndex == null ||
+                  currentIndex < 0 ||
+                  currentIndex >= widget.nodes.length
+              ? null
+              : widget.nodes[currentIndex];
+          final visibleRange = _controller.visibleRange;
+          return SemanticState({
+            'collectionRowCount': widget.nodes.length,
+            'taskCount': widget.nodes.length,
+            'pendingTaskCount': counts[TaskGraphStatus.pending] ?? 0,
+            'runningTaskCount': counts[TaskGraphStatus.running] ?? 0,
+            'succeededTaskCount': counts[TaskGraphStatus.succeeded] ?? 0,
+            'failedTaskCount': counts[TaskGraphStatus.failed] ?? 0,
+            'cancelledTaskCount': counts[TaskGraphStatus.cancelled] ?? 0,
+            'skippedTaskCount': counts[TaskGraphStatus.skipped] ?? 0,
+            'copyEnabled': copyEnabled,
+            'clipboardPolicy': widget.copyOptions.clipboardPolicy.name,
+            if (visibleRange != null) ...{
+              'visibleRangeStart': visibleRange.first,
+              'visibleRangeEnd': visibleRange.last,
+            },
+            'currentIndex': ?currentIndex,
+            if (selectedNode != null) ...{
+              'selectedTaskId': selectedNode.id,
+              'selectedTaskStatus': selectedNode.status.name,
+            },
+          });
+        },
         child: list,
       ),
     );

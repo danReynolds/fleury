@@ -35,6 +35,13 @@ import 'terminal_sequences.dart';
 import 'pointer_shapes.dart';
 import 'posix_input_lease.dart';
 
+/// Stops terminal-generated input before runtime teardown can yield. Kept out
+/// of the public driver interface: other drivers need no ANSI mode writes.
+@internal
+void stopPosixInputReports(TerminalDriver driver) {
+  if (driver is PosixTerminalDriver) driver._stopInputReports();
+}
+
 /// Native POSIX terminal lifecycle and byte-input driver.
 ///
 /// Interactive Ctrl+Z is handled orderly: Fleury restores the terminal,
@@ -1340,6 +1347,21 @@ class PosixTerminalDriver
     return completion.future;
   }
 
+  void _stopInputReports() {
+    final mode = _mode;
+    if (mode == null || !_wroteEnterSequences || _handoffActive || _suspended) {
+      return;
+    }
+    // These resets are repeatable. Do not pop the keyboard/pointer stacks or
+    // restore cooked input here; those still belong to the ordered teardown.
+    // Enqueue immediately without waiting for a flush or draining typeahead.
+    _stdout.write(
+      '\x1B[?1006l\x1B[?1003l\x1B[?1002l\x1B[?1000l'
+      '${mode.focusReporting ? '\x1B[?1004l' : ''}'
+      '${mode.bracketedPaste ? '\x1B[?2004l' : ''}',
+    );
+  }
+
   Future<void> _exitOutputMode(
     TerminalMode mode, {
     bool restoring = false,
@@ -1508,6 +1530,7 @@ class PosixTerminalDriver
     if ((!_nativeRawMode && _selfStopOverride == null) || _handoffActive) {
       return;
     }
+    _stopInputReports();
     _suspended = true;
     await _inlineTail;
     if (!_active || _restoring || lifecycleGeneration != _lifecycleGeneration) {
@@ -1620,6 +1643,7 @@ class PosixTerminalDriver
         throw StateError('Terminal session closed before handoff could start.');
       }
       final mode = handoffMode = _mode!;
+      _stopInputReports();
       _handoffActive = didHandoff = true;
       await _inlineTail;
       if (!_active || _restoring) {
@@ -1736,7 +1760,16 @@ class PosixTerminalDriver
   }
 
   @override
-  Future<void> restore() => _restoreFuture ??= _restore();
+  Future<void> restore() {
+    final pending = _restoreFuture;
+    if (pending != null) return pending;
+    // Publish before the first synchronous write: a custom sink can request
+    // restore from write(), including the early input-mode disables.
+    final completion = Completer<void>();
+    _restoreFuture = completion.future;
+    _restore().then(completion.complete, onError: completion.completeError);
+    return completion.future;
+  }
 
   Future<void> _restore() async {
     _entryUsed = true;
@@ -1826,6 +1859,14 @@ class PosixTerminalDriver
         }
         failure ??= (error, stack);
       }
+    }
+
+    // Stop reports before subscription cancellation or a slow reader release.
+    // A child that currently owns the terminal must remain untouched.
+    try {
+      _stopInputReports();
+    } catch (error, stack) {
+      if (!_savedOutputIsGone(error)) failure ??= (error, stack);
     }
 
     // Keep the signal shields active while an existing child/operation still

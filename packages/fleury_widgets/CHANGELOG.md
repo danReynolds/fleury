@@ -1,5 +1,12 @@
 ## 0.1.0
 
+- FileBrowser exposes a clickable, semantic parent-directory action in its
+  existing separator row, including empty and unreadable directories.
+- Collection widgets read viewport semantics lazily without rebuilding their
+  content after scrolling. Selection, filtering, expansion, explicit refresh,
+  and public controller notifications retain their behavior. The shared adapter
+  uses `ListController.viewChanges`; no private core imports are needed.
+
 - Tabs handle Left/Right and Home/End only while the tab strip has focus.
   Navigation bubbling from controls in a tab body no longer switches tabs or
   loses focus. Explicit Alt+digit and Ctrl+PageUp/PageDown shortcuts still work.

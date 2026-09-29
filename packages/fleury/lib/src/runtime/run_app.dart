@@ -1032,6 +1032,7 @@ Future<AppExit> _runAppImpl(
     }
 
     captureSync('frame driver', () => frameDriver?.dispose());
+    captureSync('input reporting', () => stopPosixInputReports(usedDriver));
     captureSync('semantics pipeline', () => semanticsPipeline?.dispose());
     captureSync('remote clipboard', () => remoteClipboard?.dispose());
 

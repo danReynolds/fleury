@@ -181,6 +181,57 @@ from them — the type and domain a `set_value` will accept — so an agent fill
 a field correctly the first time, and an out-of-domain value is rejected with
 a clear reason rather than silently dropped.
 
+## Live semantic state without rebuilding content
+
+Use `state:` for values known when a widget builds. Use `stateBuilder:` for
+values that become available after layout, such as a list's visible range:
+
+```dart
+Semantics(
+  role: SemanticRole.region,
+  label: 'Source viewport',
+  stateListenable: controller,
+  stateBuilder: () {
+    final range = controller.visibleRange;
+    return SemanticState({
+      if (range != null) ...{
+        'visibleRangeStart': range.first,
+        'visibleRangeEnd': range.last,
+      },
+    });
+  },
+  child: SizedBox(
+    height: 8,
+    child: ListView.builder(
+      controller: controller,
+      itemCount: lines.length,
+      itemBuilder: (_, index, _) => Text(lines[index]),
+    ),
+  ),
+)
+```
+
+Here `controller` is a `ListController` owned by the enclosing state. A completed
+scroll updates the semantic snapshot without rebuilding this wrapper or its
+content. First-party collections already use this pattern.
+
+The callback runs when semantics are collected. It can run several times per
+frame, and a terminal session without a semantic consumer may never call it.
+Keep it a pure read: no inherited dependency reads, model mutations, or work
+scheduling. Return a snapshot whose map and nested values will not be mutated.
+Compute expensive content summaries when content changes; reading viewport state
+should not scan the entire collection.
+
+`stateListenable` invalidates the semantic snapshot even when no pixels change.
+The element manages the subscription across moves and replacement, but does not
+dispose your model. Without a listenable, changing the model alone does not
+schedule a semantic update. Supply either `state` or `stateBuilder`.
+
+For a custom collection wrapper whose visual content depends on the controller,
+listen to `controller.viewChanges` in its build dependency. That signal covers
+cursor changes, explicit content refresh, and scroll requests. Ordinary
+controller listeners continue to receive completed viewport metrics as well.
+
 ## The graph is the API — for tests, too
 
 That graph isn't a diagram of something internal; it's the API — and agents

@@ -3,6 +3,7 @@ import 'dart:async' show unawaited;
 import 'package:characters/characters.dart';
 import 'package:fleury/fleury_core.dart';
 
+import 'internal/collection_notifications.dart';
 import 'semantic_roles.dart';
 
 /// Protocol-neutral role for one message in a [MessageList].
@@ -130,10 +131,18 @@ class MessageListController extends Notifier {
          initialIndex: initialIndex,
          followTail: followTail,
        ) {
-    _list.addListener(notify);
+    _notifications = CollectionNotifications(
+      _list,
+      dispatch: notify,
+      publish: super.notify,
+    );
   }
 
   final ListController _list;
+  late final CollectionNotifications _notifications;
+
+  @override
+  void notify() => _notifications.publish();
   bool _disposed = false;
 
   ListController get _listController => _list;
@@ -181,7 +190,7 @@ class MessageListController extends Notifier {
   void dispose() {
     if (_disposed) return;
     _disposed = true;
-    _list.removeListener(notify);
+    _notifications.dispose();
     _list.dispose();
     super.dispose();
   }
@@ -290,7 +299,7 @@ class _MessageListState extends State<MessageList> {
     super.initState();
     _controller = widget.controller ?? MessageListController();
     _ownsController = widget.controller == null;
-    _controller.addListener(_onControllerChange);
+    _controller._notifications.viewChanges.addListener(_onControllerChange);
     _focusNode = widget.focusNode ?? FocusNode(debugLabel: 'MessageList');
     _ownsFocusNode = widget.focusNode == null;
   }
@@ -299,11 +308,13 @@ class _MessageListState extends State<MessageList> {
   void didUpdateWidget(covariant MessageList oldWidget) {
     super.didUpdateWidget(oldWidget);
     if (widget.controller != oldWidget.controller) {
-      _controller.removeListener(_onControllerChange);
+      _controller._notifications.viewChanges.removeListener(
+        _onControllerChange,
+      );
       if (_ownsController) _controller.dispose();
       _controller = widget.controller ?? MessageListController();
       _ownsController = widget.controller == null;
-      _controller.addListener(_onControllerChange);
+      _controller._notifications.viewChanges.addListener(_onControllerChange);
     }
     if (widget.focusNode != oldWidget.focusNode) {
       if (_ownsFocusNode) _focusNode.dispose();
@@ -328,7 +339,7 @@ class _MessageListState extends State<MessageList> {
 
   @override
   void dispose() {
-    _controller.removeListener(_onControllerChange);
+    _controller._notifications.viewChanges.removeListener(_onControllerChange);
     if (_ownsController) _controller.dispose();
     if (_ownsFocusNode) _focusNode.dispose();
     super.dispose();
@@ -392,15 +403,7 @@ class _MessageListState extends State<MessageList> {
 
   @override
   Widget build(BuildContext context) {
-    final visibleRange = _controller.visibleRange;
-    final currentIndex = _controller.currentIndex;
     final copyEnabled = widget.copySelection && widget.messages.isNotEmpty;
-    final selectedMessage =
-        currentIndex == null ||
-            currentIndex < 0 ||
-            currentIndex >= widget.messages.length
-        ? null
-        : widget.messages[currentIndex];
 
     Widget list = ListView.builder(
       controller: _controller._listController,
@@ -451,21 +454,32 @@ class _MessageListState extends State<MessageList> {
           if (copyEnabled) SemanticAction.copy,
         },
         onAction: _handleListAction,
-        state: SemanticState({
-          'collectionRowCount': widget.messages.length,
-          'totalMessageCount': widget.messages.length,
-          'followTail': _controller.followTail,
-          'isFollowing': _controller.isFollowing,
-          'copyEnabled': copyEnabled,
-          'copyIncludesPrefix': widget.copyOptions.includePrefix,
-          'clipboardPolicy': widget.copyOptions.clipboardPolicy.name,
-          if (visibleRange != null) ...{
-            'visibleRangeStart': visibleRange.first,
-            'visibleRangeEnd': visibleRange.last,
-          },
-          'currentIndex': ?currentIndex,
-          ..._selectedMessageState(selectedMessage),
-        }),
+        stateListenable: _controller,
+        stateBuilder: () {
+          final currentIndex = _controller.currentIndex;
+          final selectedMessage =
+              currentIndex == null ||
+                  currentIndex < 0 ||
+                  currentIndex >= widget.messages.length
+              ? null
+              : widget.messages[currentIndex];
+          final visibleRange = _controller.visibleRange;
+          return SemanticState({
+            'collectionRowCount': widget.messages.length,
+            'totalMessageCount': widget.messages.length,
+            'followTail': _controller.followTail,
+            'isFollowing': _controller.isFollowing,
+            'copyEnabled': copyEnabled,
+            'copyIncludesPrefix': widget.copyOptions.includePrefix,
+            'clipboardPolicy': widget.copyOptions.clipboardPolicy.name,
+            if (visibleRange != null) ...{
+              'visibleRangeStart': visibleRange.first,
+              'visibleRangeEnd': visibleRange.last,
+            },
+            'currentIndex': ?currentIndex,
+            ..._selectedMessageState(selectedMessage),
+          });
+        },
         child: list,
       ),
     );

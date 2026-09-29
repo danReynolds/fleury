@@ -2,6 +2,7 @@ import 'dart:async' show scheduleMicrotask, unawaited;
 
 import 'package:fleury/fleury_core.dart';
 
+import 'internal/collection_notifications.dart';
 import 'semantic_roles.dart';
 
 /// Type of target exposed by [FileMentionPicker].
@@ -65,10 +66,18 @@ typedef FileMentionMatcher =
 class FileMentionPickerController extends Notifier {
   FileMentionPickerController({int? initialIndex = 0})
     : _list = ListController(initialIndex: initialIndex) {
-    _list.addListener(notify);
+    _notifications = CollectionNotifications(
+      _list,
+      dispatch: notify,
+      publish: super.notify,
+    );
   }
 
   final ListController _list;
+  late final CollectionNotifications _notifications;
+
+  @override
+  void notify() => _notifications.publish();
   bool _disposed = false;
 
   ListController get _listController => _list;
@@ -96,7 +105,7 @@ class FileMentionPickerController extends Notifier {
   void dispose() {
     if (_disposed) return;
     _disposed = true;
-    _list.removeListener(notify);
+    _notifications.dispose();
     _list.dispose();
     super.dispose();
   }
@@ -300,7 +309,7 @@ class _FileMentionPickerState extends State<FileMentionPicker> {
     _query.addListener(_onQueryChange);
     _controller = widget.controller ?? FileMentionPickerController();
     _ownsController = widget.controller == null;
-    _controller.addListener(_onControllerChange);
+    _controller._notifications.viewChanges.addListener(_onControllerChange);
     _queryFocusNode =
         widget.queryFocusNode ??
         FocusNode(debugLabel: 'FileMentionPicker query');
@@ -323,11 +332,13 @@ class _FileMentionPickerState extends State<FileMentionPicker> {
       _query.addListener(_onQueryChange);
     }
     if (widget.controller != oldWidget.controller) {
-      _controller.removeListener(_onControllerChange);
+      _controller._notifications.viewChanges.removeListener(
+        _onControllerChange,
+      );
       if (_ownsController) _controller.dispose();
       _controller = widget.controller ?? FileMentionPickerController();
       _ownsController = widget.controller == null;
-      _controller.addListener(_onControllerChange);
+      _controller._notifications.viewChanges.addListener(_onControllerChange);
     }
     if (widget.queryFocusNode != oldWidget.queryFocusNode) {
       if (_ownsQueryFocusNode) _queryFocusNode.dispose();
@@ -553,7 +564,7 @@ class _FileMentionPickerState extends State<FileMentionPicker> {
   void dispose() {
     _query.removeListener(_onQueryChange);
     if (_ownsQuery) _query.dispose();
-    _controller.removeListener(_onControllerChange);
+    _controller._notifications.viewChanges.removeListener(_onControllerChange);
     if (_ownsController) _controller.dispose();
     if (_ownsQueryFocusNode) _queryFocusNode.dispose();
     if (_ownsResultsFocusNode) _resultsFocusNode.dispose();
@@ -567,7 +578,6 @@ class _FileMentionPickerState extends State<FileMentionPicker> {
         ? 1
         : (order.length > widget.maxVisible ? widget.maxVisible : order.length);
     final selected = _selectedMention(order);
-    final visibleRange = _controller.visibleRange;
     final copyEnabled = widget.copySelection && selected != null;
     final canPick = widget.onPick != null;
 
@@ -659,20 +669,24 @@ class _FileMentionPickerState extends State<FileMentionPicker> {
           if (copyEnabled) SemanticAction.copy,
         },
         onAction: _handlePickerAction,
-        state: SemanticState({
-          'filterText': _query.text,
-          'collectionRowCount': order.length,
-          'totalMentionCount': widget.entries.length,
-          'filteredMentionCount': order.length,
-          'copyEnabled': copyEnabled,
-          'clipboardPolicy': widget.copyOptions.clipboardPolicy.name,
-          if (visibleRange != null && order.isNotEmpty) ...{
-            'visibleRangeStart': visibleRange.first,
-            'visibleRangeEnd': visibleRange.last,
-          },
-          'currentIndex': ?_controller.currentIndex,
-          if (selected != null) ..._selectedMentionState(selected.entry),
-        }),
+        stateListenable: _controller,
+        stateBuilder: () {
+          final visibleRange = _controller.visibleRange;
+          return SemanticState({
+            'filterText': _query.text,
+            'collectionRowCount': order.length,
+            'totalMentionCount': widget.entries.length,
+            'filteredMentionCount': order.length,
+            'copyEnabled': copyEnabled,
+            'clipboardPolicy': widget.copyOptions.clipboardPolicy.name,
+            if (visibleRange != null && order.isNotEmpty) ...{
+              'visibleRangeStart': visibleRange.first,
+              'visibleRangeEnd': visibleRange.last,
+            },
+            'currentIndex': ?_controller.currentIndex,
+            if (selected != null) ..._selectedMentionState(selected.entry),
+          });
+        },
         child: panel,
       ),
     );

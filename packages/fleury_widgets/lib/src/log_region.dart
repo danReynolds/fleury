@@ -5,6 +5,7 @@ import 'package:characters/characters.dart';
 import 'package:fleury/fleury.dart';
 
 import 'component_theme.dart';
+import 'internal/collection_notifications.dart';
 
 /// Severity attached to a [LogEntry].
 enum LogSeverity { trace, debug, info, warning, error, success }
@@ -151,10 +152,18 @@ class LogRegionController extends Notifier {
          initialIndex: initialIndex,
          followTail: followTail,
        ) {
-    _list.addListener(notify);
+    _notifications = CollectionNotifications(
+      _list,
+      dispatch: notify,
+      publish: super.notify,
+    );
   }
 
   final ListController _list;
+  late final CollectionNotifications _notifications;
+
+  @override
+  void notify() => _notifications.publish();
   bool _disposed = false;
 
   ListController get _listController => _list;
@@ -202,7 +211,7 @@ class LogRegionController extends Notifier {
   void dispose() {
     if (_disposed) return;
     _disposed = true;
-    _list.removeListener(notify);
+    _notifications.dispose();
     _list.dispose();
     super.dispose();
   }
@@ -331,7 +340,7 @@ class _LogRegionState extends State<LogRegion> {
     super.initState();
     _controller = widget.controller ?? LogRegionController();
     _ownsController = widget.controller == null;
-    _controller.addListener(_onControllerChange);
+    _controller._notifications.viewChanges.addListener(_onControllerChange);
     _focusNode = widget.focusNode ?? FocusNode(debugLabel: 'LogRegion');
     _ownsFocusNode = widget.focusNode == null;
   }
@@ -340,11 +349,13 @@ class _LogRegionState extends State<LogRegion> {
   void didUpdateWidget(covariant LogRegion oldWidget) {
     super.didUpdateWidget(oldWidget);
     if (widget.controller != oldWidget.controller) {
-      _controller.removeListener(_onControllerChange);
+      _controller._notifications.viewChanges.removeListener(
+        _onControllerChange,
+      );
       if (_ownsController) _controller.dispose();
       _controller = widget.controller ?? LogRegionController();
       _ownsController = widget.controller == null;
-      _controller.addListener(_onControllerChange);
+      _controller._notifications.viewChanges.addListener(_onControllerChange);
     }
     if (widget.focusNode != oldWidget.focusNode) {
       if (_ownsFocusNode) _focusNode.dispose();
@@ -393,7 +404,7 @@ class _LogRegionState extends State<LogRegion> {
 
   @override
   void dispose() {
-    _controller.removeListener(_onControllerChange);
+    _controller._notifications.viewChanges.removeListener(_onControllerChange);
     if (_ownsController) _controller.dispose();
     if (_ownsFocusNode) _focusNode.dispose();
     super.dispose();
@@ -484,13 +495,7 @@ class _LogRegionState extends State<LogRegion> {
   @override
   Widget build(BuildContext context) {
     final order = _entryOrder();
-    final visibleRange = _controller.visibleRange;
-    final currentIndex = _controller.currentIndex;
     final copyEnabled = widget.copySelection && order.isNotEmpty;
-    final selectedEntry =
-        currentIndex == null || currentIndex < 0 || currentIndex >= order.length
-        ? null
-        : widget.entries[order[currentIndex]];
 
     Widget list = ListView.builder(
       controller: _controller._listController,
@@ -555,24 +560,35 @@ class _LogRegionState extends State<LogRegion> {
           if (copyEnabled) SemanticAction.copy,
         },
         onAction: _handleLogAction,
-        state: SemanticState({
-          'collectionRowCount': order.length,
-          'totalEntryCount': widget.entries.length,
-          'filteredEntryCount': order.length,
-          ..._filterState(widget.filter),
-          'followTail': _controller.followTail,
-          'isFollowing': _controller.isFollowing,
-          'copyEnabled': copyEnabled,
-          'copyIncludesPrefix': widget.copyOptions.includePrefix,
-          'clipboardPolicy': widget.copyOptions.clipboardPolicy.name,
-          ..._lastEntryState(widget.entries, order),
-          if (visibleRange != null) ...{
-            'visibleRangeStart': visibleRange.first,
-            'visibleRangeEnd': visibleRange.last,
-          },
-          ..._currentIndexState(currentIndex),
-          ..._selectedEntryState(selectedEntry),
-        }),
+        stateListenable: _controller,
+        stateBuilder: () {
+          final currentIndex = _controller.currentIndex;
+          final selectedEntry =
+              currentIndex == null ||
+                  currentIndex < 0 ||
+                  currentIndex >= order.length
+              ? null
+              : widget.entries[order[currentIndex]];
+          final visibleRange = _controller.visibleRange;
+          return SemanticState({
+            'collectionRowCount': order.length,
+            'totalEntryCount': widget.entries.length,
+            'filteredEntryCount': order.length,
+            ..._filterState(widget.filter),
+            'followTail': _controller.followTail,
+            'isFollowing': _controller.isFollowing,
+            'copyEnabled': copyEnabled,
+            'copyIncludesPrefix': widget.copyOptions.includePrefix,
+            'clipboardPolicy': widget.copyOptions.clipboardPolicy.name,
+            ..._lastEntryState(widget.entries, order),
+            if (visibleRange != null) ...{
+              'visibleRangeStart': visibleRange.first,
+              'visibleRangeEnd': visibleRange.last,
+            },
+            ..._currentIndexState(currentIndex),
+            ..._selectedEntryState(selectedEntry),
+          });
+        },
         child: list,
       ),
     );

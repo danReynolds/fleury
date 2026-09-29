@@ -108,14 +108,36 @@ class ListController extends Notifier {
   int _attachment = 0;
   int _viewRevision = 0;
   bool _nextNotificationIsMetrics = false;
+  Notifier? _viewChanges;
+
+  /// Changes to the requested view: cursor, content refresh, or scroll requests.
+  ///
+  /// Unlike this controller's ordinary listeners, these listeners are not
+  /// called when layout publishes the resulting viewport metrics. Collection
+  /// wrappers can rebuild their content from this source and observe this
+  /// controller separately for semantic state such as [visibleRange].
+  /// The controller owns this listenable; callers must not dispose it. Once
+  /// obtained, it remains accessible after disposal so listeners can detach.
+  Listenable get viewChanges {
+    final changes = _viewChanges;
+    if (changes != null) return changes;
+    _checkNotDisposed();
+    return _viewChanges = Notifier();
+  }
 
   /// Refreshes consumers after externally managed list content changes.
   @override
   void notify() {
+    _checkNotDisposed();
     // Consume the kind before invoking listeners: a nested command or explicit
     // refresh must advance the view revision even during metric delivery.
-    if (!_nextNotificationIsMetrics) _viewRevision++;
+    final metrics = _nextNotificationIsMetrics;
     _nextNotificationIsMetrics = false;
+    if (!metrics) {
+      _viewRevision++;
+      _viewChanges?.notify();
+      if (_disposed) return; // a view listener may dispose the controller
+    }
     super.notify();
   }
 
@@ -448,6 +470,7 @@ class ListController extends Notifier {
     _disposed = true;
     _detach();
     _clearRequests();
+    _viewChanges?.dispose();
     super.dispose();
   }
 }

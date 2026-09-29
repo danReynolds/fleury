@@ -541,29 +541,10 @@ class _RenderScrollView extends RenderObject
     final scratch = _scratch = CellBuffer.acquire(_scratch, size);
     c.paint(scratch, _scrollDirection.offset(-scroll));
 
-    final bufCols = buffer.size.cols;
-    final bufRows = buffer.size.rows;
     final visibleCols = size.cols < childSize.cols ? size.cols : childSize.cols;
-    for (var r = 0; r < size.rows; r++) {
-      final tr = offset.row + r;
-      if (tr < 0 || tr >= bufRows) continue;
-      for (var col = 0; col < visibleCols; col++) {
-        final tc = offset.col + col;
-        if (tc < 0 || tc >= bufCols) continue;
-        // Replay, not re-measure: the viewport carries the cells the child
-        // painted, wide-pair roles included. Re-deriving the width here would
-        // let the frame buffer disagree with the scratch the child measured
-        // into, severing every ambiguous-width pair on a surface whose probe
-        // measured ambiguous glyphs wide.
-        buffer.replayCellFrom(scratch, col, r, tc, tr);
-      }
-    }
-    // Inline images live on the buffer as placements, not in cells, so carry
-    // the exact source window the leading-cell loop used. The scratch
-    // placements are already scroll-adjusted (the child painted at
-    // row -scroll); preserving their original box metadata keeps partial
-    // leading/trailing slices fitted against the unscrolled image.
-    buffer.compositeImageRectFrom(
+    // Composite cells and image windows with the same clipping rules used by
+    // cached subtrees and Flex overflow.
+    buffer.compositeRectFrom(
       scratch,
       CellRect.fromLTWH(0, 0, visibleCols, size.rows),
       offset,

@@ -5,6 +5,7 @@ import 'package:characters/characters.dart';
 import 'package:fleury/fleury_core.dart';
 
 import 'component_theme.dart';
+import 'internal/collection_notifications.dart';
 
 /// JSON value type represented by a [JsonViewRow].
 enum JsonValueType { object, array, string, number, boolean, nullValue }
@@ -111,12 +112,20 @@ class JsonViewController extends Notifier {
   }) : _expandedPointers = Set<String>.of(expandedPointers),
        _collapsedPointers = Set<String>.of(collapsedPointers),
        _list = ListController(initialIndex: initialIndex) {
-    _list.addListener(notify);
+    _notifications = CollectionNotifications(
+      _list,
+      dispatch: notify,
+      publish: super.notify,
+    );
   }
 
   final Set<String> _expandedPointers;
   final Set<String> _collapsedPointers;
   final ListController _list;
+  late final CollectionNotifications _notifications;
+
+  @override
+  void notify() => _notifications.publish();
   bool _disposed = false;
 
   /// Bumped by every change to what is expanded, and by nothing else: the
@@ -195,7 +204,7 @@ class JsonViewController extends Notifier {
   void dispose() {
     if (_disposed) return;
     _disposed = true;
-    _list.removeListener(notify);
+    _notifications.dispose();
     _list.dispose();
     super.dispose();
   }
@@ -513,7 +522,7 @@ class _JsonViewState extends State<JsonView> {
     super.initState();
     _controller = widget.controller ?? JsonViewController();
     _ownsController = widget.controller == null;
-    _controller.addListener(_onControllerChange);
+    _controller._notifications.viewChanges.addListener(_onControllerChange);
     _focusNode = widget.focusNode ?? FocusNode(debugLabel: 'JsonView');
     _ownsFocusNode = widget.focusNode == null;
   }
@@ -522,11 +531,13 @@ class _JsonViewState extends State<JsonView> {
   void didUpdateWidget(covariant JsonView oldWidget) {
     super.didUpdateWidget(oldWidget);
     if (widget.controller != oldWidget.controller) {
-      _controller.removeListener(_onControllerChange);
+      _controller._notifications.viewChanges.removeListener(
+        _onControllerChange,
+      );
       if (_ownsController) _controller.dispose();
       _controller = widget.controller ?? JsonViewController();
       _ownsController = widget.controller == null;
-      _controller.addListener(_onControllerChange);
+      _controller._notifications.viewChanges.addListener(_onControllerChange);
     }
     if (widget.focusNode != oldWidget.focusNode) {
       if (_ownsFocusNode) _focusNode.dispose();
@@ -546,7 +557,7 @@ class _JsonViewState extends State<JsonView> {
 
   @override
   void dispose() {
-    _controller.removeListener(_onControllerChange);
+    _controller._notifications.viewChanges.removeListener(_onControllerChange);
     if (_ownsController) _controller.dispose();
     if (_ownsFocusNode) _focusNode.dispose();
     super.dispose();
@@ -715,8 +726,9 @@ class _JsonViewState extends State<JsonView> {
     if (!widget.document.valid) return _buildInvalidDocument();
 
     final rows = _rows;
-    final selected = _selectedRow(rows);
-    final visibleRange = _controller.visibleRange;
+    final expandedCount = rows
+        .where((row) => row.expandable && row.expanded)
+        .length;
     final copyEnabled = widget.copySelection && rows.isNotEmpty;
     final visible = rows.isEmpty
         ? 1
@@ -794,28 +806,31 @@ class _JsonViewState extends State<JsonView> {
           if (copyEnabled) SemanticAction.copy,
         },
         onAction: (action) => _handleJsonAction(action, rows),
-        state: SemanticState({
-          'valid': true,
-          'collectionRowCount': rows.length,
-          'rootType': rows.first.type.name,
-          'expandedCount': rows
-              .where((row) => row.expandable && row.expanded)
-              .length,
-          'copyEnabled': copyEnabled,
-          'copyMode': widget.copyOptions.mode.name,
-          'clipboardPolicy': widget.copyOptions.clipboardPolicy.name,
-          if (visibleRange != null) ...{
-            'visibleRangeStart': visibleRange.first,
-            'visibleRangeEnd': visibleRange.last,
-          },
-          if (_controller.currentIndex != null)
-            'currentIndex': _controller.currentIndex,
-          if (selected != null) ...{
-            'selectedKey': selected.pointer,
-            'selectedPath': selected.path,
-            'selectedType': selected.type.name,
-          },
-        }),
+        stateListenable: _controller,
+        stateBuilder: () {
+          final selected = _selectedRow(rows);
+          final visibleRange = _controller.visibleRange;
+          return SemanticState({
+            'valid': true,
+            'collectionRowCount': rows.length,
+            'rootType': rows.first.type.name,
+            'expandedCount': expandedCount,
+            'copyEnabled': copyEnabled,
+            'copyMode': widget.copyOptions.mode.name,
+            'clipboardPolicy': widget.copyOptions.clipboardPolicy.name,
+            if (visibleRange != null) ...{
+              'visibleRangeStart': visibleRange.first,
+              'visibleRangeEnd': visibleRange.last,
+            },
+            if (_controller.currentIndex != null)
+              'currentIndex': _controller.currentIndex,
+            if (selected != null) ...{
+              'selectedKey': selected.pointer,
+              'selectedPath': selected.path,
+              'selectedType': selected.type.name,
+            },
+          });
+        },
         child: list,
       ),
     );

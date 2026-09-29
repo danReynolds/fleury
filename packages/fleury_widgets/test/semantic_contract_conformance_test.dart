@@ -47,7 +47,7 @@ const Map<String, List<String>> _semanticCatalog = {
   'dialog': ['dialog'],
   'diff_view': ['diff', 'diffLine'],
   'digits': ['text'],
-  'file_browser': ['tree', 'treeItem'],
+  'file_browser': ['button', 'tree', 'treeItem'],
   'file_mention_picker': ['fileMention', 'fileMentionPicker'],
   'file_picker': ['tree', 'treeItem'],
   'form': ['form'],

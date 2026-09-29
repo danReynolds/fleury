@@ -103,6 +103,11 @@ class InputDispatcher {
   Timer? _timer;
   bool _disposed = false;
 
+  // A segmented paste belongs to the claimant that accepted its first part.
+  // Subsequent focus changes must not send its tail into another field.
+  ({int id, FocusNode node, TextInputClaimant claimant})? _pasteOwner;
+  int _pasteRevision = 0;
+
   /// Reactive view of the current pending sequence, shared with the widget
   /// tree by `runApp` (via `PendingSequenceScope`) so a which-key widget can
   /// read it through `KeyBindings.pendingOf`. Updated whenever the pending
@@ -972,18 +977,51 @@ class InputDispatcher {
     return KeyEventResult.ignored;
   }
 
-  /// Offers bracketed paste content to each [TextInputClaimant] up the focus
-  /// chain until one consumes it.
+  /// Routes a whole paste to the claimant that accepted its first segment.
   KeyEventResult _deliverPaste(PasteEvent event) {
+    KeyEventResult deliver(TextInputClaimant claimant) =>
+        claimant is PasteEventClaimant
+        ? (claimant as PasteEventClaimant).onPasteEvent(event)
+        : claimant.onPaste(event.text);
+
+    if (!event.isFirst) {
+      final owner = _pasteOwner;
+      if (owner == null || owner.id != event.pasteId) {
+        return KeyEventResult.ignored;
+      }
+      // Clear before calling user code: a final handler can start a new paste.
+      if (event.isFinal) _pasteOwner = null;
+      if (!owner.node.acceptsInput ||
+          !identical(owner.node.textInputClaimant, owner.claimant)) {
+        _pasteOwner = null;
+        return KeyEventResult.ignored;
+      }
+      return deliver(owner.claimant);
+    }
+
+    final revision = ++_pasteRevision;
+    _pasteOwner = null;
     for (final node in focusManager.activeChain()) {
       final claimant = node.textInputClaimant;
       if (claimant == null) continue;
-      final result = claimant is PasteEventClaimant
-          ? (claimant as PasteEventClaimant).onPasteEvent(event)
-          : claimant.onPaste(event.text);
-      if (result == KeyEventResult.handled) {
-        return KeyEventResult.handled;
+      final owner = event.isFinal
+          ? null
+          : (id: event.pasteId!, node: node, claimant: claimant);
+      _pasteOwner = owner;
+      final KeyEventResult result;
+      try {
+        result = deliver(claimant);
+      } catch (_) {
+        // A failed claimant never accepted ownership. Preserve a newer paste
+        // if the callback started one before throwing.
+        if (_pasteRevision == revision) _pasteOwner = null;
+        rethrow;
       }
+      if (result == KeyEventResult.handled) return result;
+      // Records have no stable identity. A revision also detects a nested
+      // complete paste, whose owner has already returned to null.
+      if (_pasteRevision != revision || _disposed) return result;
+      _pasteOwner = null;
     }
     return KeyEventResult.ignored;
   }
@@ -1275,6 +1313,7 @@ class InputDispatcher {
     _capture = null;
     _captureContext = null;
     _disposed = true;
+    _pasteOwner = null;
     // Teardown is authority loss (RFC 0020 §6): recover held keys so every
     // observer's stream closes its open presses (one up per down, always).
     final releases = keyboardSession.loseAuthority();

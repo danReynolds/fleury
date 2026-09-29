@@ -6,7 +6,10 @@ import 'package:fleury/fleury.dart';
 import 'package:fleury/src/terminal/capabilities.dart'
     show widthProbeIsPermittedByEnvironment;
 import 'package:fleury/src/terminal/posix_driver.dart'
-    show PosixTerminalModeController, isTerminalGoneError;
+    show
+        PosixTerminalModeController,
+        isTerminalGoneError,
+        stopPosixInputReports;
 import 'package:test/test.dart';
 
 class _FakeStdin implements Stdin {
@@ -254,6 +257,92 @@ class _OnMount extends StatelessWidget {
 }
 
 void main() {
+  test(
+    'input reports stop synchronously without releasing protocol stacks',
+    () async {
+      final input = _FakeStdin();
+      final output = _RecordingStdout(terminal: true);
+      final driver = PosixTerminalDriver(
+        stdinOverride: input,
+        stdoutOverride: output,
+      );
+      try {
+        await driver.enter(TerminalMode.interactive);
+        output.written.clear();
+        stopPosixInputReports(driver);
+        final bytes = output.written.toString();
+        expect(bytes, contains('\x1B[?1000l'));
+        expect(bytes, contains('\x1B[?2004l'));
+        expect(bytes, isNot(contains('\x1B[<1u')));
+        expect(bytes, isNot(contains('\x1B[?1049l')));
+        output.written.clear();
+        final restoring = driver.restore();
+        expect(
+          output.written.toString(),
+          contains('\x1B[?1000l'),
+          reason: 'reports stop before the first teardown await',
+        );
+        await restoring;
+      } finally {
+        await driver.restore();
+        await input.close();
+      }
+    },
+  );
+
+  test(
+    'synchronous report shutdown reentry shares the same restore future',
+    () async {
+      final input = _FakeStdin();
+      late PosixTerminalDriver driver;
+      Future<void>? reentrant;
+      var armed = false;
+      final output = _RecordingStdout(
+        terminal: true,
+        onWrite: (_) {
+          if (armed) {
+            armed = false;
+            reentrant = driver.restore();
+          }
+        },
+      );
+      driver = PosixTerminalDriver(
+        stdinOverride: input,
+        stdoutOverride: output,
+      );
+      try {
+        await driver.enter(TerminalMode.interactive);
+        armed = true;
+        final restoring = driver.restore();
+        expect(reentrant, same(restoring));
+        await restoring;
+      } finally {
+        await driver.restore();
+        await input.close();
+      }
+    },
+  );
+
+  test('early report shutdown leaves a borrowed terminal untouched', () async {
+    final input = _FakeStdin();
+    final output = _RecordingStdout(terminal: true);
+    final driver = PosixTerminalDriver(
+      stdinOverride: input,
+      stdoutOverride: output,
+    );
+    try {
+      await driver.enter(TerminalMode.interactive);
+      await driver.runWithTerminalHandoff(() async {
+        output.written.clear();
+        stopPosixInputReports(driver);
+        expect(output.written.toString(), isEmpty);
+      });
+    } finally {
+      await driver.restore();
+      await input.close();
+    }
+  });
+
   test(
     'ambiguous protocol mutation quarantines later runApp admission',
     () async {
