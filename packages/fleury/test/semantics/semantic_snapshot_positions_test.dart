@@ -96,7 +96,7 @@ void main() {
         expect(tree.root.children.map((n) => n.id.value), expected);
         expect(
           semanticAnchorOf(global.currentContext! as Element),
-          '${keyedRoot ? 'auto:outer%2F%7E%25/' : 'auto:'}inner%2F%7E%25/~0',
+          '${keyedRoot ? 'auto:s:outer%2F%7E%25/' : 'auto:~0/'}~1/~0/s:inner%2F%7E%25/~0',
         );
       },
     );
@@ -199,7 +199,7 @@ void main() {
     expect(tree.nodeCount, count + 1);
     expect(root.childVisits, lessThanOrEqualTo(count * 3));
     for (var i = 0; i < count; i++) {
-      expect(tree.root.children[i].id.value, 'auto:scope/~$i');
+      expect(tree.root.children[i].id.value, 'auto:s:scope/~$i');
       expect(tree.elementById(tree.root.children[i].id), isA<_AnchorElement>());
     }
   });
@@ -224,7 +224,7 @@ void main() {
         final root = owner.mountRoot(scene(false));
         addTearDown(root.unmount);
         final element = key.currentContext! as Element;
-        expect(semanticAnchorOf(element), 'auto:scope/~0');
+        expect(semanticAnchorOf(element), 'auto:s:scope/~0');
         if (fail) {
           expect(() => SemanticTree.fromElement(root), throwsStateError);
         } else {
@@ -235,9 +235,9 @@ void main() {
         expect(identical(key.currentContext, element), isTrue);
         // Read outside collection first: no prior snapshot may leave indices
         // behind for action dispatch or a retained-leaf update to consume.
-        expect(semanticAnchorOf(element), 'auto:scope/~1');
+        expect(semanticAnchorOf(element), 'auto:s:scope/~1');
         final next = SemanticTree.fromElement(root);
-        expect(next.root.children.first.id.value, 'auto:scope/~1');
+        expect(next.root.children.first.id.value, 'auto:s:scope/~1');
         expect(next.elementById(next.root.children.first.id), same(element));
       },
     );
@@ -259,17 +259,17 @@ void main() {
       addTearDown(root.unmount);
       final element = key.currentContext;
       final before = SemanticTree.fromElement(root);
-      expect(before.root.children.single.id.value, 'auto:a/~0');
+      expect(before.root.children.single.id.value, 'auto:~0/s:a/~0');
       owner.updateRoot(root, scene(true));
       expect(key.currentContext, same(element));
       final after = SemanticTree.fromElement(root);
-      expect(after.root.children.single.id.value, 'auto:b/~0');
+      expect(after.root.children.single.id.value, 'auto:~0/s:b/~0');
       expect(
-        after.elementById(const SemanticNodeId('auto:b/~0')),
+        after.elementById(const SemanticNodeId('auto:~0/s:b/~0')),
         same(element),
       );
-      expect(after.elementById(const SemanticNodeId('auto:a/~0')), isNull);
-      expect(before.root.children.single.id.value, 'auto:a/~0');
+      expect(after.elementById(const SemanticNodeId('auto:~0/s:a/~0')), isNull);
+      expect(before.root.children.single.id.value, 'auto:~0/s:a/~0');
     },
   );
 }

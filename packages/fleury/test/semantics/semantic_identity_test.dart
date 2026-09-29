@@ -143,7 +143,7 @@ void main() {
       expect(id.value, startsWith('auto:'));
       expect(
         id.value,
-        contains('/row-a/'),
+        contains('/s:row-a/'),
         reason: 'the keyed ancestor (rendered compactly) anchors the id',
       );
       expect(id.value, isNot(contains('element-')));

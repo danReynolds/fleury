@@ -39,7 +39,7 @@
 | E | high | DataTable stops virtualizing under an unbounded height (e.g. as a Column child): every row is built each frame and the cursor moves off-screen | Decision pending: unbounded-height DataTable |
 | E | high | FileBrowser strands the keyboard in an empty or unreadable directory: Left/Backspace go dead and there is no way back up | Fixed (a clickable parent row is a follow-up) |
 | E | high | Image re-decodes on every parent rebuild and resamples the full source on every paint (19–90 ms/frame); animated images restart and trip the one-ticker assert | Fixed |
-| E | high | Left/Right bubbling out of any control inside a Tabs body switches tabs and drops focus | Decision pending: Tabs arrows only from the strip |
+| E | high | Left/Right bubbling out of any control inside a Tabs body switches tabs and drops focus | Fixed: strip navigation requires strip focus; explicit tab-switch shortcuts remain available |
 | E | high | Markdown inline parser treats intraword `_` and spaced `*` as emphasis, deleting characters from identifiers, filenames and math | Fixed |
 | E | medium | Every first-party collection wrapper forces a second full frame per scroll step, undoing ListView's metrics-only no-rebuild guarantee | Decision pending: scroll-step rebuilds in collection widgets |
 | E | medium | FileBrowser re-reads the directory from disk and resets the cursor to row 0 on every parent rebuild when entityFilter is an inline closure | Fixed |
@@ -55,7 +55,7 @@
 | E | low | FileBrowser, SearchPanel and DiffView recompute O(n) data on every build and every navigation call | Fixed |
 | E | low | LineChart sorts and dedupes every x value on each series update or parent rebuild, even when not interactive, and repaints all points when the data is unchanged | Fixed: cursor and palette; skipping a fresh series list over the same points waits on the in-place list mutation decision |
 | E | low | parseUnifiedDiff reads the `git format-patch` signature line (`-- `) as a deletion: phantom row, wrong counts, corrupt hunk copy | Fixed |
-| F | high | A legal duplicate semantic id on a node with children makes the wire encoder drop the whole semantic tree. Serve's a11y DOM goes empty and MCP reports that the app never rendered. | Decision pending: duplicate semantic ids (now reported as a developer warning) |
+| F | high | A legal duplicate semantic id on a node with children makes the wire encoder drop the whole semantic tree. Serve's a11y DOM goes empty and MCP reports that the app never rendered. | Fixed: generated paths retain unkeyed ancestor positions and distinguish key types; explicit app-owned duplicates still warn |
 | F | medium | A semantic action whose handler awaits UI (the `await context.present(Confirm())` idiom) blocks the served semantic-action queue, so the dialog can't be confirmed through a11y/MCP | Fixed |
 | F | medium | SemanticDomPresenter re-inserts the whole content of every aria-live region on any structural change, so screen readers re-read the entire log for each appended line | Fixed |
 | F | medium | The coverage fallback turns border glyphs (Panel, Dialog, Menu…) into hundreds of junk text nodes and keeps the semantics pipeline on its slow path | Fixed (an explicit ASCII border is a follow-up) |

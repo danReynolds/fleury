@@ -170,7 +170,95 @@ Future<MountedApp> runTuiSurface(
   // Internal host hooks for the isolated docs debugger. The caller owns these
   // services and disposes them after the surface. The native debug event bus
   // is isolate-wide, so this must run in its own browser context, not alongside
-  // unrelated local runtimes. Public mountApp keeps these layers disabled.
+  // unrelated local runtimes. Public mountApp keeps debug/log capture disabled;
+  // a missing errorReporter gets a host-owned reporter and error overlay.
+  DebugController? debugController,
+  LogBuffer? logBuffer,
+  RuntimeErrorReporter? errorReporter,
+}) async {
+  final errors =
+      errorReporter ??
+      RuntimeErrorReporter(onLog: (message) => web.console.error(message.toJS));
+  final ready = Completer<MountedApp>();
+  var active = true;
+  void releaseReporter() {
+    active = false;
+    if (errorReporter == null) errors.dispose();
+  }
+
+  // Complete `ready` explicitly inside the error zone: an error future cannot
+  // cross a runZonedGuarded boundary by itself. Setup failures must still reach
+  // the caller, while later unawaited handlers surface in the error overlay.
+  runZonedGuarded(
+    () async {
+      // The web surface is a framework host, like core runApp, and owns the
+      // reporter's scheduling zone for this session.
+      // ignore: invalid_use_of_internal_member
+      errors.bindZone(Zone.current);
+      try {
+        ready.complete(
+          await _runTuiSurface(
+            rootFactory,
+            surface: surface,
+            cellMetrics: cellMetrics,
+            inputSource: inputSource,
+            imageOverlay: imageOverlay,
+            semanticPresenter: semanticPresenter,
+            semanticFlushScheduler: semanticFlushScheduler,
+            clipboard: clipboard,
+            frameInterval: frameInterval,
+            flushScheduler: flushScheduler,
+            planner: planner,
+            instrumentation: instrumentation,
+            focusCoordinator: focusCoordinator,
+            debugController: debugController,
+            logBuffer: logBuffer,
+            errorReporter: errors,
+            disposeHostResources: () async {
+              try {
+                await disposeHostResources?.call();
+              } finally {
+                releaseReporter();
+              }
+            },
+          ),
+        );
+      } catch (error, stack) {
+        releaseReporter();
+        ready.completeError(error, stack);
+      }
+    },
+    (error, stack) {
+      if (!active || errors.isDisposed) {
+        Zone.current.handleUncaughtError(error, stack);
+        return;
+      }
+      errors.report(error, stack);
+    },
+  );
+  return ready.future;
+}
+
+Future<MountedApp> _runTuiSurface(
+  Widget Function() rootFactory, {
+  required FrameSurface surface,
+  CellMetrics? cellMetrics,
+  TuiInputSource? inputSource,
+  InlineImageOverlay? imageOverlay,
+  SemanticFramePresenter? semanticPresenter,
+  SemanticFlushScheduler? semanticFlushScheduler,
+  Clipboard? clipboard,
+  Duration frameInterval = Duration.zero,
+  FrameFlushScheduler? flushScheduler,
+  FramePresentationPlanner planner = const FramePresentationPlanner(),
+  WebHostInstrumentation instrumentation = const NoopWebHostInstrumentation(),
+  WebFocusCoordinator? focusCoordinator,
+  FutureOr<void> Function()? disposeHostResources,
+  // Internal host hooks for the isolated docs debugger. The caller owns these
+  // services and disposes them after the surface. The native debug event bus
+  // is isolate-wide, so this must run in its own browser context, not alongside
+  // unrelated local runtimes. Public mountApp keeps debug/log capture disabled;
+  // a missing errorReporter gets a host-owned reporter and error overlay.
   DebugController? debugController,
   LogBuffer? logBuffer,
   RuntimeErrorReporter? errorReporter,
