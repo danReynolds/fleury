@@ -1,5 +1,15 @@
 # Changelog
 
+- Arrow navigation now reveals controls outside the current scroll viewport
+  without scrolling away from the focused action. Descendant editors and lists
+  retain their key handling. Scrollbars can hide when content fits with
+  `showWhenFits: false` (`showScrollbarWhenFits` on `ScrollView`).
+- Explicit native POSIX drivers now tolerate a full terminal output queue.
+  Large frames no longer crash when stdin and stdout share nonblocking flags.
+- Inline shutdown now resolves a pending terminal resize before clearing its
+  region. Exiting during a resize removes the old UI without allocating another
+  frame; missing cursor replies still use a bounded, conservative cleanup.
+
 - Generated semantic IDs distinguish repeated row keys in separate unkeyed
   lists and keys with different value types. Keyed rows retain their IDs when
   reordered within a list; explicit semantic IDs and `Semantics(key:)` IDs are

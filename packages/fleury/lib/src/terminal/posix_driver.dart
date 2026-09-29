@@ -59,7 +59,7 @@ class PosixTerminalDriver
     )?
     signalWatcherOverride,
   }) : _stdin = stdinOverride ?? stdin,
-       _stdout = stdoutOverride ?? stdout,
+       _stdout = stdoutOverride ?? _nativeOutput(),
        _forceExitOverride = forceExitOverride,
        _selfStopOverride = selfStopOverride,
        _signalWatcherOverride = signalWatcherOverride,
@@ -91,6 +91,14 @@ class PosixTerminalDriver
       identical(_stdin, stdin) &&
       _stdinIsTerminal &&
       (Platform.isMacOS || Platform.isLinux);
+  // Native input temporarily sets O_NONBLOCK on a duplicated stdin. Shells
+  // may share that open-file description with stdout, so dart:io's synchronous
+  // terminal writes can fail with EAGAIN on a full queue. The same sink used
+  // by runApp's fd capture retries partial writes/EINTR and polls on EAGAIN.
+  // Borrow fd 1; the driver never closes it. Keep explicit/zone overrides intact.
+  static Stdout _nativeOutput() =>
+      IOOverrides.current == null ? fd.StdoutTerminalSink(1) : stdout;
+
   final Stdout _stdout;
 
   /// How long a delivered [SignalEvent] may remain unresolved before the
@@ -490,11 +498,13 @@ class PosixTerminalDriver
   @override
   bool get isInteractive => _stdoutIsTerminal;
 
-  Future<CellOffset> _queryInlineCursor() async {
+  Future<CellOffset> _queryInlineCursor({
+    Duration timeout = const Duration(seconds: 1),
+  }) async {
     try {
       final reply = await _queryRunner.request(
         '\x1B[6n\x1B[c',
-        timeout: const Duration(seconds: 1),
+        timeout: timeout,
       );
       final match = RegExp(
         r'\x1b\[(\d+);(\d+)R',
@@ -639,6 +649,41 @@ class PosixTerminalDriver
       } catch (_) {}
       _stdout.write(inline.release(_physicalSize));
     }
+  }
+
+  /// Shutdown gates new frames first, but keeps the input lease until this
+  /// bounded ownership check completes. A resize can arrive before SIGWINCH is
+  /// processed or while another cursor query is pending. Settle that exchange,
+  /// then use a fresh report to clear only the surviving rows, without reserving
+  /// or repainting a new UI on the way out.
+  Future<void> _releaseInlineForRestore() async {
+    await _inlineTail;
+    final inline = _inline;
+    if (inline == null || !inline.isAllocated) return;
+    final clock = Stopwatch()..start();
+    const budget = Duration(seconds: 1);
+    while (_physicalSize != inline.terminalSize && clock.elapsed < budget) {
+      final physical = _physicalSize;
+      if (physical.isEmpty) break;
+      try {
+        final cursor = await _queryInlineCursor(
+          timeout: budget - clock.elapsed,
+        );
+        if (physical != _physicalSize) continue;
+        // Validation is part of release: invalid evidence cannot authorize a
+        // clear. Recovery-file failure must not prevent terminal restoration.
+        try {
+          _recordInlineLease(region: false);
+        } catch (_) {}
+        if (physical != _physicalSize) continue;
+        _stdout.write(inline.release(physical, cursor: cursor));
+        return;
+      } on StateError {
+        // Missing or invalid reports retain the non-destructive fallback.
+        break;
+      }
+    }
+    _releaseInline();
   }
 
   void _recordInlineLease({
@@ -1799,11 +1844,11 @@ class PosixTerminalDriver
     await _suspendTail.then<void>((_) {}, onError: (Object _) {});
     await _resumeTail.then<void>((_) {}, onError: (Object _) {});
     await _modeWriteTail;
-    await attempt(() => _releaseInput(finalRelease: true));
-    _queryRunner.dispose();
-    await attempt(() => _inlineTail);
     await attempt(() => _resizeSubscription?.cancel());
     _resizeSubscription = null;
+    await attempt(_releaseInlineForRestore, terminalOutput: true);
+    await attempt(() => _releaseInput(finalRelease: true));
+    _queryRunner.dispose();
     if (_changedStdin) {
       await attempt(() {
         if (!_restoreCookedMode()) {
@@ -1814,7 +1859,6 @@ class PosixTerminalDriver
     }
     if (_wroteEnterSequences) {
       await attempt(() async {
-        _releaseInline();
         await _exitOutputMode(
           _mode ?? TerminalMode.interactive,
           restoring: true,

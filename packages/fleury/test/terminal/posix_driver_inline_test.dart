@@ -399,6 +399,121 @@ void main() {
   );
 
   test(
+    'restore observes an unhandled resize before clearing the region',
+    () async {
+      await driver.enter(mode);
+      driver.recordInlineCursor(const CellOffset(3, 1));
+      output.bytes.clear();
+      output.terminalColumns = 60;
+      output.terminalLines = 10;
+      cursor = const CellOffset(3, 7);
+      // Exit arrives before SIGWINCH / a new frame. The old top is no longer
+      // evidence; a fresh report places the surviving region at row 6.
+      await driver.restore();
+      expect(cursorQueries, 2);
+      final bytes = output.bytes.toString();
+      expect(bytes, contains('\x1B[7;1H\x1B[2K'));
+      expect(bytes, contains('\x1B[10;1H\x1B[2K'));
+      expect(bytes, isNot(contains('\x1B[6;1H\x1B[2K')));
+      expect(RegExp(r'\x1b\[2K').allMatches(bytes).length, 4);
+      expect(
+        bytes,
+        isNot(contains('\n')),
+        reason: 'cleanup must not allocate another region',
+      );
+      expect(modes.raw, isFalse);
+      expect(errors, isEmpty);
+    },
+  );
+
+  test(
+    'shutdown retries a cursor report invalidated by another resize',
+    () async {
+      await driver.enter(mode);
+      output.bytes.clear();
+      driver.recordInlineCursor(const CellOffset(0, 1));
+      output.terminalColumns = 60;
+      holdCursor = true;
+      final restoring = driver.restore();
+      await _settle();
+      expect(cursorQueries, 2);
+      output.terminalColumns = 40;
+      cursor = const CellOffset(0, 9);
+      holdCursor = false;
+      input.send('\x1B[8;1R\x1B[?1;2c');
+      await restoring;
+      expect(cursorQueries, 3);
+      expect(output.bytes.toString(), contains('\x1B[9;1H\x1B[2K'));
+      expect(output.bytes.toString(), isNot(contains('\x1B[7;1H\x1B[2K')));
+      expect(modes.raw, isFalse);
+      expect(errors, isEmpty);
+    },
+  );
+
+  test(
+    'shutdown after a pending resize uses a fresh report, not the stale reply',
+    () async {
+      await driver.enter(mode);
+      driver.recordInlineCursor(const CellOffset(0, 1));
+      output.terminalColumns = 60;
+      holdCursor = true;
+      signals[ProcessSignal.sigwinch]!(ProcessSignal.sigwinch);
+      await _settle();
+      final restoring = driver.restore();
+      await _settle();
+      output.bytes.clear();
+      cursor = const CellOffset(0, 11);
+      holdCursor = false;
+      input.send('\x1B[8;1R\x1B[?1;2c');
+      await restoring;
+      expect(cursorQueries, 3);
+      expect(output.bytes.toString(), contains('\x1B[11;1H\x1B[2K'));
+      expect(output.bytes.toString(), isNot(contains('\x1B[7;1H\x1B[2K')));
+      expect(output.bytes.toString(), isNot(contains('\n')));
+      expect(modes.raw, isFalse);
+    },
+  );
+
+  test(
+    'shutdown without a cursor reply is bounded and does not guess rows',
+    () async {
+      await driver.enter(mode);
+      output.bytes.clear();
+      output.terminalColumns = 60;
+      answerCursor = false;
+      final clock = Stopwatch()..start();
+      await driver.restore().timeout(const Duration(seconds: 3));
+      expect(clock.elapsed, lessThan(const Duration(seconds: 3)));
+      expect(cursorQueries, 2);
+      expect(output.bytes.toString(), isNot(contains('\x1B[2K')));
+      expect(modes.raw, isFalse);
+      expect(errors, isEmpty);
+    },
+  );
+
+  test(
+    'continuous resizing cannot keep shutdown querying indefinitely',
+    () async {
+      await driver.enter(mode);
+      output.bytes.clear();
+      output.terminalColumns = 60;
+      output.onWrite = (bytes) {
+        if (!bytes.contains('\x1B[6n')) return;
+        cursorQueries++;
+        Timer(const Duration(milliseconds: 10), () {
+          output.terminalColumns = output.terminalColumns == 60 ? 40 : 60;
+          input.send('\x1B[8;1R\x1B[?1;2c');
+        });
+      };
+      await driver.restore().timeout(const Duration(seconds: 3));
+      expect(cursorQueries, greaterThan(2));
+      expect(output.bytes.toString(), isNot(contains('\x1B[2K')));
+      expect(modes.raw, isFalse);
+      expect(errors, isEmpty);
+    },
+  );
+
+  test(
     'restore during a pending resize prevents a late region acquisition',
     () async {
       await driver.enter(mode);

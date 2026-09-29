@@ -37,12 +37,17 @@ class Session:
         self.raw = bytearray()
         self.decoder = codecs.getincrementaldecoder("utf-8")("replace")
         self.keyboard_tail = ''
+        self.hold_replies = False
+        self.held_replies = []
         self.set_size(cols, rows)
         owner = self
 
         class Screen(pyte.HistoryScreen):
             def write_process_input(self, data):
-                owner.send(data.encode())
+                if owner.hold_replies:
+                    owner.held_replies.append(data.encode())
+                else:
+                    owner.send(data.encode())
 
         self.screen = Screen(cols, rows, history=2000)
         self.stream = pyte.Stream(self.screen)
@@ -68,6 +73,9 @@ class Session:
         fcntl.ioctl(self.master, termios.TIOCSWINSZ, struct.pack("HHHH", rows, cols, 0, 0))
 
     def resize(self, cols, rows):
+        # Commit old-size output before changing the emulator's geometry.
+        while select.select([self.master], [], [], 0)[0]:
+            self.pump(0)
         # pyte clips from the top but does not shift its saved cursor with
         # those lines. Keep the cursor attached to the retained content.
         y = max(0, self.screen.cursor.y - max(0, self.screen.lines - rows))
@@ -234,6 +242,35 @@ def signals(dart):
             app.close()
 
 
+def resize_exit(dart, *, executable=None):
+    """Exit while the resize query is pending, not after a convenient redraw."""
+    for cols, rows in [(70, 18), (90, 24)]:
+        app = Session(dart, executable=executable)
+        try:
+            app.wait(lambda: app.app_pid() is not None, 'ready for resize/exit')
+            app.hold_replies = True
+            start = len(app.raw)
+            app.resize(cols, rows)
+            app.wait(lambda: b'\x1b[6n' in app.raw[start:], 'pending resize cursor query')
+            app.send(b'\x11')
+            # Give shutdown the pending query; it cannot finish until we reply.
+            until = time.monotonic() + .15
+            while time.monotonic() < until:
+                app.pump(.02)
+            app.hold_replies = False
+            for reply in app.held_replies:
+                app.send(reply)
+            app.held_replies.clear()
+            app.finish()
+            history = '\n'.join(''.join(cell.data for cell in line.values())
+                                for line in app.screen.history.top) + app.text()
+            for n in range(10):
+                assert f'SHELL-KEEP-{n}' in history, f'lost shell line {n}'
+            print(f'PASS exit during pending resize {cols}x{rows}')
+        finally:
+            app.close()
+
+
 if __name__ == "__main__":
     if len(sys.argv) > 1 and sys.argv[1] == '--guard':
         # Keep the controlling session alive long enough to inspect real
@@ -259,6 +296,7 @@ if __name__ == "__main__":
     interactions(args.dart, 40, 12)
     lifecycle(args.dart)
     signals(args.dart)
+    resize_exit(args.dart)
     if not args.skip_supervisor:
         lifecycle(args.dart, supervised=True)
         lifecycle(args.dart, supervised=True, crash=True)

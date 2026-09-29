@@ -69,6 +69,93 @@ void main() {
     expect(_col(buf, 5), '████', reason: 'content fits → full thumb');
   });
 
+  for (final axis in Axis.values) {
+    testWidgets(
+      'optional ${axis.name} bar follows overflow without losing focus',
+      (tester) {
+        final focus = FocusNode();
+        addTearDown(focus.dispose);
+        final vertical = axis == Axis.vertical;
+        final children = [
+          Focus(focusNode: focus, child: const Text('aa')),
+          const Text('bb'),
+        ];
+        tester.pumpWidget(
+          ScrollView(
+            scrollbar: true,
+            showScrollbarWhenFits: false,
+            scrollDirection: axis,
+            child: vertical
+                ? Column(children: children)
+                : Row(children: children),
+          ),
+        );
+        String gutter(CellBuffer buffer) => vertical
+            ? _col(buffer, buffer.size.cols - 1)
+            : [
+                for (var col = 0; col < buffer.size.cols; col++)
+                  buffer.atColRow(col, buffer.size.rows - 1).grapheme ?? ' ',
+              ].join();
+        var buffer = tester.render(size: const CellSize(6, 4));
+        focus.requestFocus();
+        expect(gutter(buffer).trim(), isEmpty);
+        buffer = tester.render(
+          size: vertical ? const CellSize(6, 1) : const CellSize(3, 4),
+        );
+        expect(gutter(buffer), contains('█'));
+        expect(focus.hasFocus, isTrue);
+        buffer = tester.render(size: const CellSize(6, 4));
+        expect(
+          gutter(buffer).trim(),
+          isEmpty,
+          reason: 'the old thumb is erased',
+        );
+        expect(
+          focus.hasFocus,
+          isTrue,
+          reason: 'hiding does not remount content',
+        );
+      },
+    );
+  }
+
+  testWidgets('showWhenFits can change without changing gutter layout', (
+    tester,
+  ) {
+    final sc = ScrollController();
+    addTearDown(sc.dispose);
+    Widget tree(bool show) => Scrollbar(
+      controller: sc,
+      showWhenFits: show,
+      child: ScrollView(controller: sc, child: const Text('abcdef')),
+    );
+    tester.pumpWidget(tree(true));
+    var buffer = tester.render(size: const CellSize(6, 4));
+    expect(_col(buffer, 5), '████');
+    tester.pumpWidget(tree(false));
+    buffer = tester.render(size: const CellSize(6, 4));
+    expect(_col(buffer, 5), '    ');
+    expect(
+      buffer.atColRow(0, 1).grapheme,
+      'f',
+      reason: 'the gutter remains reserved',
+    );
+  });
+
+  testWidgets('a fitting list can hide its scrollbar', (tester) {
+    final lc = ListController();
+    addTearDown(lc.dispose);
+    tester.pumpWidget(
+      Scrollbar.list(
+        controller: lc,
+        showWhenFits: false,
+        child: ListView(controller: lc, children: const [Text('one')]),
+      ),
+    );
+    final buffer = tester.render(size: const CellSize(6, 4));
+    expect(_col(buffer, 5), '    ');
+  });
+
   testWidgets('reserves a gutter without painting over content', (tester) {
     final sc = ScrollController();
     tester.pumpWidget(

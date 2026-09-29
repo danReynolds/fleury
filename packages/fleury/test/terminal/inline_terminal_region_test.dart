@@ -66,6 +66,35 @@ void main() {
     expect(region.release(const CellSize(40, 10)), '\r\n');
   });
 
+  test('fresh cursor evidence clears resized rows without allocating', () {
+    final region = InlineTerminalRegion(4);
+    region.acquire(const CellSize(80, 24), const CellOffset(0, 20));
+    region.recordCursor(const CellOffset(3, 1));
+    final bytes = region.release(
+      const CellSize(60, 10),
+      cursor: const CellOffset(3, 7),
+    );
+    expect(RegExp(r'\x1b\[2K').allMatches(bytes).length, 4);
+    expect(bytes, startsWith('\x1B[0m\x1B[7;1H\x1B[2K'));
+    expect(bytes, endsWith('\x1B[7;1H'));
+    expect(bytes, isNot(contains('\n')));
+    expect(region.isAllocated, isFalse);
+  });
+
+  test('invalid shutdown evidence cannot consume the allocation', () {
+    final region = InlineTerminalRegion(4);
+    region.acquire(const CellSize(80, 24), const CellOffset(0, 7));
+    expect(
+      () => region.release(
+        const CellSize(60, 10),
+        cursor: const CellOffset(60, 7),
+      ),
+      throwsStateError,
+    );
+    expect(region.isAllocated, isTrue);
+    expect(region.release(const CellSize(60, 10)), '\r\n');
+  });
+
   test('invalid heights fail in release builds too', () {
     expect(() => InlineTerminalRegion(0), throwsArgumentError);
     final region = InlineTerminalRegion(2);

@@ -92,12 +92,21 @@ final class InlineTerminalRegion {
   }
 
   /// Release once, parking at the start for the shell/next command output.
-  /// If geometry changed without a completed resize query, do not erase at
-  /// stale coordinates. A newline is safer than erasing unknown shell rows.
-  String release(CellSize terminal) {
+  /// A fresh [cursor] report can locate the surviving rows after a physical
+  /// resize without allocating or repainting another region. Without that
+  /// evidence, a newline is safer than erasing unknown shell rows.
+  String release(CellSize terminal, {CellOffset? cursor}) {
     if (!_allocated) return '';
+    if (cursor != null) _validateCursor(terminal, cursor);
     _allocated = false;
-    if (terminal != _terminalSize) return '\r\n';
-    return '${target.clearSequence(_size)}\x1B[${_top + 1};1H';
+    if (terminal == _terminalSize) {
+      return '${target.clearSequence(_size)}\x1B[${_top + 1};1H';
+    }
+    if (cursor == null) return '\r\n';
+    final top = (cursor.row - _cursor.row).clamp(0, terminal.rows - 1);
+    final visibleRows = _size.rows.clamp(0, terminal.rows - top);
+    final recovered = AnsiRenderTarget.inline(top: top);
+    return '${recovered.clearSequence(CellSize(terminal.cols, visibleRows))}'
+        '\x1B[${top + 1};1H';
   }
 }
