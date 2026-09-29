@@ -405,6 +405,12 @@ export 'src/runtime/clipboard.dart'
         ClipboardWriteReport,
         ClipboardWriteResult,
         InProcessClipboard;
+// The captured-output record and its views. Capture itself is native; the
+// buffer is plain data, so browser apps can feed one (a streamed build log,
+// a remote process) and show it with the same widgets.
+export 'src/runtime/output_capture.dart' show LogBuffer, LogLine, LogSource;
+export 'src/widgets/output_capture_view.dart'
+    show LogBufferScope, OutputCaptureConsole, OutputCaptureView;
 export 'src/widgets/selection/selection_area.dart'
     show SelectionArea, SelectionChangedCallback;
 export 'src/widgets/selection/selection_container_delegate.dart'

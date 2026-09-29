@@ -68,13 +68,12 @@ void main() {
 
 **Constraints**
 
-- **Web-safe widgets only.** Anything that reaches `dart:io` won't compile to JS
-  — that includes four native-only widgets (`FileBrowser`, `FilePicker`,
-  `LogRegion`, `TerminalOutputRegion`). The supporting `WorkflowSnapshot`
-  model is also absent from the web barrel today because its `LogEntry`
-  dependency lives in the native-only log library.
-  Import `package:fleury/fleury_core.dart`, not `fleury.dart` (see
-  [Core and targets](core-and-targets.md#the-web-safety-boundary)).
+- **Web-safe code only.** Code that reaches `dart:io` fails in the browser:
+  dart2js compiles it, but the call throws when it runs. Every widget in
+  `fleury_widgets_web.dart` is web-safe; `FileBrowser` and `FilePicker` read a
+  `FileSource` you pass (such as a `MemoryFileSource`), since there is no local
+  disk to list. Import `package:fleury/fleury_core.dart`, not `fleury.dart`
+  (see [Core and targets](core-and-targets.md#the-web-safety-boundary)).
 - **No host machine.** No filesystem, processes, or environment — the browser
   sandbox is all you get.
 - The host element needs an explicit CSS size.
@@ -174,10 +173,9 @@ authenticating reverse proxy.
 
 **Properties**
 
-- **Full fidelity.** The app is the real native program, so *every* widget works
-  — including the `dart:io`-backed ones (`FileBrowser`, log/terminal regions)
-  and native-only constructors such as `Image.file`. It
-  has a filesystem, processes, and environment.
+- **Full fidelity.** The app is the real native program, with a filesystem,
+  processes, and environment: `FileBrowser` and `FilePicker` read the real
+  disk, `TerminalOutputRegion` shows captured output, and `Image.file` works.
 - **Browser-visible.** A running terminal app becomes a local URL for preview,
   debugging, and trusted pairing.
 - The wire is tuned: cell-range patches with a style table and varints,

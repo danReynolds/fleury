@@ -1,16 +1,9 @@
-/// Web-safe subset of `fleury_widgets.dart`. Re-exports every widget EXCEPT the
-/// 4 that depend on `dart:io` — directly (file I/O or log capture)
-/// or transitively (widgets built on native log buffers)
-/// — and so cannot compile to JavaScript with dart2js. It also omits the
-/// supporting `WorkflowSnapshot` model: its current `LogEntry` dependency lives
-/// in the native-only log library. Import THIS, not `fleury_widgets.dart`, from
-/// code that runs client-side in the browser (see
-/// docs/serving-and-embedding.md). The excluded APIs still run over the
-/// `fleury serve` path.
-///
-/// Excluded widgets: file_browser, file_picker, log_region,
-/// terminal_output_region.
-/// Excluded supporting model: workflow_snapshot.
+/// Web-safe subset of `fleury_widgets.dart`: every export except
+/// `LocalFileSource`, the `dart:io` reader of the local disk. `FileBrowser` and
+/// `FilePicker` compile here too, and read whatever `FileSource` you pass them
+/// (for example a `MemoryFileSource`). Import THIS, not `fleury_widgets.dart`,
+/// from code that runs client-side in the browser (see
+/// docs/serving-and-embedding.md).
 library;
 
 export 'src/autocomplete.dart' show Autocomplete;
@@ -111,6 +104,15 @@ export 'src/diff_view.dart'
         DiffViewCopyResult,
         exportDiffSelection,
         parseUnifiedDiff;
+export 'src/file_browser.dart'
+    show
+        FileBrowser,
+        FileBrowserController,
+        FileBrowserCopyOptions,
+        FileBrowserCopyResult,
+        FileBrowserFilterDescriptor,
+        buildFileBrowserEntryOrder,
+        exportFileBrowserEntry;
 export 'src/file_mention_picker.dart'
     show
         FileMentionCopyOptions,
@@ -123,6 +125,15 @@ export 'src/file_mention_picker.dart'
         FileMentionPickerController,
         buildFileMentionOrder,
         exportFileMention;
+export 'src/file_picker.dart' show FilePicker;
+export 'src/file_source.dart'
+    show
+        FileEntry,
+        FileEntryFilter,
+        FileEntryType,
+        FileSource,
+        FileSourceException,
+        MemoryFileSource;
 export 'src/digits.dart' show Digits;
 export 'src/form.dart' show FormController, Form, FormField, FormFieldState;
 export 'src/gauge.dart' show Gauge;
@@ -140,6 +151,20 @@ export 'src/line_chart.dart'
         ReferenceStyle,
         TickFormat,
         TickFormatter;
+export 'src/log_region.dart'
+    show
+        LogEntry,
+        LogRegion,
+        LogRegionController,
+        LogRegionCopyOptions,
+        LogRegionCopyResult,
+        LogRegionExportOptions,
+        LogRegionExportResult,
+        LogRegionFilterDescriptor,
+        LogRegionSearchIndex,
+        LogSeverity,
+        buildLogRegionEntryOrder,
+        exportLogEntries;
 export 'src/message_list.dart'
     show
         MessageEntry,
@@ -233,6 +258,8 @@ export 'src/table.dart'
         TableExportResult,
         exportTableRows,
         tableCellText;
+export 'src/terminal_output_region.dart'
+    show TerminalOutputRegion, buildTerminalOutputLogEntries;
 export 'src/task_graph.dart'
     show
         TaskGraph,
@@ -261,6 +288,8 @@ export 'src/tool_call_card.dart'
         ToolCallRecord,
         ToolCallStatus,
         exportToolCallSummary;
+export 'src/workflow_snapshot.dart'
+    show WorkflowHealth, WorkflowSnapshot, WorkflowSummary;
 export 'src/tabs.dart' show TabController, TabItem, Tabs;
 export 'src/toaster.dart' show Toaster, ToastAction, ToastHandle, ToastSeverity;
 export 'src/tooltip.dart' show Tooltip;

@@ -1,5 +1,18 @@
 ## 0.1.0
 
+- **Breaking:** `FileBrowser` and `FilePicker` read directories through a
+  `FileSource` and report `FileEntry` values, so both run in the browser.
+  Natively they default to `LocalFileSource`, the local disk; in a browser,
+  pass a source such as `MemoryFileSource`. `FileBrowserEntry` and
+  `FileBrowserEntryType` are now `FileEntry` and `FileEntryType`,
+  `FileBrowser.entityFilter` is `entryFilter`, and `FilePicker.onSelect` and
+  `filter` receive a `FileEntry` instead of a `dart:io` `File` or
+  `FileSystemEntity`.
+- `LogRegion`, `TerminalOutputRegion`, and `WorkflowSnapshot` are exported from
+  `fleury_widgets_web.dart`; none of them needed `dart:io`. A test now walks the
+  web barrel's imports so `dart:io` can't reach it: dart2js compiles `dart:io`
+  code, which only fails when it runs.
+
 - FileBrowser exposes a clickable, semantic parent-directory action in its
   existing separator row, including empty and unreadable directories.
 - Collection widgets read viewport semantics lazily without rebuilding their

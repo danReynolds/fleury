@@ -1,5 +1,9 @@
 # Changelog
 
+- `LogBuffer`, `LogLine`, `LogSource`, `LogBufferScope`, `OutputCaptureView`,
+  and `OutputCaptureConsole` are exported from `fleury_core.dart`, so browser
+  apps can fill a log buffer and show it. `fleury.dart` still exports them.
+
 - `Semantics.stateBuilder` reads live model state when a semantic snapshot is
   collected. Pair it with `stateListenable` to publish model-only changes without
   rebuilding the child. Existing `state:` annotations remain supported.

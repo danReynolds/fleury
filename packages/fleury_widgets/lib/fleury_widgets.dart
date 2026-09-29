@@ -111,9 +111,6 @@ export 'src/file_browser.dart'
         FileBrowserController,
         FileBrowserCopyOptions,
         FileBrowserCopyResult,
-        FileBrowserEntityFilter,
-        FileBrowserEntry,
-        FileBrowserEntryType,
         FileBrowserFilterDescriptor,
         buildFileBrowserEntryOrder,
         exportFileBrowserEntry;
@@ -130,6 +127,14 @@ export 'src/file_mention_picker.dart'
         buildFileMentionOrder,
         exportFileMention;
 export 'src/file_picker.dart' show FilePicker;
+export 'src/file_source.dart'
+    show
+        FileEntry,
+        FileEntryFilter,
+        FileEntryType,
+        FileSource,
+        FileSourceException,
+        MemoryFileSource;
 export 'src/form.dart' show FormController, Form, FormField, FormFieldState;
 export 'src/digits.dart' show Digits;
 export 'src/gauge.dart' show Gauge;
@@ -147,6 +152,7 @@ export 'src/line_chart.dart'
         ReferenceStyle,
         TickFormat,
         TickFormatter;
+export 'src/local_file_source.dart' show LocalFileSource;
 export 'src/log_region.dart'
     show
         LogEntry,

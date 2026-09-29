@@ -19,7 +19,6 @@ export 'src/debug/debug_shell.dart'
     show tryConsumeDebugKey, tryConsumeDebugText;
 export 'src/debug/debug_state.dart'
     show DebugConfig, DebugController, DebugMode, DebugPanelSide, DebugTab;
-export 'src/runtime/output_capture.dart' show LogBuffer, LogLine, LogSource;
 export 'src/runtime/runtime_error_overlay.dart'
     show RuntimeErrorOverlay, RuntimeErrorRecord, RuntimeErrorReporter;
 export 'src/rendering/render_error_boundary.dart'

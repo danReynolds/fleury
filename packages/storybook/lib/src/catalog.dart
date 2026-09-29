@@ -3123,8 +3123,7 @@ class _FilesStory extends StatelessWidget {
           initialDirectory: cwd,
           showHidden: showHidden,
           onSelect: (_) {},
-          filter: (entity) =>
-              entity is io.Directory || entity.path.endsWith('.dart'),
+          filter: (entry) => entry.isDirectory || entry.name.endsWith('.dart'),
         ),
       ),
       'FileMentionPicker' || 'FileMentionEntry' => FileMentionPicker(

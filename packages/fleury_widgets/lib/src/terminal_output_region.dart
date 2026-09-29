@@ -1,4 +1,4 @@
-import 'package:fleury/fleury.dart';
+import 'package:fleury/fleury_core.dart';
 
 import 'log_region.dart';
 

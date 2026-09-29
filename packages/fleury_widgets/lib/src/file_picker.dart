@@ -1,6 +1,8 @@
-import 'dart:io';
+import 'package:fleury/fleury_core.dart';
 
-import 'package:fleury/fleury.dart';
+import 'file_source.dart';
+import 'file_source_default_stub.dart'
+    if (dart.library.io) 'file_source_default_io.dart';
 
 /// A keyboard-driven file picker. Shows the contents of one directory at
 /// a time as a scrollable list; Up/Down navigates, Enter opens a folder
@@ -9,18 +11,21 @@ import 'package:fleury/fleury.dart';
 /// ```dart
 /// FilePicker(
 ///   initialDirectory: '/home/user/projects',
-///   filter: (entity) => entity is Directory || entity.path.endsWith('.dart'),
+///   filter: (entry) => entry.isDirectory || entry.name.endsWith('.dart'),
 ///   onSelect: (file) => openInEditor(file.path),
 /// )
 /// ```
 ///
-/// Filesystem reads are synchronous — fine for a picker UI on local
-/// disks, but don't point this at a slow network mount.
+/// It lists directories from [source]: the local disk by default on native
+/// platforms. A browser embed passes one, such as a [MemoryFileSource].
+/// Directory reads are synchronous — fine for a picker UI on local disks, but
+/// don't point this at a slow network mount.
 class FilePicker extends StatefulWidget {
   const FilePicker({
     super.key,
     required this.initialDirectory,
     required this.onSelect,
+    this.source,
     this.filter,
     this.showHidden = false,
     this.maxVisible = 12,
@@ -33,14 +38,18 @@ class FilePicker extends StatefulWidget {
   /// unreadable), the picker renders a dim error row instead of entries.
   final String initialDirectory;
 
-  /// Called with the chosen [File] when Enter is pressed on a file row.
+  /// Called with the chosen file when Enter is pressed on a file row.
   /// Directories are opened in place — not passed to this callback.
-  final void Function(File file) onSelect;
+  final void Function(FileEntry file) onSelect;
 
-  /// Optional predicate to hide entries. Receives every [Directory] /
-  /// [File] before they're rendered; return `false` to skip. Use to
-  /// filter by extension, hide build artifacts, etc.
-  final bool Function(FileSystemEntity entity)? filter;
+  /// Where directories are read from. Defaults to the local disk on native
+  /// platforms; in the browser, pass one, such as a [MemoryFileSource].
+  final FileSource? source;
+
+  /// Optional predicate to hide entries. Receives every entry before it's
+  /// rendered; return `false` to skip. Use to filter by extension, hide
+  /// build artifacts, etc.
+  final FileEntryFilter? filter;
 
   /// When `false` (default), entries whose name starts with `.` are
   /// hidden — matches the unix convention. Set `true` to include them.
@@ -66,9 +75,10 @@ class FilePicker extends StatefulWidget {
 class _FilePickerState extends State<FilePicker> {
   late FocusNode _node;
   bool _owns = false;
-  late Directory _cwd;
-  List<FileSystemEntity> _entries = const [];
+  late String _cwd;
+  List<FileEntry> _entries = const [];
   String? _error;
+  FileSource? _defaultSource;
 
   // The selected row lives on a ListController so the entries can render in a
   // scrolling ListView that keeps the cursor in view (a plain Column clipped
@@ -82,9 +92,12 @@ class _FilePickerState extends State<FilePicker> {
     super.initState();
     _node = widget.focusNode ?? FocusNode(debugLabel: 'file-picker');
     _owns = widget.focusNode == null;
-    _cwd = Directory(widget.initialDirectory);
+    _cwd = _source.absolute(widget.initialDirectory);
     _listEntries(_cwd);
   }
+
+  FileSource get _source =>
+      widget.source ?? (_defaultSource ??= defaultFileSource());
 
   @override
   void didUpdateWidget(FilePicker oldWidget) {
@@ -95,7 +108,8 @@ class _FilePickerState extends State<FilePicker> {
       _owns = widget.focusNode == null;
     }
     if (widget.showHidden != oldWidget.showHidden ||
-        !identical(widget.filter, oldWidget.filter)) {
+        !identical(widget.filter, oldWidget.filter) ||
+        !identical(widget.source, oldWidget.source)) {
       _listEntries(_cwd);
     }
   }
@@ -112,29 +126,24 @@ class _FilePickerState extends State<FilePicker> {
   /// directories first, files after, both alphabetically; cursor reset to
   /// the top. When the listing fails — unreadable or just-deleted directory
   /// — `_cwd`/`_entries` are left untouched and the failure is surfaced as
-  /// a dim error row instead of an uncaught [FileSystemException].
-  void _listEntries(Directory dir) {
-    final List<FileSystemEntity> all;
+  /// a dim error row instead of an uncaught [FileSourceException].
+  void _listEntries(String dir) {
+    final List<FileEntry> all;
     try {
-      all = dir.listSync(followLinks: false);
-    } on FileSystemException catch (error) {
+      all = _source.list(dir);
+    } on FileSourceException catch (error) {
       _error = error.message;
       return;
     }
-    final filtered = <FileSystemEntity>[];
-    for (final e in all) {
-      final name = _basename(e.path);
-      if (!widget.showHidden && name.startsWith('.')) continue;
-      if (widget.filter != null && !widget.filter!(e)) continue;
-      filtered.add(e);
-    }
+    final filter = widget.filter;
+    final filtered = <FileEntry>[
+      for (final e in all)
+        if ((widget.showHidden || !e.hidden) && (filter == null || filter(e)))
+          e,
+    ];
     filtered.sort((a, b) {
-      final aDir = a is Directory;
-      final bDir = b is Directory;
-      if (aDir != bDir) return aDir ? -1 : 1;
-      return _basename(
-        a.path,
-      ).toLowerCase().compareTo(_basename(b.path).toLowerCase());
+      if (a.isDirectory != b.isDirectory) return a.isDirectory ? -1 : 1;
+      return a.name.toLowerCase().compareTo(b.name.toLowerCase());
     });
     _error = null;
     _cwd = dir;
@@ -142,28 +151,16 @@ class _FilePickerState extends State<FilePicker> {
     _list.currentIndex = filtered.isEmpty ? null : 0;
   }
 
-  String _basename(String path) {
-    final i = path.lastIndexOf(Platform.pathSeparator);
-    return i < 0 ? path : path.substring(i + 1);
-  }
-
   String _safeText(String text) {
     return sanitizeSingleLine(text);
   }
 
-  String _entryType(FileSystemEntity entry) {
-    if (entry is Directory) return 'directory';
-    if (entry is File) return 'file';
-    if (entry is Link) return 'link';
-    return 'other';
+  String _displayName(FileEntry entry) {
+    final name = _safeText(entry.name);
+    return entry.isDirectory ? '$name/' : name;
   }
 
-  String _displayName(FileSystemEntity entry) {
-    final name = _safeText(_basename(entry.path));
-    return entry is Directory ? '$name/' : name;
-  }
-
-  bool _canOpen(FileSystemEntity entry) => entry is Directory || entry is File;
+  bool _canOpen(FileEntry entry) => entry.isDirectory || entry.isFile;
 
   void _activateEntryAt(int index) {
     if (index < 0 || index >= _entries.length) return;
@@ -191,16 +188,16 @@ class _FilePickerState extends State<FilePicker> {
   void _enterCurrent() {
     if (_entries.isEmpty) return;
     final e = _entries[_cursor];
-    if (e is Directory) {
-      setState(() => _listEntries(e));
-    } else if (e is File) {
+    if (e.isDirectory) {
+      setState(() => _listEntries(e.path));
+    } else if (e.isFile) {
       widget.onSelect(e);
     }
   }
 
   void _goUp() {
-    final parent = _cwd.parent;
-    if (parent.path == _cwd.path) return; // already at filesystem root
+    final parent = _source.parent(_cwd);
+    if (parent == _cwd) return; // already at the root
     setState(() => _listEntries(parent));
   }
 
@@ -239,10 +236,10 @@ class _FilePickerState extends State<FilePicker> {
 
   Widget _entryRow(ThemeData theme, int i, bool focused) {
     final e = _entries[i];
-    final isDir = e is Directory;
+    final isDir = e.isDirectory;
     final isSelected = i == _cursor;
     final marker = isDir ? '▸ ' : '  ';
-    final rawName = _basename(e.path) + (isDir ? '/' : '');
+    final rawName = e.name + (isDir ? '/' : '');
     final name = _displayName(e);
     final style = isSelected
         ? (focused ? theme.selectionStyle : theme.mutedStyle)
@@ -269,9 +266,9 @@ class _FilePickerState extends State<FilePicker> {
         'rowIndex': i,
         'rowKey': safePath,
         'path': safePath,
-        'entryType': _entryType(e),
+        'entryType': e.type.name,
         'isDirectory': isDir,
-        'hidden': _basename(e.path).startsWith('.'),
+        'hidden': e.hidden,
         'outputSanitized': safePath != e.path || name != rawName,
       }),
       // Click a row to activate it: a directory opens in place, a file is
@@ -293,7 +290,7 @@ class _FilePickerState extends State<FilePicker> {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final focused = context.listen(_node).hasFocus;
-    final safeCwd = _safeText(_cwd.path);
+    final safeCwd = _safeText(_cwd);
     final selected = _entries.isEmpty ? null : _entries[_cursor];
     final visible = _entries.isEmpty
         ? 1
@@ -312,12 +309,12 @@ class _FilePickerState extends State<FilePicker> {
           );
     // A clickable parent-directory row so the mouse can climb out of a folder
     // without the keyboard (Backspace / Left). Hidden at the filesystem root.
-    final canGoUp = _cwd.parent.path != _cwd.path;
+    final canGoUp = _source.parent(_cwd) != _cwd;
     final Widget? upRow = canGoUp
         ? Semantics(
             role: SemanticRole.treeItem,
             label: 'Parent directory',
-            value: _safeText(_cwd.parent.path),
+            value: _safeText(_source.parent(_cwd)),
             enabled: true,
             actions: {SemanticAction.open},
             onAction: (action) {
@@ -356,14 +353,14 @@ class _FilePickerState extends State<FilePicker> {
         'currentDirectory': safeCwd,
         'collectionRowCount': _entries.length,
         'showHidden': widget.showHidden,
-        'outputSanitized': safeCwd != _cwd.path,
+        'outputSanitized': safeCwd != _cwd,
         if (_error != null) 'error': _safeText(_error!),
         if (selected != null) ...{
           'currentIndex': _cursor,
           'selectedKey': _safeText(selected.path),
           'selectedPath': _safeText(selected.path),
-          'selectedEntryType': _entryType(selected),
-          'selectedIsDirectory': selected is Directory,
+          'selectedEntryType': selected.type.name,
+          'selectedIsDirectory': selected.isDirectory,
         },
       }),
       child: KeyDetector(
