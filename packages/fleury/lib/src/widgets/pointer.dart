@@ -646,8 +646,11 @@ class _PointerRouterScopeElement extends ScopeElement<PointerRouter> {
 /// Reports taps (and right-clicks) on its [child]. A tap is a press and
 /// release within the same region — the terminal analogue of a button
 /// press. Moving to a different cell while held cancels the tap, even inside
-/// the region. The innermost tap/drag target owns the press; wrapping an
-/// interactive child does not observe its taps or add secondary handling.
+/// the region. The innermost tap/drag target owns the tap, so wrapping an
+/// interactive child does not observe the child's taps or add secondary
+/// handling: [onTap] and [onSecondaryTap] fire only on the innermost target. A
+/// drag goes to the nearest drag target from the pressed child outward, and
+/// that target also receives [onTapDown].
 /// Pair with a `Focus` if the target should also take keyboard
 /// focus (click-to-focus handles that automatically for focusables).
 class GestureDetector extends StatelessWidget {

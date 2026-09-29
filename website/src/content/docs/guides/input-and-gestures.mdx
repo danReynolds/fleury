@@ -99,9 +99,12 @@ This adds enter/exit callbacks without intercepting the children's presses.
 <FleuryExample slot="demo" id="input.nesting" cols={38} rows={9} interactive />
 </CodeDemoSplit>
 
-Tap and drag handling belongs to the innermost target. Wrapping a button in a
-gesture detector won't observe its taps or add secondary-click handling; use
-the button's own callbacks. Hover remains active on containing mouse regions.
+A press goes to the innermost target that handles taps or drags, and only that
+target's `onTap` or `onSecondaryTap` fires on release. Wrapping a button in a
+gesture detector therefore won't observe its taps or add secondary-click
+handling; use the button's own callbacks. A drag that starts on the button goes
+to the nearest ancestor that handles drags, which also receives `onTapDown`.
+Hover remains active on containing mouse regions.
 
 Wheel input can pass to an ancestor at a scroll edge; see
 [nested scrolling](/fleury/guides/lists-and-scrolling/#nested-wheel-input) for containment.
@@ -109,9 +112,12 @@ Wheel input can pass to an ancestor at a scroll edge; see
 <details>
 <summary>Keep copied text separate from controls</summary>
 
-FleuryApp makes ordinary text selectable. Use a `SelectionArea` for a region
-with its own selection callback or options. Set `allowSelect: false` on handle
-text so dragging it doesn't also select its label.
+In a terminal app, `runApp` makes ordinary text selectable. Use a
+`SelectionArea` for a region with its own selection callback or options. Set
+`allowSelect: false` on decorative text inside a control, such as a resize
+handle's `│`, so a selection dragged across it doesn't copy the glyph. Dragging
+the handle itself resizes: its detector is the nearest target that handles
+drags, so the selection never sees that drag.
 
 </details>
 
