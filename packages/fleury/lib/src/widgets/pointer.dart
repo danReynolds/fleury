@@ -645,7 +645,10 @@ class _PointerRouterScopeElement extends ScopeElement<PointerRouter> {
 
 /// Reports taps (and right-clicks) on its [child]. A tap is a press and
 /// release within the same region — the terminal analogue of a button
-/// press. Pair with a `Focus` if the target should also take keyboard
+/// press. Moving to a different cell while held cancels the tap, even inside
+/// the region. The innermost tap/drag target owns the press; wrapping an
+/// interactive child does not observe its taps or add secondary handling.
+/// Pair with a `Focus` if the target should also take keyboard
 /// focus (click-to-focus handles that automatically for focusables).
 class GestureDetector extends StatelessWidget {
   const GestureDetector({
@@ -682,7 +685,9 @@ class GestureDetector extends StatelessWidget {
   final PointerTapCallback? onSecondaryTap;
 
   /// Drag: a left press, then motion (with the button held), then
-  /// release. The region keeps receiving [onDragUpdate] even when the
+  /// release. The first changed cell calls both [onDragStart] and
+  /// [onDragUpdate] with the same delta; apply movement in [onDragUpdate].
+  /// The region keeps receiving [onDragUpdate] even when the
   /// pointer leaves it (pointer capture), so sliders and splitters track
   /// smoothly. A drag suppresses [onTap].
   final PointerDragCallback? onDragStart;

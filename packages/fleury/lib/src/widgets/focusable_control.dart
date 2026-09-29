@@ -19,6 +19,7 @@ import 'theme.dart';
 class FocusableControl extends StatefulWidget {
   const FocusableControl({
     required this.onActivate,
+    this.onSecondaryActivate,
     required this.builder,
     required this.semanticRole,
     required this.defaultStyle,
@@ -42,6 +43,7 @@ class FocusableControl extends StatefulWidget {
   /// click then does nothing, and a semantic activation reports it
   /// `unsupported`. Anything else it throws reports that activation `failed`.
   final void Function()? onActivate;
+  final void Function()? onSecondaryActivate;
   final Widget Function(
     CellStyle style,
     bool enabled,
@@ -78,6 +80,7 @@ class _FocusableControlState extends State<FocusableControl>
   late FocusNode _node;
   bool _owns = false;
   bool _hovered = false;
+  bool _pressed = false;
   FormControlRegistration? _formRegistration;
 
   @override
@@ -91,6 +94,7 @@ class _FocusableControlState extends State<FocusableControl>
   @override
   void didUpdateWidget(FocusableControl oldWidget) {
     super.didUpdateWidget(oldWidget);
+    if (!widget.enabled) _pressed = false;
     if (widget.focusNode != oldWidget.focusNode) {
       _node.textInputClaimant = null;
       if (_owns) _node.dispose();
@@ -135,6 +139,10 @@ class _FocusableControlState extends State<FocusableControl>
     _formRegistration?.controlValueChanged(this);
   }
 
+  void _setPressed(bool value) {
+    if (_pressed != value) setState(() => _pressed = value);
+  }
+
   void _setValue(Object? payload) {
     widget.onSetValue?.call(payload);
     _formRegistration?.controlValueChanged(this);
@@ -162,6 +170,14 @@ class _FocusableControlState extends State<FocusableControl>
   KeyEventResult onPaste(String text) => KeyEventResult.ignored;
 
   @override
+  void deactivate() {
+    // Capture is dropped when this subtree leaves the active tree, including
+    // a GlobalKey move. A preserved State must not carry its held visual along.
+    _pressed = false;
+    super.deactivate();
+  }
+
+  @override
   void dispose() {
     _node.textInputClaimant = null;
     _formRegistration?.release(this);
@@ -177,6 +193,7 @@ class _FocusableControlState extends State<FocusableControl>
     final states = <CellStyleState>{
       if (_hovered) CellStyleState.hovered,
       if (focused) CellStyleState.focused,
+      if (_pressed) CellStyleState.pressed,
       if (widget.styleSelected) CellStyleState.selected,
       if (!widget.enabled) CellStyleState.disabled,
       if (validationError != null) CellStyleState.invalid,
@@ -230,12 +247,26 @@ class _FocusableControlState extends State<FocusableControl>
             },
             onSetValue: widget.onSetValue == null ? null : _setValue,
             child: GestureDetector(
+              onTapDown: (_) => _setPressed(true),
+              onTapUp: (_) => _setPressed(false),
+              onTapCancel: () => _setPressed(false),
               // A click focuses the control and activates it, so pointer users
               // get the same affordance as keyboard users.
               onTap: () {
                 _node.requestFocus();
                 _activate();
               },
+              onSecondaryTap: widget.onSecondaryActivate == null
+                  ? null
+                  : () {
+                      _node.requestFocus();
+                      try {
+                        widget.onSecondaryActivate!();
+                      } on SemanticActionDeclined {
+                        // A declined right-click is a no-op, like a primary click.
+                        return;
+                      }
+                    },
               child: KeyDetector(
                 onKey: (event) {
                   if ((_onKey)(event) == KeyEventResult.handled) {

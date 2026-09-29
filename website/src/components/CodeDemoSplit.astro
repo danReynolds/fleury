@@ -253,6 +253,11 @@ const expandIcon =
         hostWrap.className = 'fleury-host-wrap';
         hostWrap.append(host);
         demoCol.append(demoCap, hostWrap);
+      } else if (fx?.dataset.practice === 'true') {
+        const exercise = document.createElement('input-practice');
+        exercise.dataset.example = id;
+        exercise.append(host);
+        demoCol.append(demoCap, exercise);
       } else {
         demoCol.append(demoCap, host);
       }

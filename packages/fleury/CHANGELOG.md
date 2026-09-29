@@ -1,5 +1,11 @@
 # Changelog
 
+- `Button.onSecondaryPressed` handles a completed right click while retaining
+  keyboard focus and the button's enabled state. `CellStyle.interactive(pressed:)`
+  styles a held primary pointer press on activatable controls; release,
+  cancellation, or disabling clears it. Keyboard and semantic activation remain
+  immediate actions. Custom controls can also pass `pressed:` to `CellStyle.resolve`.
+
 - Arrow navigation now reveals controls outside the current scroll viewport
   without scrolling away from the focused action. Descendant editors and lists
   retain their key handling. Scrollbars can hide when content fits with

@@ -50,6 +50,7 @@ class Button extends StatelessWidget {
     this.child,
     this.semanticLabel,
     required this.onPressed,
+    this.onSecondaryPressed,
     this.variant = ButtonVariant.normal,
     this.appearance = ButtonAppearance.bracketed,
     this.focusNode,
@@ -80,6 +81,12 @@ class Button extends StatelessWidget {
   /// starts; see [FocusableControl.onActivate] for how a press declines.
   final void Function()? onPressed;
 
+  /// Called after a completed right-button click, without calling [onPressed].
+  /// The click also focuses the button. Null [onPressed] disables both actions.
+  /// Provide a keyboard-accessible route to this action as well, such as a
+  /// separate Details button or a shortcut in an enclosing KeyBindings.
+  final void Function()? onSecondaryPressed;
+
   /// Accent applied to the label, resolved from the theme's [ColorScheme].
   final ButtonVariant variant;
 
@@ -92,7 +99,7 @@ class Button extends StatelessWidget {
   /// Whether the button requests focus when mounted.
   final bool autofocus;
 
-  /// Base styling, plus optional hover, focus, and disabled state entries from
+  /// Base styling, plus optional hover, focus, pressed, and disabled entries from
   /// [CellStyle.interactive].
   final CellStyle? style;
 
@@ -155,6 +162,7 @@ class Button extends StatelessWidget {
       focusNode: focusNode,
       autofocus: autofocus,
       onActivate: onPressed,
+      onSecondaryActivate: onSecondaryPressed,
       semanticRole: SemanticRole.button,
       semanticLabel: name,
       builder: (style, enabled, states) => ExcludeSemantics(

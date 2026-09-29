@@ -1,0 +1,33 @@
+---
+import FleuryExample from './FleuryExample.astro';
+interface Props { id: string; cols: number; rows: number }
+const { id, cols, rows } = Astro.props;
+---
+<input-practice data-example={id}>
+  <FleuryExample id={id} cols={cols} rows={rows} interactive practice />
+</input-practice>
+
+<script>
+  import { attachInputPractice } from '../scripts/input-practice.mjs';
+  if (!customElements.get('input-practice')) {
+    customElements.define('input-practice', class extends HTMLElement {
+      private cleanup?: () => void;
+      connectedCallback() { this.cleanup = attachInputPractice(this); }
+      disconnectedCallback() { this.cleanup?.(); }
+    });
+  }
+</script>
+
+<style is:global>
+  input-practice { display: block; min-width: 0; width: 100%; }
+  .input-practice-panel { margin-top: 1rem; font-size: 0.82rem; line-height: 1.4; }
+  .input-practice-header { display: flex; justify-content: space-between; align-items: center; gap: 0.7rem; }
+  .input-practice-header [role="status"] { font-weight: 600; color: var(--sl-color-text-accent); }
+  .input-practice-header button { border: 0; padding: .2rem; background: transparent; color: var(--sl-color-gray-2); font: inherit; cursor: pointer; text-decoration: underline; text-underline-offset: .2em; }
+  .input-practice-header button:hover { color: var(--sl-color-text-accent); }
+  .input-practice-steps { list-style: none !important; padding: 0 !important; margin: .65rem 0 0 !important; display: grid; gap: .5rem; }
+  .input-practice-steps li { display: flex; gap: .6rem; align-items: baseline; margin: 0 !important; color: var(--sl-color-gray-2); }
+  .input-practice-steps [data-done="true"] { color: var(--sl-color-text); }
+  .input-practice-check { width: 1.1rem; flex: 0 0 1.1rem; text-align: center; }
+  [data-done="true"] .input-practice-check { color: var(--sl-color-text-accent); font-weight: 700; }
+</style>
