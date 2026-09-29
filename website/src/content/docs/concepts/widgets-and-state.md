@@ -75,15 +75,19 @@ With `value` and `onChanged`, your state owns the value. The control asks for a
 change, and you supply the updated value:
 
 ```dart
-Checkbox(
-  label: 'Contain arrows',
-  value: contain,
-  onChanged: (value) => setState(() => contain = value),
+Select<EdgeBehavior>(
+  value: edgeBehavior,
+  options: const [
+    SelectOption(value: EdgeBehavior.bubble, label: 'Bubble (leave pane)'),
+    SelectOption(value: EdgeBehavior.contain, label: 'Contain (stay in pane)'),
+  ],
+  onChanged: (value) => setState(() => edgeBehavior = value),
 )
 ```
 
-Try that checkbox in the [scroll-edge demo](/fleury/guides/lists-and-scrolling/#see-what-happens-at-an-edge).
-The same `contain` field controls both its checkmark and the pane's edge behavior.
+Try that selector in the [scroll-edge demo](/fleury/guides/lists-and-scrolling/#scroll-edges).
+The same `edgeBehavior` field controls both the option it shows and the pane's
+edge behavior.
 
 A controller holds live state that both your code and the widget can change.
 Create it once in `State` and dispose it with that state:
@@ -178,11 +182,12 @@ responsive layout; it's a `Scope` under the hood (see below). There
 are shorthands too: `context.theme` and `context.colors`.
 
 For application state, `context.scope<Model>()` finds the nearest `Scope<Model>`
-and subscribes this widget. If you already have a model,
-`context.listen(model)` subscribes directly and returns that same object. Call
-these readers during this widget's `build`; use the captured model in event
-callbacks. Their subscriptions follow the dependencies used by each build and
-are removed automatically when no longer used or when the widget unmounts.
+and subscribes this widget until it leaves the tree. If you already have a
+model, `context.listen(model)` subscribes directly and returns that same
+object; that subscription lasts while the widget's builds keep reading the
+model. Call these readers during this widget's `build`, and use the captured
+model in event callbacks. Both subscriptions end automatically when the widget
+unmounts.
 
 Note one difference from a render tree: a `BuildContext` has no `.size`. A widget
 doesn't know its own dimensions during `build` (it hasn't been laid out yet).

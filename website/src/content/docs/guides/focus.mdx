@@ -73,23 +73,6 @@ Fleury provides this policy with a `FocusTraversalGroup` at each route root.
 You normally do not add one yourself; build the layout and let traversal follow
 it.
 
-### How arrow movement works
-
-Arrow-driven focus movement is commonly called
-[spatial navigation](https://www.w3.org/TR/css-nav-1/). Fleury uses the painted
-layout and the widget tree together. When a focused control leaves an arrow
-unhandled, Fleury:
-
-1. Considers visible, focusable controls in the requested direction.
-2. Prefers controls in the same logical region, such as siblings in one pane.
-3. Prefers a focusable child over its focusable container.
-4. Chooses the best-aligned nearby control, with stable reading order as the
-   final tie-breaker.
-
-Arrows do not wrap. If there is no target in that direction, the key remains
-unhandled so an ancestor can respond. Because navigation follows the rendered
-layout, moving or resizing a control updates the focus path automatically.
-
 Click the example, then try the behavior together:
 
 - Tab scans each visual row from left to right; Shift+Tab reverses it.
@@ -108,6 +91,23 @@ Click the example, then try the behavior together:
 
 The highlighted panel only makes the automatic path visible. The screen does
 not configure focus traversal.
+
+### How arrow movement works
+
+Arrow-driven focus movement is commonly called
+[spatial navigation](https://www.w3.org/TR/css-nav-1/). Fleury uses the painted
+layout and the widget tree together. When a focused control leaves an arrow
+unhandled, Fleury:
+
+1. Considers visible, focusable controls in the requested direction.
+2. Prefers controls in the same logical region, such as siblings in one pane.
+3. Prefers a focusable child over its focusable container.
+4. Chooses the best-aligned nearby control, with a stable order as the
+   final tie-breaker.
+
+Arrows do not wrap. If there is no target in that direction, the key remains
+unhandled so an ancestor can respond. Because navigation follows the rendered
+layout, moving or resizing a control updates the focus path automatically.
 
 ## Focus targets
 
@@ -139,8 +139,10 @@ Focus(
 )
 ```
 
-Put the control's key behavior inside it with `KeyDetector`, or declare
-commands around it with `KeyBindings`.
+Keys travel from the focused node up through its ancestors, so wrap the
+`Focus` itself: in a `KeyDetector` for the control's own key handling, or in
+`KeyBindings` for declared commands. A detector placed inside the `Focus`
+never sees the keys.
 
 ## Programmatic focus
 
@@ -233,24 +235,21 @@ children of the same region.
 
 ### Reading focus while you build
 
-`FocusDetector` and `Focus.of(context).hasFocus` answer different questions.
+`FocusDetector` and `Focus.of(context).hasFocus` answer different questions:
 
-`FocusDetector` is descendant-inclusive: it stays true while *anything inside*
-the region is focused, and moving between children is not a leave. That is the
-active-pane signal.
+- `FocusDetector` reports whether *anything inside* a region has focus. Moving
+  between its children is not a leave, which makes it the active-pane signal.
+- `Focus.of(context).hasFocus` is true only while the nearest `Focus` *is* the
+  focused node. Inside a pane of buttons or inputs, it is false while a child
+  holds the keyboard. Use it when the region is itself one focus stop, such as
+  a list or a slider.
 
-`Focus.of(context).hasFocus` is identity: it is true only while the nearest
-`Focus` *is* the focused node. Inside a pane that contains buttons or inputs,
-that check is false while a child holds the keyboard. Use it when the region
-is itself one focus stop — a list, a slider — not as a stand-in for the
-detector.
-
-Reading `Focus.of` or `FocusManager.of` subscribes the caller, so a build
-method can keep the value current without a detector or a `setState`.
-`Focus.of` in a widget's own build rebuilds it when that node's focus flips;
-`FocusManager.of` rebuilds it on every focus move.
-`KeyBindings` and `KeyDetector` are input-chain mailboxes, not `Focus`
-targets — `Focus.of` walks past them to the enclosing keyboard target.
+Reading `Focus.of` during `build` subscribes the widget, so it rebuilds when
+that node gains or loses focus without a detector or `setState`.
+`FocusManager.of(context)` returns the application's focus manager, which
+knows what has focus anywhere, and rebuilds the reader on every focus move.
+`KeyBindings` and `KeyDetector` are not focus targets; `Focus.of` skips past
+them to the enclosing `Focus`.
 
 A list is one focus stop with a row cursor. `highlighted` means *current* and
 stays true when the keyboard leaves; `Focus.of(context).hasFocus` is whether
@@ -281,12 +280,9 @@ ListView.builder(
 )
 ```
 
-The manager itself is `FocusManager.of(context)`, which answers what has focus
-anywhere in the application. One manager exists per application rather than per
-process, which is why it is reached through the tree. Overlay entries
-(menus, toasts, the error overlay) sit beside the app root, not under it: a
-context in an entry with no local `Focus` has no enclosing node
-(`Focus.maybeOf` returns null and `Focus.of` throws) while `FocusManager.of`
+Overlay entries such as menus, toasts, and the error overlay sit beside the
+app root rather than under it. Inside an entry with no `Focus` of its own,
+`Focus.maybeOf` returns null and `Focus.of` throws, while `FocusManager.of`
 still works.
 
 ## Screens and dialogs
@@ -330,8 +326,9 @@ FocusScope(
 
 Every `FocusScope` remembers its last focused descendant. `trapFocus` adds the
 stronger rule that focus cannot leave the subtree; it does not swallow key
-events. Use a key-binding boundary separately when a low-level overlay must
-also prevent unmatched commands from reaching the app behind it.
+events. When unmatched keys must not reach the app behind the overlay either,
+also wrap it in `KeyBindings(modal: true)`. `Navigator.present` applies both
+for you.
 
 ### Bare roots
 
@@ -353,17 +350,22 @@ These APIs answer different questions:
 
 ```dart
 // Clickable or programmatically focusable, but skipped by traversal.
-Focus(skipTraversal: true, child: AuxiliaryButton());
+final _helpFocus = FocusNode(skipTraversal: true);
+Button(text: 'Help', focusNode: _helpFocus, onPressed: showHelp);
 
 // Cannot receive focus by traversal, click, or requestFocus().
-Focus(canRequestFocus: false, child: DecorativeWidget());
+Focus(canRequestFocus: false, child: DecorativeCanvas());
 
 // Remove an entire hidden or inactive subtree from focus.
 ExcludeFocus(child: OffstagePage());
 ```
 
-Prefer `ExcludeFocus` for a whole inactive page and the `Focus` flags for an
-individual target. Skipping traversal does not disable pointer input.
+The flags belong to the node that takes focus. A built-in control owns its
+node, so give it a `FocusNode` created with the flag, and own and dispose it
+like any other node. Wrapping the control in `Focus(skipTraversal: true)` would
+only flag the wrapper. Use the `Focus` flags for a custom target that has no
+node of its own, and `ExcludeFocus` for a whole inactive page. Skipping
+traversal does not disable pointer input.
 
 ## API reference
 

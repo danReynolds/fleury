@@ -38,15 +38,15 @@ enum DetailsResult { done }
 
 Future<void> openDetails(BuildContext context) async {
   final result = await context.push<DetailsResult>(const DetailsScreen());
-
-  if (result != null) showResult(result);
+  if (!context.mounted || result == null) return;
+  showResult(result);
 }
 
 Future<void> showConfirmation(BuildContext context) async {
   final confirmed = await context.present<bool>(
     const ConfirmationDialog(),
   );
-
+  if (!context.mounted) return;
   showDialogResult(confirmed == true);
 }
 ```
@@ -69,6 +69,9 @@ Try the operations in isolation:
 3. Activate **Pop without result**. The home screen returns unchanged.
 4. Push details again and choose **Pop with result**. The awaiting home screen
    now reports `done`.
+
+Check `context.mounted` after awaiting a route: other navigation can remove the
+calling screen while the route is open.
 
 Routes stay mounted while covered, so their widget state, scroll positions, and
 form values remain intact. Each route also gets automatic focus traversal and
@@ -139,10 +142,10 @@ Select<Alignment>(
     SelectOption(value: Alignment.center, label: 'Center'),
     SelectOption(value: Alignment.bottomRight, label: 'Bottom right'),
   ],
-  onChanged: (alignment) => context.present<void>(
-    const PlacedDialog(),
-    alignment: alignment,
-  ),
+  onChanged: (alignment) {
+    setState(() => placement = alignment);
+    context.present<void>(const PlacedDialog(), alignment: alignment);
+  },
 )
 ```
 </Fragment>
@@ -354,4 +357,4 @@ finishing or cancelling the whole flow, or for opening an app-wide route.
 - [App entry points](/fleury/concepts/app-entry/) covers `home`, `child`, and
   custom root shells.
 - The [app-shell example](https://github.com/danReynolds/fleury/blob/main/packages/fleury_widgets/example/app_shell_demo.dart)
-  combines a custom root shell, commands, and navigation results.
+  combines app-wide commands, a screen's `CommandScope`, and pushed routes.

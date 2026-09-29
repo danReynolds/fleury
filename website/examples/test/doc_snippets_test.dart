@@ -276,29 +276,15 @@ void main() {
           'Project: Beacon',
         ),
         (
-          'project context reader',
-          state_management.projectContextDemoApp,
-          'Project: Atlas',
-          'Switch project',
-          'Project: Beacon',
+          'shop scope',
+          state_management.shopDemoApp,
+          'In cart: 0',
+          'Add coffee',
+          'In cart: 1',
         ),
         (
           'cart notifier builder',
           state_management.cartNotifierDemoApp,
-          'Items: 0',
-          'Add item',
-          'Items: 1',
-        ),
-        (
-          'cart context reader',
-          state_management.cartContextDemoApp,
-          'Items: 0',
-          'Add item',
-          'Items: 1',
-        ),
-        (
-          'cart value notifier',
-          state_management.cartValueDemoApp,
           'Items: 0',
           'Add item',
           'Items: 1',
@@ -383,6 +369,73 @@ void main() {
     photo.complete(img.Image(width: 2, height: 2));
     await tester.settle();
     expect(tester.renderToString(emptyMark: ' '), contains('Load another'));
+  });
+
+  // A FutureBuilder keeps the previous error while a new future waits, so the
+  // card must read the connection state before the error.
+  testWidgets('loading data guide explorer shows loading after an error', (
+    tester,
+  ) async {
+    tester.pumpWidget(const loading_data.SnapshotExplorer());
+    await tester.button('Snapshot state').setValue('Error');
+    await tester.settle();
+    expect(tester.renderToString(emptyMark: ' '), contains('ERROR'));
+
+    await tester.button('Snapshot state').setValue('Loading');
+    await tester.settle();
+    final output = tester.renderToString(emptyMark: ' ');
+    expect(output, contains('LOADING'));
+    expect(output, isNot(contains('ERROR')));
+  });
+
+  testWidgets('loading data guide retry replaces the stale error', (
+    tester,
+  ) async {
+    final requests = <Completer<img.Image>>[];
+    tester.pumpWidget(
+      loading_data.PhotoViewer(
+        loadPhoto: () => (requests..add(Completer<img.Image>())).last.future,
+      ),
+    );
+    requests.last.completeError(StateError('offline'));
+    await tester.settle();
+    expect(
+      tester.renderToString(emptyMark: ' '),
+      contains('Could not load a photo.'),
+    );
+
+    await tester.button('Retry').press();
+    expect(requests, hasLength(2));
+    var output = tester.renderToString(emptyMark: ' ');
+    expect(output, contains('Loading a photo from the web…'));
+    expect(output, isNot(contains('Could not load')));
+    expect(output, isNot(contains('Retry')));
+
+    requests.last.complete(img.Image(width: 2, height: 2));
+    await tester.settle();
+    output = tester.renderToString(emptyMark: ' ');
+    expect(output, contains('Load another'));
+  });
+
+  testWidgets('loading data guide restart begins a fresh stream view', (
+    tester,
+  ) async {
+    tester.pumpWidget(const loading_data.TransmissionView());
+    for (var packet = 1; packet <= 3; packet++) {
+      await tester.button('Next packet').press();
+      await tester.settle();
+    }
+    expect(
+      tester.renderToString(emptyMark: ' '),
+      contains('LIVE · 3/5 packets'),
+    );
+
+    await tester.button('Restart').press();
+    await tester.settle();
+    expect(
+      tester.renderToString(emptyMark: ' '),
+      contains('CONNECTING · 0/5 packets'),
+    );
   });
 
   testWidgets('loading data guide stream grows and completes', (tester) async {

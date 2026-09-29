@@ -10,10 +10,9 @@ import 'package:fleury/fleury_core.dart';
 import 'package:fleury_samples/samples.dart';
 import 'package:fleury_themes/fleury_themes.dart';
 import 'package:fleury_widgets/fleury_widgets_web.dart';
-import 'package:http/http.dart' as http;
-import 'package:image/image.dart' as img;
 
 import 'state_management_guide.dart' as state;
+import 'loading_data_guide.dart' as loading;
 import 'testing_guide.dart' as testing;
 import 'input_guide.dart' as input;
 import 'lists_guide.dart' as lists;
@@ -2146,18 +2145,6 @@ form.clearErrors();''',
     builder: () => const _EffectPickerTour(),
   ),
   ExampleInfo(
-    id: 'animation.chain',
-    widget: 'Animation',
-    category: 'Guide examples',
-    blurb:
-        'Drive and await a multi-step packet route from an application '
-        'event.',
-    cols: 48,
-    rows: 13,
-    interactive: true,
-    builder: () => const _AnimationChainTour(),
-  ),
-  ExampleInfo(
     id: 'animation.frames',
     widget: 'FrameBuilder',
     category: 'Guide examples',
@@ -2189,23 +2176,27 @@ form.clearErrors();''',
   ),
   ExampleInfo(
     id: 'state.project-scope',
-    widget: 'ScopeBuilder',
-    category: 'Guide examples',
-    blurb: 'A descendant reads the shared project with ScopeBuilder.',
-    cols: 38,
-    rows: 9,
-    interactive: true,
-    builder: () => _framed(const state.ProjectScopeScreen()),
-  ),
-  ExampleInfo(
-    id: 'state.project-context',
     widget: 'Scope',
     category: 'Guide examples',
-    blurb: 'A descendant reads the shared project through context.scope.',
+    blurb:
+        'Two const descendants read one shared project, one with ScopeBuilder '
+        'and one with context.scope.',
     cols: 38,
     rows: 9,
     interactive: true,
     builder: () => _framed(const state.ProjectScreen()),
+  ),
+  ExampleInfo(
+    id: 'state.shop',
+    widget: 'Scope.create',
+    category: 'Guide examples',
+    blurb:
+        'A scope creates and owns a cart; a badge and two buttons elsewhere '
+        'in the subtree share it.',
+    cols: 38,
+    rows: 9,
+    interactive: true,
+    builder: () => _framed(const state.Shop()),
   ),
   ExampleInfo(
     id: 'state.cart-notifier',
@@ -2216,26 +2207,6 @@ form.clearErrors();''',
     rows: 9,
     interactive: true,
     builder: () => _framed(const state.CartDemo()),
-  ),
-  ExampleInfo(
-    id: 'state.cart-context',
-    widget: 'BuildContext',
-    category: 'Guide examples',
-    blurb: 'The same cart API updates a widget through context.listen.',
-    cols: 38,
-    rows: 9,
-    interactive: true,
-    builder: () => _framed(const state.CartDemo(contextReader: true)),
-  ),
-  ExampleInfo(
-    id: 'state.cart-value',
-    widget: 'ValueNotifier',
-    category: 'Guide examples',
-    blurb: 'A ValueNotifier updates the item count through context.listen.',
-    cols: 38,
-    rows: 9,
-    interactive: true,
-    builder: () => _framed(const state.CartValueDemo()),
   ),
   ExampleInfo(
     id: 'input.editing',
@@ -4002,9 +3973,15 @@ class _ThemePreview extends StatelessWidget {
   Widget build(BuildContext context) {
     final cs = context.colors;
     final theme = context.theme;
+    // The border shows the theme's borderStyle; it replaces vertical padding
+    // so the preview keeps its height in both embeds.
     return Container(
       color: cs.background,
-      padding: const EdgeInsets.all(1),
+      border: BoxBorder(
+        style: theme.borderStyle,
+        cellStyle: CellStyle(foreground: cs.primary),
+      ),
+      padding: const EdgeInsets.symmetric(horizontal: 1),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: <Widget>[
@@ -4105,142 +4082,19 @@ class _InteractiveStyleTour extends StatelessWidget {
   }
 }
 
-enum _SnapshotPreview { disconnected, waiting, error, empty, success }
-
-Future<List<String>>? _futureFor(_SnapshotPreview preview) => switch (preview) {
-  _SnapshotPreview.disconnected => null,
-  _SnapshotPreview.waiting => Completer<List<String>>().future,
-  // Own the failure immediately, even if rendering is delayed or this preview
-  // is replaced before a frame. FutureBuilder still receives the same error.
-  _SnapshotPreview.error => Future<List<String>>.error(
-    StateError('Connection lost'),
-  )..ignore(),
-  _SnapshotPreview.empty => Future<List<String>>.value(const <String>[]),
-  _SnapshotPreview.success => Future<List<String>>.value(const <String>[
-    'alpha.log',
-    'beta.log',
-  ]),
-};
-
-Widget _snapshotStateCard(
-  BuildContext context,
-  AsyncSnapshot<List<String>> snapshot,
-) {
-  final colors = Theme.of(context).colorScheme;
-  final files = snapshot.data ?? const <String>[];
-  late final String symbol;
-  late final String label;
-  late final String detail;
-  late final Color accent;
-
-  if (snapshot.connectionState == ConnectionState.none) {
-    symbol = '○';
-    label = 'DISCONNECTED';
-    detail = 'Choose a source to begin.';
-    accent = colors.foreground ?? Colors.white;
-  } else if (snapshot.hasError) {
-    symbol = '×';
-    label = 'ERROR';
-    detail = 'Connection lost. Try again.';
-    accent = colors.error;
-  } else if (snapshot.connectionState == ConnectionState.waiting) {
-    symbol = '◌';
-    label = 'LOADING';
-    detail = 'Loading files…';
-    accent = colors.info;
-  } else if (files.isEmpty) {
-    symbol = '◇';
-    label = 'EMPTY';
-    detail = 'The request completed with no files.';
-    accent = colors.warning;
-  } else {
-    symbol = '✓';
-    label = 'READY';
-    detail = '${files.length} files loaded';
-    accent = colors.success;
-  }
-
-  return Container(
-    border: BoxBorder(
-      style: Theme.of(context).borderStyle,
-      cellStyle: CellStyle(foreground: accent),
-    ),
-    padding: const EdgeInsets.symmetric(horizontal: 1),
-    child: Column(
-      mainAxisSize: MainAxisSize.min,
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: <Widget>[
-        Row(
-          children: <Widget>[
-            Text(symbol, style: CellStyle(foreground: accent, bold: true)),
-            const SizedBox(width: 1),
-            Text(label, style: CellStyle(foreground: accent, bold: true)),
-          ],
-        ),
-        Text(detail),
-        if (label == 'READY')
-          for (final file in files) Text('  $file'),
-      ],
-    ),
-  );
-}
-
-class _SnapshotLoadingTour extends StatefulWidget {
+class _SnapshotLoadingTour extends StatelessWidget {
   const _SnapshotLoadingTour();
 
   @override
-  State<_SnapshotLoadingTour> createState() => _SnapshotLoadingTourState();
-}
-
-class _SnapshotLoadingTourState extends State<_SnapshotLoadingTour> {
-  var _preview = _SnapshotPreview.waiting;
-  late Future<List<String>>? _future = _futureFor(_preview);
-
-  void _show(_SnapshotPreview preview) => setState(() {
-    _preview = preview;
-    _future = _futureFor(preview);
-  });
-
-  @override
   Widget build(BuildContext context) => _framed(
-    Column(
+    const Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: <Widget>[
-        const Text('PREVIEW ASYNC UI', style: CellStyle(bold: true)),
-        Select<_SnapshotPreview>(
-          value: _preview,
-          semanticLabel: 'Snapshot state',
-          onChanged: _show,
-          options: const <SelectOption<_SnapshotPreview>>[
-            SelectOption(
-              value: _SnapshotPreview.disconnected,
-              label: 'Disconnected',
-            ),
-            SelectOption(value: _SnapshotPreview.waiting, label: 'Loading'),
-            SelectOption(value: _SnapshotPreview.error, label: 'Error'),
-            SelectOption(value: _SnapshotPreview.empty, label: 'Empty'),
-            SelectOption(value: _SnapshotPreview.success, label: 'Success'),
-          ],
-        ),
-        const SizedBox(height: 1),
-        FutureBuilder<List<String>>(
-          future: _future,
-          builder: _snapshotStateCard,
-        ),
+        Text('PREVIEW ASYNC UI', style: CellStyle(bold: true)),
+        loading.SnapshotExplorer(),
       ],
     ),
   );
-}
-
-Future<img.Image> _fetchDemoPhoto(int seed) async {
-  final response = await http.get(
-    Uri.parse('https://picsum.photos/seed/fleury-$seed/480/240.jpg'),
-  );
-  if (response.statusCode != 200) {
-    throw StateError('Photo request failed (${response.statusCode})');
-  }
-  return img.decodeImage(response.bodyBytes) ??
-      (throw const FormatException('Response was not an image'));
 }
 
 class _NetworkImageLoadingTour extends StatefulWidget {
@@ -4252,163 +4106,25 @@ class _NetworkImageLoadingTour extends StatefulWidget {
 }
 
 class _NetworkImageLoadingTourState extends State<_NetworkImageLoadingTour> {
-  var _seed = 1;
-  late Future<img.Image> _photo = _fetchDemoPhoto(_seed);
-
-  void _reload() => setState(() => _photo = _fetchDemoPhoto(++_seed));
+  var _seed = 0;
 
   @override
   Widget build(BuildContext context) => _framed(
-    FutureBuilder<img.Image>(
-      future: _photo,
-      builder: (context, snapshot) {
-        if (snapshot.hasError) {
-          return Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: <Widget>[
-              const Text('Could not load a photo.'),
-              Button(text: 'Retry', onPressed: _reload),
-            ],
-          );
-        }
-
-        final photo = snapshot.data;
-        if (photo == null) return const Text('Loading a photo from the web…');
-        final refreshing = snapshot.connectionState == ConnectionState.waiting;
-        return Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: <Widget>[
-            Text(refreshing ? 'Loading a new photo…' : 'Photo $_seed'),
-            const SizedBox(height: 1),
-            SizedBox(
-              width: 48,
-              height: 10,
-              child: Image.decoded(
-                photo,
-                fit: ImageFit.cover,
-                semanticLabel: 'Random landscape photo',
-              ),
-            ),
-            const SizedBox(height: 1),
-            Button(
-              text: 'Load another',
-              onPressed: refreshing ? null : _reload,
-            ),
-          ],
-        );
-      },
-    ),
+    loading.PhotoViewer(loadPhoto: () => loading.fetchPhoto(++_seed)),
   );
 }
 
-class _DemoTransmission {
-  static const chunks = <String>[
-    '          *',
-    '         / \\',
-    '    *---*   *',
-    '     \\   \\ /',
-    '      *---*',
-  ];
-
-  final _controller = StreamController<List<String>>();
-  var _received = 0;
-
-  Stream<List<String>> get updates => _controller.stream;
-
-  void receiveNext() {
-    if (_received == chunks.length) return;
-    _received++;
-    _controller.add(chunks.take(_received).toList());
-    if (_received == chunks.length) _controller.close();
-  }
-
-  void dispose() {
-    if (!_controller.isClosed) _controller.close();
-  }
-}
-
-class _StreamLoadingTour extends StatefulWidget {
+class _StreamLoadingTour extends StatelessWidget {
   const _StreamLoadingTour();
 
   @override
-  State<_StreamLoadingTour> createState() => _StreamLoadingTourState();
-}
-
-class _StreamLoadingTourState extends State<_StreamLoadingTour> {
-  late _DemoTransmission _transmission;
-  late Stream<List<String>> _updates;
-
-  @override
-  void initState() {
-    super.initState();
-    _start();
-  }
-
-  void _start() {
-    _transmission = _DemoTransmission();
-    _updates = _transmission.updates;
-  }
-
-  void _restart() {
-    _transmission.dispose();
-    setState(_start);
-  }
-
-  @override
-  void dispose() {
-    _transmission.dispose();
-    super.dispose();
-  }
-
-  @override
   Widget build(BuildContext context) => _framed(
-    StreamBuilder<List<String>>(
-      stream: _updates,
-      initialData: const <String>[],
-      builder: (context, snapshot) {
-        if (snapshot.hasError) {
-          return Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: <Widget>[
-              const Text('STAR MAP TRANSMISSION', style: CellStyle(bold: true)),
-              const Text('Signal lost.'),
-              Button(text: 'Restart', onPressed: _restart),
-            ],
-          );
-        }
-
-        final lines = snapshot.requireData;
-        final status = switch (snapshot.connectionState) {
-          ConnectionState.none => 'OFFLINE',
-          ConnectionState.waiting => 'CONNECTING',
-          ConnectionState.active => 'LIVE',
-          ConnectionState.done => 'COMPLETE',
-        };
-        return Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: <Widget>[
-            const Text('STAR MAP TRANSMISSION', style: CellStyle(bold: true)),
-            Text(
-              '$status · ${lines.length}/${_DemoTransmission.chunks.length} packets',
-            ),
-            const SizedBox(height: 1),
-            for (final line in lines) Text(line),
-            const SizedBox(height: 1),
-            Row(
-              children: <Widget>[
-                Button(
-                  text: 'Next packet',
-                  onPressed: snapshot.connectionState == ConnectionState.done
-                      ? null
-                      : _transmission.receiveNext,
-                ),
-                const SizedBox(width: 1),
-                Button(text: 'Restart', onPressed: _restart),
-              ],
-            ),
-          ],
-        );
-      },
+    const Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: <Widget>[
+        Text('STAR MAP TRANSMISSION', style: CellStyle(bold: true)),
+        loading.TransmissionView(),
+      ],
     ),
   );
 }
@@ -5048,105 +4764,6 @@ class _ValidationFeedbackTourState extends State<_ValidationFeedbackTour> {
       ],
     ),
   );
-}
-
-class _AnimationChainTour extends StatefulWidget {
-  const _AnimationChainTour();
-
-  @override
-  State<_AnimationChainTour> createState() => _AnimationChainTourState();
-}
-
-class _PacketRouteController {
-  final position = Animation<int>(0, debugLabel: 'packet route position');
-
-  Future<void> send() async {
-    position.snap(0);
-    await position
-        .to(
-          10,
-          curve: Curves.easeInOut,
-          duration: const Duration(milliseconds: 900),
-        )
-        .delay(const Duration(milliseconds: 350))
-        .to(
-          20,
-          curve: Curves.easeInOut,
-          duration: const Duration(milliseconds: 1000),
-        )
-        .delay(const Duration(milliseconds: 350))
-        .to(
-          30,
-          curve: Curves.easeOut,
-          duration: const Duration(milliseconds: 1100),
-        )
-        .orCancel;
-  }
-
-  void dispose() => position.dispose();
-}
-
-class _AnimationChainTourState extends State<_AnimationChainTour> {
-  final _route = _PacketRouteController();
-  var _sending = false;
-
-  Future<void> _send() async {
-    setState(() => _sending = true);
-    try {
-      await _route.send();
-    } on TickerCanceled {
-      return;
-    }
-    if (mounted) setState(() => _sending = false);
-  }
-
-  @override
-  void dispose() {
-    _route.dispose();
-    super.dispose();
-  }
-
-  String _statusFor(int position) {
-    if (!_sending && position >= 30) return '✓ Packet archived';
-    if (!_sending) return 'Ready at depot';
-    if (position < 10) return '1/3 · Sending to relay A';
-    if (position == 10) return '1/3 · Paused at relay A';
-    if (position < 20) return '2/3 · Forwarding through relay B';
-    if (position == 20) return '2/3 · Paused at relay B';
-    return '3/3 · Delivering to archive';
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    final position = _route.position.value.clamp(0, 30);
-    final route = List<String>.filled(31, '·');
-    route[10] = '1';
-    route[20] = '2';
-    route[30] = '◆';
-    route[position] = position >= 30 ? '◉' : '●';
-    return _framed(
-      Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: <Widget>[
-          const Text('PACKET ROUTE', style: CellStyle(bold: true)),
-          const Text('Cross two relays, then deliver to the archive.'),
-          const SizedBox(height: 1),
-          Text(route.join()),
-          const Text('DEPOT    R1        R2        ARCHIVE'),
-          Text(_statusFor(position)),
-          const SizedBox(height: 1),
-          Button(
-            text: _sending
-                ? 'Restart route'
-                : position >= 30
-                ? 'Send another'
-                : 'Send packet',
-            onPressed: _send,
-          ),
-        ],
-      ),
-    );
-  }
 }
 
 class _FrameCadenceTour extends StatefulWidget {

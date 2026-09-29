@@ -5,8 +5,16 @@ description: Ship a Fleury app as a terminal binary or in-browser bundle, and pr
 
 The same app can ship as a native terminal program or a self-contained browser
 bundle. During development, `fleury serve` can also mirror a native process into
-a browser. This guide covers each path; for *how* the browser paths work under
-the hood, see [Serving and embedding](/fleury/architecture/serving-and-embedding/).
+a browser.
+
+| You want to… | Use |
+|---|---|
+| Ship a command-line tool | A native executable built with `dart compile exe` |
+| Put the app on a web page | A browser bundle: `mountApp` compiled with `dart compile js` |
+| Preview a native app in a browser during development | `fleury serve` |
+
+For *how* the browser paths work under the hood, see
+[Serving and embedding](/fleury/architecture/serving-and-embedding/).
 
 ## Ship a terminal app
 
@@ -25,7 +33,10 @@ dart compile exe bin/run_app.dart -o my_app
 ./my_app
 ```
 
-That binary is the whole app. Ship it like any CLI tool.
+That binary is the whole app. Build it on each operating system you ship for,
+run it once in a real terminal before release, and distribute it like any CLI
+tool. The supported baseline is a modern UTF-8, xterm-compatible terminal on
+macOS or Linux; the Windows driver is a preview.
 
 ## Run it in a browser (embed)
 
@@ -57,13 +68,23 @@ Compile it with `dart2js`:
 dart compile js web/main.dart -o web/app.js -O2
 ```
 
-Then load the bundle and give it a host element with an **explicit size and a
-monospace font** — without those, the grid measures zero cells and paints
-nothing:
+Then load the bundle from a page with a host element. Give the element an
+**explicit width and height** and a **monospace font**: without a size, the
+grid measures zero cells and paints nothing, and without a monospace font the
+cells misalign. A minimal `web/index.html`:
 
 ```html
-<div id="app" style="width:80ch;height:24em;font-family:monospace"></div>
-<script src="app.js"></script>
+<!doctype html>
+<html>
+  <head>
+    <meta charset="utf-8">
+    <title>My app</title>
+  </head>
+  <body>
+    <div id="app" style="width: 80ch; height: 24em; font-family: monospace"></div>
+    <script src="app.js"></script>
+  </body>
+</html>
 ```
 
 The output is a static `.js` file — host it on any CDN or static site, ship it
@@ -99,7 +120,7 @@ as the command to run):
 | `--host=<addr>` | `127.0.0.1` | Bind address (`0.0.0.0` to expose) |
 | `--allow-origin=<origin>` | same-origin | Allow an embedding origin, or `*` |
 | `--token=<secret>` | none on loopback; generated otherwise | Require `?token=<secret>` on the WebSocket |
-| `--debug` | off | Expose frame, log, and full error diagnostics in spawn mode |
+| `--debug` | off | Expose frame, log, and full error diagnostics |
 | `--max-sessions=<n>` | `8` | Cap concurrent browser sessions in spawn mode |
 | `--spawn <cmd …>` | bridge mode | Spawn an isolated process per connection |
 
@@ -132,7 +153,8 @@ development when the preview needs the host — the filesystem, a process, or re
 
 ## Installing the `fleury` CLI
 
-`fleury create`, `serve`, `shell`, and `diagnose` come from the `fleury` CLI.
+`fleury create`, `run`, `serve`, `shell`, and `diagnose` come from the `fleury`
+CLI.
 While Fleury is pre-release it isn't on pub.dev yet. Install it directly from
 Git:
 
@@ -144,9 +166,9 @@ dart pub global activate --source git \
 
 That puts `fleury` on your `PATH`. From the root of a local Fleury checkout, you
 can instead use `dart pub global activate --source path packages/fleury`, or run
-the source executable directly: `dart run packages/fleury/bin/fleury.dart serve …`.
+the source executable from `packages/fleury`: `dart run bin/fleury.dart serve …`.
 
-During the pre-release Git dependency window, create an app with:
+Until the packages are published, create an app with Git dependencies:
 
 ```sh
 fleury create my_app --dependency-source=git
@@ -154,6 +176,7 @@ fleury create my_app --dependency-source=git
 
 > **Release status.** Fleury is pre-1.0 and not yet published to pub.dev; apps
 > depend on it via git or path dependencies (as in [Getting
-> started](/fleury/getting-started/)). The CLI scaffold is available now;
-> hosted dependencies and the normal `dart pub global activate fleury` path
-> become the default when the packages are published.
+> started](/fleury/getting-started/)). `fleury create` already defaults to
+> hosted dependencies, which resolve only once the packages are published, so
+> pass `--dependency-source=git` until then. The normal
+> `dart pub global activate fleury` path also arrives with publication.

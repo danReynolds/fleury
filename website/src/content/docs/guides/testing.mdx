@@ -59,11 +59,12 @@ class _CounterState extends State<Counter> {
 </Fragment>
 <Fragment slot="code-1">
 ```dart wrap
+import 'dart:async';
+
 import 'package:fleury/fleury.dart';
 import 'package:fleury_test/fleury_test.dart';
+import 'package:my_app/counter.dart';
 import 'package:test/test.dart';
-
-import '../lib/testing_guide.dart';
 
 void main() {
   testWidgets('adds one', (tester) async {
@@ -97,8 +98,9 @@ the button's behavior; use keyboard or pointer tests to check input routing.
 <details>
 <summary>Set up and run the tests</summary>
 
-Add `fleury_test` and `test` to your app's development dependencies. During the
-pre-release Git installation, use:
+Projects created with `fleury create` already include `fleury_test` and
+`test`. To add them to another app during the pre-release Git installation,
+use:
 
 ```yaml
 dev_dependencies:
@@ -107,10 +109,15 @@ dev_dependencies:
       url: https://github.com/danReynolds/fleury.git
       path: packages/fleury_test
   test: ^1.26.3
+
+dependency_overrides:
+  fleury:
+    git:
+      url: https://github.com/danReynolds/fleury.git
+      path: packages/fleury
 ```
 
-Keep the `fleury` dependency override from
-[Getting started](/fleury/getting-started/) so the app and tester use the same
+The `fleury` dependency override keeps the app and the tester on the same
 checkout. Run `dart test` from your application package. In a Fleury checkout,
 run every example from this guide with:
 
@@ -280,7 +287,8 @@ testWidgets('chooses when the save finishes', (tester) async {
 
 After `request.complete()`, `await tester.settle()` lets the future callback run
 and processes the resulting frames. This makes the pending and completed states
-easy to check separately.
+easy to check separately. Use `settle()` whenever a future or stream has to
+deliver; the synchronous `pump` methods never give it a chance to run.
 
 ## Check a moment in an animation
 
@@ -361,13 +369,16 @@ testWidgets('inspects the upload halfway through its animation', (
 </CodeDemoSplit>
 
 `pump(duration)` advances animation time immediately. `pumpAndSettle()` runs
-frames until the animation is quiet. The progress bar also shows how to select
-other control kinds with `target(role: ..., label: ...)`.
+frames until the animation is quiet. Both are synchronous: they move the
+animation clock without waiting on wall time, but they don't let pending
+futures complete. The progress bar also shows how to select other control
+kinds with `target(role: ..., label: ...)`.
 
 ## Go further
 
-For dialogs and focus restoration, follow the [navigation](/fleury/guides/navigation/)
-and [focus](/fleury/guides/focus/) examples. For custom controls, see
+The [complete test file](https://github.com/danReynolds/fleury/blob/main/website/examples/test/testing_guide_test.dart)
+behind this guide also covers keyboard shortcuts, failed saves, and a dialog
+that restores focus when it closes. For custom controls, see
 [how widgets publish semantics](/fleury/architecture/agents-and-semantics/#what-the-graph-contains).
 
 The [testing API reference](https://github.com/danReynolds/fleury/blob/main/packages/fleury_test/README.md)

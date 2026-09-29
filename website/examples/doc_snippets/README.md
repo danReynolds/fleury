@@ -32,9 +32,9 @@ changes underneath a doc, the build goes red instead of the docs going stale.
 | `theming.dart` | [Theming](../../src/content/docs/guides/theming.mdx) |
 | `list_demo.dart`, `../lib/lists/`, `../test/lists_guide_test.dart` | [Lists & scrolling](../../src/content/docs/guides/lists-and-scrolling.mdx); source and tests are paired with each live demo |
 | `layout_demo.dart` | [Layout](../../src/content/docs/guides/layout.mdx) |
-| `shared_state.dart` | [State management](../../src/content/docs/guides/state-management.mdx) |
-| `loading_data.dart` | [Loading data](../../src/content/docs/guides/loading-data.mdx) |
-| `animation.dart` | [Animation](../../src/content/docs/guides/animation.mdx) |
+| `shared_state.dart`, `../lib/state_management_guide.dart` | [State management](../../src/content/docs/guides/state-management.mdx); the guide shows `#docregion` excerpts and the live demos render the same widgets |
+| `loading_data.dart`, `../lib/loading_data_guide.dart` | [Loading data](../../src/content/docs/guides/loading-data.mdx); the guide shows `#docregion` excerpts and the live demos render the same widgets |
+| `animation.dart` | [Animation](../../src/content/docs/guides/animation.mdx); the guide shows `#docregion` excerpts |
 | `testing.dart`, `../lib/testing_guide.dart`, `../test/testing_guide_test.dart` | [Testing](../../src/content/docs/guides/testing.mdx); the live widgets and the tests shown in the guide share the same source |
 | `semantic_actions.dart` | [Built for agents](../../../docs/agents-and-semantics.md) |
 
@@ -42,3 +42,12 @@ Keep each entrypoint a complete program with real imports and a `main`; shared
 libraries should be imported by every target-specific entrypoint they support.
 When you add or change documented code, add or update the matching source here
 too.
+
+Prefer showing the compiled code itself over a hand-copied fence. Mark the
+part a guide shows with `// #docregion <name>` and `// #enddocregion <name>`,
+then render it with `<SourceExcerpt code={source} region="<name>" />`
+(`website/src/components/SourceExcerpt.astro`), importing the file with
+`?raw`. The page build fails if the region is missing, and the excerpt can't
+drift from the program `doc_snippets_test.dart` analyzes. Hand-copied fences
+are checked by nothing but review; that is how the Animation guide came to
+show a `700.ms` duration extension that doesn't exist.

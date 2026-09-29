@@ -1,335 +1,147 @@
 ---
 title: State management
-description: Manage local, tree, and global state with setState, scopes, and notifiers.
+description: Keep state with the code that owns it, share it with the widgets that need it, and dispose it at the right time.
 ---
 
 import FleuryExample from '../../../components/FleuryExample.astro';
 import CodeDemoSplit from '../../../components/CodeDemoSplit.astro';
+import SourceExcerpt from '../../../components/SourceExcerpt.astro';
+import source from '../../../../examples/lib/state_management_guide.dart?raw';
+import program from '../../../../examples/doc_snippets/shared_state.dart?raw';
 
-Fleury supports state at three levels: **local state** within a widget,
-**tree state** shared by descendants, and **global state** used across
-widgets, services, and controllers.
+Every piece of state has an owner: the code that creates it, changes it, and
+cleans it up. Choose the owner by asking who needs the state:
 
-| Level | Use it for | Main API |
+| The state is used by… | Keep it in | Read it with |
 |---|---|---|
-| Local state | Data used by one widget | `State` and `setState` |
-| Tree state | Data shared by descendants | `Scope` and `ScopeBuilder` |
-| Global state | Data shared by widgets, services, and controllers | `Notifier` and `NotifierBuilder` |
+| One widget | `State`, updated with `setState` | The state's own fields |
+| Widgets below one owner | The owner's `State`, shared with `Scope(value)` | `context.scope<T>()` or `ScopeBuilder<T>` |
+| Several widgets that also change it | A `Notifier` created by `Scope.create` | `context.scope<T>()` or `ScopeBuilder<T>` |
+| Widgets and code outside the tree | A `Notifier` created outside the tree, shared with `Scope(model)` or passed to widgets | `context.scope<T>()`, `context.listen`, or `NotifierBuilder` |
 
 ## Local state
 
 Use a `StatefulWidget` when a value belongs to one part of the UI. Keep it in
 `State` and update it with `setState`:
 
-<CodeDemoSplit codeMaxHeight="32rem">
-<Fragment slot="code">
-```dart
-class _LocalCounterState extends State<LocalCounter> {
-  int count = 0;
-
-  @override
-  Widget build(BuildContext context) => Column(
-    children: [
-      Text('Count: $count'),
-      Button(
-        text: 'Increment',
-        onPressed: () => setState(() => count++),
-      ),
-    ],
-  );
-}
-
-class LocalCounter extends StatefulWidget {
-  const LocalCounter({super.key});
-
-  @override
-  State<LocalCounter> createState() => _LocalCounterState();
-}
-```
-</Fragment>
+<CodeDemoSplit file="local_counter.dart">
+<SourceExcerpt slot="code" code={source} region="local" />
 <FleuryExample slot="demo" id="state.local-counter" cols={34} rows={9} interactive />
 </CodeDemoSplit>
 
-Press **Increment** to change `count`. `setState` schedules a rebuild so the
-widget displays the new value.
+Press **Increment**. `setState` schedules a rebuild, so the widget displays the
+new value.
 
-When nearby widgets share state, keep it in their parent and pass values and
-actions through constructors. A scope helps when more of the tree needs access.
+When a few nearby widgets need the value, keep it in their closest common
+parent and pass it down through constructors. Use a scope when it has to reach
+widgets further down.
 
-## Tree state
+## Share a value with a subtree
 
-`Scope` shares a value with descendants without passing it through each
-widget's constructor. Here, the screen owns a plain `Project` value, and a
-separate `ProjectName` widget reads it with `ScopeBuilder<Project>`.
+`Scope` shares a value with every widget below it. Here the screen owns a
+`Project` and shares it; `ProjectTitle` and `ProjectPath` read it without any
+constructor parameters:
 
-The button replaces the project inside `setState`. That rebuilds the scope
-with the new value and updates the reader:
-
-<CodeDemoSplit file="project_scope.dart" codeMaxHeight="32rem">
-<Fragment slot="code">
-```dart
-class _ProjectScopeScreenState
-    extends State<ProjectScopeScreen> {
-  var project = const Project('Atlas');
-
-  @override
-  Widget build(BuildContext context) => Column(
-    crossAxisAlignment: CrossAxisAlignment.start,
-    children: [
-      Scope(
-        project,
-        child: const ProjectName(),
-      ),
-      Button(
-        text: 'Switch project',
-        onPressed: switchProject,
-      ),
-    ],
-  );
-
-  void switchProject() => setState(() {
-    project = project.name == 'Atlas'
-        ? const Project('Beacon')
-        : const Project('Atlas');
-  });
-}
-
-class ProjectName extends StatelessWidget {
-  const ProjectName({super.key});
-
-  @override
-  Widget build(BuildContext context) =>
-      ScopeBuilder<Project>(
-        builder: (context, project) =>
-            Text('Project: ${project.name}'),
-      );
-}
-
-class ProjectScopeScreen extends StatefulWidget {
-  const ProjectScopeScreen({super.key});
-
-  @override
-  State<ProjectScopeScreen> createState() =>
-      _ProjectScopeScreenState();
-}
-
-class Project {
-  const Project(this.name);
-  final String name;
-}
-```
-</Fragment>
+<CodeDemoSplit
+  files={['project_screen.dart', 'project_title.dart', 'project_path.dart', 'project.dart']}
+  codeMaxHeight="30rem"
+>
+<SourceExcerpt slot="code-0" code={source} region="project-owner" />
+<SourceExcerpt slot="code-1" code={source} region="project-builder" />
+<SourceExcerpt slot="code-2" code={source} region="project-context" />
+<SourceExcerpt slot="code-3" code={source} region="project" />
 <FleuryExample slot="demo" id="state.project-scope" cols={38} rows={9} interactive />
 </CodeDemoSplit>
 
-Press **Switch project** to alternate between Atlas and Beacon.
-`ProjectName` can sit anywhere below the scope: it finds the closest parent
-`Scope<Project>`.
+Press **Switch project**. The screen replaces its value inside `setState`, and
+both readers update. They are `const`, so rebuilding the screen does not
+rebuild them: reading the scope subscribed each one to it.
 
-### Reading from BuildContext
+The type argument is the lookup key. A reader finds the nearest `Scope<Project>`
+above it, and an inner scope of the same type overrides an outer one.
 
-`context.scope<Project>()` reads the value directly inside a widget's `build`
-method. The same update flow works here: the screen owns the project, the
-button changes it, and `ProjectLabel` rebuilds with the new value:
-
-<CodeDemoSplit files={['project_screen.dart', 'project_label.dart']} initialFile="project_screen.dart" codeMaxHeight="32rem">
-<Fragment slot="code-0">
-```dart
-class _ProjectScreenState
-    extends State<ProjectScreen> {
-  var project = const Project('Atlas');
-
-  @override
-  Widget build(BuildContext context) => Column(
-    crossAxisAlignment: CrossAxisAlignment.start,
-    children: [
-      Scope(
-        project,
-        child: const ProjectLabel(),
-      ),
-      Button(
-        text: 'Switch project',
-        onPressed: switchProject,
-      ),
-    ],
-  );
-
-  void switchProject() => setState(() {
-    project = project.name == 'Atlas'
-        ? const Project('Beacon')
-        : const Project('Atlas');
-  });
-}
-
-class ProjectScreen extends StatefulWidget {
-  const ProjectScreen({super.key});
-
-  @override
-  State<ProjectScreen> createState() =>
-      _ProjectScreenState();
-}
-
-class Project {
-  const Project(this.name);
-  final String name;
-}
-```
-</Fragment>
-<Fragment slot="code-1">
-```dart
-class ProjectLabel extends StatelessWidget {
-  const ProjectLabel({super.key});
-
-  @override
-  Widget build(BuildContext context) {
-    final project = context.scope<Project>();
-    return Text('Project: ${project.name}');
-  }
-}
-```
-</Fragment>
-<FleuryExample slot="demo" id="state.project-context" cols={38} rows={9} interactive />
-</CodeDemoSplit>
-
-`ScopeBuilder` rebuilds its builder; `context.scope` rebuilds the widget that
-reads the value. Otherwise they are the same read: both find the closest parent
-scope, follow its updates, and stay subscribed until the widget leaves the
-tree. Read a scope in `build`, `initState`, or `didChangeDependencies`; an event
-handler uses the value read there. When a scope is optional, add `?` to the
-type: `context.scope<Project?>()` returns null when no `Scope<Project>` is
+The two readers differ only in what rebuilds. `context.scope<Project>()`
+rebuilds the widget that calls it; `ScopeBuilder<Project>` rebuilds just its
+builder, which helps when a large build method uses the value in one small
+part. Read a scope in `build`, `initState`, or `didChangeDependencies`, and let
+event handlers use the value read there. When the scope is optional, add `?` to
+the type: `context.scope<Project?>()` returns `null` when no `Scope<Project>` is
 above.
 
-## Global state
+## Share a model that widgets change
 
-A shopping cart can be used by several screens and a checkout service. Keep
-that state in a model outside the widget tree so they can all work with the
-same instance.
+When several widgets change the same state, move it into a model that
+announces its changes. Extend `Notifier`, update the fields, then call
+`notify()`:
 
-A `Notifier` lets that model announce changes. Update its fields, then call
-`notify()`. Widgets observe it with `NotifierBuilder`:
+<SourceExcerpt code={source} region="cart" />
 
-<CodeDemoSplit files={['cart.dart', 'cart_view.dart']} initialFile="cart.dart" codeMaxHeight="32rem">
-<Fragment slot="code-0">
-```dart
-class Cart extends Notifier {
-  int _itemCount = 0;
-  int get itemCount => _itemCount;
+Let the part of the app that uses the cart own it. `Scope.create` creates the
+model when the scope mounts, shares it with the subtree, and disposes it when
+the scope leaves the tree:
 
-  void addItem() {
-    _itemCount++;
-    notify();
-  }
-}
+<CodeDemoSplit files={['shop.dart', 'cart_readers.dart']} codeMaxHeight="30rem">
+<SourceExcerpt slot="code-0" code={source} region="shop-owner" />
+<SourceExcerpt slot="code-1" code={source} region="shop-readers" />
+<FleuryExample slot="demo" id="state.shop" cols={38} rows={9} interactive />
+</CodeDemoSplit>
 
-final cart = Cart();
-```
-</Fragment>
-<Fragment slot="code-1">
-```dart
-class CartView extends StatelessWidget {
-  const CartView({super.key, required this.cart});
-  final Cart cart;
+Add coffee and tea. The badge and the buttons are separate widgets, and none of
+them receives the cart through its constructor. Reading a scope whose value is
+a `Notifier` also subscribes the reader to its notifications, so `CartBadge`
+rebuilds after every `notify()`.
 
-  @override
-  Widget build(BuildContext context) {
-    return NotifierBuilder(
-      notifier: cart,
-      builder: (context, cart) => Column(
-        children: [
-          Text('Items: ${cart.itemCount}'),
-          Button(
-            text: 'Add item',
-            onPressed: cart.addItem,
-          ),
-        ],
-      ),
-    );
-  }
-}
-```
-</Fragment>
+## Keep a model outside the tree
+
+Create the model outside the widget tree when code other than widgets uses it:
+a sync service, a background job, or the command that runs after the UI exits.
+Whoever creates it disposes it. `Scope(model)` lends it to the widgets without
+taking ownership, and the readers above do not change:
+
+<SourceExcerpt code={program} region="external-owner" />
+
+`runApp` completes after the UI has closed and the terminal is restored, so the
+`finally` block disposes the cart once no widget can read it. Under a plain
+`dart run`, code before `runApp` also runs in the hot-reload supervisor process;
+before starting a service there, see
+[Keep startup work inside the app](/fleury/guides/hot-reload/#keep-startup-work-inside-the-app).
+
+### Listen to a model directly
+
+A widget that already holds a model, for example from its constructor, can
+listen to it without a scope. `NotifierBuilder` rebuilds its builder;
+`context.listen(model)` rebuilds the calling widget and returns the same model:
+
+<CodeDemoSplit files={['NotifierBuilder', 'context.listen']} codeMaxHeight="30rem">
+<SourceExcerpt slot="code-0" code={source} region="cart-builder" />
+<SourceExcerpt slot="code-1" code={source} region="cart-listen" />
 <FleuryExample slot="demo" id="state.cart-notifier" cols={38} rows={9} interactive />
 </CodeDemoSplit>
 
-Press **Add item**. The model changes its count, calls `notify()`, and
-`NotifierBuilder` rebuilds the display. Create one cart and pass it to the
-widgets and services that need it. A service can call `cart.addItem()` on that
-same instance without a widget or build context.
-
-### Listening from BuildContext
-
-A widget can also observe the cart with `context.listen(cart)`. It returns the
-model and rebuilds this widget when the model notifies:
-
-<CodeDemoSplit file="cart_context_view.dart" codeMaxHeight="32rem">
-<Fragment slot="code">
-```dart
-class CartContextView extends StatelessWidget {
-  const CartContextView({super.key, required this.cart});
-  final Cart cart;
-
-  @override
-  Widget build(BuildContext context) {
-    final model = context.listen(cart);
-    return Column(
-      children: [
-        Text('Items: ${model.itemCount}'),
-        Button(
-          text: 'Add item',
-          onPressed: model.addItem,
-        ),
-      ],
-    );
-  }
-}
-```
-</Fragment>
-<FleuryExample slot="demo" id="state.cart-context" cols={38} rows={9} interactive />
-</CodeDemoSplit>
-
-`NotifierBuilder` rebuilds its builder; `context.listen` rebuilds the widget
-that calls it. Both manage their subscriptions automatically.
+`NotifierBuilder` listens while it is in the tree. `context.listen` listens
+while the widget's builds keep calling it, and stops when a build no longer
+does. Neither disposes the model.
 
 ### Value notifiers
 
-`ValueNotifier<T>` extends `Notifier` with a single `.value` property.
-Assigning a different value sends the notification for you.
+`ValueNotifier<T>` is a `Notifier` with a single `value`. Assigning a different
+value notifies for you, so it suits a model that would have one field:
 
-Here's the cart count without a custom model, using `context.listen` to read it:
+<SourceExcerpt code={source} region="value-notifier" />
 
-<CodeDemoSplit file="cart_count.dart" codeMaxHeight="32rem">
-<Fragment slot="code">
-```dart
-final count = ValueNotifier<int>(0);
+## Who disposes what
 
-class CartValueView extends StatelessWidget {
-  const CartValueView({super.key, required this.count});
-  final ValueNotifier<int> count;
+A model is disposed by the code that created it:
 
-  @override
-  Widget build(BuildContext context) {
-    final items = context.listen(count).value;
-    return Column(
-      children: [
-        Text('Items: $items'),
-        Button(
-          text: 'Add item',
-          onPressed: () => count.value++,
-        ),
-      ],
-    );
-  }
-}
-```
-</Fragment>
-<FleuryExample slot="demo" id="state.cart-value" cols={38} rows={9} interactive />
-</CodeDemoSplit>
+| Created by | Disposed by |
+|---|---|
+| A `State` field | That state's `dispose` method |
+| `Scope.create` | The scope, when it leaves the tree. Pass `dispose:` for values that are not notifiers |
+| Code outside the tree | That code, once nothing uses the model |
 
-**Add item** now updates `count.value` directly. The same value notifier can
-also be read with `NotifierBuilder`.
-
-Use `Notifier` when a model needs its own fields and actions; use
-`ValueNotifier` when one changing value is enough.
+`Scope(value)`, `context.scope`, `ScopeBuilder`, `context.listen`, and
+`NotifierBuilder` only borrow a model, and their subscriptions end
+automatically when the widget leaves the tree.
 
 ## Next steps
 

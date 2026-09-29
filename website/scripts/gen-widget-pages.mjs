@@ -566,7 +566,7 @@ const CORE = [
   { slug: 'layoutbuilder', widget: 'LayoutBuilder',
     code: "LayoutBuilder(\n  builder: (context, constraints) =>\n      (constraints.maxCols ?? 0) > 60 ? Wide() : Narrow(),\n)" },
   { slug: 'scope', guide: 'state-management', widget: 'Scope',
-    code: "Scope(\n  project,\n  child: const ProjectLabel(),\n)" },
+    code: "// Share a value owned elsewhere:\nScope(project, child: const ProjectPath())\n\n// Create and own a model for this subtree:\nScope.create(Cart.new, child: const ShopScreen())" },
   { slug: 'scopebuilder', guide: 'state-management', widget: 'ScopeBuilder',
     code: "ScopeBuilder<Project>(\n  builder: (context, project) => Text('Project: ${project.name}'),\n)" },
   { slug: 'notifierbuilder', guide: 'state-management', widget: 'NotifierBuilder',
@@ -721,13 +721,14 @@ const SHOWCASE_GOALS = {
     'handled, so "the preview matches the file" comes down to a `switch` in ' +
     '`build()`.',
   commands:
-    'A compact workspace built to make command architecture visible. Edit a ' +
-    'draft and one `AppCommand` enables its dedicated button, Ctrl+S shortcut, ' +
-    'palette row, semantic action, and programmatic identity together.\n\n' +
-    'Switch between Editor and Files and the active-command panel changes with ' +
-    'the current `CommandScope`, while app-wide commands remain available. The ' +
-    'demo is deterministic and local: every moving part exists to show how a ' +
-    'discoverable action catalog prevents invocation surfaces from drifting.',
+    'A small editor built to make command architecture visible. **New file** ' +
+    'and **Save current file** are each defined once as an `AppCommand`, which ' +
+    'supplies its shortcut, palette row, semantic action, and stable ID ' +
+    'together.\n\n' +
+    'Edit a file and Save becomes available on every surface at once; save it ' +
+    'and they all disable together. The palette opener is itself a command ' +
+    'bound to Ctrl+K, so the palette lists exactly what the editor\'s ' +
+    '`CommandScope` offers. The demo is deterministic and local.',
   agent:
     'A Claude-Code-style streaming session — prose, tool cards, a live todo list, ' +
     'a colored diff, a prompt box.\n\n' +
@@ -807,10 +808,9 @@ const SHOWCASE_TRY = {
     '*Try it: arrow through the tree — the preview swaps viewers as the ' +
     'selection changes.*',
   commands:
-    '*Try it: edit the draft and watch **Save draft** become available everywhere. ' +
-    'Save with Ctrl+S, or press Ctrl+K and choose it from the palette. Then switch ' +
-    'to Files and watch the local command ' +
-    'catalog change while the workspace commands remain.*',
+    '*Try it: edit the file, then save it with Ctrl+S or press Ctrl+K and ' +
+    'choose **Save current file**. Choose **New file** from the palette to ' +
+    'open an untitled file; the last-command line reports each invocation.*',
   agent:
     '*Try it: type a message in the prompt (or just press Enter) and the ' +
     'next turn streams in.*',

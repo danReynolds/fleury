@@ -101,8 +101,8 @@ Row(
 ```
 
 Multiple expanded children divide the space by `flex`. In the workspace demo,
-`2` and `3` make Files receive two-fifths and Preview three-fifths. Any leftover
-cell from integer division is assigned deterministically.
+`2` and `3` make Files receive two-fifths and Preview three-fifths. A cell left
+over from integer division goes to the earliest flexible child.
 
 `Flexible(fit: FlexFit.loose)` offers a child up to its share without forcing
 it to fill. `Spacer()` is an expanded empty gap; `SizedBox` is a fixed gap or
@@ -139,6 +139,8 @@ Container width and height are outer dimensions, including the border. A
 
 `LayoutBuilder` reads the constraints of the exact place where it appears.
 Use it when a reusable pane should respond to its own width, as in the demo.
+An unbounded maximum, such as the width inside a horizontal scroll view, is
+`null`. That is why the demo reads `constraints.maxCols ?? 0`.
 
 `MediaQuery.sizeOf(context)` reads the entire surface size and rebuilds on
 resize. Use it for app-wide decisions such as hiding global chrome below a
@@ -157,8 +159,7 @@ not listen to resize events yourself.
 ### Direct constraints
 
 `ConstrainedBox` adds minimum or maximum dimensions without overriding a
-tighter parent. An unbounded maximum is represented by `null`, so check before
-using it as a number:
+tighter parent:
 
 ```dart
 ConstrainedBox(
@@ -197,10 +198,11 @@ geometry.
 
 ### Overflow
 
-When a row or column cannot fit its children, Fleury clips them and paints a red
-`▓` marker on the overflowing edge. Fix the constraint mismatch: add an
-`Expanded`, choose a compact layout, bound the child, or make the content
-scroll. Do not hide the marker without addressing the layout.
+When a row or column cannot fit its children, Fleury clips them. With Dart
+assertions enabled, for example `fleury run --enable-asserts`, it also paints a
+red `▓` marker on the overflowing edge; release builds and a plain `dart run`
+only clip. Fix the constraint mismatch: add an `Expanded`, choose a compact
+layout, bound the child, or make the content scroll.
 
 ## API reference
 
@@ -221,5 +223,5 @@ scroll. Do not hide the marker without addressing the layout.
   long content a bounded viewport.
 - [Widgets & state](/fleury/concepts/widgets-and-state/) explains how layout
   widgets participate in the widget tree and rebuild lifecycle.
-- Browse the [widget reference](/fleury/widgets/) for focused examples of every
-  layout primitive.
+- Browse the [widget reference](/fleury/widgets/) for the details of
+  individual widgets.

@@ -73,8 +73,8 @@ belongs in the form's status message.
 `onSubmit` can return a future. The example uses `isSubmitting` to keep the
 name read-only while saving, so the result still refers to the value being
 shown. It uses `isBusy`, which also includes validation, to disable Save. If
-you disable choice controls during a save, use `isSubmitting`: disabled fields
-are skipped during validation.
+you disable controls inside a `FormField` during a save, use `isSubmitting`:
+disabled fields are skipped during validation.
 
 `submit()` returns `false` if validation fails or `onSubmit` leaves a field
 error. Setting `FormField.error` in the callback is enough; there is no second
@@ -156,10 +156,11 @@ can omit its `controller` argument and let the form create one.
 
 ## Next steps
 
-The [Form reference](/fleury/widgets/form/) covers the remaining controller and
-field options. Continue with [Navigation](/fleury/guides/navigation/) for
-protecting unsaved changes, or [Testing](/fleury/guides/testing/) to exercise
-validation and submission in your own forms.
+The [Form](/fleury/widgets/form/), [FormField](/fleury/widgets/formfield/), and
+[FormController](/fleury/widgets/formcontroller/) references list their
+options. Continue with [Navigation](/fleury/guides/navigation/) for protecting
+unsaved changes, or [Testing](/fleury/guides/testing/) for the tester API used
+by the tests above.
 
 Each demo's source and test tabs show the files used by the live example. Run
 all four from the checkout with

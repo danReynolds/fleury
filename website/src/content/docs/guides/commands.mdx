@@ -66,18 +66,39 @@ Register commands where they are relevant:
 
 ```dart
 FleuryApp(
-  commands: [openCommands],
+  title: 'Editor',
+  commands: [openCommandsCommand()],
   home: CommandScope(
-    commands: [newFile, saveFileCommand()],
+    commands: [newFileCommand(), saveFileCommand()],
     child: const EditorScreen(),
   ),
 )
 ```
 
 Commands passed to `FleuryApp` remain available across the app. A
-`CommandScope` adds actions for its subtree and installs their shortcuts. A
-palette opened inside the editor with `CommandPalette.open(context)` discovers
-both sets; editor commands disappear when that scope leaves the tree.
+`CommandScope` adds actions for its subtree and installs their shortcuts.
+Editor commands disappear when that scope leaves the tree.
+
+The palette itself is opened by a command. Fleury doesn't reserve a palette
+shortcut, so choose one:
+
+```dart
+AppCommand openCommandsCommand() => AppCommand(
+  id: const CommandId('app.commands'),
+  title: 'Open commands',
+  shortcuts: [KeySequence.ctrl.k],
+  showInPalette: false,
+  run: (invocation) {
+    final context = invocation.buildContext;
+    if (context != null) unawaited(CommandPalette.open(context));
+  },
+);
+```
+
+`invocation.buildContext` is where the command ran. For a shortcut on a command
+registered with `FleuryApp`, that is the focused widget, so a palette opened
+there with `CommandPalette.open` lists every command active at that point:
+inside the editor, both the app's commands and the editor's.
 
 This is the main value of the model: the interface can ask which actions are
 available *here* instead of every button, shortcut, palette, test, or agent
