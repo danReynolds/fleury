@@ -36,7 +36,12 @@ def run(dart):
                 assert child.poll() is None, 'writer did not encounter backpressure'
             if child.poll() is not None:
                 while select.select([master], [], [], 0)[0]:
-                    data.extend(os.read(master, 65536))
+                    chunk = os.read(master, 65536)
+                    # A revoked macOS PTY stays readable at EOF; it will not
+                    # become unready just because the child has exited.
+                    if not chunk:
+                        break
+                    data.extend(chunk)
                 assert child.returncode == 0, bytes(data[-1000:])
                 assert paused and b'BACKPRESSURE PASS' in data, bytes(data[-1000:])
                 assert data.count(b'X') == 32 * 65536, 'truncated synchronous output'

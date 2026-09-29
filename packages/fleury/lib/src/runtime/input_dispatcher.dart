@@ -106,6 +106,7 @@ class InputDispatcher {
   // A segmented paste belongs to the claimant that accepted its first part.
   // Subsequent focus changes must not send its tail into another field.
   ({int id, FocusNode node, TextInputClaimant claimant})? _pasteOwner;
+  int _pasteRevision = 0;
 
   /// Reactive view of the current pending sequence, shared with the widget
   /// tree by `runApp` (via `PendingSequenceScope`) so a which-key widget can
@@ -998,6 +999,7 @@ class InputDispatcher {
       return deliver(owner.claimant);
     }
 
+    final revision = ++_pasteRevision;
     _pasteOwner = null;
     for (final node in focusManager.activeChain()) {
       final claimant = node.textInputClaimant;
@@ -1006,11 +1008,19 @@ class InputDispatcher {
           ? null
           : (id: event.pasteId!, node: node, claimant: claimant);
       _pasteOwner = owner;
-      final result = deliver(claimant);
+      final KeyEventResult result;
+      try {
+        result = deliver(claimant);
+      } catch (_) {
+        // A failed claimant never accepted ownership. Preserve a newer paste
+        // if the callback started one before throwing.
+        if (_pasteRevision == revision) _pasteOwner = null;
+        rethrow;
+      }
       if (result == KeyEventResult.handled) return result;
-      // A handler may synchronously start another paste or dispose us. Do
-      // not let this older focus-chain walk overwrite that ownership.
-      if (!identical(_pasteOwner, owner) || _disposed) return result;
+      // Records have no stable identity. A revision also detects a nested
+      // complete paste, whose owner has already returned to null.
+      if (_pasteRevision != revision || _disposed) return result;
       _pasteOwner = null;
     }
     return KeyEventResult.ignored;

@@ -1,6 +1,6 @@
 # Batch G follow-ups
 
-Status: review draft, 2026-09-29. Reconciled with main `273e4725` and the pasted
+Status: reviewed for PR #283, 2026-09-29. Reconciled with main `273e4725` and the pasted
 "Batch G — needs Dan's input" report. This is the current disposition of that
 report, not a release qualification checklist. The lazy-semantics and list
 view-change APIs are additive; the wire version and existing controller listener
@@ -11,7 +11,7 @@ behavior are unchanged.
 | Issue | Result | Evidence |
 | --- | --- | --- |
 | FileBrowser cannot leave an empty/unreadable directory with mouse or semantics | A parent-directory button occupies the existing blank separator row. File indices and total height stay unchanged. | Empty/missing-directory semantic activation and mouse regressions; 26 FileBrowser tests. |
-| Paste tail follows a focus move into another field | The dispatcher retains the first accepting claimant. Detached/replaced/ineligible owners cannot spill their tail into a new field; orphaned segments are ignored. | Actual TextInput/TextArea controllers retain one undo across a focus change; claimant removal/replacement and mismatched IDs covered. |
+| Paste tail follows a focus move into another field | The dispatcher retains the first accepting claimant. Detached/replaced/ineligible owners cannot spill their tail into a new field; orphaned segments are ignored. | Actual TextInput/TextArea controllers retain one undo across a focus change; claimant removal/replacement, mismatched IDs, reentrant supersession and throwing claimants covered. |
 | Terminal reports remain enabled during asynchronous teardown | Enqueue mouse/focus/paste disables before the runtime's first teardown await, and at driver restore/suspend/handoff entry. Keep protocol-stack restoration ordered, leave a borrowed terminal alone, and never drain typeahead. | Lifecycle/suspend/inline suites, synchronous shutdown and reentry tests. This narrows the window; it cannot retract reports already in flight over SSH. |
 | Flex and ScrollView use inconsistent scratch compositors | Both use `CellBuffer.compositeRectFrom` for cells and images. A wide glyph at the right clip becomes `?`, preserving the adjacent sibling. | 26 Flex/ScrollView tests; paint and wire gates pass. |
 | Palette command can decline after the palette closes | Added the missing regression. Availability depends on the palette still being open, so the row passes its check and the registry declines after the pop. The press reports unsupported and never runs the command. | Palette suite passes; no production change needed. |
@@ -141,6 +141,20 @@ tolerance is relaxed for this design.
   changing deadlines. The reviewer-notes path uses passive diagnose with no
   frame timing, so do not assume its root cause matches the debug timer test.
 
+## Review cleanup
+
+- Paste ownership now uses a revision instead of record identity. A nested
+  complete paste supersedes its older dispatch, and a throwing first claimant
+  cannot retain the tail. Six focused regressions cover nested whole/segmented
+  pastes, ancestor fallback, and callback failure.
+- The inline PTY suspend check drains queued cleanup bytes after the process
+  stops. Eight-byte reads exercise the race without weakening the screen
+  assertion. The check also verifies restored termios settings, excluding the
+  kernel's transient PENDIN state flag, and resumes stopped children for cleanup.
+- The native backpressure probe stops draining at PTY EOF. A revoked macOS PTY
+  remains readable, so waiting for readiness to disappear caused an infinite
+  loop after a successful child exit. The byte-count and mode checks remain.
+
 ## Local validation
 
 - 613 core regressions passed, one skipped, in 21 seconds: semantics, retained
@@ -150,6 +164,14 @@ tolerance is relaxed for this design.
   each exercise 20 wheel steps with zero follow-up widget builds. Additional
   probes cover initial tail selection, bounded semantic reads, source/controller
   replacement, reentrant refresh, subclass dispatch, and disposal.
+- Review cleanup: all 112 input/editing tests and the complete local inline PTY
+  suite pass, including fragmented suspend reads, restart, crash, signal and
+  pending-resize cleanup. The runtime and served-wire gates pass on the cleanup;
+  every injected key produces exactly one plan. The input allocation gate exits
+  green with the measurement limitation below.
+- Native backpressure passes. All sequential-session probes pass locally in
+  JIT and compiled AOT, including delayed handoff cleanup, throwing output hooks, and
+  terminal disconnects in full-screen and inline sessions.
 - Changed-file analysis, formatting and `git diff --check` are clean.
 - The fast gates passed in 39 seconds: semantics, image, bundle size, paint,
   selection and runtime; the allocation gates also exited green but remain
@@ -160,4 +182,4 @@ tolerance is relaxed for this design.
 - No baseline or tolerance was changed. These checks do not replace live
   terminal/SSH qualification or a valid allocation-churn measurement.
 
-Optional hosted CI is not the local development feedback loop for this draft.
+Optional hosted CI supplements the focused local development checks above.

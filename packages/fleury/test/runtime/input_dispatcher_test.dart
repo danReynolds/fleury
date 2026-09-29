@@ -159,11 +159,13 @@ class _DecliningFieldState extends State<_DecliningField>
 }
 
 class _PasteLog implements TextInputClaimant, PasteEventClaimant {
+  _PasteLog({this.onEvent});
+  final KeyEventResult Function(PasteEvent event)? onEvent;
   final events = <PasteEvent>[];
   @override
   KeyEventResult onPasteEvent(PasteEvent event) {
     events.add(event);
-    return KeyEventResult.handled;
+    return onEvent?.call(event) ?? KeyEventResult.handled;
   }
 
   @override
@@ -174,6 +176,155 @@ class _PasteLog implements TextInputClaimant, PasteEventClaimant {
 
 void main() {
   group('segmented paste ownership', () {
+    for (final outerSegmented in [false, true]) {
+      for (final nestedSegmented in [false, true]) {
+        test(
+          'nested paste supersedes its declining caller, outerSegmented=$outerSegmented nestedSegmented=$nestedSegmented',
+          () {
+            final h = _TestHarness();
+            final parentLog = _PasteLog();
+            final childLog = _PasteLog(
+              onEvent: (event) {
+                if (event.text != 'outer') return KeyEventResult.handled;
+                h.dispatcher.dispatch(
+                  nestedSegmented
+                      ? const PasteEvent.segment(
+                          'nested',
+                          pasteId: 2,
+                          phase: PasteEventPhase.start,
+                        )
+                      : const PasteEvent('nested'),
+                );
+                return KeyEventResult.ignored;
+              },
+            );
+            final parent = FocusNode()..textInputClaimant = parentLog;
+            final child = FocusNode()..textInputClaimant = childLog;
+            addTearDown(() {
+              h.dispatcher.dispose();
+              child.dispose();
+              parent.dispose();
+              h.manager.dispose();
+            });
+            h.mountRoot(
+              Focus(
+                focusNode: parent,
+                child: Focus(
+                  focusNode: child,
+                  autofocus: true,
+                  child: const EmptyBox(),
+                ),
+              ),
+            );
+            h.dispatcher.dispatch(
+              outerSegmented
+                  ? const PasteEvent.segment(
+                      'outer',
+                      pasteId: 1,
+                      phase: PasteEventPhase.start,
+                    )
+                  : const PasteEvent('outer'),
+            );
+            h.dispatcher.dispatch(
+              const PasteEvent.segment(
+                'old tail',
+                pasteId: 1,
+                phase: PasteEventPhase.end,
+              ),
+            );
+            if (nestedSegmented) {
+              h.dispatcher.dispatch(
+                const PasteEvent.segment(
+                  'new tail',
+                  pasteId: 2,
+                  phase: PasteEventPhase.end,
+                ),
+              );
+            }
+            expect(parentLog.events, isEmpty);
+            expect(childLog.events.map((event) => event.text), [
+              'outer',
+              'nested',
+              if (nestedSegmented) 'new tail',
+            ]);
+          },
+        );
+      }
+    }
+
+    test(
+      'declined first segment falls back to an ancestor for the whole paste',
+      () {
+        final h = _TestHarness();
+        final parentLog = _PasteLog();
+        final childLog = _PasteLog(onEvent: (_) => KeyEventResult.ignored);
+        final parent = FocusNode()..textInputClaimant = parentLog;
+        final child = FocusNode()..textInputClaimant = childLog;
+        addTearDown(() {
+          h.dispatcher.dispose();
+          child.dispose();
+          parent.dispose();
+          h.manager.dispose();
+        });
+        h.mountRoot(
+          Focus(
+            focusNode: parent,
+            child: Focus(
+              focusNode: child,
+              autofocus: true,
+              child: const EmptyBox(),
+            ),
+          ),
+        );
+        const start = PasteEvent.segment(
+          'start',
+          pasteId: 1,
+          phase: PasteEventPhase.start,
+        );
+        const end = PasteEvent.segment(
+          'end',
+          pasteId: 1,
+          phase: PasteEventPhase.end,
+        );
+        h.dispatcher.dispatch(start);
+        h.dispatcher.dispatch(end);
+        expect(childLog.events, [start]);
+        expect(parentLog.events, [start, end]);
+      },
+    );
+
+    test('a throwing first claimant cannot retain the paste tail', () {
+      final h = _TestHarness();
+      final log = _PasteLog(
+        onEvent: (event) {
+          if (event.isFirst) throw StateError('paste rejected');
+          return KeyEventResult.handled;
+        },
+      );
+      final node = FocusNode()..textInputClaimant = log;
+      addTearDown(() {
+        h.dispatcher.dispose();
+        node.dispose();
+        h.manager.dispose();
+      });
+      h.mountRoot(
+        Focus(focusNode: node, autofocus: true, child: const EmptyBox()),
+      );
+      const start = PasteEvent.segment(
+        'start',
+        pasteId: 1,
+        phase: PasteEventPhase.start,
+      );
+      const end = PasteEvent.segment(
+        'end',
+        pasteId: 1,
+        phase: PasteEventPhase.end,
+      );
+      expect(() => h.dispatcher.dispatch(start), throwsStateError);
+      expect(h.dispatcher.dispatch(end), KeyEventResult.ignored);
+      expect(log.events, [start]);
+    });
+
     for (final invalidation in ['focus', 'detach', 'replace claimant']) {
       test('paste tail never retargets after $invalidation', () {
         final h = _TestHarness();

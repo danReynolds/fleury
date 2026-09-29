@@ -88,10 +88,10 @@ class Session:
     def send(self, data):
         os.write(self.master, data)
 
-    def pump(self, timeout=0.1):
+    def pump(self, timeout=0.1, *, max_bytes=65536):
         ready, _, _ = select.select([self.master], [], [], timeout)
         if ready:
-            chunk = os.read(self.master, 65536)
+            chunk = os.read(self.master, max_bytes)
             self.raw.extend(chunk)
             text = self.keyboard_tail + self.decoder.decode(chunk)
             # pyte predates the Kitty keyboard stack and prints a '<1u'
@@ -145,6 +145,9 @@ class Session:
 
     def close(self):
         try:
+            # A failed suspend assertion can leave Dart stopped. Resume the
+            # test's process group so teardown can reap it on macOS as well.
+            os.killpg(self.child.pid, signal.SIGCONT)
             os.killpg(self.child.pid, signal.SIGKILL)
         except ProcessLookupError:
             pass
@@ -213,14 +216,29 @@ def lifecycle(dart, supervised=False, crash=False, abrupt=False):
             end = time.monotonic() + 5
             stopped = False
             while time.monotonic() < end:
-                app.pump()
+                # Deliberately fragment reads: stopping is not evidence that
+                # the emulator has consumed every preceding terminal write.
+                app.pump(max_bytes=8)
                 status = subprocess.run(['ps', '-o', 'stat=', '-p', str(pid)],
                                         capture_output=True, text=True).stdout
                 if 'T' in status:
                     stopped = True
                     break
             assert stopped, "Ctrl+Z did not suspend"
+            # The stopped app has flushed its cleanup output, but that output
+            # may still be queued on the PTY. Drain it before inspecting the
+            # screen; no sleep or relaxed screen assertion is needed.
+            while select.select([app.master], [], [], 0)[0]:
+                app.pump(0, max_bytes=8)
             assert "INLINE-READY" not in app.text(), "suspend left the live region"
+            restored_modes = termios.tcgetattr(app.slave)
+            expected_modes = app.original_modes.copy()
+            # macOS may set PENDIN when canonical input resumes. It describes
+            # pending input retyping, not a mode configured by the app.
+            pending_input = getattr(termios, "PENDIN", 0)
+            restored_modes[3] &= ~pending_input
+            expected_modes[3] &= ~pending_input
+            assert restored_modes == expected_modes, "suspend left terminal modes changed"
             os.kill(pid, signal.SIGCONT)
             app.wait(lambda: "INLINE-READY" in app.text(), "resume frame")
             app.send(b"\x03")
