@@ -1605,6 +1605,9 @@ void main() {
       tester.pumpWidget(app());
       tester.render(size: const CellSize(12, 2));
 
+      expect(unmounts, isEmpty, reason: 'leaving keyed mode keeps live rows');
+      expect(mounts, {'a': 1, 'b': 1});
+
       items = ['b', 'a'];
       keyed = true;
       tester.pumpWidget(app());

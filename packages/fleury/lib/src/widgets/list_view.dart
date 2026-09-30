@@ -1879,9 +1879,10 @@ class _LazyListElement extends RenderObjectElement {
     for (final entry in _mountedChildren.entries.toList()) {
       final i = entry.key;
       final oldEl = entry.value;
-      final itemKey = _itemKeyByElement[oldEl];
       final newWidget = _LazyListItem(
-        key: itemKey == null ? null : ValueKey(itemKey),
+        // Reconciliation above owns row lifetime. Retain this wrapper's key
+        // when leaving keyed mode, which keeps the existing rows by position.
+        key: oldEl.widget.key,
         builder: widget.itemBuilder,
         index: i,
         highlighted: i == widget.currentIndex,
