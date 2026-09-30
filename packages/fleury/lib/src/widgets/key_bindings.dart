@@ -126,9 +126,9 @@ final class PendingSequenceNotifier with Notifier {
   /// request tree→dispatcher). Apps go through [KeyBindings.cancelPending].
   VoidCallback? onCancel;
 
-  /// Requests cancellation of the in-flight sequence, as if the user pressed
-  /// Esc. No-op when nothing is pending or the dispatcher hasn't wired a
-  /// handler.
+  /// Requests an abort of the in-flight sequence, as if the user pressed Esc:
+  /// the keys typed so far are dropped. No-op when nothing is pending or the
+  /// dispatcher hasn't wired a handler.
   void cancel() => onCancel?.call();
 }
 
@@ -513,11 +513,14 @@ List<ActiveKeyBinding> resolveActiveKeyBindings(FocusManager manager) {
 /// A multi-key sequence (`.g.g`, `.ctrl.x.ctrl.s`, or a `.space` leader) fires
 /// when its keys arrive in order. While the user is partway through one,
 /// [pendingOf] reports the keys typed so far and the keys that can follow,
-/// which the `WhichKey` widget in `fleury_widgets` shows as a popup. A key
-/// that doesn't continue the sequence cancels it and is then handled as usual.
-/// When a single-key binding in the same list shares the first key (`g`
-/// beside `g g`), it fires once the next key rules out the sequence, or after
-/// the sequence timeout (500 ms by default; see `runApp`'s `sequenceTimeout`).
+/// which the `WhichKey` widget in `fleury_widgets` shows as a popup. A key that
+/// doesn't continue the sequence ends it. Esc backs out and does nothing else:
+/// the keys typed so far are dropped, and the Esc doesn't also close a dialog
+/// or go back a page. Any other key cancels the sequence and is then handled
+/// as usual. When a single-key binding in the same list shares the first key
+/// (`g` beside `g g`), it fires once a key other than Esc rules out the
+/// sequence, or after the sequence timeout (500 ms by default; see `runApp`'s
+/// `sequenceTimeout`).
 ///
 /// With [modal] set, keys that nothing inside this subtree handles stop here.
 /// `Navigator` sets it for dialogs shown with `present`.
@@ -569,11 +572,11 @@ class KeyBindings extends StatefulWidget {
   static PendingKeySequenceMatch? pendingOf(BuildContext context) =>
       dependOnScope<PendingSequenceNotifier>(context)?.value;
 
-  /// Cancels the sequence [pendingOf] reports, for a which-key popup's close
-  /// control or another way to dismiss it. The keys typed so far are then
-  /// handled as single key presses, so a single-key binding for one of them
-  /// still fires. Does nothing when no sequence is in progress, and doesn't
-  /// make [context] rebuild.
+  /// Abandons the sequence [pendingOf] reports, exactly as pressing Esc does,
+  /// for a which-key popup's close control or another way to dismiss it. The
+  /// keys typed so far are dropped, so a single-key binding waiting on them
+  /// (`g` beside `g g`) doesn't fire. Does nothing when no sequence is in
+  /// progress, and doesn't make [context] rebuild.
   static void cancelPending(BuildContext context) =>
       readScope<PendingSequenceNotifier>(context)?.cancel();
 

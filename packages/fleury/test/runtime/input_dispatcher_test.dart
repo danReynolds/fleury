@@ -2611,6 +2611,209 @@ void main() {
     });
   });
 
+  group('Esc aborts a pending sequence', () {
+    // which-key.nvim's Esc, Emacs's C-g: backing out of a half-typed
+    // sequence does nothing else. Every other key that breaks a sequence
+    // still replays the held keys and then acts as usual (vim).
+    test('the held keys are dropped and no Esc binding fires', () async {
+      final calls = <String>[];
+      final h = _TestHarness(
+        rootBindings: [
+          KeyBinding(KeyCode.escape, onTrigger: (_) => calls.add('app esc')),
+        ],
+      );
+      h.mountRoot(
+        KeyBindings(
+          bindings: [
+            KeyBinding(KeySequence.d, onTrigger: (_) => calls.add('d')),
+            KeyBinding(KeySequence.d.k, onTrigger: (_) => calls.add('dk')),
+          ],
+          child: const Focus(autofocus: true, child: EmptyBox()),
+        ),
+      );
+
+      h.dispatch(_char('d'));
+      expect(h.dispatcher.hasPendingSequence, isTrue);
+
+      expect(h.dispatch(_code(KeyCode.escape)), KeyEventResult.handled);
+      expect(calls, isEmpty);
+      expect(h.dispatcher.hasPendingSequence, isFalse);
+      await Future<void>.delayed(const Duration(milliseconds: 100));
+      expect(calls, isEmpty, reason: 'nor does the timeout commit d later');
+
+      h.dispatch(_code(KeyCode.escape));
+      expect(calls, ['app esc'], reason: 'with nothing pending, Esc is Esc');
+    });
+
+    test('a held character is dropped instead of typed', () {
+      final controller = TextEditingController();
+      final h = _TestHarness();
+      h.mountRoot(
+        KeyBindings(
+          bindings: [KeyBinding(KeySequence.ctrl.x.a.b, onTrigger: (_) {})],
+          child: TextInput(controller: controller, autofocus: true),
+        ),
+      );
+
+      h.dispatch(_char('x', ctrl: true));
+      h.dispatcher.dispatch(const TextInputEvent('a'));
+      expect(controller.text, isEmpty, reason: 'held while the chord lives');
+
+      h.dispatch(_code(KeyCode.escape));
+      expect(controller.text, isEmpty);
+      expect(h.dispatcher.hasPendingSequence, isFalse);
+    });
+
+    test('an Esc the sequence expects still completes or extends it', () {
+      final calls = <String>[];
+      final h = _TestHarness();
+      h.mountRoot(
+        KeyBindings(
+          bindings: [
+            KeyBinding(KeySequence.g.escape, onTrigger: (_) => calls.add('g')),
+            KeyBinding(
+              KeySequence.z.escape.x,
+              onTrigger: (_) => calls.add('z'),
+            ),
+          ],
+          child: const Focus(autofocus: true, child: EmptyBox()),
+        ),
+      );
+
+      h.dispatch(_char('g'));
+      h.dispatch(_code(KeyCode.escape));
+      expect(calls, ['g']);
+
+      h.dispatch(_char('z'));
+      h.dispatch(_code(KeyCode.escape));
+      expect(h.dispatcher.hasPendingSequence, isTrue);
+      h.dispatch(_char('x'));
+      expect(calls, ['g', 'z']);
+    });
+
+    test('a modified Esc breaks a sequence like any other key', () {
+      final calls = <String>[];
+      final h = _TestHarness();
+      h.mountRoot(
+        KeyBindings(
+          bindings: [
+            KeyBinding(KeySequence.d, onTrigger: (_) => calls.add('d')),
+            KeyBinding(KeySequence.d.k, onTrigger: (_) => calls.add('dk')),
+            KeyBinding(
+              KeySequence.shift.escape,
+              onTrigger: (_) => calls.add('shift esc'),
+            ),
+          ],
+          child: const Focus(autofocus: true, child: EmptyBox()),
+        ),
+      );
+
+      h.dispatch(_char('d'));
+      h.dispatch(
+        const KeyEvent(KeyCode.escape, modifiers: {KeyModifier.shift}),
+      );
+      expect(calls, ['d', 'shift esc']);
+    });
+
+    test('any other key still replays the held keys, then acts as usual', () {
+      final calls = <String>[];
+      final h = _TestHarness();
+      h.mountRoot(
+        KeyBindings(
+          bindings: [
+            KeyBinding(KeySequence.d, onTrigger: (_) => calls.add('d')),
+            KeyBinding(KeySequence.d.k, onTrigger: (_) => calls.add('dk')),
+            KeyBinding(KeySequence.z, onTrigger: (_) => calls.add('z')),
+          ],
+          child: const Focus(autofocus: true, child: EmptyBox()),
+        ),
+      );
+
+      h.dispatcher.dispatch(const TextInputEvent('d'));
+      expect(h.dispatcher.hasPendingSequence, isTrue);
+      h.dispatcher.dispatch(const TextInputEvent('z'));
+      expect(calls, ['d', 'z']);
+      expect(h.dispatcher.hasPendingSequence, isFalse);
+    });
+
+    for (final interruption in ['paste', 'IME composition']) {
+      test('$interruption still cancels by replaying the held keys', () {
+        final calls = <String>[];
+        final events = <String>[];
+        final h = _TestHarness();
+        h.mountRoot(
+          KeyBindings(
+            bindings: [
+              KeyBinding(KeySequence.ctrl.x, onTrigger: (_) => calls.add('cx')),
+              KeyBinding(
+                KeySequence.ctrl.x.ctrl.s,
+                onTrigger: (_) => calls.add('save'),
+              ),
+            ],
+            child: _ClaimLog(events: events),
+          ),
+        );
+
+        h.dispatch(_char('x', ctrl: true));
+        expect(h.dispatcher.hasPendingSequence, isTrue);
+        h.dispatcher.dispatch(
+          interruption == 'paste'
+              ? const PasteEvent('p')
+              : const TextCompositionEvent.update('あ'),
+        );
+        expect(calls, ['cx']);
+        expect(events, [
+          interruption == 'paste' ? 'paste:p' : 'composition-update:あ',
+        ]);
+        expect(h.dispatcher.hasPendingSequence, isFalse);
+      });
+    }
+
+    group('after its scope lost the sequence', () {
+      // A rebuild removed the longer binding while its prefix was held: the
+      // next key finds nothing left to continue.
+      _TestHarness lostSequence(List<String> calls) {
+        var generation = 0;
+        final key = GlobalKey<_RebuildingScopeState>();
+        final h = _TestHarness();
+        h.mountRoot(
+          _RebuildingScope(
+            key: key,
+            bindings: () => [
+              KeyBinding(KeySequence.d, onTrigger: (_) => calls.add('d')),
+              KeyBinding(KeySequence.z, onTrigger: (_) => calls.add('z')),
+              if (++generation == 1)
+                KeyBinding(KeySequence.d.k, onTrigger: (_) => calls.add('dk')),
+            ],
+          ),
+        );
+        h.dispatch(_char('d'));
+        expect(h.dispatcher.hasPendingSequence, isTrue);
+        key.currentState!.rebuild();
+        h.owner.flushBuild();
+        return h;
+      }
+
+      test('another key replays the held keys, then acts as usual', () {
+        final calls = <String>[];
+        final h = lostSequence(calls);
+        h.dispatch(_char('z'));
+        expect(calls, ['d', 'z']);
+        expect(h.dispatcher.hasPendingSequence, isFalse);
+      });
+
+      test('Esc still aborts: the user backed out of what they saw', () {
+        // A which-key popup keeps showing the prefix until the next key, so
+        // Esc here is the same abort as anywhere else.
+        final calls = <String>[];
+        final h = lostSequence(calls);
+        expect(h.dispatch(_code(KeyCode.escape)), KeyEventResult.handled);
+        expect(calls, isEmpty);
+        expect(h.dispatcher.hasPendingSequence, isFalse);
+      });
+    });
+  });
+
   group('cancelPending (a which-key close control)', () {
     test('abandons a held pure prefix, firing nothing', () {
       final calls = <String>[];
@@ -2632,7 +2835,7 @@ void main() {
       expect(calls, isEmpty, reason: 'a pure prefix commits nothing');
     });
 
-    test('commits a deferred shorter binding, exactly as Esc would', () {
+    test('drops a deferred shorter binding too, exactly as Esc does', () async {
       final calls = <String>[];
       final h = _TestHarness();
       h.mountRoot(
@@ -2649,8 +2852,11 @@ void main() {
       expect(calls, isEmpty, reason: 'direct .d deferred while .d.k is live');
 
       h.dispatcher.cancelPending();
-      expect(calls, ['d'], reason: 'the held prefix replays, like Esc/timeout');
+      expect(calls, isEmpty, reason: 'an abort replays nothing');
       expect(h.dispatcher.hasPendingSequence, isFalse);
+      // Nor later: the timeout that would have committed `d` is gone too.
+      await Future<void>.delayed(const Duration(milliseconds: 100));
+      expect(calls, isEmpty);
     });
 
     test('is a no-op when no sequence is in flight', () {

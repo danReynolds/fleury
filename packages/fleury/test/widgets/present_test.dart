@@ -400,4 +400,32 @@ void main() {
     expect(quits, 0, reason: 'the app behind the dialog must not see the q');
     expect(tester.dispatcher.hasPendingSequence, isFalse);
   });
+
+  testWidgets('Esc aborts a sequence pending inside a dialog without '
+      'dismissing the dialog', (tester) {
+    // Closing a which-key popup with Esc must not also close what's under it.
+    var fired = 0;
+    tester.pumpWidget(Navigator(home: const Text('page')));
+    final nav = tester.binding.rootNavigator!;
+    nav.present<void>(
+      KeyBindings(
+        bindings: [KeyBinding(KeySequence.g.g, onTrigger: (_) => fired++)],
+        child: const Focus(autofocus: true, child: Text('dialog')),
+      ),
+    );
+    tester.pump(const Duration(milliseconds: 300));
+
+    tester.press(KeySequence.g);
+    expect(tester.dispatcher.hasPendingSequence, isTrue);
+
+    tester.sendKey(const KeyEvent(KeyCode.escape));
+    tester.pump(const Duration(milliseconds: 300));
+    expect(tester.dispatcher.hasPendingSequence, isFalse);
+    expect(nav.depth, 2, reason: 'that Esc only abandoned the sequence');
+
+    tester.sendKey(const KeyEvent(KeyCode.escape));
+    tester.pump(const Duration(milliseconds: 300));
+    expect(nav.depth, 1, reason: 'with nothing pending, Esc dismisses');
+    expect(fired, 0);
+  });
 }

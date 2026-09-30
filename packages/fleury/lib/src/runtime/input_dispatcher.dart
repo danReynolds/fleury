@@ -3,7 +3,8 @@
 // Owns pending-sequence state, sequence timeouts, focus-chain walking,
 // and global-bindings fallback. Per RFC 0008 §7, dispatch precedence is:
 //
-//   1. PENDING SEQUENCE: complete or cancel-and-redispatch.
+//   1. PENDING SEQUENCE: complete, advance, abort (Esc), or
+//      cancel-and-redispatch.
 //   2. FOCUS CHAIN, deepest first:
 //      a. Direct match on a KeyBindings binding (binding wins).
 //      b. Sequence-start match on a KeyBindings binding (begin pending).
@@ -165,14 +166,15 @@ class InputDispatcher {
   /// they never see the press at all.
   bool _keyHeldForText = false;
 
-  /// Abandons an in-flight sequence as if the user pressed Esc: held events
-  /// replay (a shorter binding fires, a text-owed char reaches the field) and
-  /// the pending state clears, dropping any which-key popup. No-op when
-  /// nothing is pending. The widget tree reaches this via
-  /// [KeyBindings.cancelPending] → [PendingSequenceNotifier.cancel].
+  /// Aborts an in-flight sequence exactly as Esc does: the pending state
+  /// clears, dropping any which-key popup, and the held events are discarded
+  /// rather than replayed — a deferred shorter binding doesn't fire and a
+  /// held character doesn't reach the field. No-op when nothing is pending.
+  /// The widget tree reaches this via [KeyBindings.cancelPending] →
+  /// [PendingSequenceNotifier.cancel].
   void cancelPending() {
     _checkNotDisposed();
-    _cancelPendingAndRedispatchHeld();
+    _clearPending();
   }
 
   /// Builds the public snapshot: the held prefix plus every live next step
@@ -675,10 +677,11 @@ class InputDispatcher {
   }
 
   /// Runs the pending-sequence machinery for [event]. A non-null result means
-  /// the sequence completed, advanced, or deliberately held its prefix for
-  /// another view of the same physical step. Otherwise it cancels the
-  /// sequence, replays every held event direct-only, and returns null so the
-  /// caller dispatches [event] through its own normal path.
+  /// the sequence completed, advanced, deliberately held its prefix for
+  /// another view of the same physical step, or was aborted by Esc. Otherwise
+  /// it cancels the sequence, replays every held event direct-only, and
+  /// returns null so the caller dispatches [event] through its own normal
+  /// path (see [_breakPending]).
   KeyEventResult? _tryPendingSequence(
     KeyEvent event, {
     String? textOrigin,
@@ -715,8 +718,7 @@ class InputDispatcher {
       // moved out or into a dialog in front of it), or its rebuild removed or
       // disabled every binding that opened the sequence. Never fire a
       // captured handler after that.
-      _cancelPendingAndRedispatchHeld();
-      return null;
+      return _breakPending(event);
     }
     if (!_sameBindings(live, pending.candidates)) {
       pending = pending.withCandidates(live);
@@ -746,14 +748,26 @@ class InputDispatcher {
       _keyHeldForText = true;
       return KeyEventResult.ignored;
     }
-    // Sequence didn't complete and didn't continue: cancel and
-    // redispatch every event that was held; the caller dispatches the
-    // current one.
-    //
-    // Replays go through direct-match-only — we just CANCELLED a
-    // sequence, so re-arming pending on the same prefix (e.g.
-    // replaying Space and immediately re-entering the Space-leader
-    // sequence) would trap the dispatcher in a stale-pending loop.
+    // Sequence didn't complete and didn't continue.
+    return _breakPending(event);
+  }
+
+  /// [event] can't continue the pending sequence, so the sequence ends.
+  ///
+  /// An unmodified Esc aborts it, as Esc does in which-key.nvim and C-g in
+  /// Emacs: the held events are dropped, not replayed, and the Esc is spent
+  /// on the abort (handled), so backing out of a half-typed sequence doesn't
+  /// also close a dialog or pop a page. Only a miss gets here — a sequence
+  /// that binds Esc as its next step has already completed or advanced.
+  ///
+  /// Any other key cancels it, as in vim: every held event replays
+  /// direct-only (see [_replayHeld]), and null hands [event] back to the
+  /// caller's normal path.
+  KeyEventResult? _breakPending(KeyEvent event) {
+    if (event.code == KeyCode.escape && event.modifiers.isEmpty) {
+      _clearPending();
+      return KeyEventResult.handled;
+    }
     _cancelPendingAndRedispatchHeld();
     return null;
   }
@@ -932,6 +946,8 @@ class InputDispatcher {
     return _deliverComposition(event);
   }
 
+  /// Cancels the pending sequence and replays its held events. The explicit
+  /// aborts — Esc and [cancelPending] — clear it without replaying instead.
   void _cancelPendingAndRedispatchHeld() {
     final pending = _pending;
     if (pending == null) return;
@@ -1288,7 +1304,8 @@ class InputDispatcher {
   /// `Space` leader — with nothing to fall back to. It must NOT self-destruct
   /// on a timer: we keep it pending (with no timer re-armed) so a which-key
   /// popup stays on screen while the user reads it and can still complete it —
-  /// or Esc / any other key cancels it. This matches which-key.nvim / emacs.
+  /// or Esc aborts it, or any other key cancels it. This matches
+  /// which-key.nvim / emacs.
   /// The pending state is left untouched in that case (not cleared and
   /// restored), so the pending-sequence notifier never round-trips through
   /// null and the popup doesn't flicker.
