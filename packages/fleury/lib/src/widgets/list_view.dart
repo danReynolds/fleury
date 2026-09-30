@@ -143,11 +143,14 @@ class ListController extends Notifier {
     super.notify();
   }
 
-  /// Whether new output should be followed while the viewport is at its end.
-  /// Scrolling away pauses following without disabling this policy. Setting it
-  /// false keeps it disabled even after returning to the end and leaves the
-  /// cursor where it is; true catches up and puts the cursor back on the last
-  /// item.
+  /// Whether the list keeps its newest items in view as items are appended,
+  /// like a log or chat feed. Scrolling away pauses following ([isFollowing]
+  /// turns false) without turning this off, and returning to the end resumes
+  /// it.
+  ///
+  /// Setting it to false stops following, even at the end, and leaves the
+  /// cursor where it is. Setting it to true scrolls to the end and puts the
+  /// cursor back on the last item.
   bool get followTail => _followTail;
   set followTail(bool value) {
     _checkNotDisposed();
@@ -168,18 +171,28 @@ class ListController extends Notifier {
     notify();
   }
 
-  /// Whether the viewport is currently following output. False while reading
-  /// history, even when [followTail] remains enabled.
+  /// Whether the list is following new items right now: true while
+  /// [followTail] is on and the end of the list is in view. It is false while
+  /// the user reads earlier items, even though [followTail] stays on.
   bool get isFollowing => _isFollowing;
 
-  /// Whether the viewport includes the start / end of the content.
+  /// Whether the viewport shows the start of the content.
   bool get atStart => _atTop;
+
+  /// Whether the viewport shows the end of the content.
   bool get atEnd => _atBottom;
 
-  /// Appended items not yet seen at the end of an ordered feed. Prepends do not
-  /// count when stable item keys are provided. Mixed reorders and insertions are
-  /// not a general unread-item diff. Cleared on reaching the end.
+  /// How many items were appended since the end of the list was last in view,
+  /// for a "new items" badge; zero while following. It resets when the end
+  /// comes back into view or on [jumpToEnd].
+  ///
+  /// Without a [ListView.itemKeyBuilder], any increase in the item count is
+  /// counted. With one, only items added after the previous last item are, so
+  /// prepends aren't; an update that mixes reordering with insertion may not
+  /// be counted at all.
   int get unseenCount => _unseenCount;
+
+  /// The number of items in the attached list.
   int get itemCount => _itemCount;
 
   /// Visible item indices, including partially visible items; null when empty
@@ -195,11 +208,15 @@ class ListController extends Notifier {
   /// This is an estimate for variable-size items not yet measured.
   double get visibleFraction => _visibleFraction;
 
-  /// Remembered cursor index, independent of keyboard focus and scrolling.
-  /// Starts on the first item, or on the last item of a following list, which
-  /// keeps it there as items arrive until the cursor is moved; an explicit null
-  /// starts without a cursor. A non-selectable list keeps this null. Values
-  /// clamp once attached to a list.
+  /// The index of the current item (the list's cursor), or null when there is
+  /// none. Setting it moves the cursor and scrolls that item into view without
+  /// selecting it or taking focus. Values are clamped to the attached list.
+  ///
+  /// The cursor is independent of keyboard focus and scrolling. It starts on
+  /// the first item, or on the last item of a following list, which keeps it
+  /// there as items arrive until the cursor is moved; an explicit null
+  /// `initialIndex` starts without a cursor. A non-selectable list keeps this
+  /// null.
   int? get currentIndex => _currentIndex;
   set currentIndex(int? value) {
     _checkNotDisposed();
@@ -250,8 +267,9 @@ class ListController extends Notifier {
         : _currentIndex;
   }
 
-  /// Places an item at the viewport start, clamped to the final full viewport. Does not
-  /// change the cursor. The resulting position survives unrelated rebuilds.
+  /// Scrolls so the item at [index] starts the viewport, or as close as the
+  /// end of the content allows. Doesn't move the cursor, and pauses following.
+  /// The resulting position survives unrelated rebuilds.
   void jumpToIndex(int index) {
     _checkNotDisposed();
     // Refuse BEFORE clearing. A realized zero-row layout with items
@@ -276,7 +294,9 @@ class ListController extends Notifier {
     notify();
   }
 
-  /// Scrolls by cells along the list's axis, including within an oversized item.
+  /// Scrolls by [delta] cells along the list's axis (negative toward the
+  /// start), including within an item taller than the viewport. Doesn't move
+  /// the cursor, and pauses following.
   void scrollBy(int delta) {
     _checkNotDisposed();
     if (delta == 0) return;
@@ -287,8 +307,11 @@ class ListController extends Notifier {
     notify();
   }
 
-  /// Moves a scrollbar to an approximate fraction of the collection. Zero and
-  /// one reach the actual content edges, including a single oversized item.
+  /// Scrolls to an approximate position given as a [fraction] of the whole
+  /// list, as a scrollbar drag does: 0 is the start and 1 the end, exactly,
+  /// even for a single oversized item. Values are clamped to 0..1, and a
+  /// non-finite value throws an [ArgumentError]. Doesn't move the cursor, and
+  /// pauses following.
   void jumpToFraction(double fraction) {
     _checkNotDisposed();
     if (!fraction.isFinite) throw ArgumentError.value(fraction, 'fraction');
@@ -298,10 +321,10 @@ class ListController extends Notifier {
     notify();
   }
 
-  /// Shows the end of the final item. Resumes following only if [followTail] is
-  /// enabled — and then, as End does, puts the cursor back on the last item,
-  /// so going live never leaves it on a row that scrolled away. A normal list
-  /// does not become a live feed by jumping to its end.
+  /// Scrolls to the end of the last item and clears [unseenCount]. With
+  /// [followTail] on, following resumes and, as the End key does, the cursor
+  /// moves back to the last item; otherwise the cursor stays where it is, and
+  /// the list doesn't start following.
   void jumpToEnd() {
     _checkNotDisposed();
     _clearRequests();
@@ -477,7 +500,8 @@ class ListController extends Notifier {
   }
 }
 
-/// A vertical, keyboard-navigable list of items.
+/// A scrollable, keyboard-navigable list of items, vertical by default or
+/// horizontal with [scrollDirection].
 ///
 /// Two ways to populate the list:
 ///
@@ -492,15 +516,20 @@ class ListController extends Notifier {
 ///     Best for long lists where most items are off-screen (file pickers, log
 ///     viewers, completion menus).
 ///
-/// When focused, the widget claims the main-axis arrows, Home, End,
-/// and enter:
-///   - Arrows / Home / End move the current item and report [onFocusedItemChanged];
-///     the viewport scrolls to keep it visible.
+/// When focused, the list handles its main-axis arrows (Up and Down, or Left
+/// and Right in a horizontal list), PageUp, PageDown, Home, End, and Enter:
+///   - The arrows move the current item by one, PageUp and PageDown by the
+///     number of items in view, and Home and End to the first and last item.
+///     A move reports [onFocusedItemChanged] and scrolls the item into view.
 ///   - Enter or a completed click selects the current item via [onSelect].
-///   - Up at the first item / Down at the last item respects
-///     [edgeBehavior]: `contain` consumes the key, `bubble` returns
+///   - An arrow or page key that would move past the first or last item
+///     follows [edgeBehavior]: `contain` consumes the key, `bubble` returns
 ///     it to the focus chain so an ancestor `KeyBindings` (e.g. one
 ///     coordinating sidebar + main pane focus traversal) can react.
+///   - A list without a current item (`selectable: false`, or a controller
+///     with no cursor) scrolls instead: the arrows by one cell and PageUp and
+///     PageDown by a viewport, following [edgeBehavior] once scrolled to an
+///     end, while Home and End jump to the start and end.
 ///
 /// [itemBuilder] receives `(context, index, highlighted)` for each visible item.
 /// The current item remains highlighted when keyboard focus leaves the list.
@@ -611,30 +640,30 @@ class ListView extends StatefulWidget {
   /// [ListView.builder] forms.
   final Widget? Function(BuildContext context, int index)? separatorBuilder;
 
-  /// Stable data identity for lazy items.
+  /// Returns a stable key for the data item at each index. Supply it when items
+  /// can move (prepends, removals, filters, reorders) so the current item, the
+  /// scroll position, and the state of mounted items follow each item rather
+  /// than its index. Keys must be unique within the list and have stable
+  /// equality and hash codes; a duplicate key throws a [StateError].
   ///
-  /// Supply this when items can move.
-  /// Fleury then preserves the current item, viewport anchor, and mounted
-  /// element state across prepends, removals, filters, and reorders. Keys must
-  /// be unique within this list. This is data identity only: it does not install
-  /// a Fleury `Key` on the row or create a semantic identifier. Add those at the
-  /// item-widget layer when the application needs either contract.
+  /// This is data identity only: it does not install a Fleury `Key` on the row
+  /// or create a semantic identifier. Add those at the item-widget layer when
+  /// the application needs either contract.
   ///
   /// Fleury reads all item keys once on mount and whenever the parent supplies
   /// an updated ListView. Checking keys takes O(itemCount) time; unchanged
   /// ordered keys reuse the existing reverse lookup. Changed keys rebuild it
   /// in O(itemCount) time and space. Row widgets are still built and laid out
   /// only as needed.
-  /// Keys must have stable equality and hash codes; duplicates are an error.
   final ListItemKeyBuilder? itemKeyBuilder;
 
-  /// Wrap each item in a [RepaintBoundary] (default true, Flutter-parity) so a
-  /// localized update — one row's setState, a streaming-token line — repaints
-  /// only that row instead of re-walking every item's paint. Paint CPU scales
-  /// with the change, not the list size; the boundary replays its pointer and
-  /// semantic regions on cache-hit so items stay interactive and accessible.
-  /// Turn off only for a list of trivially-cheap items where the per-item
-  /// boundary bookkeeping would outweigh the saved paint.
+  /// Whether each item gets its own [RepaintBoundary], so an update inside one
+  /// item (a row's setState, a line of streaming output) repaints only that
+  /// item rather than the whole list. Items stay interactive and accessible
+  /// either way.
+  ///
+  /// Turn it off only for lists of trivially cheap items, where the per-item
+  /// boundaries would cost more than the painting they save.
   final bool addRepaintBoundaries;
 
   /// Whether to request focus on first mount.
