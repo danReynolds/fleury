@@ -22,8 +22,8 @@ changes underneath a doc, the build goes red instead of the docs going stale.
 | `app_shell.dart` | [App entry points](../../src/content/docs/concepts/app-entry.md), [Theming](../../src/content/docs/guides/theming.mdx) |
 | `terminal_modes/` and `terminal_modes.dart` | [Full-screen and inline UIs](../../src/content/docs/guides/terminal-modes.mdx); runnable mode choices, native resizing, repeated sessions, and subprocess handoff |
 | `getting_started_app.dart`, `status_app_terminal.dart`, `status_app_web.dart` | The finished web-safe `lib/app.dart` and its native and browser entrypoints in [Getting started](../../src/content/docs/getting-started.mdx) |
-| `web_app_shell.dart` | Browser entry snippets in [App entry points](../../src/content/docs/concepts/app-entry.md) and [Coming from Flutter](../../src/content/docs/coming-from-flutter.md) |
-| `coming_from_flutter.dart` | [Coming from Flutter](../../src/content/docs/coming-from-flutter.md) |
+| `web_app_shell.dart` | Browser entry snippets in [App entry points](../../src/content/docs/concepts/app-entry.md) and [Coming from Flutter](../../src/content/docs/coming-from-flutter.mdx) |
+| `coming_from_flutter.dart`, `flutter_counter_main.dart`, `../lib/flutter_map.dart` | [Coming from Flutter](../../src/content/docs/coming-from-flutter.mdx); the page shows `#docregion` excerpts of `flutter_map.dart`, whose widgets the live demos run, and `coming_from_flutter.dart` checks its remaining hand-written fences |
 | `filterable_list.dart` | [Tutorial: a filterable list](../../src/content/docs/tutorial.mdx) |
 | `keyboard_tour.dart` | [Key handling](../../src/content/docs/guides/focus-and-keyboard.mdx) |
 | `focus_tour.dart` | [Focus management](../../src/content/docs/guides/focus.mdx) |

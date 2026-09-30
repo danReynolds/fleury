@@ -7,23 +7,33 @@
 //
 // A region is every block between `// #docregion <name>` and
 // `// #enddocregion <name>`; several blocks with one name join in file order.
-// Markers of other regions inside it are dropped, and the result is dedented.
+// Pass several files to join their blocks in the order given, for a program
+// whose parts live in different libraries. Markers of other regions inside it
+// are dropped, and the result is dedented.
 import { Code } from '@astrojs/starlight/components';
 
 interface Props {
-  /** The complete source file, imported with `?raw`. */
-  code: string;
+  /** The complete source file, or files, imported with `?raw`. */
+  code: string | string[];
   /** The `#docregion` name to show. */
   region: string;
+  /** Lines to highlight, counted in the excerpt as shown. */
+  mark?: Array<number | { range: string }>;
 }
-const { code, region } = Astro.props;
+const { code, region, mark } = Astro.props;
 const name = region.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 const pattern = new RegExp(
   `^[ \\t]*// #docregion ${name}[ \\t]*\\r?\\n([\\s\\S]*?)^[ \\t]*// #enddocregion ${name}[ \\t]*$`,
   'gm',
 );
-const blocks = [...code.matchAll(pattern)].map((match) => match[1]);
-if (!blocks.length) throw new Error(`Source region is missing: ${region}`);
+const sources = Array.isArray(code) ? code : [code];
+const blocks = sources.flatMap((source, index) => {
+  const found = [...source.matchAll(pattern)].map((match) => match[1]);
+  if (!found.length) {
+    throw new Error(`Source region is missing: ${region} (file ${index + 1} of ${sources.length})`);
+  }
+  return found;
+});
 const dedent = (value: string) => {
   const lines = value
     .replace(/^[ \t]*\/\/ #(end)?docregion .*\r?\n/gm, '')
@@ -36,4 +46,4 @@ const dedent = (value: string) => {
 };
 const excerpt = blocks.map(dedent).join('\n\n');
 ---
-<Code code={excerpt} lang="dart" wrap />
+<Code code={excerpt} lang="dart" wrap mark={mark} />

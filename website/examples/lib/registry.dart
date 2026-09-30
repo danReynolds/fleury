@@ -22,6 +22,8 @@ import 'forms/project_form.dart';
 import 'forms/save_project.dart';
 import 'forms/related_fields.dart';
 import 'forms/custom_field.dart';
+import 'concepts.dart' as concepts;
+import 'flutter_map.dart' as flutter_map;
 import 'live_previews.dart' as live;
 
 /// Builds the root widget for one live example.
@@ -2414,6 +2416,71 @@ Text('\${summary.health.name}: \${summary.activeTaskCount} of \${summary.taskCou
     rows: 11,
     interactive: true,
     builder: () => const _TickerSimulationTour(),
+  ),
+  ExampleInfo(
+    id: 'flutter.counter',
+    widget: 'Counter',
+    category: 'Guide examples',
+    blurb: 'The Flutter counter, ported: same widgets and setState, in cells.',
+    cols: 34,
+    rows: 7,
+    interactive: true,
+    builder: () => _framed(const flutter_map.Counter()),
+  ),
+  ExampleInfo(
+    id: 'flutter.cells',
+    widget: 'AspectRatio',
+    category: 'Guide examples',
+    blurb: 'Cells are taller than wide, so a square-looking box is 2:1.',
+    cols: 28,
+    rows: 14,
+    builder: () => _framed(const flutter_map.CellBoxes()),
+  ),
+  ExampleInfo(
+    id: 'flutter.keys',
+    widget: 'KeyBindings',
+    category: 'Guide examples',
+    blurb:
+        'Ctrl+S and Esc bindings around a focused field, listed by a hint bar.',
+    cols: 44,
+    rows: 8,
+    interactive: true,
+    builder: () => _framed(const flutter_map.EditorShortcuts()),
+  ),
+  ExampleInfo(
+    id: 'flutter.animation',
+    widget: 'AnimationBuilder',
+    category: 'Guide examples',
+    blurb: 'AnimationBuilder eases toward a new target when state changes.',
+    cols: 36,
+    rows: 7,
+    interactive: true,
+    builder: () => _framed(const flutter_map.SelectionMeter()),
+  ),
+  ExampleInfo(
+    id: 'flutter.routes',
+    widget: 'Navigator',
+    category: 'Guide examples',
+    blurb: 'Push a screen widget, pop it, or pop back to a screen type.',
+    cols: 38,
+    rows: 8,
+    interactive: true,
+    builder: () => _framed(
+      Navigator(
+        transition: RouteTransition.none,
+        home: const flutter_map.HomeScreen(),
+      ),
+    ),
+  ),
+  ExampleInfo(
+    id: 'concepts.clock',
+    widget: 'State',
+    category: 'Guide examples',
+    blurb:
+        'A clock that starts its timer in initState and cancels it in dispose.',
+    cols: 25,
+    rows: 3,
+    builder: () => _framed(const concepts.Clock()),
   ),
   ExampleInfo(
     id: 'state.local-counter',

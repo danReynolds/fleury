@@ -3,6 +3,12 @@ title: Widgets & state
 description: The programming model — stateless and stateful widgets, the State lifecycle, setState, keys, and context.
 ---
 
+import CodeDemoSplit from '../../../components/CodeDemoSplit.astro';
+import FleuryExample from '../../../components/FleuryExample.astro';
+import SourceExcerpt from '../../../components/SourceExcerpt.astro';
+import concepts from '../../../../examples/lib/concepts.dart?raw';
+import stateGuide from '../../../../examples/lib/state_management_guide.dart?raw';
+
 A Fleury UI is a tree of **widgets**: immutable descriptions of what should be on
 screen. You never mutate a widget — you describe a new one and let the framework
 work out the minimal change. (If you've used Flutter, this is the same model,
@@ -30,33 +36,17 @@ counter, a scroll position, a text buffer. The widget itself is still immutable;
 the mutable part lives in a companion **`State`** object that the framework keeps
 alive across rebuilds:
 
-```dart
-class Counter extends StatefulWidget {
-  const Counter({super.key});
-
-  @override
-  State<Counter> createState() => _CounterState();
-}
-
-class _CounterState extends State<Counter> {
-  int _count = 0;
-
-  @override
-  Widget build(BuildContext context) => Column(
-    children: [
-      Text('Count: $_count'),
-      Button(text: 'Increment', onPressed: () => setState(() => _count++)),
-    ],
-  );
-}
-```
+<CodeDemoSplit file="local_counter.dart">
+<SourceExcerpt slot="code" code={stateGuide} region="local" />
+<FleuryExample slot="demo" id="state.local-counter" cols={34} rows={9} interactive />
+</CodeDemoSplit>
 
 ## Rebuild after changing state
 
 When a field in your `State` changes, use **`setState`** to rebuild its widget:
 
 ```dart
-setState(() => _count++);
+setState(() => count++);
 ```
 
 `setState` runs your callback synchronously, then marks this widget for rebuild.
@@ -91,29 +81,12 @@ most, in the order they fire:
   you started in `initState` — controllers, tickers, stream subscriptions.
   Always call `super.dispose()`.
 
-```dart
-class _ClockState extends State<Clock> {
-  late final Timer _timer;
-  DateTime _now = DateTime.now();
+A clock starts its timer in `initState` and cancels it in `dispose`:
 
-  @override
-  void initState() {
-    super.initState();
-    _timer = Timer.periodic(const Duration(seconds: 1), (_) {
-      setState(() => _now = DateTime.now());
-    });
-  }
-
-  @override
-  void dispose() {
-    _timer.cancel();   // started in initState → cleaned up here
-    super.dispose();
-  }
-
-  @override
-  Widget build(BuildContext context) => Text('$_now');
-}
-```
+<CodeDemoSplit file="clock.dart">
+<SourceExcerpt slot="code" code={concepts} region="clock" />
+<FleuryExample slot="demo" id="concepts.clock" cols={25} rows={3} />
+</CodeDemoSplit>
 
 Three more hooks cover rarer cases. `deactivate()` runs when the state leaves
 the tree, and `activate()` runs if it's reinserted in the same frame, which

@@ -461,6 +461,7 @@ class _Runner {
         'test/lists_guide_test.dart',
         'test/forms_guide_test.dart',
         'test/state_management_guide_test.dart',
+        'test/flutter_map_test.dart',
         'test/datatable_examples_test.dart',
         'test/loading_error_future_test.dart',
       ], workingDirectory: webExamples);

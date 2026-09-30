@@ -1,0 +1,63 @@
+---
+// A Flutter program and its Fleury port, side by side, for "Coming from
+// Flutter". Mark the lines that differ in each pane. The Fleury pane should be
+// a SourceExcerpt of compiled code, so it is the program the live demo runs.
+//
+//   <FlutterComparison>
+//     <Fragment slot="flutter"> ```dart mark={3} … ``` </Fragment>
+//     <SourceExcerpt slot="fleury" code={…} region="…" mark={[3]} />
+//   </FlutterComparison>
+---
+
+<div class="flutter-comparison">
+  <div class="flutter-comparison-grid">
+    <figure class="flutter-comparison-pane">
+      <figcaption>Flutter</figcaption>
+      <slot name="flutter" />
+    </figure>
+    <figure class="flutter-comparison-pane">
+      <figcaption>Fleury</figcaption>
+      <slot name="fleury" />
+    </figure>
+  </div>
+</div>
+
+<style>
+  /* Breaks out of the reading column like CodeDemoSplit, and goes side by
+     side only when that leaves room for two code panes. */
+  .flutter-comparison {
+    container-type: inline-size;
+    width: min(78rem, calc(100% + 14rem));
+    margin: 1.5rem calc((100% - min(78rem, calc(100% + 14rem))) / 2);
+  }
+  @media (max-width: 72rem) {
+    .flutter-comparison {
+      width: 100%;
+      margin-inline: 0;
+    }
+  }
+  .flutter-comparison-grid {
+    display: grid;
+    gap: 1rem;
+  }
+  @container (min-width: 56rem) {
+    .flutter-comparison-grid {
+      grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+    }
+  }
+  .flutter-comparison-pane {
+    margin: 0;
+    min-width: 0;
+  }
+  .flutter-comparison-pane figcaption {
+    margin-bottom: 0.4rem;
+    color: var(--sl-color-gray-3);
+    font-size: 0.75rem;
+    font-weight: 600;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+  }
+  .flutter-comparison-pane :global(.expressive-code) {
+    margin-top: 0;
+  }
+</style>

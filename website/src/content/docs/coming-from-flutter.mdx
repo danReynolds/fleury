@@ -3,6 +3,13 @@ title: Coming from Flutter
 description: A practical map from Flutter's widget model to Fleury's cell-grid UI model.
 ---
 
+import CodeDemoSplit from '../../components/CodeDemoSplit.astro';
+import FleuryExample from '../../components/FleuryExample.astro';
+import FlutterComparison from '../../components/FlutterComparison.astro';
+import SourceExcerpt from '../../components/SourceExcerpt.astro';
+import counterMain from '../../../examples/doc_snippets/flutter_counter_main.dart?raw';
+import demos from '../../../examples/lib/flutter_map.dart?raw';
+
 Fleury is deliberately familiar if you know Flutter: apps are widget trees,
 local widget state lives in `State`, `build` returns widgets, and `setState`
 schedules a rebuild. The difference is the surface. Flutter lays out pixels and usually
@@ -25,44 +32,41 @@ structured terminal/browser surfaces.
 | Material controls | Fleury core widgets plus `fleury_widgets` for tables, charts, forms, agent surfaces, and controls. |
 | Flutter web build | `mountApp(() => const FleuryApp(title: 'My app', home: MyApp()), into: host)` for client-side browser embeds, or `fleury serve` for a native app streamed to the browser. |
 
-## A tiny app
+## The same counter, twice
 
-If you can read this Flutter-style counter, you can read Fleury:
+Here is the classic Flutter counter next to its Fleury port. The highlighted
+lines are the whole diff:
 
-```dart title="main.dart"
-import 'package:fleury/fleury.dart';
+<FlutterComparison>
+<Fragment slot="flutter">
+```dart wrap mark={1,3,17-18,23-24,26}
+import 'package:flutter/material.dart';
 
-void main() => runApp(
-  const FleuryApp(title: 'Counter', home: CounterApp()),
-);
+void main() => runApp(const MaterialApp(home: Counter()));
 
-class CounterApp extends StatefulWidget {
-  const CounterApp({super.key});
+class Counter extends StatefulWidget {
+  const Counter({super.key});
 
   @override
-  State<CounterApp> createState() => _CounterAppState();
+  State<Counter> createState() => _CounterState();
 }
 
-class _CounterAppState extends State<CounterApp> {
+class _CounterState extends State<Counter> {
   int _count = 0;
 
   @override
   Widget build(BuildContext context) {
-    return KeyBindings(
-      bindings: [
-        KeyBinding(
-          KeySequence.space,
-          label: 'Increment',
-          onTrigger: (_) => setState(() => _count++),
-        ),
-      ],
-      child: Center(
+    return Scaffold(
+      body: Center(
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            Text('count: $_count'),
-            const SizedBox(height: 1),
-            const Text('press Space'),
+            Text('Count: $_count'),
+            const SizedBox(height: 16),
+            ElevatedButton(
+              onPressed: () => setState(() => _count++),
+              child: const Text('Increment'),
+            ),
           ],
         ),
       ),
@@ -70,12 +74,27 @@ class _CounterAppState extends State<CounterApp> {
   }
 }
 ```
+</Fragment>
+<SourceExcerpt slot="fleury" code={[counterMain, demos]} region="counter" mark={[1, 3, 17, { range: '22-25' }]} />
+</FlutterComparison>
 
-The important differences are visible in the imports and input model:
+The Fleury version, running in your browser. Press Enter, or click **Increment**:
 
-- `package:fleury/fleury.dart` is the native terminal app umbrella.
-- `KeyBindings` maps terminal/browser key chords directly to callbacks.
-- Layout dimensions are cells, so `height: 1` means one terminal row.
+<FleuryExample id="flutter.counter" cols={34} rows={7} interactive />
+
+What changed:
+
+- `MaterialApp` becomes `FleuryApp`, imported from `package:fleury/fleury.dart`.
+- There is no `Scaffold`. A terminal app composes its own chrome, so `Center`
+  is the screen's root.
+- `SizedBox(height: 16)` in pixels becomes `height: 1`: one row of cells.
+- `ElevatedButton(child: Text(...))` becomes `Button(text: ...)`.
+- `autofocus: true` gives the button keyboard focus, so Enter presses it.
+  Terminal apps are keyboard-first; see
+  [Input is keyboard-first](#input-is-keyboard-first-pointer-aware).
+
+Everything else, `StatefulWidget`, `State`, `setState`, `build`, and `Column`,
+is the same code.
 
 ## Imports and entrypoints
 
@@ -170,7 +189,12 @@ Padding(
 
 Fleury layout is integer cell layout. Width is columns; height is rows. A
 terminal cell is usually taller than it is wide, so a visually square box often
-uses an `AspectRatio` around `2.0`, not `1.0`.
+uses an `AspectRatio` around `2.0`, not `1.0`:
+
+<CodeDemoSplit file="cell_boxes.dart">
+<SourceExcerpt slot="code" code={demos} region="cells" />
+<FleuryExample slot="demo" id="flutter.cells" cols={28} rows={14} />
+</CodeDemoSplit>
 
 That sounds small, but it changes what "polish" means. You tune information
 density, alignment, wrapping, keyboard flow, and semantic structure before you
@@ -202,17 +226,15 @@ widgets in that shell. `child` does not create an implicit route stack.
 
 ### Input is keyboard-first, pointer-aware
 
-Flutter's `Shortcuts` / `Actions` stack is intentionally simpler in Fleury:
+Flutter's `Shortcuts` / `Actions` stack is intentionally simpler in Fleury: a
+key sequence maps straight to a callback. Type in the field, then press Ctrl+S
+or Esc. The bindings sit above the focused field, so its keys reach them, and
+their labels feed the hint bar:
 
-```dart
-KeyBindings(
-  bindings: [
-    KeyBinding(KeySequence.ctrl.s, label: 'Save', onTrigger: (_) => save()),
-    KeyBinding(KeySequence.escape, label: 'Cancel', onTrigger: (_) => cancel()),
-  ],
-  child: editor,
-)
-```
+<CodeDemoSplit file="editor_shortcuts.dart" codeMaxHeight="26rem">
+<SourceExcerpt slot="code" code={demos} region="keys" />
+<FleuryExample slot="demo" id="flutter.keys" cols={44} rows={8} interactive />
+</CodeDemoSplit>
 
 Pointer and hover still exist through `GestureDetector` and `MouseRegion`, but
 terminal users expect every important workflow to work from the keyboard.
@@ -230,15 +252,13 @@ fill.loop(between: (0.3, 1.0));
 ```
 
 For the common "animate when this state value changes" case, use
-`AnimationBuilder`:
+`AnimationBuilder`, the counterpart of `TweenAnimationBuilder`. Press Enter to
+flip `selected` and watch the value ease toward its new target:
 
-```dart
-AnimationBuilder<double>(
-  selected ? 1.0 : 0.0,
-  builder: (context, t, child) =>
-      Text('selected: ${t.toStringAsFixed(2)}'),
-)
-```
+<CodeDemoSplit file="selection_meter.dart" codeMaxHeight="26rem">
+<SourceExcerpt slot="code" code={demos} region="animation" />
+<FleuryExample slot="demo" id="flutter.animation" cols={36} rows={7} interactive />
+</CodeDemoSplit>
 
 For entrance/exit effects, use `Animate` or `AnimatedVisibility`:
 
@@ -254,12 +274,13 @@ AnimatedVisibility(
 ### Routes are widgets, not route names
 
 With `FleuryApp(home: ...)` there is no `MaterialPageRoute` and no named-route
-table. Push the widget you want to show:
+table. Push the widget you want to show, pop with an optional result, or pop
+back to a screen by its type:
 
-```dart
-context.push<void>(DetailScreen(id: id));
-context.popUntil<HomeScreen>();
-```
+<CodeDemoSplit file="projects.dart" codeMaxHeight="26rem">
+<SourceExcerpt slot="code" code={demos} region="routes" />
+<FleuryExample slot="demo" id="flutter.routes" cols={38} rows={8} interactive />
+</CodeDemoSplit>
 
 Use `PopScope` for the same kind of "can this route close?" guard you would use
 in Flutter.

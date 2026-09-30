@@ -345,7 +345,7 @@ void main() {
         p.join(repo.path, 'website/src/content/docs/guides/layout.mdx'),
       ).readAsStringSync();
       final flutter = File(
-        p.join(repo.path, 'website/src/content/docs/coming-from-flutter.md'),
+        p.join(repo.path, 'website/src/content/docs/coming-from-flutter.mdx'),
       ).readAsStringSync();
 
       expect(basic, contains('AspectRatio(aspectRatio: 2.0, ...)'));
