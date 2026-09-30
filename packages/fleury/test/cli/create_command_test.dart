@@ -115,6 +115,60 @@ void main() {
     );
   });
 
+  test('creates in the current directory using its package name', () async {
+    final target = Directory('${tempDir.path}/current_app')..createSync();
+    final result = await _runCreate(packageRoot, const [
+      '.',
+      '--no-pub',
+    ], workingDirectory: target.path);
+
+    expect(result.exitCode, 0, reason: result.stderr.toString());
+    expect(
+      File('${target.path}/pubspec.yaml').readAsStringSync(),
+      contains('name: current_app'),
+    );
+    expect(result.stdout, contains('cd .'));
+    expect(result.stdout, contains('dart run fleury run'));
+    expect(result.stdout, contains('press F5'));
+  });
+
+  test(
+    'pub failure preserves the project and gives usable recovery advice',
+    () async {
+      final server = await HttpServer.bind(InternetAddress.loopbackIPv4, 0);
+      addTearDown(() => server.close(force: true));
+      server.listen((request) async {
+        request.response.statusCode = HttpStatus.notFound;
+        await request.response.close();
+      });
+      final target = Directory('${tempDir.path}/unpublished_app');
+      final result = await _runCreate(
+        packageRoot,
+        [target.path],
+        environment: {
+          'PUB_HOSTED_URL': 'http://127.0.0.1:${server.port}',
+          'PUB_CACHE': '${tempDir.path}/pub_cache',
+        },
+      );
+
+      expect(result.exitCode, isNot(0));
+      expect(result.stderr, contains('`dart pub get` failed'));
+      expect(result.stderr, contains('The project was created'));
+      expect(result.stderr, contains('different, empty directory'));
+      expect(result.stderr, isNot(contains('rerun with')));
+
+      final app = File('${target.path}/lib/app.dart');
+      final originalSource = app.readAsStringSync();
+      final retry = await _runCreate(packageRoot, [
+        target.path,
+        '--dependency-source=git',
+      ]);
+      expect(retry.exitCode, 2);
+      expect(retry.stderr, contains('is not empty'));
+      expect(app.readAsStringSync(), originalSource);
+    },
+  );
+
   test('--no-editor-config omits every editor-specific file', () async {
     final target = Directory('${tempDir.path}/plain_app');
     final result = await _runCreate(packageRoot, [
@@ -297,13 +351,23 @@ void main() {
   });
 }
 
-Future<ProcessResult> _runCreate(String packageRoot, List<String> args) {
-  return Process.run(Platform.resolvedExecutable, <String>[
-    'run',
-    'fleury',
-    'create',
-    ...args,
-  ], workingDirectory: packageRoot);
+Future<ProcessResult> _runCreate(
+  String packageRoot,
+  List<String> args, {
+  String? workingDirectory,
+  Map<String, String>? environment,
+}) {
+  return Process.run(
+    Platform.resolvedExecutable,
+    <String>[
+      '--packages=$packageRoot/.dart_tool/package_config.json',
+      '$packageRoot/bin/fleury.dart',
+      'create',
+      ...args,
+    ],
+    workingDirectory: workingDirectory ?? packageRoot,
+    environment: environment,
+  );
 }
 
 List<String> _relativeFiles(Directory root) {

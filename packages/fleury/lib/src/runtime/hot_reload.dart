@@ -39,6 +39,7 @@ final class HotReloadReport {
     required this.elapsed,
     required this.loadedLibraryCount,
     this.message,
+    this.restartRequired = false,
   });
 
   /// Whether the VM accepted the reload.
@@ -52,6 +53,35 @@ final class HotReloadReport {
 
   /// Compile/rejection detail on failure.
   final String? message;
+
+  /// The VM rejected a class migration that needs a fresh isolate.
+  /// False for compiler errors and failures with no migration evidence.
+  final bool restartRequired;
+
+  /// Class migration notices identify their target class. Compiler diagnostics
+  /// use the same notice type but have no class target, so do not infer recovery
+  /// from a failed reload alone or from English error text.
+  static bool requiresRestart(Map<String, Object?> json) {
+    final notices = json['notices'];
+    return json['success'] == false &&
+        notices is List &&
+        notices.isNotEmpty &&
+        notices.every((notice) => notice is Map && notice['class'] is Map);
+  }
+
+  /// Actionable recovery followed by the original VM/compiler diagnostic.
+  String failureDescription({required bool canRestart}) {
+    final recovery = restartRequired
+        ? canRestart
+              ? 'Hot reload needs a restart. Ctrl+G, then F5 restarts the app '
+                    'and resets its state.'
+              : 'Hot reload needs a restart. Stop and rerun the app '
+                    'to apply this change (resets state).'
+        : 'Hot reload failed. Fix errors and save again; '
+              'your app is still running.';
+    final detail = message;
+    return detail == null || detail.isEmpty ? recovery : '$recovery\n$detail';
+  }
 }
 
 /// Connects a `package:vm_service` client to the VM service at [serverUri]
@@ -173,6 +203,7 @@ class HotReloadController {
             loadedLibraryCount:
                 int.tryParse(params['loadedLibraryCount'] ?? '') ?? 0,
             message: params['message'],
+            restartRequired: params['restartRequired'] == 'true',
           ),
         );
         return developer.ServiceExtensionResponse.result(

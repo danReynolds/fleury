@@ -227,16 +227,13 @@ class _DebugPanelState extends State<DebugPanel> {
     final errors = widget.controller.errorHistory();
     if (errors.isEmpty) {
       return const [
-        Text('no runtime errors', style: CellStyle(dim: true)),
+        Text('no errors', style: CellStyle(dim: true)),
         Text(''),
         Text(
-          'Uncaught errors from event handlers and async',
+          'Application exceptions and failed hot reloads',
           style: CellStyle(dim: true),
         ),
-        Text(
-          'callbacks collect here (newest first).',
-          style: CellStyle(dim: true),
-        ),
+        Text('collect here (newest first).', style: CellStyle(dim: true)),
       ];
     }
     final rows = <Widget>[
@@ -249,11 +246,11 @@ class _DebugPanelState extends State<DebugPanel> {
     for (final record in errors.reversed) {
       final at = record.when.toIso8601String().substring(11, 19);
       final summary = record.error.toString();
-      rows
-        ..add(Text('$at  $summary'))
-        ..add(
-          Text(record.stackTrace.toString(), style: const CellStyle(dim: true)),
-        );
+      rows.add(Text('$at  $summary'));
+      final stack = record.stackTrace.toString();
+      if (stack.isNotEmpty) {
+        rows.add(Text(stack, style: const CellStyle(dim: true)));
+      }
     }
     return rows;
   }
@@ -398,9 +395,9 @@ class _DebugPanelState extends State<DebugPanel> {
     final tree = widget.controller.semanticSnapshot();
     if (tree == null) {
       return [
-        ..._terminalDiagnosisRows(diagnosis),
-        if (diagnosis != null) const Text(''),
         const Text('Semantic tree unavailable', style: CellStyle(dim: true)),
+        if (diagnosis != null) const Text(''),
+        ..._terminalDiagnosisRows(diagnosis),
       ];
     }
 
@@ -432,13 +429,12 @@ class _DebugPanelState extends State<DebugPanel> {
       });
 
     return [
-      ..._terminalDiagnosisRows(diagnosis),
-      if (diagnosis != null) const Text(''),
       _row('Semantic nodes', '${inspection.nodeCount}'),
       _row('Inspection', 'v${inspection.schemaVersion}'),
       _row('Actions', '${inspection.actionCount}'),
       _row('Focus id', inspection.focusedNodeId ?? '-'),
       _row('Focused', focused.isEmpty ? '-' : _nodeSummary(focused.first)),
+      ..._semanticOutlineRows(tree.root, inspection: inspection),
       ..._appRows(appNode, commands),
       ..._commandRows(commands),
       ..._taskRows(tasks),
@@ -453,7 +449,8 @@ class _DebugPanelState extends State<DebugPanel> {
           '+${roles.length - 12} more roles',
           style: const CellStyle(dim: true),
         ),
-      ..._semanticOutlineRows(tree.root, inspection: inspection),
+      if (diagnosis != null) const Text(''),
+      ..._terminalDiagnosisRows(diagnosis),
     ];
   }
 

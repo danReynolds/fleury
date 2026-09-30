@@ -49,7 +49,9 @@ Future<int> runCreateCommand(List<String> args) async {
     return 2;
   }
 
-  final projectName = options.projectName ?? _basename(target.path);
+  // Normalize dot segments for naming without changing the requested target:
+  // its original path still needs the file/symlink checks above.
+  final projectName = options.projectName ?? _basename(target.uri.toFilePath());
   final nameError = _validateProjectName(projectName);
   if (nameError != null) {
     stderr.writeln('fleury create: $nameError');
@@ -100,8 +102,8 @@ Future<int> runCreateCommand(List<String> args) async {
         'fleury create: could not run `dart pub get`: ${error.message}',
       );
       stderr.writeln(
-        'Install the Dart SDK and ensure `dart` is on PATH, or rerun with '
-        '`--no-pub`.',
+        'The project was created. Install the Dart SDK and ensure `dart` is '
+        'on PATH, then run `dart pub get` from ${target.path}.',
       );
       return 1;
     }
@@ -116,8 +118,9 @@ Future<int> runCreateCommand(List<String> args) async {
       );
       if (options.dependencySource == _DependencySource.hosted) {
         stderr.writeln(
-          "If the fleury packages aren't on pub.dev yet, scaffold against "
-          'the Git checkout instead: rerun with `--dependency-source=git`.',
+          "If the Fleury packages aren't on pub.dev yet, use Git dependencies "
+          'in a different, empty directory: '
+          '`fleury create another_app --dependency-source=git`.',
         );
       }
       return code;
@@ -133,12 +136,12 @@ Future<int> runCreateCommand(List<String> args) async {
   if (!options.runPubGet) {
     stdout.writeln('  dart pub get');
   }
+  stdout.writeln('  dart run fleury run');
   if (options.includeEditorConfig) {
-    stdout
-      ..writeln('  code .')
-      ..writeln('  Press F5 to run in an interactive terminal.');
-  } else {
-    stdout.writeln('  dart run fleury run');
+    stdout.writeln(
+      '  Or open VS Code with `code .` and press F5 '
+      '(requires the Dart extension).',
+    );
   }
   stdout.writeln(
     '  Edit and save while it runs — hot reload keeps your state.',
@@ -263,7 +266,6 @@ $dependencies''';
 String _appSource({required String className, required String displayName}) =>
     '''
 import 'package:fleury/fleury.dart';
-import 'package:fleury_widgets/fleury_widgets.dart';
 
 class $className extends StatefulWidget {
   const $className({super.key});
@@ -293,7 +295,7 @@ class _${className}State extends State<$className> {
               onPressed: _increment,
             ),
             const SizedBox(height: 1),
-            const Text('Press Enter or click the button. Ctrl+C quits.'),
+            const Text('Press Enter or click the button.'),
           ],
         ),
       ),
@@ -310,8 +312,9 @@ String _entrypointSource({
 import 'package:fleury/fleury.dart';
 import 'package:$projectName/app.dart';
 
-void main() => runApp(
+void main(List<String> args) => runApp(
   const $className(),
+  args: args,
   mode: const TerminalMode(mouse: true),
 );
 ''';
@@ -412,12 +415,11 @@ dart test
 
 ## The same app, elsewhere
 
-- **In a browser** — `fleury serve --spawn dart run bin/run_app.dart` streams
-  this app, unchanged, to a browser tab. That command starts no VM service, so
-  it does not hot reload; for the save-to-reload loop behind the preview,
-  enable the service in the spawned command itself:
-  `fleury serve --spawn dart --enable-vm-service=0 run bin/run_app.dart`
-  (reload only — hot restart is unavailable under a serve handle).
+- **In a browser** — run
+  `dart run fleury serve --spawn dart --enable-vm-service=0 run bin/run_app.dart`
+  and open the printed URL. This streams the unchanged app to a browser tab
+  and reloads it when you save. Stop the preview with Ctrl+C in the terminal
+  running `serve` (hot restart is unavailable under a serve handle).
 - **Driven by an AI agent** — `fleury_mcp -- dart run bin/run_app.dart` exposes
   the running UI over the Model Context Protocol, so an agent reads and
   operates it by meaning instead of screen-scraping.

@@ -296,7 +296,7 @@ void main() {
       ).readAsStringSync();
       expect(guide, contains('fleury create my_app --dependency-source=git'));
       expect(guide, contains('fleury create my_app'));
-      expect(guide, contains('dart run bin/run_app.dart'));
+      expect(guide, contains('dart run fleury run'));
       expect(guide, contains('title="lib/app.dart"'));
       expect(guide, contains('title="test/app_test.dart"'));
       expect(guide, contains('class MyApp extends StatelessWidget'));

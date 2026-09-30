@@ -10,6 +10,88 @@ import 'package:fleury/src/runtime/hot_reload.dart';
 import 'package:test/test.dart';
 
 void main() {
+  group('reload recovery', () {
+    const compilerDetail =
+        "lib/app.dart:25:17: Error: Can't find ')' to match '('.";
+    test('compiler rejection preserves the diagnostic and recommends save', () {
+      final payload = <String, Object?>{
+        'success': false,
+        'notices': [
+          {'type': 'ReasonForCancelling', 'message': compilerDetail},
+        ],
+      };
+      final report = HotReloadReport(
+        success: false,
+        elapsed: Duration.zero,
+        loadedLibraryCount: 0,
+        message: compilerDetail,
+        restartRequired: HotReloadReport.requiresRestart(payload),
+      );
+      final description = report.failureDescription(canRestart: true);
+      expect(description, contains('Fix errors and save again'));
+      expect(description, contains('your app is still running'));
+      expect(description, contains(compilerDetail));
+      expect(description, isNot(contains('F5')));
+      expect(description, isNot(contains('restart')));
+    });
+
+    test('a rejected class migration teaches an available restart', () {
+      final report = HotReloadReport(
+        success: false,
+        elapsed: Duration.zero,
+        loadedLibraryCount: 0,
+        message: 'Class cannot be redefined to be a enum class',
+        restartRequired: HotReloadReport.requiresRestart({
+          'success': false,
+          'notices': [
+            {
+              'type': 'ReasonForCancelling',
+              'class': {'type': '@Class', 'name': 'Kind'},
+              'message': 'Class cannot be redefined to be a enum class',
+            },
+          ],
+        }),
+      );
+      expect(report.failureDescription(canRestart: true), contains('F5'));
+      expect(report.failureDescription(canRestart: true), contains('resets'));
+      expect(report.failureDescription(canRestart: false), contains('rerun'));
+      expect(
+        report.failureDescription(canRestart: false),
+        isNot(contains('F5')),
+      );
+    });
+
+    test('unknown or mixed failures never promise a restart will fix them', () {
+      for (final payload in <Map<String, Object?>>[
+        {},
+        {'success': false, 'notices': []},
+        {
+          'success': false,
+          'notices': ['unknown'],
+        },
+        {
+          'success': false,
+          'notices': [
+            {
+              'class': {'name': 'Kind'},
+            },
+            {'message': compilerDetail},
+          ],
+        },
+        {
+          'success': true,
+          'notices': [
+            {
+              'class': {'name': 'Kind'},
+            },
+          ],
+        },
+      ]) {
+        expect(HotReloadReport.requiresRestart(payload), isFalse);
+      }
+    });
+  });
+
   group('HotReloadController', tags: ['coverage-incompatible'], () {
     test(
       'persistent extensions dispatch in the current session zone',
@@ -26,6 +108,7 @@ void main() {
         final zoneKey = Object();
         final calls = <String>[];
         final errors = <String>[];
+        final reports = <HotReloadReport>[];
         var throwOnReload = false;
         Future<HotReloadController> attach(String name) => runZonedGuarded(
           () => HotReloadController.attach(
@@ -33,16 +116,23 @@ void main() {
               calls.add('reload:${Zone.current[zoneKey]}');
               if (throwOnReload) throw StateError('reload callback failed');
             },
-            onReloadReport: (_) => calls.add('report:${Zone.current[zoneKey]}'),
+            onReloadReport: (report) {
+              reports.add(report);
+              calls.add('report:${Zone.current[zoneKey]}');
+            },
             onShutdownRequested: () =>
                 calls.add('exit:${Zone.current[zoneKey]}'),
           ),
           (error, stack) => errors.add('$name:$error'),
           zoneValues: {zoneKey: name},
         )!;
-        Future<void> invoke(String name) async {
+        Future<void> invoke(String name, {Map<String, String>? args}) async {
           await vm
-              .callServiceExtension('ext.fleury.$name', isolateId: isolateId)
+              .callServiceExtension(
+                'ext.fleury.$name',
+                isolateId: isolateId,
+                args: args,
+              )
               .timeout(const Duration(seconds: 2));
         }
 
@@ -55,7 +145,16 @@ void main() {
         // Disposing an older controller cannot unpublish the newer one.
         await first.dispose();
         await invoke('reassemble');
-        await invoke('reloadReport');
+        await invoke(
+          'reloadReport',
+          args: {
+            'success': 'false',
+            'message': 'Class migration rejected',
+            'restartRequired': 'true',
+          },
+        );
+        expect(reports.single.restartRequired, isTrue);
+        expect(reports.single.message, 'Class migration rejected');
         await invoke('shutdown');
         throwOnReload = true;
         await invoke('reassemble');

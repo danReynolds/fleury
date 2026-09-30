@@ -1762,6 +1762,7 @@ Future<AppExit> _runAppImpl(
             void reportReload(HotReloadReport report) {
               if (disposed) return;
               if (report.success) {
+                errorReporter.dismissReloadFailure();
                 final n = report.loadedLibraryCount;
                 capture.addLine(
                   'Reloaded $n librar${n == 1 ? 'y' : 'ies'} '
@@ -1769,22 +1770,12 @@ Future<AppExit> _runAppImpl(
                   LogSource.stderr,
                 );
               } else {
-                // Teach the recovery at the moment of need: a rejected edit
-                // is exactly when hot restart applies. Only when the taught
-                // keys can actually work: a supervisor session AND the debug
-                // shell enabled (Ctrl+G is dead when the shell is off).
-                final restartHint =
-                    DevBootstrap.isSupervisedChild &&
-                        debugController.config.enabled
-                    ? ' — hot restart applies it: Ctrl+G, then F5 (drops '
-                          'state)'
-                    : '';
-                errorReporter.report(
-                  StateError(
-                    'hot reload failed: '
-                    '${report.message ?? 'rejected by the VM'}$restartHint',
+                errorReporter.reportReloadFailure(
+                  report.failureDescription(
+                    canRestart:
+                        DevBootstrap.isSupervisedChild &&
+                        debugController.config.enabled,
                   ),
-                  StackTrace.current,
                 );
               }
             }

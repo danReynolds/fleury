@@ -286,17 +286,24 @@ final class DevBootstrap {
   }) {
     if (driverInjected || !enableHotReload) return false;
     if (isSupervisedChild) return false;
-    return _supervisionBlockerHere(Platform.script) == null;
+    return _supervisionBlockerHere(
+          Platform.script,
+          productMode: const bool.fromEnvironment('dart.vm.product'),
+        ) ==
+        null;
   }
 
-  /// [supervisionBlocker] evaluated against this process.
-  static String? _supervisionBlockerHere(Uri script) => supervisionBlocker(
+  /// Session gates evaluated against this process and the app's VM mode.
+  static String? _supervisionBlockerHere(
+    Uri script, {
+    required bool productMode,
+  }) => supervisionBlocker(
     script: script,
     environment: Platform.environment,
     stdoutIsTerminal: stdout.hasTerminal,
     stdinIsTerminal: stdin.hasTerminal,
     isWindows: Platform.isWindows,
-    productMode: const bool.fromEnvironment('dart.vm.product'),
+    productMode: productMode,
     implicitHandle: () => findImplicitFleuryHandle() != null,
   );
 
@@ -345,8 +352,8 @@ final class DevBootstrap {
   ///
   /// The same gates apply as on the transparent path ([supervisionBlocker]:
   /// `FLEURY_HOT_RELOAD=0`, no terminal, a serve/mcp handle, Windows, a
-  /// compiled VM), plus "nothing to watch". When one blocks, the app runs
-  /// ONCE, without hot reload and with `FLEURY_HOT_RELOAD=0` in its
+  /// non-source entrypoint), plus "nothing to watch". When one blocks, the
+  /// app runs ONCE, without hot reload and with `FLEURY_HOT_RELOAD=0` in its
   /// environment so it does not spawn a supervisor of its own; the launcher
   /// forwards SIGTERM at once and SIGINT after [devSignalForwardBackstop]
   /// (a terminal's Ctrl+C already reached the child directly).
@@ -370,7 +377,10 @@ final class DevBootstrap {
       stderr.writeln('fleury run: no such file: $scriptPath');
       exit(64);
     }
-    final blocker = _supervisionBlockerHere(script.uri);
+    // The launcher can be an AOT executable; the app is always source run by
+    // the SDK's JIT VM. Only runApp's own gate uses this process's product
+    // mode, so an actual compiled app still cannot opt into hot reload.
+    final blocker = _supervisionBlockerHere(script.uri, productMode: false);
     _debugLog('launch: gates checked');
     String? projectRoot;
     if (blocker == null) {
@@ -928,6 +938,7 @@ final class DevBootstrap {
     final stopwatch = Stopwatch()..start();
     var success = false;
     var loadedCount = 0;
+    var restartRequired = false;
     String? message;
     try {
       // The timeout is a supervisor-sanity backstop: a reload should take
@@ -944,6 +955,7 @@ final class DevBootstrap {
       }
       if (!success && json != null) {
         message = rejectionMessage(json) ?? 'reload rejected by the VM';
+        restartRequired = HotReloadReport.requiresRestart(json);
       }
     } on TimeoutException {
       message = 'reload timed out after 30s';
@@ -969,6 +981,7 @@ final class DevBootstrap {
           'success': '$success',
           'elapsedMs': '${stopwatch.elapsedMilliseconds}',
           'loadedLibraryCount': '$loadedCount',
+          'restartRequired': '$restartRequired',
           'message': ?message,
         },
       );
@@ -1239,6 +1252,7 @@ final class InAppDevReload {
       final stopwatch = Stopwatch()..start();
       var success = false;
       var loadedCount = 0;
+      var restartRequired = false;
       String? message;
       try {
         // Same supervisor-sanity backstop as DevBootstrap._reload: a wedged
@@ -1254,6 +1268,7 @@ final class InAppDevReload {
         }
         if (!success && json != null) {
           message = DevBootstrap.rejectionMessage(json) ?? 'reload rejected';
+          restartRequired = HotReloadReport.requiresRestart(json);
         }
       } on TimeoutException {
         message = 'reload timed out after 30s';
@@ -1272,6 +1287,7 @@ final class InAppDevReload {
           elapsed: stopwatch.elapsed,
           loadedLibraryCount: loadedCount,
           message: message,
+          restartRequired: restartRequired,
         ),
       );
       if (queued) {
