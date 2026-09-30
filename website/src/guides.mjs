@@ -1,6 +1,7 @@
 // The guides, grouped by what a reader is trying to do. One list drives both
 // the sidebar (astro.config.mjs) and the guides overview page
-// (src/components/GuideIndex.astro), so the two can't disagree.
+// (src/components/GuideIndex.astro), so the two can't disagree. Each label is
+// its page's title; the overview fails the build when one drifts.
 export const GUIDE_GROUPS = [
   {
     label: 'Build the UI',
@@ -32,8 +33,8 @@ export const GUIDE_GROUPS = [
   {
     label: 'Terminal apps',
     items: [
-      { label: 'Full-screen & inline', slug: 'guides/terminal-modes' },
-      { label: 'Shutdown & signals', slug: 'guides/shutdown-and-signals' },
+      { label: 'Full-screen and inline UIs', slug: 'guides/terminal-modes' },
+      { label: 'Shutdown and signals', slug: 'guides/shutdown-and-signals' },
       { label: 'Terminal capabilities', slug: 'guides/terminal-capabilities' },
       { label: 'Deployment & distribution', slug: 'guides/deployment' },
     ],
