@@ -19,7 +19,7 @@ COPY experiments/fleury_pad experiments/fleury_pad
 COPY website/public/fonts/fleury-mono.woff2 website/public/fonts/fleury-mono.woff2
 RUN python3 experiments/fleury_pad/dartpad/setup.py
 WORKDIR /app/experiments/fleury_pad/dartpad
-RUN dart analyze bin lib && dart --enable-asserts test/policy_checks.dart && dart --enable-asserts test/precompiled_starter_checks.dart && python3 -m unittest test_supervise.py test_deploy.py test_measure_latency.py && node --test ../test_preview.mjs test/source-project.test.mjs
+RUN dart analyze bin lib && dart --enable-asserts test/policy_checks.dart && dart --enable-asserts test/precompiled_starter_checks.dart && python3 -m unittest test_supervise.py test_deploy.py test_measure_latency.py && node --test ../test_preview.mjs test/source-project.test.mjs test/editor.test.mjs test/compiler-failure.test.mjs
 # Compile the service at build time, keeping the SDK for DDC/analyzer workers.
 RUN dart compile exe bin/server.dart -o bin/server
 ARG SOURCE_REVISION=local
