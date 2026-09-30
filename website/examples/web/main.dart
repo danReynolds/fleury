@@ -11,6 +11,7 @@ import 'dart:js_interop';
 import 'dart:js_interop_unsafe';
 
 import 'package:fleury_doc_examples/frame_flush_scheduler.dart';
+import 'package:fleury_doc_examples/grid_fit.dart';
 import 'package:fleury_doc_examples/registry.dart';
 import 'package:fleury_web/fleury_web.dart';
 import 'package:web/web.dart' as web;
@@ -60,6 +61,7 @@ void main() {
 }
 
 JSObject _mountKnobs(web.Element host, String id, String paramsJson) {
+  fitToGrid(host);
   final params = KnobParams(_decodeParams(paramsJson));
   MountedApp? surface;
   var disposed = false;
@@ -104,6 +106,7 @@ JSObject _mountInto(web.Element host, String id, {void Function()? onMounted}) {
   MountedApp? surface;
   DocsExampleThemeController? followed;
   var disposed = false;
+  fitToGrid(host);
   if (builder != null) {
     final themeController = DocsExampleThemeController(
       _docsExampleStyleForHost(host),

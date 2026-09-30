@@ -37,7 +37,10 @@ const {
   expandable = true,
   surfaceTheme = 'dark',
 } = Astro.props;
-// ch ≈ one monospace column; 1 row = line-height (1.25) em at the host font size.
+// ch ≈ one monospace column; 1 row = line-height (1.25) em at the host font
+// size. That is only the size before the examples bundle runs: it then sizes
+// the host to exactly cols × rows at the device-pixel-snapped cell the grid
+// renders with (examples/lib/grid_fit.dart).
 const style = `width:${cols}ch;height:${(rows * 1.25).toFixed(2)}em`;
 const badgeLabel = interactive ? 'Live · interactive' : 'Live';
 const badgeTitle = interactive
@@ -78,6 +81,8 @@ const servingGuide = '/fleury/architecture/serving-and-embedding/';
       <div
         class="fleury-host"
         data-fleury-example={id}
+        data-cols={cols}
+        data-rows={rows}
         data-fleury-test={test}
         data-fleury-theme={surfaceTheme}
         style={style}
@@ -113,6 +118,9 @@ const servingGuide = '/fleury/architecture/serving-and-embedding/';
       const host = document.createElement('div');
       host.className = 'fleury-host';
       host.dataset.fleuryTheme = theme || 'dark';
+      // The bundle sizes the host to exactly this grid (examples/lib/grid_fit.dart).
+      host.dataset.cols = String(fc);
+      host.dataset.rows = String(fr);
       host.style.cssText =
         `width:${fc}ch;height:${(fr * 1.25).toFixed(1)}em;max-width:92vw;max-height:78vh`;
       card.appendChild(bar);

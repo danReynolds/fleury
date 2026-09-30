@@ -81,7 +81,13 @@ for (const root of document.querySelectorAll<HTMLDialogElement>('.guide-pad')) {
           root.style.setProperty('--guide-preview-height', `${Math.max(128, height)}px`);
         }
         const grid = previewPane.querySelector<HTMLElement>('[data-cols][data-rows]');
-        const frame = new URLSearchParams({ theme: document.documentElement.dataset.theme === 'light' ? 'light' : 'dark' });
+        // A `site` example follows the page's theme; the rest keep their own.
+        const surface = original?.dataset.fleuryTheme;
+        const theme = surface === 'light' || surface === 'dark'
+          ? surface
+          : document.documentElement.dataset.theme === 'light' ? 'light' : 'dark';
+        root.dataset.previewTheme = theme;
+        const frame = new URLSearchParams({ theme });
         if (grid) { frame.set('cols', grid.dataset.cols!); frame.set('rows', grid.dataset.rows!); }
         $<HTMLElement>('.guide-pad-static').hidden = true;
         $<HTMLElement>('[data-pad="editor"]').hidden = false;

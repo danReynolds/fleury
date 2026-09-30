@@ -245,6 +245,9 @@ const expandIcon =
       const host = document.createElement('div');
       host.className = 'fleury-host';
       host.dataset.fleuryTheme = theme;
+      // The bundle sizes the host to exactly this grid (examples/lib/grid_fit.dart).
+      host.dataset.cols = String(cols);
+      host.dataset.rows = String(rows);
       host.style.cssText =
         `width:${cols}ch;height:${(rows * 1.25).toFixed(1)}em;` +
         'max-width:100%;max-height:100%';
