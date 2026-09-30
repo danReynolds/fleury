@@ -2327,7 +2327,7 @@ Text('\${summary.health.name}: \${summary.activeTaskCount} of \${summary.taskCou
     cols: 54,
     rows: 16,
     interactive: true,
-    builder: () => const _NetworkImageLoadingTour(),
+    builder: () => _framed(const _NetworkImageLoadingTour()),
   ),
   ExampleInfo(
     id: 'loading.stream',
@@ -4543,13 +4543,25 @@ class _NetworkImageLoadingTour extends StatefulWidget {
       _NetworkImageLoadingTourState();
 }
 
+/// Mounts the photo viewer only after the reader asks for it, so opening a
+/// page that embeds this demo sends no request to the photo service.
 class _NetworkImageLoadingTourState extends State<_NetworkImageLoadingTour> {
   var _seed = 0;
+  var _started = false;
 
   @override
-  Widget build(BuildContext context) => _framed(
-    loading.PhotoViewer(loadPhoto: () => loading.fetchPhoto(++_seed)),
-  );
+  Widget build(BuildContext context) => _started
+      ? loading.PhotoViewer(loadPhoto: () => loading.fetchPhoto(++_seed))
+      : Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const Text('Photos come from picsum.photos.'),
+            Button(
+              text: 'Load a photo',
+              onPressed: () => setState(() => _started = true),
+            ),
+          ],
+        );
 }
 
 class _StreamLoadingTour extends StatelessWidget {
