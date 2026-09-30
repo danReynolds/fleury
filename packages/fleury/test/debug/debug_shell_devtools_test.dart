@@ -43,7 +43,8 @@ void main() {
     driver.clearOutput();
     driver.enqueue(const KeyEvent(KeyCode.tab));
     await _settle();
-    expect(driver.output, contains('terminal profile'));
+    expect(driver.output, contains('Semantic nodes'));
+    expect(driver.output, contains('select semantic node'));
 
     // Shift+Tab returns to Live (frame stats).
     driver.clearOutput();

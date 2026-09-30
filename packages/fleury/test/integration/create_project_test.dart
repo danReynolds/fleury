@@ -59,7 +59,10 @@ dependency_overrides:
   test(
     'fresh project analyzes, tests, and compiles as an executable',
     () async {
-      final analyze = await _runDart(project, const ['analyze']);
+      final analyze = await _runDart(project, const [
+        'analyze',
+        '--fatal-infos',
+      ]);
       expect(
         analyze.exitCode,
         0,
@@ -259,7 +262,12 @@ dependency_overrides:
       expect(missingDart.exitCode, 1);
       expect(missingDart.stderr, contains('could not run `dart pub get`'));
       expect(missingDart.stderr, contains('ensure `dart` is on PATH'));
-      expect(missingDart.stderr, contains('`--no-pub`'));
+      expect(missingDart.stderr, contains('The project was created'));
+      expect(missingDart.stderr, contains('then run `dart pub get`'));
+      expect(
+        File('${missingDartTarget.path}/lib/app.dart').existsSync(),
+        isTrue,
+      );
 
       final devHelp = await Process.run(
         executable,

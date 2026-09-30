@@ -511,7 +511,7 @@ void main() {
       expect(output, contains('Actions  0'));
       expect(output, contains('Focus id  text'));
       expect(output, contains('Focused  text hello'));
-      expect(output, contains('text  1'));
+      expect(output, contains('select semantic node'));
     });
 
     testWidgets('tree tab renders a semantic graph outline', (tester) {
@@ -720,7 +720,7 @@ void main() {
         DebugShell(controller: controller, child: const Text('app')),
       );
       final output = tester.renderToString(
-        size: const CellSize(64, 20),
+        size: const CellSize(64, 40),
         emptyMark: ' ',
       );
 
@@ -838,7 +838,7 @@ void main() {
         DebugShell(controller: controller, child: const Text('app')),
       );
       final output = tester.renderToString(
-        size: const CellSize(110, 48),
+        size: const CellSize(110, 72),
         emptyMark: ' ',
       );
 
@@ -951,13 +951,36 @@ void main() {
         ),
       );
 
+      controller.setSemanticTreeProvider(
+        () => const SemanticTree(
+          root: SemanticNode(
+            id: SemanticNodeId('app'),
+            role: SemanticRole.app,
+            label: 'Counter',
+          ),
+        ),
+      );
+
       tester.pumpWidget(
         DebugShell(controller: controller, child: const Text('app')),
       );
-      final output = tester.renderToString(
-        size: const CellSize(104, 40),
+      var output = tester.renderToString(
+        size: const CellSize(104, 18),
         emptyMark: ' ',
       );
+      expect(output, contains('select semantic node'));
+      expect(output, contains('Cursor  1/1 app Counter'));
+      expect(output, isNot(contains('— terminal profile —')));
+
+      // Terminal details remain reachable through the normal report controls.
+      while (!controller.detailScrollController.atEnd) {
+        expect(tryConsumeDebugKey(controller, _key(KeyCode.pageDown)), isTrue);
+        tester.pump();
+        output += tester.renderToString(
+          size: const CellSize(104, 18),
+          emptyMark: ' ',
+        );
+      }
 
       expect(output, contains('— terminal profile —'));
       expect(output, contains('Size  80×24'));
@@ -992,7 +1015,15 @@ void main() {
           'Kitty graphics protocol  activeConfirmed passive:no active:confirmed',
         ),
       );
+      controller.setSemanticTreeProvider(null);
+      controller.detailScrollController.scrollToStart();
+      tester.pump();
+      output = tester.renderToString(
+        size: const CellSize(104, 18),
+        emptyMark: ' ',
+      );
       expect(output, contains('Semantic tree unavailable'));
+      expect(output, contains('— terminal profile —'));
     });
 
     testWidgets('rebuilds tab renders frame reason and timing diagnostics', (

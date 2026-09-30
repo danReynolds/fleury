@@ -632,75 +632,164 @@ Future<void> main() async {
       },
     );
 
-    test(
-      'a launcher that never ran the app supervises it: main runs once, '
-      'save-to-reload works, the exit code comes back',
-      timeout: const Timeout(Duration(minutes: 4)),
-      () async {
-        final repoRoot = _findRepoRoot(Directory.current);
-        final app = await _generateApp(tempDir);
-        final session = await _startSession(
-          app: app,
-          timeoutSeconds: 150,
-          scriptArguments: [
-            '${repoRoot.path}/packages/fleury/bin/fleury.dart',
-            'run',
-            app.entrypoint.path,
-          ],
-        );
-        try {
-          await session.waitUntilChildReady();
-          app.marker.writeAsStringSync(_marker('BETA'));
-          final reloaded = await _waitFor(
-            () async {
-              final text = session.bootstrapLog();
-              return text.contains('reload: done') ? text : null;
-            },
-            timeout: const Duration(seconds: 60),
-            what: 'reload completion',
+    for (final compiled in [false, true]) {
+      test(
+        '${compiled ? 'compiled' : 'source'} launcher preserves state on save, '
+        'restarts with the same args, and returns the app exit code',
+        timeout: const Timeout(Duration(minutes: 4)),
+        () async {
+          final repoRoot = _findRepoRoot(Directory.current);
+          final cliSource = '${repoRoot.path}/packages/fleury/bin/fleury.dart';
+          final cliBinary = '${tempDir.path}/fleury';
+          if (compiled) {
+            final build = await Process.run(Platform.resolvedExecutable, [
+              'compile',
+              'exe',
+              cliSource,
+              '-o',
+              cliBinary,
+            ]);
+            expect(
+              build.exitCode,
+              0,
+              reason: '${build.stdout}\n${build.stderr}',
+            );
+          }
+          final app = await _generateApp(tempDir);
+          const appArgs = ['project with spaces', '--mode=debug'];
+          final session = await _startSession(
+            app: app,
+            timeoutSeconds: 150,
+            executable: compiled ? cliBinary : null,
+            scriptArguments: [
+              if (!compiled) cliSource,
+              'run',
+              app.entrypoint.path,
+              ...appArgs,
+            ],
           );
-          expect(
-            reloaded,
-            isNotNull,
-            reason:
-                'a save never reached the launcher:\n${session.diagnostics()}',
-          );
-          expect(reloaded, contains('success=true'));
+          VmService? vm;
+          try {
+            await session.waitUntilAppStarted();
+            expect(
+              session.bootstrapLog(),
+              isNot(contains('running once without hot reload')),
+              reason: 'the launcher may be AOT; its source app is still JIT',
+            );
+            await session.waitUntilChildReady();
+            final initialPid = await session.appPid();
+            final beforeBadSave = session.bootstrapLog().length;
+            app.marker.writeAsStringSync('String greeting() => ;\n');
+            final rejected = await _waitFor(
+              () async =>
+                  session
+                      .bootstrapLog()
+                      .substring(beforeBadSave)
+                      .contains('reload: done success=false')
+                  ? true
+                  : null,
+              timeout: const Duration(seconds: 60),
+              what: 'the syntax error to be rejected',
+            );
+            expect(rejected, isTrue, reason: session.diagnostics());
+            expect(
+              await session.appPid(),
+              initialPid,
+              reason: 'a bad save must keep the current app alive',
+            );
+            final beforeRecovery = session.bootstrapLog().length;
+            app.marker.writeAsStringSync(_marker('BETA'));
+            final reloaded = await _waitFor(
+              () async {
+                final text = session.bootstrapLog().substring(beforeRecovery);
+                return text.contains('reload: done success=true') ? text : null;
+              },
+              timeout: const Duration(seconds: 60),
+              what: 'reload completion',
+            );
+            expect(
+              reloaded,
+              contains('success=true'),
+              reason:
+                  'a save never reloaded the app:\n${session.diagnostics()}',
+            );
+            // Let the reassembled frame paint before replacing the process.
+            await Future<void>.delayed(const Duration(seconds: 1));
+            final firstUri = session.svcFile.readAsStringSync();
+            vm = await vmServiceConnectUri(_wsUri(firstUri));
+            final firstId = await _findMainIsolate(vm);
+            expect(firstId, isNotNull);
+            await vm.callServiceExtension(
+              'ext.fleury.restart',
+              isolateId: firstId,
+            );
+            await vm.dispose();
+            vm = null;
+            final secondUri = await _waitFor(
+              () async {
+                final current = session.svcFile.readAsStringSync();
+                return current.isNotEmpty && current != firstUri
+                    ? current
+                    : null;
+              },
+              timeout: const Duration(seconds: 45),
+              what: 'a fresh app after restart',
+            );
+            expect(secondUri, isNotNull, reason: session.diagnostics());
+            await Future<void>.delayed(const Duration(seconds: 1));
 
-          Process.killPid(await session.appPid(), ProcessSignal.sigint);
-          final metadata = await session.finish();
-          expect(
-            metadata['exitCode'],
-            77,
-            reason:
-                "the app's exit code must come back through the launcher:\n"
-                '${session.diagnostics()}',
-          );
-          final output = session.output();
-          expect(
-            'BOOT-MARKER'.allMatches(output),
-            hasLength(1),
-            reason:
-                'main() must run only in the child: the launcher never '
-                'compiles or runs the app (a transparent dart run start runs '
-                'it twice):\n${session.diagnostics()}',
-          );
-          expect(
-            'Dart VM service'.allMatches(output),
-            hasLength(1),
-            reason: 'exactly one flag-enabled VM, the child',
-          );
-          expect(
-            output,
-            contains('BETA'),
-            reason:
-                'the reloaded value never repainted:\n${session.diagnostics()}',
-          );
-        } finally {
-          session.dispose();
-        }
-      },
-    );
+            Process.killPid(await session.appPid(), ProcessSignal.sigint);
+            final metadata = await session.finish();
+            expect(metadata['timedOut'], isFalse);
+            expect(metadata['exitCode'], 77, reason: session.diagnostics());
+            final output = session.output();
+            expect(
+              'BOOT-MARKER'.allMatches(output),
+              hasLength(2),
+              reason: 'main runs once per child, never inside the launcher',
+            );
+            expect(
+              'BOOT-ARGS:${jsonEncode(appArgs)}'.allMatches(output),
+              hasLength(2),
+              reason:
+                  'the initial and restarted app must receive the same argv',
+            );
+            final liveBeta = output.indexOf('live:MARK-BETA');
+            final bootBeta = output.indexOf('boot:MARK-BETA');
+            expect(
+              liveBeta,
+              greaterThanOrEqualTo(0),
+              reason: session.diagnostics(),
+            );
+            expect(
+              bootBeta,
+              greaterThan(liveBeta),
+              reason: 'only restart may change the initState value',
+            );
+            expect(output.substring(0, bootBeta), contains('boot:MARK-ALPHA'));
+            expect(
+              output,
+              contains('\x1b[?1049l'),
+              reason: 'terminal restored on exit',
+            );
+          } finally {
+            await vm?.dispose();
+            // A failing assertion must not leave the disposable app running.
+            if (!session._exited && session.pidFile.existsSync()) {
+              final pid = int.tryParse(
+                session.pidFile.readAsStringSync().trim(),
+              );
+              if (pid != null) Process.killPid(pid, ProcessSignal.sigkill);
+              await session.process.exitCode.timeout(
+                const Duration(seconds: 10),
+                onTimeout: () => -1,
+              );
+            }
+            session.dispose();
+          }
+        },
+      );
+    }
   });
 }
 
@@ -734,6 +823,7 @@ dependencies:
   app.marker.writeAsStringSync(_marker('ALPHA'));
   app.entrypoint.writeAsStringSync('''
 import 'dart:async';
+import 'dart:convert';
 import 'dart:developer' as developer;
 import 'dart:io';
 
@@ -776,9 +866,10 @@ class _AppState extends State<App> {
   );
 }
 
-Future<void> main() async {
+Future<void> main(List<String> args) async {
   stdout.writeln('BOOT-MARKER');
-  final appExit = await runApp(const App());
+  stdout.writeln('BOOT-ARGS:\${jsonEncode(args)}');
+  final appExit = await runApp(const App(), args: args);
   // Teardown the app owns: flushing state, closing a database, a final
   // report. It runs after runApp has restored the terminal, so a signal
   // forwarded to us here has the OS default disposition and kills the
@@ -921,6 +1012,7 @@ Future<_Session> _startSession({
   required _GeneratedApp app,
   required int timeoutSeconds,
   String? workingDirectory,
+  String? executable,
   List<String>? scriptArguments,
   Map<String, String> environment = const {},
   List<String> captureArguments = const [],
@@ -947,7 +1039,7 @@ Future<_Session> _startSession({
       '77,78,130,143,254',
       ...captureArguments,
       '--',
-      Platform.resolvedExecutable,
+      executable ?? Platform.resolvedExecutable,
       ...?scriptArguments,
       if (scriptArguments == null) app.entrypoint.path,
     ],

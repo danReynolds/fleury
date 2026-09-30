@@ -13,12 +13,20 @@ import '../widgets/framework.dart';
 import '../widgets/notifier_builder.dart';
 import '../widgets/pointer.dart';
 
-/// One captured uncaught runtime error.
+/// One captured application error or hot-reload diagnostic.
 class RuntimeErrorRecord {
-  RuntimeErrorRecord(this.error, this.stackTrace, this.when);
+  RuntimeErrorRecord(
+    this.error,
+    this.stackTrace,
+    this.when, {
+    this.isReloadFailure = false,
+  });
   final Object error;
   final StackTrace stackTrace;
   final DateTime when;
+
+  /// A failed edit, rather than an uncaught application exception.
+  final bool isReloadFailure;
 }
 
 /// Collects uncaught runtime errors — a throwing event handler, a failed async
@@ -100,8 +108,35 @@ class RuntimeErrorReporter with Notifier {
     onLog?.call('Uncaught runtime error: $error\n$stackTrace');
     _window.add(now);
     _window.removeWhere((t) => now.difference(t) > const Duration(seconds: 3));
+    _record(RuntimeErrorRecord(error, stackTrace, now));
+  }
+
+  /// Show a compiler/reload failure without inventing a framework stack trace
+  /// or counting a failed edit toward the application's runtime-error storm.
+  @internal
+  void reportReloadFailure(String message) {
+    if (_disposed) return;
+    onLog?.call(message);
+    _record(
+      RuntimeErrorRecord(
+        message,
+        StackTrace.empty,
+        DateTime.now(),
+        isReloadFailure: true,
+      ),
+    );
+  }
+
+  /// A successful save clears the failed-edit banner, retaining its history.
+  /// An application exception that arrived afterward must remain visible.
+  @internal
+  void dismissReloadFailure() {
+    if (_current?.isReloadFailure ?? false) dismiss();
+  }
+
+  void _record(RuntimeErrorRecord record) {
     _shownCount = _current == null ? 1 : _shownCount + 1;
-    _current = RuntimeErrorRecord(error, stackTrace, now);
+    _current = record;
     _history.add(_current!);
     if (_history.length > _historyCap) _history.removeAt(0);
     _dismissTimer?.cancel();

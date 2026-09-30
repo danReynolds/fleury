@@ -35,7 +35,7 @@ class AppShellDemo extends StatelessWidget {
       commands: <AppCommand>[
         AppCommand(
           id: _openPaletteId,
-          title: 'Open Command Palette',
+          title: 'Commands',
           description: 'Search app-wide and active-screen commands',
           category: 'Application',
           shortcuts: <KeySequence>[KeySequence.ctrl.k],
@@ -48,11 +48,7 @@ class AppShellDemo extends StatelessWidget {
         ),
       ],
       status: (_) => <StatusItem>[
-        StatusItem.success(
-          'Environment',
-          id: 'environment',
-          value: 'production healthy',
-        ),
+        StatusItem.success('Production', id: 'environment', value: 'healthy'),
       ],
       home: const _DeploymentsScreen(),
     );
@@ -78,7 +74,7 @@ class _DeploymentsScreen extends StatelessWidget {
       commands: <AppCommand>[
         AppCommand(
           id: _openProductionId,
-          title: 'Open Production Deployment',
+          title: 'Open production',
           description: 'Show the current production deployment',
           category: 'Navigation',
           shortcuts: <KeySequence>[KeySequence.ctrl.o],
@@ -89,31 +85,24 @@ class _DeploymentsScreen extends StatelessWidget {
           },
         ),
       ],
-      child: Padding(
-        padding: const EdgeInsets.all(1),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: <Widget>[
-            const Text('Fleury Launchpad', style: CellStyle(bold: true)),
-            const Text(
-              'One app shell; shortcuts, commands, and routes stay in sync.',
-              style: CellStyle(dim: true),
-            ),
-            const SizedBox(height: 2),
-            const Text('Production deployment'),
-            const Text('api · v1.12.0 · healthy', style: CellStyle(dim: true)),
-            const SizedBox(height: 1),
-            Button(
-              text: 'Open production',
-              autofocus: true,
-              variant: ButtonVariant.primary,
-              onPressed: () => _openProduction(context),
-            ),
-            const Spacer(),
-            const AppStatusBar(),
-            const KeyHintBar(style: CellStyle(dim: true)),
-          ],
-        ),
+      child: _ScreenLayout(
+        children: <Widget>[
+          const Text('Fleury Launchpad', style: CellStyle(bold: true)),
+          const Text(
+            'Commands, shortcuts, and routes stay in sync.',
+            style: CellStyle(dim: true),
+          ),
+          const SizedBox(height: 1),
+          const Text('Production deployment'),
+          const Text('api · v1.12.0 · healthy', style: CellStyle(dim: true)),
+          const SizedBox(height: 1),
+          Button(
+            text: 'Open production',
+            autofocus: true,
+            variant: ButtonVariant.primary,
+            onPressed: () => _openProduction(context),
+          ),
+        ],
       ),
     );
   }
@@ -138,36 +127,54 @@ class _DeploymentScreenState extends State<_DeploymentScreen> {
       commands: <AppCommand>[
         AppCommand(
           id: _refreshProductionId,
-          title: 'Refresh Production Deployment',
+          title: 'Refresh status',
           description: 'Fetch the latest production status',
           category: 'Deployment',
           shortcuts: <KeySequence>[KeySequence.ctrl.r],
           run: (_) => _refresh(),
         ),
       ],
-      child: Padding(
-        padding: const EdgeInsets.all(1),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: <Widget>[
-            const Text('Production deployment', style: CellStyle(bold: true)),
-            const Text('api · v1.12.0', style: CellStyle(dim: true)),
-            const SizedBox(height: 2),
-            const Text('status: healthy'),
-            Text('refreshes: $_refreshCount'),
-            const SizedBox(height: 1),
-            Button(
-              text: 'Refresh status',
-              autofocus: true,
-              onPressed: _refresh,
-            ),
-            Button(text: 'Back', onPressed: () => context.pop()),
-            const Spacer(),
-            const AppStatusBar(),
-            const KeyHintBar(style: CellStyle(dim: true)),
-          ],
-        ),
+      child: _ScreenLayout(
+        children: <Widget>[
+          const Text('Production deployment', style: CellStyle(bold: true)),
+          const Text('api · v1.12.0', style: CellStyle(dim: true)),
+          const SizedBox(height: 1),
+          const Text('status: healthy'),
+          Text('refreshes: $_refreshCount'),
+          const SizedBox(height: 1),
+          Button(text: 'Refresh status', autofocus: true, onPressed: _refresh),
+          Button(text: 'Back', onPressed: () => context.pop()),
+        ],
       ),
     );
   }
+}
+
+/// Keep app chrome visible while the screen body can scroll in a short terminal.
+class _ScreenLayout extends StatelessWidget {
+  const _ScreenLayout({required this.children});
+
+  final List<Widget> children;
+
+  @override
+  Widget build(BuildContext context) => Padding(
+    padding: const EdgeInsets.all(1),
+    child: Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        Expanded(
+          child: ScrollView(
+            scrollbar: true,
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: children,
+            ),
+          ),
+        ),
+        const AppStatusBar(),
+        const KeyHintBar(style: CellStyle(dim: true)),
+      ],
+    ),
+  );
 }

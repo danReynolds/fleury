@@ -30,32 +30,6 @@ void main() {
     expect(result.stdout, contains('--dependency-source=<kind>'));
   });
 
-  test('a failed hosted pub get says how to scaffold against Git', () async {
-    final target = Directory('${tempDir.path}/my_app');
-    // An invalid hosted URL makes `dart pub get` fail at once, offline.
-    final result = await _runCreate(
-      packageRoot,
-      [target.path],
-      environment: const {'PUB_HOSTED_URL': 'ftp://example.invalid'},
-    );
-
-    expect(result.exitCode, isNot(0));
-    // The directory is no longer empty, so the hint must say to remove it:
-    // a plain rerun with the Git flag would be refused.
-    expect(result.stderr, contains('remove ${target.path}'));
-    // The command quotes a path its shell would split or expand, such as a
-    // Windows short name like RUNNER~1.
-    expect(
-      result.stderr,
-      matches(
-        RegExp(
-          'fleury create ["\']?${RegExp.escape(target.path)}["\']? '
-          '--dependency-source=git',
-        ),
-      ),
-    );
-  });
-
   test('creates a complete app and the minimal VS Code F5 contract', () async {
     final target = Directory('${tempDir.path}/my_app');
     final result = await _runCreate(packageRoot, [target.path, '--no-pub']);
@@ -140,6 +114,57 @@ void main() {
       contains('TerminalMode(mouse: true)'),
     );
   });
+
+  test('creates in the current directory using its package name', () async {
+    final target = Directory('${tempDir.path}/current_app')..createSync();
+    final result = await _runCreate(packageRoot, const [
+      '.',
+      '--no-pub',
+    ], workingDirectory: target.path);
+
+    expect(result.exitCode, 0, reason: result.stderr.toString());
+    expect(
+      File('${target.path}/pubspec.yaml').readAsStringSync(),
+      contains('name: current_app'),
+    );
+    expect(result.stdout, contains('cd .'));
+    expect(result.stdout, contains('dart run fleury run'));
+    expect(result.stdout, contains('press F5'));
+  });
+
+  test(
+    'pub failure preserves the project and gives usable recovery advice',
+    () async {
+      // An invalid hosted URL fails immediately without a network request.
+      final target = Directory('${tempDir.path}/unpublished_app');
+      final result = await _runCreate(
+        packageRoot,
+        [target.path],
+        environment: const {'PUB_HOSTED_URL': 'ftp://example.invalid'},
+      );
+
+      expect(result.exitCode, isNot(0));
+      expect(result.stderr, contains('`dart pub get` failed'));
+      expect(result.stderr, contains('The project was created'));
+      expect(result.stderr, contains('different, empty directory'));
+      expect(
+        result.stderr,
+        contains('fleury create another_app --dependency-source=git'),
+      );
+      expect(result.stderr, isNot(contains('remove ${target.path}')));
+      expect(result.stderr, isNot(contains('rerun with')));
+
+      final app = File('${target.path}/lib/app.dart');
+      final originalSource = app.readAsStringSync();
+      final retry = await _runCreate(packageRoot, [
+        target.path,
+        '--dependency-source=git',
+      ]);
+      expect(retry.exitCode, 2);
+      expect(retry.stderr, contains('is not empty'));
+      expect(app.readAsStringSync(), originalSource);
+    },
+  );
 
   test('--no-editor-config omits every editor-specific file', () async {
     final target = Directory('${tempDir.path}/plain_app');
@@ -326,12 +351,18 @@ void main() {
 Future<ProcessResult> _runCreate(
   String packageRoot,
   List<String> args, {
+  String? workingDirectory,
   Map<String, String>? environment,
 }) {
   return Process.run(
     Platform.resolvedExecutable,
-    <String>['run', 'fleury', 'create', ...args],
-    workingDirectory: packageRoot,
+    <String>[
+      '--packages=$packageRoot/.dart_tool/package_config.json',
+      '$packageRoot/bin/fleury.dart',
+      'create',
+      ...args,
+    ],
+    workingDirectory: workingDirectory ?? packageRoot,
     environment: environment,
   );
 }

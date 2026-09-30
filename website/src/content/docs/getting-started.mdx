@@ -47,8 +47,11 @@ needs no flag. Until then, keep `--dependency-source=git`: the hosted
 packages don't exist yet, so `dart pub get` fails without it.
 :::
 
-`fleury create` writes a small application, its first widget test, and VS Code
-settings, then runs `dart pub get`. The project depends on two packages:
+`fleury create` writes a small application, its first widget tests, and VS Code
+settings, then runs `dart pub get`. To use an existing empty directory, run
+`fleury create . --dependency-source=git` from inside it.
+
+The project depends on two packages:
 `fleury`, the framework and its core widgets (layout, text and text editing,
 focus, buttons, lists, navigation, theming), and `fleury_widgets`, the larger
 control library on top (checkboxes and selects, tables, charts and meters,
@@ -68,13 +71,15 @@ From the project directory, run:
 fleury run
 ```
 
+You can also use `dart run fleury run` without a globally activated CLI.
+
 Press Enter or click **Increment** and watch the counter change. The
 application lives in `lib/app.dart`; `bin/run_app.dart` is the small native
 entrypoint that `fleury run` starts.
 
 Leave it running and try a hot reload: in `lib/app.dart`, change the `Count:`
 label to `Clicks:` and save. The running app updates in place, and the count
-keeps its value. `Ctrl-C` quits.
+keeps its value. Press `Ctrl-C` in the terminal to quit.
 
 In VS Code with the [Dart extension](https://marketplace.visualstudio.com/items?itemName=Dart-Code.dart-code),
 you can press F5 instead: the generated launch configuration runs the app in an
@@ -242,6 +247,7 @@ fleury serve --spawn dart --enable-vm-service=0 run bin/run_app.dart
 Open the printed URL. That's your panel, in a browser, streamed from the native
 process. Saving a file reloads it here too: `--enable-vm-service=0` is what lets
 the served app reload, and without it the session runs but never reloads.
+Stop the preview with `Ctrl-C` in the terminal running `serve`.
 
 ## 6. Optional: ship a browser bundle
 

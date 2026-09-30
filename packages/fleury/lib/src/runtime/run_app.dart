@@ -1763,6 +1763,7 @@ Future<AppExit> _runAppImpl(
             void reportReload(HotReloadReport report) {
               if (disposed) return;
               if (report.success) {
+                errorReporter.dismissReloadFailure();
                 final n = report.loadedLibraryCount;
                 capture.addLine(
                   'Reloaded $n librar${n == 1 ? 'y' : 'ies'} '
@@ -1770,21 +1771,12 @@ Future<AppExit> _runAppImpl(
                   LogSource.stderr,
                 );
               } else {
-                // Compile errors need a corrected source edit first. Offer
-                // restart for valid edits the live program cannot accept.
-                // The keys require a supervisor session and enabled debugger.
-                final recoveryHint =
-                    DevBootstrap.isSupervisedChild &&
-                        debugController.config.enabled
-                    ? ' — fix compile errors and save again; for a valid edit, '
-                          'restart with Ctrl+G, then F5 (drops state)'
-                    : ' — fix compile errors and save again';
-                errorReporter.report(
-                  StateError(
-                    'hot reload failed: '
-                    '${report.message ?? 'rejected by the VM'}$recoveryHint',
+                errorReporter.reportReloadFailure(
+                  report.failureDescription(
+                    canRestart:
+                        DevBootstrap.isSupervisedChild &&
+                        debugController.config.enabled,
                   ),
-                  StackTrace.current,
                 );
               }
             }

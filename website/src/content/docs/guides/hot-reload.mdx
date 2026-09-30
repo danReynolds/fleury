@@ -39,18 +39,29 @@ options such as `--enable-asserts` go before the script, and your app's own
 arguments after it. Without the CLI on your path, use `dart run fleury run`
 from the project directory.
 
+```sh
+fleury run --enable-asserts bin/run_app.dart --profile=local
+```
+
+A compiled Fleury CLI supports the same development loop: the launcher starts
+your source app in the Dart SDK's JIT VM. Keep the Dart SDK installed for this
+workflow. A compiled app itself has no hot reload.
+
 The supervisor watches your package's sources (`lib/`, `bin/`, and the `lib/`
 of any local *path* dependency, a framework checkout included) and reloads on
 save. Edit in vim, Zed, IntelliJ, VS Code, anything: saving is the trigger.
 
 Try it: run any app, note some state (a counter, a scroll position, a focused
 input), change a color or a label in the source, and save. The frame updates
-in well under a second, and the state stays where you left it.
+with the new code, and the state stays where you left it.
 
 Reload results appear in the [debug shell](/fleury/guides/debugging/)
 (`Ctrl+G`). "Reloaded N libraries in Xms" lands in the **Logs** tab. A failed
 reload shows the compiler's message in the **Errors** tab and as an error
-banner in the app, which keeps running on the previous code.
+banner in the app, which keeps running on the previous code. **If the compiler
+reports a syntax or type error, fix it and save again.** The next successful
+reload keeps your state and clears the failed-edit banner. Restarting does
+not fix a compilation error.
 
 ### A plain `dart run`
 
@@ -69,14 +80,15 @@ its first frame. `fleury run` passes the arguments for you.
 
 ## Reload or restart
 
-Reload keeps state and is the default loop. A few edits cannot be applied to a
-running program: the VM rejects changes such as a class's type parameters, and
-an edit that doesn't compile stops the reload. Other edits apply but don't
-reach what has already run. `main()`, top-level initializers, and `initState`
-for existing states keep the results of their first run.
+Reload keeps state and is the default loop. Some valid edits cannot be migrated
+into a running program, such as changing a class's type parameters. Other
+edits apply but don't reach what has already run: `main()`, top-level
+initializers, and `initState` for existing states keep the results of their
+first run.
 
-For those, use **hot restart**: it drops all state and runs `main()` again in
-the same terminal session.
+For valid changes the VM cannot migrate, or when you deliberately want fresh
+state, use **hot restart**: it drops all state and runs `main()` again in the
+same terminal session. Fix compilation errors before restarting.
 
 - Press `Ctrl+G` to open the debug shell, then `F5` (the shell header shows
   `F5 restart` whenever it's available).
@@ -99,7 +111,8 @@ the same terminal session.
   initialized at startup.
 - Work done in `initState` for states that already exist.
 - Object identity for instances created in `build()` (same as Flutter).
-- Edits the VM rejects. Hot restart picks those up.
+- Valid changes the VM cannot migrate into existing objects. Hot restart
+  applies those with fresh state; compilation errors still need fixing first.
 
 ### Refreshing caches on reload
 
@@ -166,10 +179,10 @@ your entrypoint. No Fleury-specific editor extension exists or is needed.
 
 ## When the supervisor steps aside
 
-The supervisor runs only when it can own the session safely: a JIT run on a
-real terminal. It automatically yields to anything else that owns the run — an
+The supervisor runs only when it can own the session safely: a source app
+launched through `fleury run` or a plain JIT `dart run` on a real terminal. It automatically yields to anything else that owns the run — an
 editor debug session (a live VM service), a `fleury serve` or `fleury_mcp`
-handle, an AOT build, Windows, a non-TTY, or an injected test driver — and the
+handle, a compiled app, Windows, a non-TTY, or an injected test driver — and the
 app runs exactly as it would without it.
 
 ### Reloading a browser preview
@@ -215,7 +228,8 @@ against the new code. Hot restart asks the child to tear down gracefully
 (terminal restored), then starts a fresh one in the same session.
 
 `fleury run` is the same supervisor, started from a launcher that never loads
-your app, so the app compiles once. Under a plain `dart run`, your entrypoint
+your app, so the app compiles once, even when the launcher itself is a native
+executable. Under a plain `dart run`, your entrypoint
 reaches `runApp` first and becomes the supervisor itself.
 
 When the child exits for real — quit, `Ctrl+C`, a crash — the supervisor
@@ -232,6 +246,10 @@ supervisor steps aside and the run is an ordinary one. In an editor debug
 session, reload-on-save is the editor's job: run **Dart: Hot Reload** from the
 command palette, or set `dart.hotReloadOnSave: "allIfDirty"` (generated
 projects have it already).
+
+**The compiler rejected my save** — Fix the reported source error and save
+again; the running app keeps its previous code and state. Use hot restart for
+valid source the VM cannot migrate, or to reset state deliberately.
 
 **A reload succeeds but nothing changes** — The edit is in code that already
 ran: `main()`, a top-level initializer, or `initState`. Reload doesn't run it
