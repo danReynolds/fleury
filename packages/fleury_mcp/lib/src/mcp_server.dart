@@ -1901,8 +1901,9 @@ final class McpServer {
         'untrustedContent': _untrustedDebugContentNote,
         'reason':
             'The app did not answer the debug query — it may be built without '
-            'the debug channel, or running with debug tooling disabled '
-            '(release builds default off).',
+            'the debug channel, or running with debug tooling disabled (off '
+            'by default unless it runs from .dart source, as `dart run '
+            'bin/app.dart` does, or with assertions enabled).',
         'records': const <Object?>[],
       });
     }

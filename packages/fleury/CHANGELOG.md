@@ -2,6 +2,19 @@
 
 ## 0.1.0
 
+- **Debug tooling defaults on only for development runs.** A null
+  `DebugConfig.enabled` (the default) enables the Ctrl+G debug shell, F12 logs,
+  and the `read_frames`/`read_logs`/`read_errors` records when the Dart VM runs
+  the app's `.dart` source entrypoint (`dart run bin/app.dart`, `fleury run`,
+  and apps that `fleury serve --spawn` or `fleury_mcp` start that way) or
+  assertions are enabled. Compiled code gets none: snapshots pub precompiles
+  (`dart pub global activate` installs, and executables started by name with a
+  bare `dart run` or `dart run <package>:<exe>`), `dart compile` output, and
+  dart2js bundles. Previously every JIT run had it, so globally activated apps
+  shipped the debug shell to their users. `DebugConfig.enabled` is now
+  `bool?`; an explicit value still wins, and `DebugController.enabled` reports
+  the session's answer.
+
 - **Ctrl+Z is dispatched first.** In a native POSIX terminal, Ctrl+Z now
   reaches the application like any key: a focused `TextInput` or `TextArea`
   undoes, and application bindings fire. Only a press nothing handles suspends

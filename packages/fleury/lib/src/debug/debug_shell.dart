@@ -28,7 +28,7 @@ import 'debug_panel.dart';
 import 'debug_state.dart';
 
 /// Wraps [child] in the debug shell. Pass the runApp-resolved
-/// controller; if `controller.config.enabled == false`, this is a
+/// controller; if `controller.enabled` is false, this is a
 /// no-op shell that just returns [child].
 class DebugShell extends StatefulWidget {
   const DebugShell({
@@ -51,7 +51,7 @@ class DebugShell extends StatefulWidget {
 class _DebugShellState extends State<DebugShell> {
   @override
   Widget build(BuildContext context) {
-    if (!widget.controller.config.enabled) return widget.child;
+    if (!widget.controller.enabled) return widget.child;
     return NotifierBuilder(
       notifier: widget.controller,
       builder: (context, _) => _layout(context),
@@ -119,7 +119,7 @@ class _DebugShellState extends State<DebugShell> {
 ///   ↑/↓/Home            move semantic cursor while Tree tab is active
 ///   PageUp / PageDown   scroll non-Logs reports without moving app focus
 bool tryConsumeDebugKey(DebugController controller, KeyEvent event) {
-  if (!controller.config.enabled) return false;
+  if (!controller.enabled) return false;
   // Hotkeys act once per physical press. This runs UPSTREAM of the
   // dispatcher's release fence, so on a surface that reports releases
   // (RFC 0020: the web/serve backend, and terminals from P5) an unguarded
@@ -252,7 +252,7 @@ bool tryConsumeDebugKey(DebugController controller, KeyEvent event) {
 ///   `text`      while the Logs search field is open, append to the query — and
 ///               capture it so typed characters don't leak into the app beneath
 bool tryConsumeDebugText(DebugController controller, TextInputEvent event) {
-  if (!controller.config.enabled || controller.mode == DebugMode.off) {
+  if (!controller.enabled || controller.mode == DebugMode.off) {
     return false;
   }
   // While the search field is open, all typed text edits the query and is
