@@ -12,6 +12,11 @@
 // stand-in for every such name (STUBS below) and analyzes it against the real
 // packages. Anything still reported is a real error in the snippet, or a new
 // placeholder name that needs a stand-in here.
+//
+// A stand-in is for app state a reader supplies, never for data the example
+// depends on: a snippet that leans on a private helper of the examples library
+// (`_markdownSample`) shows readers a name whose content they cannot see, so
+// that fails outright. Put the data in the snippet instead.
 import { execFileSync } from 'node:child_process';
 import { mkdirSync, readdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
@@ -87,10 +92,7 @@ const STUBS = {
   latenciesMs: `List<num> latenciesMs = [];`, samples: `List<num> samples = [];`,
   cpuHistory: `List<num> cpuHistory = [];`, tags: `List<String> tags = [];`,
   downloaded: `int downloaded = 0;`, total: `int total = 1;`,
-  _codeSample: `String _codeSample = '';`, _markdownSample: `String _markdownSample = '';`,
-  _diffSample: `String _diffSample = '';`, utcTime: `String utcTime = '';`,
-  estTime: `String estTime = '';`, longLabel: `String longLabel = '';`,
-  releaseNotes: `String releaseNotes = '';`,
+  longLabel: `String longLabel = '';`, releaseNotes: `String releaseNotes = '';`,
   logoBytes: `late Uint8List logoBytes;`, bytes: `late Uint8List bytes;`,
   buf: `late Uint8List buf;`, decoded: `late img.Image decoded;`,
   // Widgets passed in.
@@ -129,6 +131,31 @@ const UNDEFINED = new Set([
   'UNDEFINED_IDENTIFIER', 'UNDEFINED_FUNCTION', 'CREATION_WITH_NON_TYPE',
   'NON_TYPE_AS_TYPE_ARGUMENT', 'UNDEFINED_CLASS',
 ]);
+
+// Private names the examples library declares at its top level: sample data,
+// demo widgets, and docs helpers, none of which a page shows its reader.
+// Top-level declarations start in column 0 in formatted Dart; multi-line
+// string contents are cut first, since the `code:` snippets they hold start
+// their lines in column 0 too.
+function examplesPrivateNames() {
+  const names = new Set();
+  const walk = (dir) => {
+    for (const entry of readdirSync(dir, { withFileTypes: true })) {
+      const path = join(dir, entry.name);
+      if (entry.isDirectory()) walk(path);
+      else if (entry.name.endsWith('.dart')) {
+        const source = readFileSync(path, 'utf8').replace(/r?('''|""")[\s\S]*?\1/g, "''");
+        for (const [, , type, member] of source.matchAll(
+          /^(?=[\w_])(?:((?:abstract|base|final|sealed|interface)\s+)*(?:class|mixin|enum|typedef|extension)\s+(_\w+)|[\w<>?,.() ]*?\b(?:get\s+)?(_[A-Za-z]\w*)\s*(?:=|;|\(|=>|<))/gm
+        )) {
+          names.add(type ?? member);
+        }
+      }
+    }
+  };
+  walk(join(EXAMPLES, 'lib'));
+  return names;
+}
 const DECLARATION =
   /^(class|final class|abstract class|base class|sealed class|enum|typedef|mixin|extension)\b/;
 
@@ -311,6 +338,22 @@ if (snippets.length === 0) {
   process.exit(1);
 }
 firstPass(snippets);
+const helpers = examplesPrivateNames();
+const hidden = snippets.flatMap((s) =>
+  s.undefined.filter((name) => helpers.has(name)).map((name) => ({ s, name }))
+);
+if (hidden.length) {
+  rmSync(OUT, { recursive: true, force: true });
+  console.error('Widget reference snippets that depend on code their readers cannot see:\n');
+  for (const { s, name } of hidden) {
+    console.error(
+      `  widgets/${s.slug}.mdx (${s.section}, line ${s.startLine}): uses ${name}, a private ` +
+        `declaration of the examples library. Show the data in the snippet instead ` +
+        `(a \`code:\` override in examples/lib/registry.dart).`
+    );
+  }
+  process.exit(1);
+}
 const { missing, failures } = secondPass(snippets);
 rmSync(OUT, { recursive: true, force: true });
 
