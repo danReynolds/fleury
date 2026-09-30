@@ -1,4 +1,5 @@
 import 'package:fleury/fleury.dart';
+import 'package:fleury/fleury_wire.dart';
 import 'package:fleury_test/fleury_test.dart';
 import 'package:fleury_widgets/fleury_widgets.dart';
 import 'package:test/test.dart';
@@ -251,6 +252,95 @@ void main() {
     );
   });
 
+  group('pinning focused pins only the chrome', () {
+    bool regionFocused(FleuryTester tester, String title) => tester
+        .semantics()
+        .single(role: SemanticRole.region, label: title)
+        .focused;
+
+    Object? cornerColor(FleuryTester tester) => tester
+        .render(size: const CellSize(20, 8))
+        .atColRow(0, 0)
+        .style
+        .foreground;
+
+    testWidgets('a pinned panel with no focus inside draws the accent but '
+        'reports no focus', (tester) {
+      tester.pumpWidget(_panel(focused: true));
+      expect(cornerColor(tester), _accent, reason: 'the chrome is pinned');
+      expect(
+        regionFocused(tester, 'CPU'),
+        isFalse,
+        reason: 'nothing inside the panel has focus',
+      );
+    });
+
+    testWidgets('what has focus is the control after a pinned panel', (tester) {
+      // A showcase pins a pane's chrome while the keys are with a button
+      // after it in tree order.
+      tester.pumpWidget(
+        Theme(
+          data: _theme,
+          child: Column(
+            children: [
+              const Expanded(
+                child: Panel(title: 'CPU', focused: true, child: Text('42%')),
+              ),
+              Button(text: 'Deploy', autofocus: true, onPressed: () {}),
+            ],
+          ),
+        ),
+      );
+      expect(cornerColor(tester), _accent);
+
+      final tree = tester.semantics();
+      expect(tree.focusedNode?.role, SemanticRole.button);
+      expect(tree.focusedNode?.label, 'Deploy');
+      expect(tester.accessibilitySnapshot().focusedNode?.label, 'Deploy');
+      final ui = _getUi(tree);
+      final focusedId = ui['focusedNodeId'] as String?;
+      expect(
+        tree.nodes.where((node) => node.id.value == focusedId).single.label,
+        'Deploy',
+        reason: "fleury_mcp get_ui's focusedNodeId",
+      );
+    });
+
+    for (final pinned in [true, false]) {
+      testWidgets('pinned $pinned, the region reports focus only while focus '
+          'is inside it', (tester) {
+        final body = FocusNode(debugLabel: 'body');
+        final elsewhere = FocusNode(debugLabel: 'elsewhere');
+        tester.pumpWidget(
+          Theme(
+            data: _theme,
+            child: Column(
+              children: [
+                Expanded(
+                  child: Panel(
+                    title: 'CPU',
+                    focused: pinned,
+                    child: Focus(focusNode: body, child: const Text('body')),
+                  ),
+                ),
+                Focus(focusNode: elsewhere, child: const Text('elsewhere')),
+              ],
+            ),
+          ),
+        );
+        final chrome = pinned ? _accent : isNot(_accent);
+
+        body.requestFocus();
+        expect(regionFocused(tester, 'CPU'), isTrue);
+        expect(cornerColor(tester), chrome);
+
+        elsewhere.requestFocus();
+        expect(regionFocused(tester, 'CPU'), isFalse);
+        expect(cornerColor(tester), chrome);
+      });
+    }
+  });
+
   group('what has focus is the control in the panel, not the panel', () {
     // The panel's region reports focus while focus is anywhere inside it,
     // and it comes first in tree order. What agents read (the inspection
@@ -334,4 +424,14 @@ void main() {
     // Title row + body row + borders = 4 rows; the rest stays empty.
     expect(hugged.trimRight().split('\n').length, lessThan(6));
   });
+}
+
+/// What fleury_mcp's `get_ui` serves for [tree]: a served app sends the tree
+/// over the semantic wire, the bridge decodes it, and `get_ui` returns the
+/// decoded tree's inspection snapshot, capped.
+Map<String, Object?> _getUi(SemanticTree tree) {
+  final decoded = SemanticsWireDecoder().apply(
+    SemanticsWireEncoder().encodeTree(tree)!,
+  )!;
+  return decoded.toInspectionSnapshot().toJsonCapped(maxNodes: 800);
 }

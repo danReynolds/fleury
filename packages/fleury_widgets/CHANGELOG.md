@@ -24,6 +24,10 @@
 - `Image` in half-block mode draws a transparent top pixel as empty instead of
   in the terminal's default text color.
 - A pinned `Panel` keeps tracking focus, so unpinning it shows current chrome.
+- `Panel.focused` pins only the border and title. The panel's semantic region
+  reports focus exactly while focus is inside it, so a panel pinned `true` no
+  longer tells agents and assistive technology it has focus, and one pinned
+  `false` no longer hides focus inside it.
 
 - **Breaking:** `FileBrowser` and `FilePicker` read directories through a
   `FileSource` and report `FileEntry` values, so both run in the browser.
