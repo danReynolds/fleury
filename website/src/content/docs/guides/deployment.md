@@ -38,69 +38,76 @@ run it once in a real terminal before release, and distribute it like any CLI
 tool. The supported baseline is a modern UTF-8, xterm-compatible terminal on
 macOS or Linux; the Windows driver is a preview.
 
-Native `runApp` requires an interactive terminal by default. Piping or
-redirecting standard output, or running in a CI log without a terminal, fails
-before the UI starts.
+### Pipes, CI, and cron
 
-Debug tools are disabled by default in AOT executables. If you distribute a
-JIT app instead, pass `debug: const DebugConfig(enabled: false)` to `runApp`
-to disable the debug shell, its shortcuts, and event recording.
+`runApp` needs a terminal. When standard output is piped or redirected
+(`my_app | less`, a CI job, cron), it throws before drawing anything, with
+"runApp needs an interactive terminal", rather than write screen-control codes
+into the output. If people will script your command, give it a plain-output
+path that doesn't call `runApp`, chosen by a flag such as `--plain` or by
+checking `stdout.hasTerminal` from `dart:io`.
 
-## Run it in a browser (embed)
+A `stdout.hasTerminal` check is also false when `fleury serve` or `fleury_mcp`
+runs the app, or an IDE runs it for `fleury shell`: the app draws over a socket
+there, and its standard output isn't a terminal. Prefer a flag if you use
+those tools. `runApp(requireInteractiveTerminal: false)` turns the check off,
+but the frames Fleury draws then go into the pipe as escape codes; it's meant
+for capturing that stream.
 
-The *same* widget tree compiles to JavaScript and runs client-side — no server.
-First make the library that holds your app web-safe: it imports
-`package:fleury/fleury_core.dart` and `package:fleury_widgets/fleury_widgets_web.dart`,
-never `dart:io`, as shown in
-[Getting started](/fleury/getting-started/#6-optional-ship-a-browser-bundle).
-Then write a tiny web entry point that mounts your app with
-[`mountApp`](/fleury/concepts/app-entry/):
+### Debug tooling in shipped apps
+
+The debug shell (`Ctrl+G`), its `F12` logs, and the agent debug tools
+(`read_frames`, `read_logs`, `read_errors`) are on when the app runs from a
+`.dart` source file or with assertions enabled. They're off in the builds you
+ship: AOT executables and snapshots (`dart pub global activate` installs an
+app from pub.dev or Git as a snapshot). With the tooling off, your app's own
+`Ctrl+G` and `F12` bindings work. To choose for yourself, pass a `DebugConfig`
+to `runApp`:
 
 ```dart
-// web/main.dart
-import 'package:fleury_web/fleury_web.dart';
-import 'package:my_app/app.dart';
-import 'package:web/web.dart' as web;
-
-Future<void> main() async {
-  await mountApp(
-    () => const MyApp(),
-    into: web.document.getElementById('app')!,
-  );
-}
+await runApp(const MyApp(), debug: const DebugConfig(enabled: false));
 ```
 
-Compile it with `dart2js`:
+`enabled: false` keeps the tooling off during development too; `enabled: true`
+turns it on in a compiled build, such as one an agent drives. See
+[Debugging](/fleury/guides/debugging/#configuring-it).
+
+## Ship a browser bundle
+
+The *same* widget tree compiles to JavaScript and runs client-side, with no
+server. [Getting started](/fleury/getting-started/#6-optional-ship-a-browser-bundle)
+walks through the three pieces: a web-safe library for the app, which imports
+`package:fleury/fleury_core.dart` and
+`package:fleury_widgets/fleury_widgets_web.dart` and never `dart:io`; a
+`web/main.dart` that mounts it with [`mountApp`](/fleury/concepts/app-entry/);
+and a `web/index.html` whose host element has an explicit width and height and
+a monospace font. Without a size, the grid measures zero cells and paints
+nothing; without a monospace font, the cells misalign. Then compile:
 
 ```sh
 dart compile js web/main.dart -o web/app.js -O2
 ```
 
-Then load the bundle from a page with a host element. Give the element an
-**explicit width and height** and a **monospace font**: without a size, the
-grid measures zero cells and paints nothing, and without a monospace font the
-cells misalign. A minimal `web/index.html`:
+### Host it
 
-```html
-<!doctype html>
-<html>
-  <head>
-    <meta charset="utf-8">
-    <title>My app</title>
-  </head>
-  <body>
-    <div id="app" style="width: 80ch; height: 24em; font-family: monospace"></div>
-    <script src="app.js"></script>
-  </body>
-</html>
-```
+The site is `web/index.html` and `web/app.js`. The compiler also writes
+`app.js.map`, a source map that browser developer tools use to show your Dart
+source, and `app.js.deps`, a list of the compiler's inputs. Publish the map if
+you want to debug the deployed page; the site doesn't need the `.deps` file.
+If your code uses deferred imports, publish the `app.js_*.part.js` files too.
 
-The output is a static `.js` file — host it on any CDN or static site, ship it
-offline, and scale it like a normal web asset. The one constraint: a
-client-side bundle runs in the browser sandbox, with no local disk, processes,
-or environment. Import `package:fleury_widgets/fleury_widgets_web.dart` rather
-than the full barrel: every widget in it runs in a browser, and `FileBrowser`
-and `FilePicker` read a `FileSource` you pass (such as a `MemoryFileSource`)
+Any static host works — GitHub Pages, Netlify, an object store behind a CDN,
+or an ordinary web server — with no server-side code or WebSocket to run.
+Keep `app.js` next to `index.html` (or change the script's `src`). If the host
+caches files for a long time, give the bundle a new name with each release so
+browsers load the new one. To mount the app inside an existing page or
+single-page app, give it any sized element; keep the handle `mountApp` returns
+and call `dispose()` on it when that view goes away.
+
+A client-side bundle runs in the browser sandbox, with no local disk,
+processes, or environment. Every widget in
+`package:fleury_widgets/fleury_widgets_web.dart` runs there; `FileBrowser` and
+`FilePicker` read a `FileSource` you pass (such as a `MemoryFileSource`)
 instead of the disk. Code that reaches `dart:io` still compiles with dart2js,
 but throws when it runs. To try an app that needs the local machine in a
 browser, use `serve` instead.
@@ -113,17 +120,26 @@ available with the Windows preview driver.
 
 `fleury serve` carries a **native** app's rendered frames to a browser over a
 WebSocket, painting into a DOM cell grid. (The `fleury` command comes from the
-CLI — [install it](#installing-the-fleury-cli) first if you haven't.) In spawn
-mode it starts and owns the app process; in bridge mode it attaches to an app
-that you start. It is
+CLI — [install it](#installing-the-fleury-cli) first if you haven't.) It is
 primarily a local preview and debugging bridge. The app keeps full `dart:io`
-access, so file widgets read the real disk and captured output shows up:
+access, so file widgets read the real disk and captured output shows up.
+
+In **spawn mode**, `serve` starts a fresh app process for every browser tab,
+with a warm standby so reconnects start quickly:
 
 ```sh
-# Spawn a fresh app process for each browser session
-# (the VM-service flag is what makes save-to-reload work in the browser):
+# The VM-service flag is what makes save-to-reload work in the browser:
 fleury serve --spawn dart --enable-vm-service=0 run bin/run_app.dart
 ```
+
+In **bridge mode** (no `--spawn`), `serve` waits for an app you start
+yourself. Run `fleury serve` in the app's package directory and open the URL it
+prints. Then start the app from that directory (`dart run bin/run_app.dart`)
+or an IDE debugger, or from anywhere with the `FLEURY_HANDLE=…` value `serve`
+prints: the app finds the running `serve` and draws in the browser instead of
+the terminal. Bridge mode serves one browser at a time. While a session is
+live, another browser is turned away with a message to close the first one or
+use `--spawn`.
 
 Flags (put them *before* `--spawn`, which greedily consumes everything after it
 as the command to run):
@@ -138,12 +154,6 @@ as the command to run):
 | `--max-sessions=<n>` | `8` | Cap concurrent browser sessions in spawn mode |
 | `--spawn <cmd …>` | bridge mode | Spawn an isolated process per connection |
 
-There are two models. **Bridge mode** (no `--spawn`) attaches the app you
-start and accepts one browser at a time — good for a local demo or IDE-driven
-debugging. Close that browser before connecting another. **Spawn mode**
-(`--spawn dart run bin/run_app.dart`) gives every browser connection its own
-isolated subprocess, with a warm standby so reconnects start quickly.
-
 The default bind address is loopback. A bind that is not loopback always
 requires a token: pass `--token`, or `serve` generates one for the run and
 prints the URL that carries it. If you deliberately expose it on a trusted
@@ -156,10 +166,10 @@ semantic tree.
 
 | | Embed (`mountApp`) | Serve (`fleury serve`) |
 |---|---|---|
-| Where it runs | In the browser | A native process |
-| Backend needed | None — static asset | Yes — the running app |
-| Widgets | Web-safe only | All, incl. file/process/log |
-| Scaling | Static/CDN asset | One browser at a time (bridge) or one process per connection (spawn) |
+| Where it runs | In the browser | A native process on the host |
+| Backend needed | None — static files | Yes — the running app |
+| Host resources | None — the browser sandbox | The host's disk, processes, and captured output |
+| Sessions | Every page load runs its own copy | One browser at a time (bridge) or one process per tab (spawn) |
 | Use when | It fits the browser sandbox | Local preview needs the real machine |
 
 Rule of thumb: ship an embed when it can run in the sandbox; use `serve` during
@@ -169,7 +179,7 @@ development when the preview needs the host — the filesystem, a process, or re
 ## Installing the `fleury` CLI
 
 `fleury create`, `run`, `serve`, `shell`, and `diagnose` come from the `fleury`
-CLI.
+CLI; `serve` and `shell` run on macOS and Linux.
 While Fleury is pre-release it isn't on pub.dev yet. Install it directly from
 Git:
 
