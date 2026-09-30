@@ -395,6 +395,51 @@ void main() {
       expect(picked, 'blue');
     });
 
+    testWidgets('a press on a disabled option leaves the keys working', (
+      tester,
+    ) {
+      String? picked;
+      tester.pumpWidget(
+        _Host(
+          initial: 'red',
+          onPick: (v) => picked = v,
+          options: const [
+            SelectOption(value: 'red', label: 'Red'),
+            SelectOption(value: 'green', label: 'Green', enabled: false),
+            SelectOption(value: 'blue', label: 'Blue'),
+            SelectOption(value: 'gray', label: 'Gray', enabled: false),
+          ],
+        ),
+      );
+      tester.sendKey(const KeyEvent(KeyCode.enter)); // open at Red
+      final green = _find(tester, 'Green')!;
+      for (final kind in [MouseEventKind.down, MouseEventKind.up]) {
+        tester.sendMouse(
+          MouseEvent(
+            kind: kind,
+            button: MouseButton.left,
+            col: green.col,
+            row: green.row,
+          ),
+        );
+      }
+      expect(picked, isNull, reason: 'a disabled option cannot be picked');
+      expect(_screen(tester), contains('Blue'), reason: 'the list stays open');
+      expect(
+        tester
+            .semantics()
+            .single(role: SemanticRole.menuItem, selected: true)
+            .label,
+        'Red',
+        reason: 'the highlight stays put: a disabled option is inert',
+      );
+
+      tester.sendKey(const KeyEvent(KeyCode.arrowDown)); // Blue; Gray is off
+      tester.sendKey(const KeyEvent(KeyCode.arrowDown)); // stays on Blue
+      tester.sendKey(const KeyEvent(KeyCode.enter));
+      expect(picked, 'blue');
+    });
+
     testWidgets('a click opens the list and a click picks an option', (tester) {
       String? picked;
       tester.pumpWidget(_Host(initial: 'red', onPick: (v) => picked = v));
