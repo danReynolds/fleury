@@ -224,6 +224,33 @@ void main() {
     );
   });
 
+  testWidgets('unpinning follows focus that moved while pinned', (tester) {
+    final body = FocusNode(debugLabel: 'body');
+    Widget build({bool? focused}) => Theme(
+      data: _theme,
+      child: Panel(
+        title: 'CPU',
+        expandChild: false,
+        focused: focused,
+        child: Focus(focusNode: body, child: const Text('body')),
+      ),
+    );
+    tester.pumpWidget(build(focused: false));
+    body.requestFocus();
+    tester.render(size: const CellSize(12, 5));
+
+    tester.pumpWidget(build());
+    expect(
+      tester
+          .render(size: const CellSize(12, 5))
+          .atColRow(0, 0)
+          .style
+          .foreground,
+      _accent,
+      reason: 'focus entered while pinned is still inside once unpinned',
+    );
+  });
+
   testWidgets('is a semantic region named by the title', (tester) {
     tester.pumpWidget(_panel());
     final region = tester.semantics().single(role: SemanticRole.region);

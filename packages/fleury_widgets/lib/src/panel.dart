@@ -81,8 +81,9 @@ class Panel extends StatefulWidget {
 }
 
 class _PanelState extends State<Panel> {
-  /// Whether focus is inside this panel, tracked by [FocusDetector]. Only
-  /// consulted when the caller left [Panel.focused] null.
+  /// Whether focus is inside this panel, tracked by [FocusDetector] even
+  /// while [Panel.focused] pins the chrome, so unpinning shows where focus
+  /// is now. Only consulted when the caller left [Panel.focused] null.
   bool _focusWithin = false;
 
   @override
@@ -106,8 +107,14 @@ class _PanelState extends State<Panel> {
       // idle when the panel isn't following focus.
       child: FocusDetector(
         onFocusChange: (within) {
-          if (widget.focused != null || within == _focusWithin) return;
-          setState(() => _focusWithin = within);
+          if (within == _focusWithin) return;
+          // A pinned panel records the change without rebuilding; the
+          // rebuild that unpins it reads the recorded value.
+          if (widget.focused != null) {
+            _focusWithin = within;
+          } else {
+            setState(() => _focusWithin = within);
+          }
         },
         child: Container(
           border: BoxBorder(
