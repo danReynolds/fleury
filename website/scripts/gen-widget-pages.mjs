@@ -456,9 +456,21 @@ function linkType(typeStr) {
   return `<code>${linked}</code>`;
 }
 
+// A parameter's doc for its table row: the opening paragraph, which has to fit
+// on one line of a Markdown table. Paragraphs after it become a note under the
+// table (see constructorsSection).
+function parameterDoc(doc) {
+  const { summary, details } = splitClassDoc(doc ?? '');
+  return { summary: summary.replace(/\s*\n\s*/g, ' '), more: details };
+}
+
 // Constructor-specific parameter tables from the source. Keeping overloads
 // separate matters for APIs such as ListView.builder and Image.file: a single
 // merged "properties" table can contradict the usage example above it.
+//
+// A table row holds a parameter's first paragraph. When its doc goes on (how to
+// use it, what it costs), the rest follows the table as a note the row links
+// to, written once per page even when several constructors share it.
 function constructorsSection(widget) {
   const entry = api[widget];
   if (!entry) return '';
@@ -472,6 +484,9 @@ function constructorsSection(widget) {
   // Named constructors often repeat a parameter list verbatim (Container,
   // Container.filled, Container.framed); print each distinct table once.
   const tables = new Map();
+  // Notes already on the page: `${name}\n${more}` -> anchor id.
+  const notes = new Map();
+  const anchors = new Set();
   for (const constructor of constructors) {
     const params = constructor.params ?? [];
     out += `### ${codeCell(`${constructor.name}()`)}\n\n`;
@@ -486,6 +501,7 @@ function constructorsSection(widget) {
       continue;
     }
     tables.set(signature, constructor.name);
+    const fresh = [];
     const rows = params
       .map((p) => {
         // A default that names a private helper (`_defaultStringFor`) means
@@ -504,13 +520,32 @@ function constructorsSection(widget) {
             ? codeCell(p.default)
             : '—';
         const name = p.named ? `${p.name}:` : p.name;
-        return `| ${codeCell(name)} | ${linkType(p.type)} | ${def} | ${cell(p.doc)} |`;
+        const { summary, more } = parameterDoc(p.doc);
+        let description = cell(summary || null);
+        if (more) {
+          const key = `${p.name}\n${more}`;
+          if (!notes.has(key)) {
+            let id = `param-${p.name.toLowerCase()}`;
+            for (let n = 2; anchors.has(id); n++) id = `param-${p.name.toLowerCase()}-${n}`;
+            anchors.add(id);
+            notes.set(key, id);
+            fresh.push({ name: p.name, more, id });
+          }
+          description += ` [More](#${notes.get(key)})`;
+        }
+        return `| ${codeCell(name)} | ${linkType(p.type)} | ${def} | ${description} |`;
       })
       .join('\n');
     out +=
       `| Parameter | Type | Default | Description |\n` +
       `| --- | --- | --- | --- |\n` +
       `${rows}\n\n`;
+    for (const { name, more, id } of fresh) {
+      // A list item's continuation lines are indented under its marker.
+      const body = mdxSafe(more).replace(/\n/g, '\n  ').replace(/\n  (?=\n)/g, '\n');
+      out += `- <span id="${id}"></span>**${codeCell(name)}:** ${body}\n`;
+    }
+    if (fresh.length) out += `\n`;
   }
   return out;
 }

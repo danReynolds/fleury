@@ -6,12 +6,17 @@ import 'package:analyzer/dart/ast/ast.dart';
 import 'package:analyzer/dart/ast/token.dart';
 
 /// Extracts API metadata for public classes in `fleury_widgets` and Fleury's
-/// core widget library by parsing their source (no resolution needed).
+/// core widget and app libraries by parsing their source (no resolution
+/// needed).
 ///
 /// Each class records all of its public constructors and their parameters. The
 /// top-level `params` member remains as a compatibility view of the unnamed
 /// constructor (or the first public named constructor when there is no unnamed
 /// constructor).
+///
+/// Constructor and parameter `doc`s are the complete doc comment as Markdown,
+/// paragraphs and all; a class's `doc` is only its first paragraph, on one
+/// line, and `classDoc` is the complete comment.
 ///
 /// Usage: dart run bin/api_extract.dart [out.json]   (defaults to stdout)
 void main(List<String> args) {
@@ -28,29 +33,24 @@ void main(List<String> args) {
       '../../packages/fleury/lib/src/widgets',
       'packages/fleury/lib/src/widgets',
     ),
+    // FleuryApp, and the command and status shell it installs.
+    ('../../packages/fleury/lib/src/app', 'packages/fleury/lib/src/app'),
   ];
   final result = <String, Object?>{};
   final sourceFiles = <(File, String)>[
     for (final (dirPath, repoPrefix) in sources)
       ...findApiSourceFiles(Directory(dirPath), repoPrefix),
   ];
-  final frameworkWidgetClasses = _frameworkWidgetClasses(
-    sourceFiles.map((source) => source.$1.readAsStringSync()),
-  );
-  final classFields = _classFields(
-    sourceFiles.map((source) => source.$1.readAsStringSync()),
-  );
-  final superDefaults = _superDefaults(
-    sourceFiles.map((source) => source.$1.readAsStringSync()),
-  );
+  final texts = <String>[
+    for (final (file, _) in sourceFiles) file.readAsStringSync(),
+  ];
+  final index = ApiSourceIndex(texts);
 
-  for (final (entity, file) in sourceFiles) {
+  for (var i = 0; i < sourceFiles.length; i++) {
     final extracted = extractApiFromSource(
-      entity.readAsStringSync(),
-      file: file,
-      frameworkWidgetClasses: frameworkWidgetClasses,
-      classFields: classFields,
-      superDefaults: superDefaults,
+      texts[i],
+      file: sourceFiles[i].$2,
+      index: index,
     );
     for (final entry in extracted.entries) {
       // The first source directory wins on the unlikely event of a clash.
@@ -92,24 +92,93 @@ List<(File, String)> findApiSourceFiles(
   ];
 }
 
+/// Every class declaration across the scanned sources, so a parameter can be
+/// resolved through its superclass chain even when the superclass lives in
+/// another file.
+final class ApiSourceIndex {
+  ApiSourceIndex(Iterable<String> sources) {
+    for (final source in sources) {
+      final unit = parseString(content: source, throwIfDiagnostics: false).unit;
+      for (final declaration
+          in unit.declarations.whereType<ClassDeclaration>()) {
+        _declarations.putIfAbsent(declaration.name.lexeme, () => declaration);
+      }
+    }
+    _widgetClasses = _frameworkWidgetClasses(_declarations.values);
+  }
+
+  final _declarations = <String, ClassDeclaration>{};
+  late final Set<String> _widgetClasses;
+  final _fields = <String, Map<String, _Field>>{};
+  final _resolving = <String>{};
+
+  ClassDeclaration? declaration(String className) => _declarations[className];
+
+  /// Whether [className] is a widget, so its `key` parameter is framework
+  /// identity rather than API.
+  bool isWidget(String className) => _widgetClasses.contains(className);
+
+  /// The fields [className] declares or inherits, by name.
+  Map<String, _Field> fields(String className) {
+    final existing = _fields[className];
+    if (existing != null) return existing;
+    if (!_resolving.add(className)) return const <String, _Field>{};
+    final declaration = _declarations[className];
+    final parent = _baseTypeName(
+      declaration?.extendsClause?.superclass.toSource(),
+    );
+    final fields = <String, _Field>{if (parent != null) ...this.fields(parent)};
+    for (final member
+        in declaration?.members.whereType<FieldDeclaration>() ??
+            const <FieldDeclaration>[]) {
+      final type = member.fields.type?.toSource() ?? 'dynamic';
+      final doc = _docLines(member.documentationComment);
+      for (final variable in member.fields.variables) {
+        fields[variable.name.lexeme] = _Field(type, doc);
+      }
+    }
+    _resolving.remove(className);
+    return _fields[className] = fields;
+  }
+}
+
+/// A field's declared type and its raw doc lines (Dartdoc references intact).
+final class _Field {
+  const _Field(this.type, this.doc);
+
+  final String type;
+  final List<String>? doc;
+}
+
+/// One constructor parameter as a reader of that constructor sees it.
+final class _Parameter {
+  const _Parameter({
+    required this.type,
+    required this.defaultValue,
+    required this.doc,
+  });
+
+  final String type;
+  final String? defaultValue;
+
+  /// Raw doc lines, Dartdoc references intact.
+  final List<String>? doc;
+}
+
 /// Extracts the API entries declared in one Dart source file.
 ///
 /// This is public so the extractor's schema and constructor handling can be
 /// regression-tested without invoking a subprocess or touching generated
-/// files.
+/// files. [index] resolves superclasses declared in other files; it defaults
+/// to this file alone.
 Map<String, Object?> extractApiFromSource(
   String source, {
   required String file,
-  Set<String>? frameworkWidgetClasses,
-  Map<String, Map<String, (String, String?)>>? classFields,
-  Map<String, Map<String, String>>? superDefaults,
+  ApiSourceIndex? index,
 }) {
   final parsed = parseString(content: source, throwIfDiagnostics: false);
   final result = <String, Object?>{};
-  final widgetClasses =
-      frameworkWidgetClasses ?? _frameworkWidgetClasses(<String>[source]);
-  final fields = classFields ?? _classFields(<String>[source]);
-  final defaults = superDefaults ?? _superDefaults(<String>[source]);
+  final classes = index ?? ApiSourceIndex(<String>[source]);
 
   for (final declaration in parsed.unit.declarations) {
     if (declaration is! ClassDeclaration) continue;
@@ -137,14 +206,8 @@ Map<String, Object?> extractApiFromSource(
       for (final constructor in publicConstructors) {
         constructors.add(<String, Object?>{
           'name': _constructorName(className, constructor),
-          'doc': _docText(constructor.documentationComment),
-          'params': _params(
-            declaration,
-            constructor,
-            widgetClasses,
-            fields,
-            defaults,
-          ),
+          'doc': _markdown(_docLines(constructor.documentationComment)),
+          'params': _params(declaration, constructor, classes),
           'line': parsed.lineInfo
               .getLocation(constructor.returnType.offset)
               .lineNumber,
@@ -155,10 +218,10 @@ Map<String, Object?> extractApiFromSource(
     final primary = _primaryPublicConstructor(publicConstructors);
     final legacyParams = primary == null
         ? <Map<String, Object?>>[]
-        : _params(declaration, primary, widgetClasses, fields, defaults);
+        : _params(declaration, primary, classes);
     result[className] = <String, Object?>{
-      'doc': _docText(declaration.documentationComment),
-      'classDoc': _docMarkdown(declaration.documentationComment),
+      'doc': _firstParagraph(_docLines(declaration.documentationComment)),
+      'classDoc': _markdown(_docLines(declaration.documentationComment)),
       'params': legacyParams,
       'constructors': constructors,
       'abstract': declaration.abstractKeyword != null,
@@ -191,49 +254,134 @@ String _constructorName(String className, ConstructorDeclaration constructor) {
 List<Map<String, Object?>> _params(
   ClassDeclaration cls,
   ConstructorDeclaration ctor,
-  Set<String> frameworkWidgetClasses,
-  Map<String, Map<String, (String, String?)>> classFields,
-  Map<String, Map<String, String>> superDefaults,
+  ApiSourceIndex index,
 ) {
   final out = <Map<String, Object?>>[];
   for (final parameter in ctor.parameters.parameters) {
+    final name = parameter.name?.lexeme ?? '';
+    if (name.isEmpty) continue;
     final normal = parameter is DefaultFormalParameter
         ? parameter.parameter
         : parameter;
-    final name = parameter.name?.lexeme ?? '';
-    if (name.isEmpty) continue;
-
-    final field = classFields[cls.name.lexeme]?[name];
-    final type = _parameterType(normal, field);
-    if (_isFrameworkIdentityKey(
-      cls,
-      name,
-      normal,
-      type,
-      frameworkWidgetClasses,
-    )) {
+    final resolved = _resolveParameter(cls, ctor, parameter, index, <String>{});
+    if (_isFrameworkIdentityKey(cls, name, normal, resolved.type, index)) {
       continue;
     }
-    final ownDoc = normal is NormalFormalParameter
-        ? _formalParameterDoc(parameter, normal)
-        : null;
     out.add(<String, Object?>{
       'name': name,
-      'type': type,
+      'type': resolved.type,
       'required': parameter.isRequired,
       'named': parameter.isNamed,
-      'default':
-          (parameter is DefaultFormalParameter
-              ? parameter.defaultValue?.toSource()
-              : null) ??
-          (normal is SuperFormalParameter
-              ? (superDefaults[cls.name.lexeme] ??
-                    const <String, String>{})[name]
-              : null),
-      'doc': ownDoc ?? field?.$2,
+      'default': resolved.defaultValue,
+      'doc': _markdown(resolved.doc),
     });
   }
   return out;
+}
+
+/// Resolves what a reader of [ctor] needs to know about [parameter]: its type,
+/// its default, and its doc.
+///
+/// A parameter's own declaration wins. A `super.x` parameter then takes
+/// whatever it leaves out from the superclass constructor parameter it
+/// forwards to (following further `super.x` hops), so `Expanded({required
+/// super.child})` reads Flexible's `required Widget super.child` rather than
+/// the nullable field it is stored in. Last comes the field that stores the
+/// value, whose doc covers every constructor: sentences about another
+/// constructor are dropped from it (see [_forConstructor]).
+_Parameter _resolveParameter(
+  ClassDeclaration cls,
+  ConstructorDeclaration ctor,
+  FormalParameter parameter,
+  ApiSourceIndex index,
+  Set<String> seen,
+) {
+  final name = parameter.name?.lexeme ?? '';
+  final normal = parameter is DefaultFormalParameter
+      ? parameter.parameter
+      : parameter;
+  var type = _explicitType(normal);
+  var defaultValue = parameter is DefaultFormalParameter
+      ? parameter.defaultValue?.toSource()
+      : null;
+  var doc = normal is NormalFormalParameter
+      ? _formalParameterDocLines(parameter, normal)
+      : null;
+
+  if (normal is SuperFormalParameter &&
+      (type == null || defaultValue == null || doc == null)) {
+    final forwarded = _superParameter(cls, ctor, parameter, index);
+    if (forwarded != null) {
+      final (superClass, superCtor, superParameter) = forwarded;
+      final key = '${superClass.name.lexeme}.${superCtor.name?.lexeme}.$name';
+      if (seen.add(key)) {
+        final inherited = _resolveParameter(
+          superClass,
+          superCtor,
+          superParameter,
+          index,
+          seen,
+        );
+        // An explicitly required super parameter may still inherit a
+        // default declared for the optional parameter it forwards to; that
+        // default never applies, so don't report it.
+        type ??= inherited.type;
+        defaultValue ??= parameter.isRequired ? null : inherited.defaultValue;
+        doc ??= inherited.doc;
+      }
+    }
+  }
+
+  final field = index.fields(cls.name.lexeme)[name];
+  return _Parameter(
+    type: type ?? field?.type ?? 'dynamic',
+    defaultValue: defaultValue,
+    doc: doc ?? _forConstructor(field?.doc, cls, ctor),
+  );
+}
+
+/// The superclass constructor parameter a `super.x` [parameter] of [ctor]
+/// forwards to: the same-named parameter for a named one, the one at the same
+/// position among the positionals otherwise.
+(ClassDeclaration, ConstructorDeclaration, FormalParameter)? _superParameter(
+  ClassDeclaration cls,
+  ConstructorDeclaration ctor,
+  FormalParameter parameter,
+  ApiSourceIndex index,
+) {
+  final superName = _baseTypeName(cls.extendsClause?.superclass.toSource());
+  final superClass = superName == null ? null : index.declaration(superName);
+  if (superClass == null) return null;
+  final invocation = ctor.initializers
+      .whereType<SuperConstructorInvocation>()
+      .firstOrNull;
+  final constructorName = invocation?.constructorName?.name;
+  final superCtor = superClass.members
+      .whereType<ConstructorDeclaration>()
+      .where((candidate) => candidate.name?.lexeme == constructorName)
+      .firstOrNull;
+  if (superCtor == null) return null;
+  final superParameters = superCtor.parameters.parameters;
+  if (parameter.isNamed) {
+    final match = superParameters
+        .where(
+          (candidate) =>
+              candidate.isNamed &&
+              candidate.name?.lexeme == parameter.name?.lexeme,
+        )
+        .firstOrNull;
+    return match == null ? null : (superClass, superCtor, match);
+  }
+  final position = ctor.parameters.parameters
+      .where((candidate) => candidate.isPositional)
+      .toList()
+      .indexOf(parameter);
+  final positionals = superParameters
+      .where((candidate) => candidate.isPositional)
+      .toList();
+  return position < 0 || position >= positionals.length
+      ? null
+      : (superClass, superCtor, positionals[position]);
 }
 
 bool _isFrameworkIdentityKey(
@@ -241,22 +389,19 @@ bool _isFrameworkIdentityKey(
   String name,
   FormalParameter parameter,
   String type,
-  Set<String> frameworkWidgetClasses,
+  ApiSourceIndex index,
 ) =>
     name == 'key' &&
-    frameworkWidgetClasses.contains(cls.name.lexeme) &&
+    index.isWidget(cls.name.lexeme) &&
     (parameter is SuperFormalParameter || type == 'Key' || type == 'Key?');
 
-Set<String> _frameworkWidgetClasses(Iterable<String> sources) {
-  final superclasses = <String, String?>{};
-  for (final source in sources) {
-    final unit = parseString(content: source, throwIfDiagnostics: false).unit;
-    for (final declaration in unit.declarations.whereType<ClassDeclaration>()) {
-      superclasses[declaration.name.lexeme] = _baseTypeName(
+Set<String> _frameworkWidgetClasses(Iterable<ClassDeclaration> declarations) {
+  final superclasses = <String, String?>{
+    for (final declaration in declarations)
+      declaration.name.lexeme: _baseTypeName(
         declaration.extendsClause?.superclass.toSource(),
-      );
-    }
-  }
+      ),
+  };
 
   final widgets = <String>{
     'Widget',
@@ -292,140 +437,7 @@ String? _baseTypeName(String? type) {
       : unqualified.substring(0, genericStart);
 }
 
-/// For each class, the defaults its `super.x` constructor parameters inherit.
-///
-/// `Row({super.mainAxisSize})` declares no default of its own, but the call
-/// lands on `Flex({this.mainAxisSize = MainAxisSize.max})`, so a reader of the
-/// Row reference needs `MainAxisSize.max`. A super parameter without a default
-/// takes the one declared by the same-named parameter of the superclass's
-/// primary constructor, following further `super.x` hops up the chain.
-Map<String, Map<String, String>> _superDefaults(Iterable<String> sources) {
-  final declarations = <String, ClassDeclaration>{};
-  for (final source in sources) {
-    final unit = parseString(content: source, throwIfDiagnostics: false).unit;
-    for (final declaration in unit.declarations.whereType<ClassDeclaration>()) {
-      declarations.putIfAbsent(declaration.name.lexeme, () => declaration);
-    }
-  }
-
-  String? declaredDefault(String className, String name, Set<String> seen) {
-    if (!seen.add(className)) return null;
-    final declaration = declarations[className];
-    if (declaration == null) return null;
-    final constructor = _primaryPublicConstructor(
-      declaration.members
-          .whereType<ConstructorDeclaration>()
-          .where(_isPublicConstructor)
-          .toList(),
-    );
-    if (constructor == null) return null;
-    for (final parameter in constructor.parameters.parameters) {
-      if (parameter.name?.lexeme != name) continue;
-      final explicit = parameter is DefaultFormalParameter
-          ? parameter.defaultValue?.toSource()
-          : null;
-      if (explicit != null) return explicit;
-      final normal = parameter is DefaultFormalParameter
-          ? parameter.parameter
-          : parameter;
-      if (normal is! SuperFormalParameter) return null;
-      final parent = _baseTypeName(
-        declaration.extendsClause?.superclass.toSource(),
-      );
-      return parent == null ? null : declaredDefault(parent, name, seen);
-    }
-    return null;
-  }
-
-  final resolved = <String, Map<String, String>>{};
-  for (final entry in declarations.entries) {
-    final parent = _baseTypeName(
-      entry.value.extendsClause?.superclass.toSource(),
-    );
-    if (parent == null) continue;
-    for (final constructor
-        in entry.value.members.whereType<ConstructorDeclaration>()) {
-      for (final parameter in constructor.parameters.parameters) {
-        final normal = parameter is DefaultFormalParameter
-            ? parameter.parameter
-            : parameter;
-        final name = parameter.name?.lexeme;
-        if (normal is! SuperFormalParameter || name == null) continue;
-        final inherited = declaredDefault(parent, name, <String>{});
-        if (inherited != null) {
-          (resolved[entry.key] ??= <String, String>{})[name] = inherited;
-        }
-      }
-    }
-  }
-  return resolved;
-}
-
-Map<String, Map<String, (String, String?)>> _classFields(
-  Iterable<String> sources,
-) {
-  final declarations = <String, ClassDeclaration>{};
-  for (final source in sources) {
-    final unit = parseString(content: source, throwIfDiagnostics: false).unit;
-    for (final declaration in unit.declarations.whereType<ClassDeclaration>()) {
-      declarations.putIfAbsent(declaration.name.lexeme, () => declaration);
-    }
-  }
-
-  final resolved = <String, Map<String, (String, String?)>>{};
-  Map<String, (String, String?)> resolve(String className, Set<String> seen) {
-    final existing = resolved[className];
-    if (existing != null) return existing;
-    if (!seen.add(className)) return const <String, (String, String?)>{};
-
-    final declaration = declarations[className];
-    if (declaration == null) return const <String, (String, String?)>{};
-    final parentName = _baseTypeName(
-      declaration.extendsClause?.superclass.toSource(),
-    );
-    final fields = <String, (String, String?)>{
-      if (parentName != null) ...resolve(parentName, seen),
-    };
-    for (final member in declaration.members.whereType<FieldDeclaration>()) {
-      final type = member.fields.type?.toSource() ?? 'dynamic';
-      final doc = _docText(member.documentationComment);
-      for (final variable in member.fields.variables) {
-        fields[variable.name.lexeme] = (type, doc);
-      }
-    }
-    seen.remove(className);
-    resolved[className] = fields;
-    return fields;
-  }
-
-  for (final className in declarations.keys) {
-    resolve(className, <String>{});
-  }
-  return resolved;
-}
-
-String? _formalParameterDoc(
-  FormalParameter outer,
-  NormalFormalParameter normal,
-) {
-  final attached = _docText(normal.documentationComment);
-  if (attached != null) return attached;
-
-  // Analyzer currently leaves comments inside a formal parameter list on the
-  // parameter's first token instead of always materializing a [Comment] node.
-  // Read that token trivia as the parameter's own docs, but ignore ordinary
-  // implementation comments.
-  final lines = <String>[];
-  Token? comment = outer.beginToken.precedingComments;
-  while (comment is CommentToken) {
-    final lexeme = comment.lexeme;
-    if (lexeme.startsWith('///')) lines.add(lexeme);
-    comment = comment.next;
-  }
-  return _docTextFromLexemes(lines);
-}
-
-String _parameterType(FormalParameter parameter, (String, String?)? field) {
+String? _explicitType(FormalParameter parameter) {
   if (parameter is FunctionTypedFormalParameter) {
     final returnType = parameter.returnType?.toSource() ?? 'void';
     final typeParameters = parameter.typeParameters?.toSource() ?? '';
@@ -433,53 +445,217 @@ String _parameterType(FormalParameter parameter, (String, String?)? field) {
     return '$returnType Function$typeParameters'
         '${parameter.parameters.toSource()}$nullable';
   }
+  return switch (parameter) {
+    FieldFormalParameter(:final type) => type?.toSource(),
+    SimpleFormalParameter(:final type) => type?.toSource(),
+    SuperFormalParameter(:final type) => type?.toSource(),
+    _ => null,
+  };
+}
 
-  TypeAnnotation? explicitType;
-  if (parameter is FieldFormalParameter) {
-    explicitType = parameter.type;
-  } else if (parameter is SimpleFormalParameter) {
-    explicitType = parameter.type;
-  } else if (parameter is SuperFormalParameter) {
-    explicitType = parameter.type;
+// ── Doc comments ────────────────────────────────────────────────────────────
+
+/// A `///` doc comment's lines without their comment markers, Dartdoc
+/// references intact; null when there is no comment or it is blank.
+List<String>? _docLines(Comment? comment) => comment == null
+    ? null
+    : _linesFromLexemes(comment.tokens.map((t) => t.lexeme));
+
+List<String>? _linesFromLexemes(Iterable<String> lexemes) {
+  final lines = <String>[
+    for (final lexeme in lexemes)
+      if (lexeme.startsWith('///'))
+        (lexeme.length > 3 && lexeme[3] == ' '
+                ? lexeme.substring(4)
+                : lexeme.substring(3))
+            .trimRight(),
+  ];
+  while (lines.isNotEmpty && lines.first.trim().isEmpty) {
+    lines.removeAt(0);
   }
-  return explicitType?.toSource() ?? field?.$1 ?? 'dynamic';
+  while (lines.isNotEmpty && lines.last.trim().isEmpty) {
+    lines.removeLast();
+  }
+  return lines.isEmpty ? null : lines;
 }
 
-/// The full `///` doc comment as Markdown, preserving paragraphs and fenced
-/// code. Dartdoc `[Name]` references become inline code (we have no API site to
-/// link to yet).
-String? _docMarkdown(Comment? comment) {
-  if (comment == null) return null;
-  final lines = comment.tokens.map((token) {
-    var text = token.lexeme;
-    if (text.startsWith('///')) text = text.substring(3);
-    if (text.startsWith(' ')) text = text.substring(1);
-    return text;
-  }).toList();
-  final text = lines.join('\n').trim();
-  if (text.isEmpty) return null;
-  return _normalizeDartdocReferences(text);
+List<String>? _formalParameterDocLines(
+  FormalParameter outer,
+  NormalFormalParameter normal,
+) {
+  final attached = _docLines(normal.documentationComment);
+  if (attached != null) return attached;
+
+  // Analyzer currently leaves comments inside a formal parameter list on the
+  // parameter's first token instead of always materializing a [Comment] node.
+  // Read that token trivia as the parameter's own docs, but ignore ordinary
+  // implementation comments.
+  final lexemes = <String>[];
+  Token? comment = outer.beginToken.precedingComments;
+  while (comment is CommentToken) {
+    lexemes.add(comment.lexeme);
+    comment = comment.next;
+  }
+  return _linesFromLexemes(lexemes);
 }
 
-/// First paragraph of a `///` doc comment, collapsed to one line.
-String? _docText(Comment? comment) {
-  if (comment == null) return null;
-  return _docTextFromLexemes(comment.tokens.map((token) => token.lexeme));
-}
+/// The complete doc comment as Markdown, preserving paragraphs and fenced
+/// code. Dartdoc `[Name]` references become inline code (we have no API site
+/// to link to yet).
+String? _markdown(List<String>? lines) =>
+    lines == null ? null : _normalizeDartdocReferences(lines.join('\n').trim());
 
-String? _docTextFromLexemes(Iterable<String> lexemes) {
+/// First paragraph of a doc comment, collapsed to one line.
+String? _firstParagraph(List<String>? lines) {
+  if (lines == null) return null;
   final buffer = <String>[];
-  for (final lexeme in lexemes) {
-    final line = lexeme.replaceFirst(RegExp(r'^///?\s?'), '').trimRight();
-    if (line.trim().isEmpty) {
-      if (buffer.isNotEmpty) break; // stop at the first blank line
-      continue;
-    }
+  for (final line in lines) {
+    if (line.trim().isEmpty) break;
     if (_markdownFenceOpening(line, 0, line.length) != null) break;
     buffer.add(line.trim());
   }
   final text = buffer.join(' ').trim();
   return text.isEmpty ? null : _normalizeDartdocReferences(text);
+}
+
+/// A field's doc, as the doc of the [ctor] parameter that initializes it.
+///
+/// A field's doc describes the field under every constructor, so it can say
+/// "mutually exclusive with [children]" or "null for [MarkdownView.document]".
+/// In a table of one constructor's parameters that is noise at best, and it
+/// contradicts the table at worst. This keeps the field's doc but drops each
+/// sentence (or `;` clause) of a prose paragraph that names another public
+/// constructor of [cls], or a parameter only another constructor takes,
+/// without naming [ctor] itself: "[Container.filled] and [Container.framed]
+/// fill with the theme's surface instead" stays in both of their tables and
+/// leaves `Container`'s. A doc left with nothing is returned unchanged.
+List<String>? _forConstructor(
+  List<String>? lines,
+  ClassDeclaration cls,
+  ConstructorDeclaration ctor,
+) {
+  if (lines == null) return null;
+  final className = cls.name.lexeme;
+  final constructors = cls.members
+      .whereType<ConstructorDeclaration>()
+      .where(_isPublicConstructor)
+      .toList();
+  String reference(ConstructorDeclaration c) =>
+      '$className.${c.name?.lexeme ?? 'new'}';
+  final ownParameters = {
+    for (final p in ctor.parameters.parameters) ?p.name?.lexeme,
+  };
+  final foreign = <String>{
+    for (final other in constructors)
+      if (!identical(other, ctor)) ...[
+        reference(other),
+        for (final p in other.parameters.parameters)
+          if (p.name?.lexeme case final name?
+              when !ownParameters.contains(name))
+            name,
+      ],
+  };
+  if (foreign.isEmpty) return lines;
+  final own = reference(ctor);
+  bool namesForeign(String unit) {
+    final names = _references(unit).toSet();
+    return names.any(foreign.contains) && !names.contains(own);
+  }
+
+  final out = <String>[];
+  var changed = false;
+  for (final paragraph in _paragraphs(lines)) {
+    if (!_isProse(paragraph) || !paragraph.any(namesForeign)) {
+      if (out.isNotEmpty) out.add('');
+      out.addAll(paragraph);
+      continue;
+    }
+    final units = _sentences(paragraph.map((line) => line.trim()).join(' '));
+    final kept = units.where((unit) => !namesForeign(unit)).toList();
+    changed = true;
+    if (kept.isEmpty) continue;
+    var text = kept.join(' ').trim();
+    // A kept clause that ended in `;` now ends the paragraph.
+    if (text.endsWith(';')) text = '${text.substring(0, text.length - 1)}.';
+    text = text[0].toUpperCase() + text.substring(1);
+    if (out.isNotEmpty) out.add('');
+    out.add(text);
+  }
+  return !changed || out.isEmpty ? lines : out;
+}
+
+Iterable<List<String>> _paragraphs(List<String> lines) sync* {
+  var current = <String>[];
+  String? fence;
+  for (final line in lines) {
+    final trimmed = line.trimLeft();
+    if (fence == null &&
+        (trimmed.startsWith('```') || trimmed.startsWith('~~~'))) {
+      fence = trimmed.substring(0, 3);
+    } else if (fence != null && trimmed.startsWith(fence)) {
+      fence = null;
+    }
+    if (fence == null && line.trim().isEmpty) {
+      if (current.isNotEmpty) yield current;
+      current = <String>[];
+    } else {
+      current.add(line);
+    }
+  }
+  if (current.isNotEmpty) yield current;
+}
+
+/// Whether [paragraph] is plain prose, rather than a list, quote, table,
+/// heading, or code block, which are left exactly as written.
+bool _isProse(List<String> paragraph) => paragraph.every((line) {
+  final trimmed = line.trimLeft();
+  return !(line.startsWith('    ') ||
+      trimmed.startsWith('```') ||
+      trimmed.startsWith('~~~') ||
+      trimmed.startsWith('>') ||
+      trimmed.startsWith('|') ||
+      trimmed.startsWith('#') ||
+      RegExp(r'^([-*+]|\d+[.)])\s').hasMatch(trimmed));
+});
+
+/// Splits prose into sentences and `;` clauses, each keeping its closing
+/// punctuation. Code spans, references, and parentheses never split, nor do
+/// the abbreviations prose uses mid-sentence.
+List<String> _sentences(String text) {
+  const abbreviations = ['e.g.', 'i.e.', 'etc.', 'vs.', 'cf.'];
+  final units = <String>[];
+  var start = 0;
+  var depth = 0;
+  var inCode = false;
+  for (var i = 0; i < text.length; i++) {
+    final c = text[i];
+    if (c == '`') {
+      inCode = !inCode;
+      continue;
+    }
+    if (inCode) continue;
+    if (c == '(' || c == '[') depth++;
+    if ((c == ')' || c == ']') && depth > 0) depth--;
+    if (depth > 0 || !'.!?;'.contains(c)) continue;
+    if (i + 1 < text.length && text[i + 1] != ' ') continue;
+    final unit = text.substring(start, i + 1);
+    if (c == '.' && abbreviations.any(unit.endsWith)) continue;
+    units.add(unit.trim());
+    start = i + 1;
+  }
+  final rest = text.substring(start).trim();
+  if (rest.isNotEmpty) units.add(rest);
+  return units;
+}
+
+/// The Dartdoc references (`[name]`) and whole code spans (`` `name` ``) in
+/// [text]: the ways a doc names a parameter or constructor.
+Iterable<String> _references(String text) sync* {
+  for (final match in RegExp(
+    r'\[([A-Za-z_][\w.]*)\](?!\()|`([A-Za-z_][\w.]*)`',
+  ).allMatches(text)) {
+    yield (match[1] ?? match[2])!;
+  }
 }
 
 String _normalizeDartdocReferences(String text) {
