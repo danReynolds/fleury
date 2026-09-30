@@ -9,6 +9,7 @@ import 'package:fleury/src/terminal/posix_driver.dart'
     show
         PosixTerminalModeController,
         isTerminalGoneError,
+        requestCtrlZSuspend,
         stopPosixInputReports;
 import 'package:test/test.dart';
 
@@ -839,7 +840,7 @@ void main() {
   );
 
   test(
-    'raw Ctrl+Z restores before self-stop, is consumed, and resumes',
+    'raw Ctrl+Z reaches the app; unhandled, it restores, stops, and resumes',
     () async {
       final trace = <String>[];
       final input = _FakeStdin(terminal: true);
@@ -894,17 +895,25 @@ void main() {
         );
         events.clear();
 
+        // The job-control press itself is the app's input first (launch
+        // audit 3.a): a focused text field undoes. The driver never suspends
+        // on its own; runApp asks when nothing handled the press.
         input.push(const <int>[0x1A]);
         await _pump();
-        await driver.debugSuspend();
+        expect(selfStops, 0);
+        expect(driver.debugSuspended, isFalse);
+        expect(events.whereType<KeyEvent>(), [
+          const KeyEvent(
+            KeyCode.char('z'),
+            modifiers: <KeyModifier>{KeyModifier.ctrl},
+          ),
+        ]);
+
+        expect(requestCtrlZSuspend(driver), isTrue);
+        await driver.debugSuspend(); // joins the suspension in flight
 
         expect(selfStops, 1);
         expect(driver.debugSuspended, isTrue);
-        expect(
-          events.whereType<KeyEvent>(),
-          isEmpty,
-          reason: 'the job-control chord belongs to the driver, not the app',
-        );
         final restoreAt = trace.indexOf('mode:restore');
         final exitAt = trace.indexWhere(
           (entry) =>
@@ -951,7 +960,7 @@ void main() {
     );
 
     await driver.enter(TerminalMode.interactive);
-    input.push(const <int>[0x1A]);
+    expect(requestCtrlZSuspend(driver), isTrue);
     await out.waitForFlushCount(1);
 
     final restoring = driver.restore();
@@ -1897,7 +1906,7 @@ void main() {
               expect(count(pop), supported ? 1 : 0);
             });
             expect(count(push), supported ? 2 : 0);
-            input.push([0x1a]);
+            expect(requestCtrlZSuspend(driver), isTrue);
             await Future<void>.delayed(const Duration(milliseconds: 20));
             expect(count(pop), supported ? 2 : 0);
             await driver.debugResume();

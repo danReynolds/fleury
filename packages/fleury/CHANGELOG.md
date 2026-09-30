@@ -2,6 +2,13 @@
 
 ## 0.1.0
 
+- **Ctrl+Z is dispatched first.** In a native POSIX terminal, Ctrl+Z now
+  reaches the application like any key: a focused `TextInput` or `TextArea`
+  undoes, and application bindings fire. Only a press nothing handles suspends
+  the process (restore, stop, resume after `fg`) — the rule Ctrl+C already
+  follows for exit. `PosixTerminalDriver(suspendOnCtrlZ: false)` keeps an
+  unhandled Ctrl+Z an ordinary key. Browser and served sessions never suspend.
+
 - The CLI reports its package version through `--version` and `diagnose`.
   `serve` reports invalid or occupied ports cleanly, releases startup resources,
   and prints the selected browser URL when `--port=0` chooses a free port.

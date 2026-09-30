@@ -42,10 +42,25 @@ void stopPosixInputReports(TerminalDriver driver) {
   if (driver is PosixTerminalDriver) driver._stopInputReports();
 }
 
+/// Suspends [driver]'s session for the shell's job control — restore the
+/// terminal, stop, re-enter after `fg` — for a Ctrl+Z press the application
+/// left unhandled. The runtime owns that rule (dispatch first, like Ctrl+C's
+/// exit); the driver owns whether its session suspends at all.
+///
+/// Returns whether a suspension started. False for every driver without job
+/// control (browser, served, remote, Windows), for
+/// [PosixTerminalDriver.suspendOnCtrlZ] false, and for a session without
+/// native raw mode, whose Ctrl+Z the kernel handles before it is ever read.
+/// On false the chord stays an ordinary key.
+@internal
+bool requestCtrlZSuspend(TerminalDriver driver) =>
+    driver is PosixTerminalDriver && driver._suspendForCtrlZ();
+
 /// Native POSIX terminal lifecycle and byte-input driver.
 ///
-/// Interactive Ctrl+Z is handled orderly: Fleury restores the terminal,
-/// self-stops, then re-enters after `fg`. Externally sending SIGTSTP is not a
+/// A Ctrl+Z press the application leaves unhandled suspends orderly: Fleury
+/// restores the terminal, self-stops, then re-enters after `fg` (see
+/// [suspendOnCtrlZ]). Externally sending SIGTSTP is not a
 /// supported lifecycle path because Dart cannot safely watch SIGTSTP/SIGCONT;
 /// it may stop the process before Fleury can restore terminal modes.
 class PosixTerminalDriver
@@ -121,12 +136,19 @@ class PosixTerminalDriver
   /// process even when the app hangs mid-teardown.
   final Duration signalGrace;
 
-  /// Whether the driver owns the Ctrl+Z restore/stop/resume workflow.
-  /// Set false for applications that must close sensitive state instead of
-  /// suspending. The chord is then delivered as an ordinary [KeyEvent], so
-  /// the application can finish cleanup and request an orderly exit.
-  /// Raw terminal startup fails if native raw mode is unavailable: Dart's
-  /// line/echo fallback cannot deliver Ctrl+Z to the application.
+  /// Whether a Ctrl+Z press the application leaves unhandled suspends the
+  /// session: restore the terminal for the shell, stop, and re-enter after
+  /// `fg`.
+  ///
+  /// Ctrl+Z is always dispatched to the application first, the way Ctrl+C is
+  /// before it exits: a focused text field undoes, an app binding fires, and
+  /// only a press nothing handled suspends. Set false for applications that
+  /// must never be suspended from the keyboard — to close sensitive state
+  /// instead. The chord is then only an ordinary [KeyEvent], so the
+  /// application can finish cleanup and request an orderly exit.
+  /// Raw terminal startup then fails if native raw mode is unavailable:
+  /// Dart's line/echo fallback leaves Ctrl+Z to the kernel's job control,
+  /// which stops the process before the application could see the key.
   /// This does not make external SIGTSTP/SIGCONT observable to Dart.
   final bool suspendOnCtrlZ;
 
@@ -144,7 +166,8 @@ class PosixTerminalDriver
   /// `Stdin.lineMode` / `echoMode` API only toggles ICANON/ECHO and leaves ISIG
   /// enabled, so Ctrl+Z is consumed by the kernel as SIGTSTP before Fleury can
   /// restore the screen. The native controller uses cfmakeraw, making Ctrl+Z a
-  /// parsed byte that can take the orderly restore -> stop -> resume path.
+  /// parsed key: the application sees it first, and an unhandled press takes
+  /// the orderly restore -> stop -> resume path.
   final PosixTerminalModeController _terminalModeController;
 
   // Snapshotted once: whether each standard stream is a real TTY. Output
@@ -1412,19 +1435,19 @@ class PosixTerminalDriver
       }
       return true;
     }
-    if (!suspendOnCtrlZ ||
-        !_active ||
-        !_nativeRawMode ||
-        event is! KeyEvent ||
-        event.code.character != 'z' ||
-        event.type != KeyEventType.down ||
-        event.modifiers.length != 1 ||
-        !event.hasCtrl) {
+    // Everything else — Ctrl+Z included — is the application's input. A
+    // Ctrl+Z press it leaves unhandled comes back as [requestCtrlZSuspend].
+    return false;
+  }
+
+  /// [requestCtrlZSuspend]: the orderly suspend, when this session owns one.
+  bool _suspendForCtrlZ() {
+    // cfmakeraw disables ISIG, so the terminal delivers Ctrl+Z as 0x1a rather
+    // than the kernel stopping us; without native raw mode no press is ever
+    // read. A handed-off terminal belongs to the child until it returns.
+    if (!suspendOnCtrlZ || !_active || !_nativeRawMode || _handoffActive) {
       return false;
     }
-    // cfmakeraw disables ISIG, so the terminal delivers Ctrl+Z as 0x1a and the
-    // parser turns it into this chord. Consume the terminal job-control chord
-    // here: app dispatch must not race the restore/stop sequence.
     // The transition publishes its failure on [events], where runApp treats
     // it as fatal. Do not also send it to the survivable widget-error zone.
     unawaited(_suspend().catchError((Object _) {}));
@@ -1498,10 +1521,12 @@ class PosixTerminalDriver
   /// continue here after the shell's `fg` sends SIGCONT and repaint.
   ///
   /// Dart deliberately does not allow watching SIGTSTP/SIGCONT. Production
-  /// therefore reaches this method from the parsed Ctrl+Z byte (ISIG is off in
-  /// our cfmakeraw mode) and self-stops with uncatchable SIGSTOP. An external
-  /// `kill -TSTP` cannot be observed safely by pure Dart and may bypass this
-  /// orderly path; callers should use the terminal's Ctrl+Z job-control chord.
+  /// therefore reaches this method from a parsed Ctrl+Z press (ISIG is off in
+  /// our cfmakeraw mode) that the application left unhandled — runApp calls
+  /// [requestCtrlZSuspend] — and self-stops with uncatchable SIGSTOP. An
+  /// external `kill -TSTP` cannot be observed safely by pure Dart and may
+  /// bypass this orderly path; callers should use the terminal's Ctrl+Z
+  /// job-control chord.
   Future<void> _suspend() {
     if (_suspended) return _suspendTail;
     return _suspendTail = _suspendImpl().catchError((

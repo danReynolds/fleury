@@ -212,6 +212,11 @@ def lifecycle(dart, supervised=False, crash=False, abrupt=False):
                 app.finish()
         else:
             pid = app.app_pid()
+            # Ctrl+Z reaches the app first, and the autofocused field would
+            # take it as undo. Focus the button, which leaves the chord
+            # unhandled, so it becomes the terminal's job control.
+            app.click(app.row("Click me"))
+            app.wait(lambda: "clicks=1" in app.text(), "focus the button")
             app.send(b"\x1a")
             end = time.monotonic() + 5
             stopped = False
