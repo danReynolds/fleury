@@ -1052,7 +1052,9 @@ class TreeTable<T> extends StatefulWidget {
   /// they are expanded.
   final TreeTableFilterDescriptor? filter;
 
-  /// Optional prebuilt search index for large trees.
+  /// Optional prebuilt search index for large trees. While [filter] has a
+  /// query, the table lists rows from the index instead of [roots], so build
+  /// a new index whenever the tree changes.
   final TreeTableSearchIndex<T>? searchIndex;
 
   /// Called with a row that has no children when the user activates it with

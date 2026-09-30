@@ -86,9 +86,9 @@ class FileBrowserController extends Notifier {
 
   /// Reads the current directory again, applying the browser's current
   /// `source` and `entryFilter`, and keeps the selected entry selected when it
-  /// is still listed. The browser reads its directory only when it opens one
-  /// or this is called: a new filter closure on a rebuild does not re-read the
-  /// disk.
+  /// is still listed. The browser reads its directory only when it opens one,
+  /// when `filter.showHidden` changes, or when this is called: a new filter
+  /// closure on a rebuild does not re-read the disk.
   void reload() {
     _checkNotDisposed();
     final host = _host;
@@ -247,9 +247,10 @@ class FileBrowser extends StatefulWidget {
   final FileBrowserFilterDescriptor filter;
 
   /// Optional predicate applied to entries when a directory is read: on
-  /// opening one, and on [FileBrowserController.reload]. A new predicate
-  /// takes effect at the next of those, so an inline closure rebuilt with
-  /// its parent never re-reads the disk.
+  /// opening one, when `filter.showHidden` changes, and on
+  /// [FileBrowserController.reload]. A new predicate takes effect at the next
+  /// of those, so an inline closure rebuilt with its parent never re-reads
+  /// the disk.
   final FileEntryFilter? entryFilter;
 
   /// Whether Ctrl+C (and the semantic copy action) copies the selected entry

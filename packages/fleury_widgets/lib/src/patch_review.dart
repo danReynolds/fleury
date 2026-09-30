@@ -6,7 +6,7 @@ import 'internal/collection_notifications.dart';
 import 'diff_view.dart';
 import 'semantic_roles.dart';
 
-/// Protocol-neutral review status for a patch or one patch file.
+/// Review status of a patch or one patch file.
 enum PatchReviewStatus {
   pending,
   reviewing,

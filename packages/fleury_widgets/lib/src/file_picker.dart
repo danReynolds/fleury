@@ -49,6 +49,8 @@ class FilePicker extends StatefulWidget {
 
   /// Where directories are read from. Defaults to the local disk on native
   /// platforms; in the browser, pass one, such as a [MemoryFileSource].
+  /// Like [filter], passing a different source object re-lists the current
+  /// directory and moves the cursor to the first row.
   final FileSource? source;
 
   /// Optional predicate that hides entries: return `false` to skip one. It

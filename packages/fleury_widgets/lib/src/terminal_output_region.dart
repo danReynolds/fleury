@@ -32,12 +32,14 @@ List<LogEntry> buildTerminalOutputLogEntries(
   );
 }
 
-/// Structured terminal-output view backed by a runtime [LogBuffer].
+/// Shows captured stdout and stderr (a [LogBuffer]) as a [LogRegion]:
+/// filterable, copyable rows that follow new output, with stderr lines styled
+/// as errors.
 ///
-/// Core [OutputCaptureView] remains the minimal captured-output tail view used by the
-/// debug console. [TerminalOutputRegion] is the app-facing surface for captured
-/// stdout/stderr when apps need filtering, copy/export semantics, lazy rows, and
-/// safety metadata from [LogRegion].
+/// By default it reads the [LogBuffer] from the nearest [LogBufferScope],
+/// which `runApp` provides in a terminal app; pass [buffer] to show another.
+/// For a minimal tail view without filtering or copy, use
+/// [OutputCaptureView].
 class TerminalOutputRegion extends StatelessWidget {
   const TerminalOutputRegion({
     super.key,

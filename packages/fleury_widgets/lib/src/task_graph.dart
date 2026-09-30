@@ -5,10 +5,10 @@ import 'package:fleury/fleury_core.dart';
 import 'internal/collection_notifications.dart';
 import 'semantic_roles.dart';
 
-/// Protocol-neutral status for a node in a [TaskGraph].
+/// Status of a node in a [TaskGraph].
 enum TaskGraphStatus { pending, running, succeeded, failed, cancelled, skipped }
 
-/// One node in a compact protocol-neutral task/plan graph.
+/// One task in a [TaskGraph].
 final class TaskGraphNode {
   const TaskGraphNode({
     required this.id,

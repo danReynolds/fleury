@@ -349,7 +349,9 @@ class LogRegion extends StatefulWidget {
   /// unchanged.
   final LogRegionFilterDescriptor? filter;
 
-  /// Optional prebuilt search index for large log collections.
+  /// Optional prebuilt search index for large log collections. The region
+  /// uses it only when it was built over the same list object passed as
+  /// [entries]; otherwise it filters without it.
   final LogRegionSearchIndex? searchIndex;
 
   /// Whether Ctrl+C (and the semantic copy action) copies the entry under the

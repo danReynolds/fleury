@@ -6,7 +6,7 @@ import 'package:fleury/fleury_core.dart';
 import 'internal/collection_notifications.dart';
 import 'semantic_roles.dart';
 
-/// Protocol-neutral role for one message in a [MessageList].
+/// Role of one message in a [MessageList].
 enum MessageRole { user, assistant, system, tool, log, event }
 
 /// Lifecycle/status attached to one message in a [MessageList].
@@ -33,7 +33,7 @@ final class MessageEntry {
   /// message through a prepend or reorder.
   final Object? id;
 
-  /// Protocol-neutral role for the message.
+  /// The message's role, shown in the row's prefix and used for its color.
   final MessageRole role;
 
   /// Status for streamed or workflow-owned messages.

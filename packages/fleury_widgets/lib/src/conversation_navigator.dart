@@ -6,7 +6,7 @@ import 'package:fleury/fleury_core.dart';
 import 'internal/collection_notifications.dart';
 import 'semantic_roles.dart';
 
-/// Protocol-neutral lifecycle for a conversation/session row.
+/// Lifecycle state of a conversation or session.
 enum ConversationStatus {
   active,
   idle,

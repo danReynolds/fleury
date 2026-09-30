@@ -39,10 +39,10 @@ import 'package:fleury/fleury_core.dart';
 import 'component_theme.dart';
 
 /// Accent color for Markdown links — a mint green that reads on dark
-/// backgrounds (unlike a browser's default link blue) and matches Fleury's
-/// default styling. Applies to safe-scheme links on every surface (terminal
-/// OSC 8 text, browser `<a>`), since the browser anchor inherits the cell's
-/// foreground.
+/// backgrounds (unlike a browser's default link blue). It is fixed, not
+/// taken from the theme. Applies to safe-scheme links on every surface
+/// (terminal OSC 8 text, browser `<a>`), since the browser anchor inherits
+/// the cell's foreground.
 const Color _kMarkdownLinkColor = RgbColor(126, 217, 149);
 
 /// A widget that renders a [data] string of light Markdown as styled
@@ -66,7 +66,7 @@ class MarkdownText extends StatefulWidget {
 
   /// Whether a link keeps its inspectable ` (url)` suffix after the text.
   ///
-  /// Default true (RFC 0017): the destination stays visible on terminals that
+  /// Default true: the destination stays visible on terminals that
   /// don't honor OSC 8 and auditable everywhere. Set false for the clean-link
   /// look — but the suffix is only dropped when the link is actually *live*
   /// (a real OSC 8 / anchor target was emitted, which makes the visible url

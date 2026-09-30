@@ -6,7 +6,7 @@ import 'package:fleury/fleury_core.dart';
 import 'internal/collection_notifications.dart';
 import 'semantic_roles.dart';
 
-/// Protocol-neutral lifecycle state for a timeline event.
+/// Lifecycle state of a timeline event.
 enum TraceTimelineStatus {
   queued,
   running,
@@ -17,7 +17,7 @@ enum TraceTimelineStatus {
   info,
 }
 
-/// Protocol-neutral kind for one timeline event.
+/// Kind of a timeline event.
 enum TraceTimelineKind {
   app,
   command,
