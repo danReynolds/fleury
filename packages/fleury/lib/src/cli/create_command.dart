@@ -405,9 +405,10 @@ hot-reload session, but compiles the app twice on a cold start.
 
 Press Enter or click **Increment**. Press Ctrl+C to quit.
 
-**Saving a changed file hot reloads the running app** — in any editor: the
-terminal updates in place and widget state survives. Set `FLEURY_HOT_RELOAD=0`
-to opt out.
+**Saving a changed file hot reloads the running app** — in any editor, on
+macOS and Linux: the terminal updates in place and widget state survives. Set
+`FLEURY_HOT_RELOAD=0` to opt out. On Windows the app runs without hot reload;
+to reload there, run it under your editor's Dart debugger.
 
 $editorNote
 ## Test
