@@ -355,8 +355,14 @@ final class ShellSession {
     _resizes = _resizeSignals.listen((_) => _send(ResizeFrame(_terminal.size)));
     _frames = transport.incoming.listen(
       _onFrame,
-      onError: (Object error) =>
-          _end(ShellSessionEnd(ShellSessionEndReason.failed, error: error)),
+      // A socket error is the app going away: Linux resets the connection
+      // when a killed app leaves input unread, as an IDE's Stop often does.
+      // Anything else (a malformed frame, an overflowing send) is a failure.
+      onError: (Object error) => _end(
+        error is SocketException
+            ? const ShellSessionEnd(ShellSessionEndReason.appDisconnected)
+            : ShellSessionEnd(ShellSessionEndReason.failed, error: error),
+      ),
       onDone: () =>
           _end(const ShellSessionEnd(ShellSessionEndReason.appDisconnected)),
       cancelOnError: true,

@@ -4,6 +4,7 @@
 
 import 'dart:async';
 import 'dart:convert';
+import 'dart:io' show SocketException;
 import 'dart:typed_data';
 
 import 'package:fleury/fleury.dart' show CellSize;
@@ -125,6 +126,44 @@ void main() {
 
     expect(end.reason, ShellSessionEndReason.appDisconnected);
     expect(terminal.log, ['acquire', 'release']);
+  });
+
+  test('a reset connection is the app disconnecting, not a failure', () async {
+    // Linux resets the socket when a killed app leaves input unread, which is
+    // how an IDE's Stop often looks from here.
+    final terminal = _FakeTerminal();
+    final transport = _ErroringTransport();
+    final run = ShellSession(
+      transport,
+      terminal: terminal,
+      resizes: const Stream<Object?>.empty(),
+      environment: _noProbe,
+    ).run();
+    await pumpEventQueue();
+
+    transport.fail(const SocketException('Connection reset by peer'));
+    final end = await run;
+
+    expect(end.reason, ShellSessionEndReason.appDisconnected);
+    expect(terminal.log, ['acquire', 'release']);
+  });
+
+  test('a protocol error from the app fails the session', () async {
+    final terminal = _FakeTerminal();
+    final transport = _ErroringTransport();
+    final run = ShellSession(
+      transport,
+      terminal: terminal,
+      resizes: const Stream<Object?>.empty(),
+      environment: _noProbe,
+    ).run();
+    await pumpEventQueue();
+
+    transport.fail(const RemoteProtocolException('unknown frame type 0x7f'));
+    final end = await run;
+
+    expect(end.reason, ShellSessionEndReason.failed);
+    expect(end.error, isA<RemoteProtocolException>());
   });
 
   test('shutdown hands the terminal back before waiting on the app', () async {
@@ -276,6 +315,31 @@ final class _FakeTerminal implements ShellTerminal {
   void type(String text) => _onInput!(Uint8List.fromList(utf8.encode(text)));
 
   void hangUp() => _onGone!();
+}
+
+/// A transport whose incoming stream can fail, as a socket's does.
+final class _ErroringTransport implements RemoteFrameTransport {
+  final _in = StreamController<RemoteFrame>.broadcast();
+  final sent = <RemoteFrame>[];
+
+  void fail(Object error) => _in.addError(error);
+
+  @override
+  Stream<RemoteFrame> get incoming => _in.stream;
+
+  @override
+  void send(RemoteFrame frame) => sent.add(frame);
+
+  @override
+  bool get isSendBacklogged => false;
+
+  @override
+  Future<void> get sendDrained => Future<void>.value();
+
+  @override
+  Future<void> close() async {
+    if (!_in.isClosed) await _in.close();
+  }
 }
 
 /// A transport whose close pends until the test finishes it, as a socket
