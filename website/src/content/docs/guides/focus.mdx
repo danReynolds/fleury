@@ -242,7 +242,7 @@ previous screen's remembered control.
 clicks, and direct focus requests cannot move focus to the covered screen, and
 unmatched keys do not fall through to it. The `Publish…` flow in the first demo
 shows both behaviors: focus starts on Cancel, stays in the dialog, and returns
-to Publish when the dialog closes.
+to `Publish…` when the dialog closes.
 
 ```dart
 final confirmed = await context.present<bool>(
@@ -283,8 +283,8 @@ behavior shown above. `FocusTraversalGroup` is the lower-level widget that
 provides that policy, not an extra boundary that ordinary panes and toolbars
 need to add.
 
-Create one directly only for a low-level tree passed to `runApp` without
-`FleuryApp` or `Navigator`:
+Neither `runApp` nor `mountApp` installs one. Create one directly only for a
+low-level tree passed to either without `FleuryApp` or `Navigator`:
 
 ```dart
 runApp(FocusTraversalGroup(child: EmbeddedSurface()));
@@ -317,9 +317,9 @@ traversal does not disable pointer input.
 
 | API | What it does |
 |---|---|
-| `Focus` | Makes a custom subtree focusable. `Focus.of` returns its node. |
-| `FocusNode` | Owns a target you can request, inspect, and dispose. |
-| `FocusDetector` | Reports focus entering or leaving a subtree. |
+| [`Focus`](/fleury/widgets/focus/) | Makes a custom subtree focusable. `Focus.of` returns its node. |
+| [`FocusNode`](/fleury/widgets/focusnode/) | Owns a target you can request, inspect, and dispose. |
+| [`FocusDetector`](/fleury/widgets/focusdetector/) | Reports focus entering or leaving a subtree. |
 | `FocusManager.of` | The application's focus manager. |
 | `FocusScope` | Remembers focus within a subtree; `trapFocus` can contain it. |
 | `FocusTraversalGroup` | Installs Tab and arrow traversal for a bare root. |
@@ -331,5 +331,7 @@ traversal does not disable pointer input.
 - Move focus after validation in [Forms & validation](/fleury/guides/forms/).
 - Learn how collections consume and release arrows in
   [Lists & scrolling](/fleury/guides/lists-and-scrolling/).
-- Review the generated [`Focus` API reference](/fleury/widgets/focus/) and the
+- API references: [`Focus`](/fleury/widgets/focus/),
+  [`FocusNode`](/fleury/widgets/focusnode/),
+  [`FocusDetector`](/fleury/widgets/focusdetector/), and the
   [`FocusTraversalGroup` source](https://github.com/danReynolds/fleury/blob/main/packages/fleury/lib/src/widgets/focus_traversal.dart).

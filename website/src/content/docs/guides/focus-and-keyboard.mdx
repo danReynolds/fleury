@@ -34,22 +34,31 @@ To control *where* keys go—focusable widgets, Tab order, and traversal—see
 
 ## Keys handled by the host
 
-A few keys have behavior outside the widget binding chain:
+A few keys have behavior of their own in Fleury's runtime. `Ctrl+C` and
+`Ctrl+Z` act only when nothing in your app handles them, so a binding can claim
+them. The debug shell takes its keys before your bindings see them:
 
-- **Ctrl+G and F12** are reserved while Fleury's debug tooling is enabled, even
-  when its panel is closed. Pass `debug: const DebugConfig(enabled: false)` to
-  `runApp` to release them. Other panel shortcuts apply while it is open; see
-  [Debugging](/fleury/guides/debugging/#keep-the-debugger-out-of-the-reproduction).
-- **Ctrl+Z** suspends a native POSIX terminal app by default, before a widget can
-  handle it; `fg` resumes it. If the app needs that chord, pass
-  `driver: PosixTerminalDriver(suspendOnCtrlZ: false)` to `runApp` and declare its
-  binding. Browser examples do not use this POSIX job-control path.
-- **Ctrl+C** exits a native app when no widget handles it. A handled binding
-  keeps the app running. The structured browser host does not apply this exit
-  fallback, so browser copy gestures can pass through without closing the app.
+| Key | What Fleury does | To use it in your app |
+|---|---|---|
+| `Ctrl+C` | In a terminal, ends the app when nothing handles it: `runApp` returns `AppExit.signal(AppSignal.interrupt)`. With text selected, it copies instead. In a browser, it's an ordinary key. | Bind it. A binding that handles it keeps the app running; see [Shutdown and signals](/fleury/guides/shutdown-and-signals/#finish-work-before-closing). |
+| `Ctrl+Z` | In a terminal on macOS or Linux, [suspends the app](/fleury/guides/terminal-modes/#let-another-program-use-the-terminal) when nothing handles it, until `fg` resumes it. A focused text field undoes instead. | Bind it, or turn suspension off with `PosixTerminalDriver(suspendOnCtrlZ: false)`. |
+| `Ctrl+G`, `F12` | Open the [debug shell](/fleury/guides/debugging/#keep-the-debug-shell-out-of-the-reproduction) and its Logs tab whenever debug tooling is on, even with the panel closed. Your bindings never see them. | Turn the debug shell off with `runApp(debug: const DebugConfig(enabled: false))`. It's already off in compiled builds. |
+| `Tab`, `Shift+Tab`, `←`, `→`, `F11`, `p` | Go to the debug panel while it's open. Some of its tabs take more: `Page Up` and `Page Down` outside Logs, `↑` and `↓` on Tree, and `/`, `s`, and a search in progress on Logs. `F5` restarts when the panel offers it, and `Esc` clears a Logs search or docks an expanded panel. | Close the panel with `Ctrl+G`. |
 
-An editor, terminal emulator, or browser may also intercept a shortcut before
-Fleury receives it. Offer another way to trigger essential commands.
+The Ctrl+Z switch belongs to the terminal driver, so you pass the driver
+yourself on macOS and Linux:
+`runApp(app, driver: PosixTerminalDriver(suspendOnCtrlZ: false))`. An app that
+passes `driver:` replaces the driver `runApp` would have chosen, and gives up
+what came with it: the app no longer attaches to `fleury serve`,
+`fleury shell`, or `fleury_mcp`, stray output isn't captured, and the debug
+shell offers no hot restart. Under a plain `dart run`, it also runs without
+[hot reload](/fleury/guides/hot-reload/#when-the-supervisor-steps-aside).
+
+Your terminal, multiplexer, operating system, or editor can also take a key
+before Fleury sees it: tmux's prefix (`Ctrl+B` by default), `F5` in VS Code's
+integrated terminal, or `F11`, which many terminals, editors, and desktops
+reserve for full screen or for showing the desktop. Offer another way to
+trigger essential commands.
 
 ## Scoped keyboard bindings
 
@@ -263,7 +272,7 @@ simultaneous held-key combinations may not be available.
 
 Neon Asteroids combines held movement, tap edges, and press-driven fallbacks:
 
-<FleuryExample id="showcase.asteroids" cols={100} rows={30} interactive />
+<FleuryExample id="showcase.asteroids" cols={100} rows={32} interactive />
 
 See the [full source](https://github.com/danReynolds/fleury/blob/main/packages/samples/lib/src/neon_asteroids.dart)
 and [showcase walkthrough](/fleury/showcases/asteroids/).
@@ -353,7 +362,9 @@ and falls back to classic press events, so commands such as `Ctrl+S`, `q`,
 arrows, and multi-key sequences use the same declarations on both paths. It
 confirms which guarantees the terminal, and any multiplexer, actually preserve
 and exposes only those capabilities to the app. Application code should not
-inspect terminal names, parse protocol replies, or force a keyboard mode.
+inspect terminal names, parse protocol replies, or force a keyboard mode. Bind
+any chord you need; [Keys handled by the host](#keys-handled-by-the-host) lists
+the few that Fleury also acts on.
 
 Check a capability only when a feature fundamentally needs information a
 classic terminal may not deliver, such as key releases for holds and sampled
