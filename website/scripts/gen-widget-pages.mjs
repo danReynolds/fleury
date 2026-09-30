@@ -1297,7 +1297,7 @@ const SHOWCASE_GOALS = {
     'bound to Ctrl+K, so the palette lists exactly what the editor\'s ' +
     '`CommandScope` offers. The demo is deterministic and local.',
   agent:
-    'A Claude-Code-style streaming session — prose, tool cards, a live todo list, ' +
+    'A coding-agent streaming session — prose, tool cards, a live todo list, ' +
     'a colored diff, a prompt box.\n\n' +
     'It is built from core primitives alone — `Text`, `Row`, `Column`, a ' +
     '`ListView`, and a `TextInput` over a cell grid — so a rich agent UI comes ' +

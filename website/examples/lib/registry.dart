@@ -300,7 +300,7 @@ final List<ExampleInfo> exampleList = <ExampleInfo>[
     id: 'linechart.lab.braille2',
     widget: 'LineChart',
     category: 'Charts & meters',
-    blurb: 'Braille line, 2px band (current default).',
+    blurb: 'Braille line with a 2px band (the default strokeWidth is 1).',
     cols: 58,
     rows: 15,
     code: 'LineChart(marker: CanvasMarker.braille, strokeWidth: 2, ...)',
@@ -1141,7 +1141,8 @@ NotifierBuilder(
     widget: 'RadioGroup',
     category: 'Inputs & controls',
     blurb:
-        'An arrow-key-navigable group of radio choices on a single tab stop.',
+        'A group of radio choices: the arrow keys move the selection, and each '
+        'option is its own Tab stop.',
     cols: 40,
     rows: 6,
     interactive: true,
@@ -2290,7 +2291,7 @@ Text('\${summary.health.name}: \${summary.activeTaskCount} of \${summary.taskCou
     widget: 'Coding agent',
     category: 'Showcases',
     blurb:
-        'A Claude-Code-style streaming session: prose, tool cards, a live todo '
+        'A coding-agent streaming session: prose, tool cards, a live todo '
         'list, a colored diff, and a prompt box.',
     cols: 92,
     rows: 34,
