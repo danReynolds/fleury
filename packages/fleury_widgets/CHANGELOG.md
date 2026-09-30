@@ -50,10 +50,11 @@
   Left and Backspace climb to the parent again.
 - `FileBrowser` reads a directory when it opens it or on
   `FileBrowserController.reload()`, not on every parent rebuild; an inline
-  `entityFilter` no longer re-reads the disk and resets the cursor. Toggling
-  `showHidden`, changing the query or a reload keeps the selected entry,
-  wherever it lands. The display order is kept until the entries or the
-  filter change.
+  `entryFilter` no longer re-reads the disk and resets the cursor. A new
+  `entryFilter` applies at once to the entries already read, as `FilePicker`'s
+  `filter` does. Toggling `showHidden`, changing the query or the
+  `entryFilter`, or a reload keeps the selected entry, wherever it lands. The
+  display order is kept until the entries or the filter change.
 - `Image` no longer re-decodes when its parent rebuilds with the same
   source, an animated image keeps playing across rebuilds, and a static
   image is painted once rather than resampled every frame. After
