@@ -254,6 +254,40 @@ void main() {
     });
   });
 
+  group('abandoning a pending sequence', () {
+    testWidgets('KeyBindings.cancelPending drops the keys typed so far', (
+      tester,
+    ) {
+      // A which-key popup's close control: the same abort as Esc, so a
+      // single-key binding that shares the prefix does not fire.
+      final calls = <String>[];
+      late BuildContext context;
+      tester.pumpWidget(
+        FleuryApp(
+          key: UniqueKey(),
+          title: 'Keyboard test',
+          home: KeyBindings(
+            bindings: [
+              KeyBinding(KeySequence.g, onTrigger: (_) => calls.add('g')),
+              KeyBinding(KeySequence.g.g, onTrigger: (_) => calls.add('g g')),
+            ],
+            child: _Probe((c) {
+              context = c;
+              return const Focus(autofocus: true, child: Text('x'));
+            }),
+          ),
+        ),
+      );
+
+      tester.press(KeySequence.g);
+      expect(tester.dispatcher.hasPendingSequence, isTrue);
+
+      KeyBindings.cancelPending(context);
+      expect(tester.dispatcher.hasPendingSequence, isFalse);
+      expect(calls, isEmpty);
+    });
+  });
+
   group('KeyDetector (§17)', () {
     testWidgets('propagates by default, consumes on request', (tester) {
       final seen = <String>[];

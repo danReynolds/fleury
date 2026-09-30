@@ -12,22 +12,31 @@ typedef LayoutWidgetBuilder =
 /// can adapt to the available space — a sidebar that collapses below a
 /// width, a list that switches to a grid when wide, etc.
 ///
-/// The [builder] runs during the layout pass, so it always sees current
-/// constraints — but NOT on every pass: it re-runs only when the incoming
-/// constraints change or the element was invalidated (a parent rebuild
-/// delivering a new widget, a scope dependency changing, a setState
-/// above). Reading a scope (e.g. [MediaQuery]) inside it works
-/// and re-runs when that ancestor changes. The memoization matters: layout
-/// re-enters from the root every frame that renders, and an
-/// unconditionally re-run builder re-instantiates its subtree per frame —
-/// if that subtree isn't identity-stable, each re-run produces damage that
-/// schedules the next frame, a self-sustaining rebuild loop.
+/// The [builder] runs during layout rather than build. It runs again when the
+/// incoming constraints change, when the parent rebuilds this widget, or when
+/// something the builder reads changes, such as a scope like
+/// `MediaQuery.of(context)` or an animation's value; otherwise the child it
+/// built last time is kept, so the builder doesn't run on every frame. An
+/// exception in the builder is handled like one thrown by a build method: the
+/// error widget takes the child's place.
+///
+/// An axis can be unbounded: `constraints.maxCols` or `maxRows` is null for an
+/// inflexible child of a `Row` or `Column`, for example. A builder that sizes
+/// from that axis needs a bound, so wrap this widget in `Expanded` or
+/// `SizedBox`. With assertions enabled, a child that comes out zero-sized on
+/// an unbounded axis while non-empty on the other throws a [StateError] that
+/// says so.
 class LayoutBuilder extends RenderObjectWidget {
   const LayoutBuilder({super.key, required this.builder});
 
   /// Creates the child for the constraints received during the current layout.
   final LayoutWidgetBuilder builder;
 
+  // The builder is memoized on its constraints (see RenderLayoutBuilder).
+  // Layout re-enters from the root on every rendered frame; re-running the
+  // builder each time would rebuild its subtree per frame, and a subtree that
+  // isn't identity-stable then produces damage that schedules the next frame,
+  // a self-sustaining rebuild loop.
   @override
   RenderObjectElement createElement() => _LayoutBuilderElement(this);
 

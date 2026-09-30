@@ -347,4 +347,85 @@ void main() {
     tester.pump(const Duration(milliseconds: 300));
     expect(nav.depth, 2, reason: 'only the top dialog dismissed');
   });
+
+  // ---------------------------------------------------------------------
+  // Key sequences and the dialog's key boundary. `present` wraps the route
+  // in KeyBindings(modal: true): a multi-key sequence bound inside the dialog
+  // must still work, and one bound behind it must not finish from inside.
+  // ---------------------------------------------------------------------
+
+  testWidgets('key sequences bound inside a dialog complete', (tester) {
+    final calls = <String>[];
+    tester.pumpWidget(Navigator(home: const Text('page')));
+    final nav = tester.binding.rootNavigator!;
+    nav.present<void>(
+      KeyBindings(
+        bindings: [
+          KeyBinding(KeySequence.g.g, onTrigger: (_) => calls.add('g g')),
+          KeyBinding(
+            KeySequence.ctrl.x.ctrl.s,
+            onTrigger: (_) => calls.add('save'),
+          ),
+        ],
+        child: const Focus(autofocus: true, child: Text('dialog')),
+      ),
+    );
+    tester.pump(const Duration(milliseconds: 300));
+
+    tester.press(KeySequence.g.g); // printables arrive as typed text
+    tester.press(KeySequence.ctrl.x.ctrl.s); // chords arrive as key events
+    expect(calls, ['g g', 'save']);
+    expect(nav.depth, 2);
+  });
+
+  testWidgets('a sequence begun on the page cannot finish inside a dialog '
+      'that opened before its last key', (tester) {
+    var quits = 0;
+    tester.pumpWidget(
+      KeyBindings(
+        bindings: [KeyBinding(KeySequence.space.q, onTrigger: (_) => quits++)],
+        child: Navigator(
+          home: const Focus(autofocus: true, child: Text('page')),
+        ),
+      ),
+    );
+    final nav = tester.binding.rootNavigator!;
+
+    tester.press(KeySequence.space);
+    expect(tester.dispatcher.hasPendingSequence, isTrue);
+    nav.present<void>(const Focus(autofocus: true, child: Text('dialog')));
+    tester.pump(const Duration(milliseconds: 300));
+
+    tester.press(KeySequence.q);
+    expect(quits, 0, reason: 'the app behind the dialog must not see the q');
+    expect(tester.dispatcher.hasPendingSequence, isFalse);
+  });
+
+  testWidgets('Esc aborts a sequence pending inside a dialog without '
+      'dismissing the dialog', (tester) {
+    // Closing a which-key popup with Esc must not also close what's under it.
+    var fired = 0;
+    tester.pumpWidget(Navigator(home: const Text('page')));
+    final nav = tester.binding.rootNavigator!;
+    nav.present<void>(
+      KeyBindings(
+        bindings: [KeyBinding(KeySequence.g.g, onTrigger: (_) => fired++)],
+        child: const Focus(autofocus: true, child: Text('dialog')),
+      ),
+    );
+    tester.pump(const Duration(milliseconds: 300));
+
+    tester.press(KeySequence.g);
+    expect(tester.dispatcher.hasPendingSequence, isTrue);
+
+    tester.sendKey(const KeyEvent(KeyCode.escape));
+    tester.pump(const Duration(milliseconds: 300));
+    expect(tester.dispatcher.hasPendingSequence, isFalse);
+    expect(nav.depth, 2, reason: 'that Esc only abandoned the sequence');
+
+    tester.sendKey(const KeyEvent(KeyCode.escape));
+    tester.pump(const Duration(milliseconds: 300));
+    expect(nav.depth, 1, reason: 'with nothing pending, Esc dismisses');
+    expect(fired, 0);
+  });
 }
