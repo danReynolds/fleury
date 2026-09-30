@@ -12,16 +12,22 @@ import 'task_graph.dart';
 import 'tool_call_card.dart';
 import 'trace_timeline.dart';
 
-/// High-level health for a protocol-neutral developer workflow snapshot.
+/// Overall state of a [WorkflowSnapshot], as [WorkflowSummary.health]
+/// reports it: `failed` when anything has failed; otherwise `needsAttention`
+/// when there is an approval request, a patch in review or with changes
+/// requested, a warning, or a degraded or offline model; otherwise `active`
+/// while anything is queued or running; and `idle` when nothing is.
 enum WorkflowHealth { idle, active, needsAttention, failed }
 
-/// Aggregates the first-party workflow records used by developer-tool and
-/// agent-style Fleury apps.
+/// One immutable bundle of the records an agent or developer-tool app shows:
+/// messages, tool calls, approvals, tasks, logs, and more, each in the type
+/// the matching widget takes (such as [MessageEntry] for [MessageList]).
 ///
-/// This is intentionally a data snapshot, not a transport, router, provider
-/// session, persistence model, or ACP schema. Apps and adapter packages map
-/// their own domain state into these protocol-neutral records, while Fleury
-/// owns summaries, safe semantic state, and testable lookup behavior.
+/// It draws nothing itself. Build a new snapshot from your app's state when
+/// that state changes, pass its lists to the widgets that display them, and
+/// read [summary] for derived counts and an overall [WorkflowHealth]. Lookup
+/// helpers such as [toolCallById] find a record by id, and [toSemanticState]
+/// exposes the summary to tests and agents.
 final class WorkflowSnapshot {
   WorkflowSnapshot({
     this.id,
@@ -62,7 +68,9 @@ final class WorkflowSnapshot {
   /// Tool calls attached to the workflow.
   final List<ToolCallRecord> toolCalls;
 
-  /// Pending or completed approval requests.
+  /// Approval requests waiting for the user. Any request here makes
+  /// [summary] report [WorkflowHealth.needsAttention] (unless something
+  /// failed), so remove answered ones.
   final List<ApprovalRequest> approvals;
 
   /// Task graph nodes representing planned or running work.

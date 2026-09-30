@@ -58,7 +58,7 @@ class Select<T> extends StatefulWidget {
 
   /// Called as the highlight moves through the open list, before anything is
   /// committed — use it to live-preview the highlighted option, the way theme,
-  /// font and colour pickers show you the choice while you arrow through it.
+  /// font and color pickers show you the choice while you arrow through it.
   ///
   /// Fires again with the applied [value] when the list is dismissed without a
   /// pick (Esc, click-away), so a preview never outlives the dropdown that
@@ -77,8 +77,8 @@ class Select<T> extends StatefulWidget {
   /// Stable label for semantic snapshots.
   ///
   /// The visible collapsed value changes as the user picks options, so pass a
-  /// label such as "Environment" or "Color" when tests, debug tools, prompt
-  /// fallback, or future adapters need to refer to the picker itself.
+  /// label such as "Environment" or "Color" when tests, tools, or agents
+  /// need to refer to the picker itself.
   final String? semanticLabel;
 
   /// Base styling for the closed trigger, plus optional hover, focus, disabled,
@@ -964,7 +964,7 @@ class _SelectListState<T> extends State<_SelectList<T>> {
   }
 
   /// Jump to the next enabled option whose label starts with [ch] (wrapping) —
-  /// the type-to-search convention (Textual Select, W3C APG combobox).
+  /// the type-to-search convention (W3C APG combobox).
   KeyEventResult _typeahead(String ch) {
     final lower = ch.toLowerCase();
     final start = (_list.currentIndex ?? -1) + 1;

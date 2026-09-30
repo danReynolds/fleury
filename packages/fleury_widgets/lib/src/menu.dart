@@ -51,19 +51,21 @@ final class MenuSeparator extends MenuEntry {
   const MenuSeparator();
 }
 
-/// A dropdown menu: a [trigger] that, when focused and activated (Enter),
-/// opens a floating list of [items] anchored just below it. Arrows move
-/// the selection (skipping separators and disabled items), Enter runs it
-/// (and closes), Esc closes. Focus is trapped in the open menu and returns
-/// to the trigger on close.
+/// A dropdown menu: activating [trigger] with Enter or a click opens a
+/// floating list of [items] just below it.
 ///
-/// Items can nest via [SubMenu]: Right/Enter opens a cascading submenu to
-/// the right, Left/Esc steps back out. Choosing any leaf item runs it and
-/// closes the whole menu.
+/// In the open menu, Up and Down move the selection (skipping separators and
+/// disabled items), Home and End jump to the first and last item, and typing
+/// a letter jumps to the next item that starts with it. Enter or a click runs
+/// an item and closes the menu; Esc or a click outside closes it. Focus stays
+/// in the open menu and returns to the trigger on close.
 ///
-/// Built on the bounds primitive ([BoundsObserver] + [BoundsAnchor]), so it
-/// floats over everything and flips/clamps to stay on screen — rather than
-/// expanding inline and shoving content around.
+/// Items can nest via [SubMenu]: Right, Enter, or a click opens a cascading
+/// submenu to the right, and Left or Esc steps back out. Choosing any leaf
+/// item runs it and closes the whole menu.
+///
+/// The menu floats over other content instead of pushing it aside, and moves
+/// to stay on screen when there isn't room below the trigger.
 class Menu extends StatefulWidget {
   const Menu({
     super.key,
@@ -85,8 +87,8 @@ class Menu extends StatefulWidget {
   /// Label for the menu trigger and root menu in semantic snapshots.
   ///
   /// The visible [trigger] can be any widget, so Fleury cannot reliably infer a
-  /// human label from it. Pass this when tests, debug tools, prompt fallback, or
-  /// future adapters need a stable menu name.
+  /// human label from it. Pass this when tests, tools, or agents need a stable
+  /// menu name.
   final String? semanticLabel;
 
   @override

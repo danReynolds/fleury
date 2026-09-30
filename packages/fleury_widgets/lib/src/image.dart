@@ -74,7 +74,7 @@ abstract class ImageSource {
   img.Image decode();
 
   /// Backed by an in-memory byte buffer (PNG / JPEG / BMP / TIFF /
-  /// GIF — whatever `package:image` recognises).
+  /// GIF — whatever `package:image` recognizes).
   factory ImageSource.bytes(
     /// Encoded image bytes to decode lazily and cache in this source.
     Uint8List bytes,
@@ -304,7 +304,7 @@ class Image extends StatefulWidget {
   /// when transparent PNGs need crisp edges against a known surface.
   final Color? backgroundColor;
 
-  /// Semantic label exposed to tests, inspectors, and future adapters.
+  /// Describes the image for screen readers, agents, tests, and inspectors.
   ///
   /// Leave null for decorative images. Capability and fallback state is still
   /// exposed so diagnostics can explain how the image rendered.
