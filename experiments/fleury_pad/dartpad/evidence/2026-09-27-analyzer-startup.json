@@ -1,0 +1,64 @@
+{
+  "samples": [
+    {
+      "mode": "jit",
+      "connectedMs": 577.2,
+      "hostEquivalentReadyMs": 4252.1,
+      "firstAnalysisMs": 4279.5,
+      "diagnostics": 0
+    },
+    {
+      "mode": "aot",
+      "connectedMs": 200.4,
+      "hostEquivalentReadyMs": 1558.6,
+      "firstAnalysisMs": 1668.2,
+      "diagnostics": 0
+    },
+    {
+      "mode": "aot",
+      "connectedMs": 128.5,
+      "hostEquivalentReadyMs": 1520.3,
+      "firstAnalysisMs": 1534.5,
+      "diagnostics": 0
+    },
+    {
+      "mode": "jit",
+      "connectedMs": 601.0,
+      "hostEquivalentReadyMs": 3882.6,
+      "firstAnalysisMs": 3910.3,
+      "diagnostics": 0
+    },
+    {
+      "mode": "jit",
+      "connectedMs": 550.2,
+      "hostEquivalentReadyMs": 3938.9,
+      "firstAnalysisMs": 3972.6,
+      "diagnostics": 0
+    },
+    {
+      "mode": "aot",
+      "connectedMs": 145.5,
+      "hostEquivalentReadyMs": 1508.4,
+      "firstAnalysisMs": 1553.6,
+      "diagnostics": 0
+    }
+  ],
+  "cpu": 1,
+  "memoryGiB": 2,
+  "platform": "linux/amd64 emulated on Apple Silicon",
+  "scope": "Analyzer worker only; excludes Cloud Run infrastructure, HTTP host, DDC and browser.",
+  "sdk": "3.12.2",
+  "image": "fleury-pad:cloud-aot-trial",
+  "cache": "New analyzer HOME for each run; kernel file cache is not flushed.",
+  "imageConfigDigest": "sha256:f4202d7b592b3e534f155fa85a490a7fe5bcb138e321964c0b7631905f1f8450",
+  "medianHostEquivalentReadyMs": {
+    "jit": 3938.9,
+    "aot": 1520.3
+  },
+  "limitations": [
+    "Three worker starts per mode, one local container",
+    "Initial diagnostics only; no completion/format/reload integration checks",
+    "No cloud deployment or configuration changes",
+    "Not an end-to-end startup measurement"
+  ]
+}

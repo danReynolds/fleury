@@ -4,13 +4,13 @@ description: Diagnose a terminal session, understand Fleury’s fallbacks, and f
 ---
 
 Fleury adapts its output to the terminal: colors can be reduced, images become
-cell art, and links can fall back to visible URLs. When an app behaves
+cell art, and links stop being clickable. When an app behaves
 differently over SSH or inside tmux, inspect the session before changing the
 widget code.
 
 ## Inspect the affected session
 
-With the [Fleury CLI installed](/fleury/getting-started/#1-create-a-project), run
+With the [Fleury CLI installed](/fleury/getting-started/#1-install-the-cli-and-create-a-project), run
 this in the same terminal, SSH connection, and multiplexer pane as the app:
 
 ```sh
@@ -56,8 +56,8 @@ clipboard.
 | Colors are missing or reduced | Color mode, `NO_COLOR`, `COLORTERM`, `TERM` | Check the environment and compare color depths below. |
 | Borders or emoji misalign | Glyph tier, measured widths, width policy | Probe in the affected session; inspect which width values came from a probe or an override. |
 | Images turn into blocks | Image protocol and fallback reason | Compare a direct terminal session with the multiplexer session. |
-| Links show their URL as text | OSC 8 hyperlinks | Check whether links are unsupported, suppressed, or explicitly disabled. |
-| Clicks or held keys do nothing | App mouse mode; **Live → Keyboard** in the debugger | Check enabled input modes and negotiated key events, not only terminal support. |
+| Links aren't clickable | OSC 8 hyperlinks | Check whether links are unsupported, suppressed, or explicitly disabled. |
+| Clicks or held keys do nothing | App mouse mode; **Live → Keyboard** in the debugger | Check enabled input modes and negotiated key events, not only terminal support. Multiplexers limit key events by default. |
 | Copy works only inside the app | Clipboard write report | Check the transport and policy used for that operation. |
 | Frames flicker or appear partially drawn | Synchronized output | Check whether the terminal confirmed support below. |
 
@@ -103,9 +103,12 @@ a modern UTF-8, xterm-compatible POSIX terminal.
 
 ## Terminal hyperlinks (OSC 8)
 
-Markdown links use clickable terminal hyperlinks when detected. Otherwise the
-label stays underlined and the URL is shown inline. The browser surface renders
-ordinary anchors.
+Markdown links become clickable terminal hyperlinks when the terminal supports
+them; otherwise the label stays underlined without a link. Either way,
+`MarkdownText` shows the destination after the label as a dim `(url)` by
+default, so a visible URL does not mean hyperlinks failed. Set
+`inlineLinkUrls: false` to hide it for links that are clickable; a link that
+isn't keeps its URL. The browser surface renders ordinary anchors.
 
 The diagnosis reports **supported**, **unsupported**, **suppressed-under-tmux**,
 or **disabled-by-override**. Multiplexers are suppressed by default. Supported
@@ -132,8 +135,25 @@ side.
 Held keys require release events. Open the [debugger](/fleury/guides/debugging/)
 and inspect **Live → Keyboard** for the app's negotiated capabilities. A
 successful standalone keyboard probe is not evidence that this running session
-receives releases. [Key handling](/fleury/guides/focus-and-keyboard/) covers
-capability-aware input.
+receives releases. Inside tmux, GNU Screen, or Zellij, Fleury requests a reduced
+keyboard protocol by default, because a multiplexer may not pass the full one
+through reliably: chords, arrows, and function keys are enhanced, but letters
+arrive as plain text, so there is no held-key state. Held controls then use
+their press-driven fallback.
+[Key handling](/fleury/guides/focus-and-keyboard/) covers capability-aware
+input.
+
+To diagnose keyboard input, choose the protocol level explicitly:
+
+```sh
+FLEURY_KEYBOARD=legacy dart run bin/run_app.dart         # classic input only
+FLEURY_KEYBOARD=disambiguated dart run bin/run_app.dart  # enhanced chords and arrows; no held keys
+FLEURY_KEYBOARD=lifecycle dart run bin/run_app.dart      # every key, with repeats and releases
+```
+
+Use `lifecycle` inside a multiplexer only after verifying that the whole path
+delivers releases. If a terminal misbehaves when Fleury queries its keyboard
+support, `FLEURY_KEYBOARD_PROBE=0` skips the query and uses classic input.
 
 For clipboard issues, run this from an app callback and inspect the result
 in the debugger’s **Logs** tab:

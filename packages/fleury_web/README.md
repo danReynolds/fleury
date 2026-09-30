@@ -71,6 +71,20 @@ Semantics are enabled by default and should remain enabled in product builds.
 Disabling them requires the explicit `allowInaccessibleDiagnostics` opt-in and
 is intended only for focused local performance diagnostics.
 
+## Integrating a development reloader
+
+After your development tool applies a Dart code update, call
+`await mountedApp.reassemble()` on the handle returned by `mountApp`. This runs
+Fleury's shared reload lifecycle: reassemble the existing widget tree, reset
+surviving animation and ticker controllers, then present the updated frame and
+accessibility tree. Existing widget identity and state rules still apply.
+
+The method handles framework reassembly; the development tool supplies code
+compilation and replacement. It rejects if the mount was disposed, presentation
+fails, or the handle represents a remote app whose code runs on another host.
+A failed code update or reload hook should offer a fresh app restart rather than
+accepting the update as successful.
+
 ## Browser-safe imports
 
 Browser entry points cannot import libraries backed by `dart:io`. Use:

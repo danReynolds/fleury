@@ -3,14 +3,17 @@ import 'package:fleury/fleury_core.dart';
 import 'component_theme.dart';
 import 'glyphs.dart';
 
-/// A horizontal determinate progress bar that fills proportionally to
-/// [value] (0..1). It fills the available width — bound it with a
-/// `SizedBox` for a fixed length — and renders sub-cell precision with
-/// eighth-block glyphs, so a 4.5-cell fill shows four full blocks plus a
-/// half block rather than rounding.
+/// A horizontal bar for task progress. A [value] from 0 to 1 fills the bar
+/// proportionally; null shows an indeterminate sweep for work of unknown
+/// length.
+///
+/// The bar fills the available width — bound it with a `SizedBox` for a
+/// fixed length — and renders sub-cell precision with eighth-block glyphs, so
+/// a 4.5-cell fill shows four full blocks plus a half block rather than
+/// rounding. For a status reading such as CPU or disk use, use `Gauge`.
 ///
 /// ```dart
-/// SizedBox(width: 20, child: ProgressBar(value: downloaded / total));
+/// SizedBox(width: 20, child: ProgressBar(value: downloaded / total))
 /// ```
 class ProgressBar extends StatelessWidget {
   const ProgressBar({

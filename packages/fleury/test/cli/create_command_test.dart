@@ -135,26 +135,23 @@ void main() {
   test(
     'pub failure preserves the project and gives usable recovery advice',
     () async {
-      final server = await HttpServer.bind(InternetAddress.loopbackIPv4, 0);
-      addTearDown(() => server.close(force: true));
-      server.listen((request) async {
-        request.response.statusCode = HttpStatus.notFound;
-        await request.response.close();
-      });
+      // An invalid hosted URL fails immediately without a network request.
       final target = Directory('${tempDir.path}/unpublished_app');
       final result = await _runCreate(
         packageRoot,
         [target.path],
-        environment: {
-          'PUB_HOSTED_URL': 'http://127.0.0.1:${server.port}',
-          'PUB_CACHE': '${tempDir.path}/pub_cache',
-        },
+        environment: const {'PUB_HOSTED_URL': 'ftp://example.invalid'},
       );
 
       expect(result.exitCode, isNot(0));
       expect(result.stderr, contains('`dart pub get` failed'));
       expect(result.stderr, contains('The project was created'));
       expect(result.stderr, contains('different, empty directory'));
+      expect(
+        result.stderr,
+        contains('fleury create another_app --dependency-source=git'),
+      );
+      expect(result.stderr, isNot(contains('remove ${target.path}')));
       expect(result.stderr, isNot(contains('rerun with')));
 
       final app = File('${target.path}/lib/app.dart');

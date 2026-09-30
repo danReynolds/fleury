@@ -35,13 +35,18 @@ The launcher preserves those arguments across restarts. Also pass argv to
 Future<void> main(List<String> args) => runApp(const MyApp(), args: args);
 ```
 
+Under plain `dart run`, the child cannot recover the original arguments by
+itself. Without `args:`, it sees an empty list from its first frame, not only
+after restart. The launcher already has the arguments from its command line.
+
 Try it: increment a counter or focus an input, change a label in `build`,
 and save. The label changes while the counter and focus stay where they were.
 
 ## Fix a failed save or restart
 
 Open the debug shell with `Ctrl+G`. Successful reloads appear in **Logs**;
-failed saves appear in **Errors** with their compiler diagnostics.
+failed saves appear in **Errors** with their compiler diagnostics and as an
+error banner over the app. A successful save clears the failed-edit banner.
 
 - **Syntax or type error:** fix the source and save again. The running app
   keeps its previous code and state until the next successful reload.
@@ -240,9 +245,10 @@ supervised-child environment either way.
 ## How it works under the hood
 
 1. `runApp(enableHotReload: true)` calls
-   `HotReloadController.attach(onReassemble: ...)`. By default, that
-   callback runs `BuildOwner.reassembleApplication()` followed by
-   `TickerScheduler.reassemble()`.
+   `HotReloadController.attach(onReassemble: ...)`. That callback runs
+   `TuiRuntime.reassembleApplication()`, which calls
+   `BuildOwner.reassembleApplication()` followed by
+   `TickerScheduler.reassemble()`, then schedules a frame.
 2. The controller registers a `dart:developer` service extension at
    `ext.fleury.reassemble`. Any tool that can speak the VM service
    protocol can trigger a reassemble explicitly.
@@ -263,6 +269,18 @@ supervised-child environment either way.
   per-frame tick callbacks).
 - `Animation` settles at its current target so no old completion remains
   pending. `FrameTicker` resets its phase and re-anchors its clock.
+
+## Browser development hosts
+
+Terminal and browser reloads share `TuiRuntime.reassembleApplication()`:
+rebuild the element tree, then reset surviving animations and frame tickers.
+A browser tool such as [Fleury Pad](https://danreynolds.github.io/fleury/pad/)
+applies the compiler's code update itself, then calls
+`await MountedApp.reassemble()` from `package:fleury_web`. That future
+completes after the rebuilt frame and its accessibility update are presented,
+and rejects if the mount is disposed or presentation fails. Compilation and
+code transport stay outside the framework; there is no separate tree walk for
+the browser.
 
 ## Disabling hot reload
 
@@ -299,14 +317,17 @@ Some edits can't be applied cleanly to a running tree (changing a
 State references). The VM accepts the source change but the next
 build crashes. Stop and relaunch the process.
 
-**"`isolate reload failed: missing fields`"** — You added a non-
-nullable field to a `State` class without a default value. The
-existing State instance can't be migrated. Hot restart, or make the
-field nullable / give it a default.
+**A new field throws `type 'Null' is not a subtype of type …` after a
+reload** — Existing objects never ran the constructor that sets the new
+field. Give it an initializer where it's declared, or hot restart. A
+non-nullable field with neither is a compile error, and the reload reports
+it.
 
 ## Implementation references
 
 - `lib/src/runtime/hot_reload.dart` — `HotReloadController`
+- `lib/src/runtime/tui_runtime.dart` — `TuiRuntime.reassembleApplication`,
+  shared by the terminal and browser hosts
 - `lib/src/widgets/framework.dart` — `BuildOwner.reassembleApplication`,
   `State.reassemble`
 - `lib/src/animation/ticker_scheduler.dart` — reassemble registry

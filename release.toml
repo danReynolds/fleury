@@ -1,8 +1,9 @@
-schema = 1
+schema = 2
 
-[release.fleury]                 # tag fleury-v{version}
+[release.fleury]                 # tag also verifies/deploys the matching Pad build
 path = "packages/fleury"
-publish = ["pub.dev"]
+tag = "fleury-v{version}"
+publish = ["pub.dev", "git-tag"]
 
 [release.fleury_mcp]                 # tag fleury_mcp-v{version}
 path = "packages/fleury_mcp"
@@ -18,7 +19,8 @@ publish = ["pub.dev"]
 
 [release.fleury_web]                 # tag fleury_web-v{version}
 path = "packages/fleury_web"
-publish = ["pub.dev"]
+tag = "fleury_web-v{version}"
+publish = ["pub.dev", "git-tag"]
 
 [release.fleury_widgets]                 # tag fleury_widgets-v{version}
 path = "packages/fleury_widgets"

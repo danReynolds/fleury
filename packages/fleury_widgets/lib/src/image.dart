@@ -222,7 +222,7 @@ class _DecodedSource implements ImageSource {
 /// Image.file('logo.png')                      // most common
 /// Image.bytes(bytes, fit: ImageFit.cover)
 /// Image.decoded(decoded, glyph: ImageGlyph.sextant)
-/// Image(source: ImageSource.bytes(buf))       // long form, still works
+/// Image(source: ImageSource.bytes(buf))       // the explicit form
 /// ```
 ///
 /// Decoding is synchronous and cached on the [ImageSource]; the

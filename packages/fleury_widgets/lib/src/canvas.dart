@@ -60,16 +60,6 @@ abstract class CanvasPainter {
   void paint(CanvasContext ctx);
 }
 
-/// A braille drawing surface — each terminal cell holds a 2×4 pixel grid,
-/// so lines and dots render at sub-cell resolution. Use it to build custom
-/// data visualisations; `LineChart` is built on the same primitive.
-///
-/// ```dart
-/// Canvas(
-///   bounds: const CanvasBounds(minX: 0, maxX: 100, minY: -10, maxY: 10),
-///   painter: _SinePainter(),
-/// )
-/// ```
 /// Sub-cell rendering style for [Canvas]. Different markers trade
 /// vertical/horizontal resolution against font coverage and aesthetic.
 enum CanvasMarker {
@@ -116,10 +106,13 @@ SubCellBuffer subCellBufferFor(CanvasMarker marker, int cols, int rows) =>
 
 /// A sub-cell drawing surface for custom plots, diagrams, and markers.
 ///
-/// The [painter] draws in the logical coordinate space described by [bounds];
-/// [marker] selects how those points map onto terminal cells. Provide semantic
-/// metadata when the drawing communicates information that is not otherwise
-/// represented by an enclosing widget.
+/// Subclass [CanvasPainter] and draw with [CanvasContext.drawLine] and
+/// [CanvasContext.drawDot] in the logical coordinate space described by
+/// [bounds]. [marker] selects how those points map onto terminal cells; the
+/// braille default packs a 2×4 grid of dots into each cell, and `LineChart`
+/// is built on the same primitive. Provide semantic metadata when the drawing
+/// communicates information that is not otherwise represented by an
+/// enclosing widget.
 class Canvas extends StatelessWidget {
   const Canvas({
     super.key,

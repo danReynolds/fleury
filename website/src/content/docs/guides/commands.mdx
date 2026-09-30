@@ -1,10 +1,10 @@
 ---
-title: Commands
+title: Commands & shortcuts
 description: Define an application action once and expose it wherever users work.
 ---
 
 import FleuryExample from '../../../components/FleuryExample.astro';
-import CodeDemoSplit from '../../../components/CodeDemoSplit.astro';
+import GuidePad from '../../../components/GuidePad.astro';
 
 Use a command when the same action should appear in several places, or when the
 available actions need to be discoverable. For a single control, call its
@@ -20,28 +20,7 @@ An `AppCommand` ties together the pieces every entry point needs: a stable ID,
 user-facing title, availability, shortcuts, and one callback. Define **Save
 current file** once, and every surface reads the same definition:
 
-<CodeDemoSplit file="save_file.dart" layout="demo-wide">
-<Fragment slot="code">
-```dart
-const saveFile = CommandId('editor.save');
-
-AppCommand saveFileCommand() => AppCommand(
-  id: saveFile,
-  title: 'Save current file',
-  shortcuts: [KeySequence.ctrl.s],
-  enabled: (_) => dirty,
-  run: (_) => save(),
-);
-
-CommandScope(
-  commands: [saveFileCommand()],
-  child: const CommandButton(
-    command: saveFile,
-    label: 'Save',
-  ),
-)
-```
-</Fragment>
+<GuidePad id="commands.overview" layout="demo-wide">
 <FleuryExample
   slot="demo"
   id="commands.overview"
@@ -50,10 +29,10 @@ CommandScope(
   rows={12}
   interactive
 />
-</CodeDemoSplit>
+</GuidePad>
 
 Edit the document. **Save**, **Ctrl+S**, and the **Ctrl+K** palette all reach
-`save()`. The same `enabled` rule disables every surface after saving, while
+`_save()`. The same `enabled` rule disables every surface after saving, while
 the command's ID remains stable for semantics, tests, and agents.
 
 `CommandButton` is an ordinary Fleury button backed by a command ID. It reads
@@ -66,18 +45,39 @@ Register commands where they are relevant:
 
 ```dart
 FleuryApp(
-  commands: [openCommands],
+  title: 'Editor',
+  commands: [openCommandsCommand()],
   home: CommandScope(
-    commands: [newFile, saveFileCommand()],
+    commands: [newFileCommand(), saveFileCommand()],
     child: const EditorScreen(),
   ),
 )
 ```
 
 Commands passed to `FleuryApp` remain available across the app. A
-`CommandScope` adds actions for its subtree and installs their shortcuts. A
-palette opened inside the editor with `CommandPalette.open(context)` discovers
-both sets; editor commands disappear when that scope leaves the tree.
+`CommandScope` adds actions for its subtree and installs their shortcuts.
+Editor commands disappear when that scope leaves the tree.
+
+The palette itself is opened by a command. Fleury doesn't reserve a palette
+shortcut, so choose one:
+
+```dart
+AppCommand openCommandsCommand() => AppCommand(
+  id: const CommandId('app.commands'),
+  title: 'Open commands',
+  shortcuts: [KeySequence.ctrl.k],
+  showInPalette: false,
+  run: (invocation) {
+    final context = invocation.buildContext;
+    if (context != null) unawaited(CommandPalette.open(context));
+  },
+);
+```
+
+`invocation.buildContext` is where the command ran. For a shortcut on a command
+registered with `FleuryApp`, that is the focused widget, so a palette opened
+there with `CommandPalette.open` lists every command active at that point:
+inside the editor, both the app's commands and the editor's.
 
 This is the main value of the model: the interface can ask which actions are
 available *here* instead of every button, shortcut, palette, test, or agent

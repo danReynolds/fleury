@@ -348,10 +348,11 @@ const _semanticActionQueueHold = Duration(milliseconds: 500);
 /// Wrap the root in `FleuryApp(home: ...)` for Fleury's standard navigation
 /// shell, or supply a `Navigator`/custom shell explicitly. Bare single-screen
 /// roots remain valid.
-/// Pass your `main()` argv as [args] if the app reads it: a dev hot-reload
-/// respawn re-runs the entrypoint, and a process cannot portably recover its
-/// own script arguments, so without this the restarted app sees an empty argv
-/// and may show something other than what was asked for.
+/// Pass your `main()` argv as [args] if the app reads it. Under a plain
+/// `dart run`, the hot-reload supervisor runs the app in a child process, and
+/// a process cannot portably recover its own script arguments, so without this
+/// the app sees an empty argv from its first launch and after every restart.
+/// (`fleury run` passes the arguments itself.)
 ///
 /// ```dart
 /// Future<void> main(List<String> args) => runApp(MyApp(), args: args);
@@ -1799,13 +1800,6 @@ Future<AppExit> _runAppImpl(
                   onReassemble: () {
                     if (disposed) return;
                     runtime.reassembleApplication();
-                    // Fire scheduler-level reassemble after the element-tree
-                    // walk so Animations + FrameTickers reset to a
-                    // known state under the freshly-reloaded code. Order
-                    // matters: tree reassembly may dispose old controllers
-                    // (which unregister themselves), so reset only the
-                    // controllers that survive.
-                    binding.tickerScheduler.reassemble();
                     scheduleFrame('hot-reload');
                   },
                   onReloadReport: reportReload,

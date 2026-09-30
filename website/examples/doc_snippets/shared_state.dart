@@ -9,13 +9,14 @@ import '../lib/state_management_guide.dart';
 
 export '../lib/state_management_guide.dart';
 
+// #docregion external-owner
 Future<void> main(List<String> args) async {
   final cart = Cart();
   try {
     await runApp(
       FleuryApp(
-        title: 'Cart',
-        home: CartView(cart: cart),
+        title: 'Shop',
+        home: Scope(cart, child: const ShopScreen()),
       ),
       args: args,
     );
@@ -23,21 +24,15 @@ Future<void> main(List<String> args) async {
     cart.dispose();
   }
 }
+// #enddocregion external-owner
 
 Widget localStateDemoApp() =>
     const FleuryApp(title: 'Counter', home: LocalCounter());
 
 Widget projectScopeDemoApp() =>
-    const FleuryApp(title: 'Project', home: ProjectScopeScreen());
-
-Widget projectContextDemoApp() =>
     const FleuryApp(title: 'Project', home: ProjectScreen());
+
+Widget shopDemoApp() => const FleuryApp(title: 'Shop', home: Shop());
 
 Widget cartNotifierDemoApp() =>
     const FleuryApp(title: 'Cart', home: CartDemo());
-
-Widget cartContextDemoApp() =>
-    const FleuryApp(title: 'Cart', home: CartDemo(contextReader: true));
-
-Widget cartValueDemoApp() =>
-    const FleuryApp(title: 'Cart', home: CartValueDemo());

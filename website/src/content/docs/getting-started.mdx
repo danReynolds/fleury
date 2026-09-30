@@ -5,21 +5,30 @@ description: Install Fleury and build your first terminal app in a few minutes.
 
 import FleuryExample from '../../components/FleuryExample.astro';
 
-Fleury is a retained-mode UI framework — the familiar Flutter model of a widget
-tree rebuilt declaratively, `setState` and all — that paints to a **grid of
-cells** instead of pixels. One widget tree renders in a terminal *and* a browser.
-Fleury can also project that tree into a **semantic graph**, so a test or an
-agent can read it like a screen reader.
+Fleury is a Dart UI framework for terminal apps that also run in a browser. If
+you know Flutter, the model is the same: a tree of widgets, `build`, and
+`setState`, painted to a grid of character cells instead of pixels.
 
-The status panel below is live — a real Fleury tree compiled to JavaScript and
-running in your browser, from the *same* Dart you'll run in a terminal.
+The status panel below is live: a real Fleury app compiled to JavaScript and
+running in your browser, from the same Dart you'll run in a terminal.
 
 <FleuryExample id="home.monitor" cols={34} rows={9} />
 
-In about five minutes you'll build exactly this from scratch, run it in your
-terminal, and watch it run in a browser. Let's go.
+In about five minutes you'll build this panel, run it in your terminal, and
+open it in a browser.
 
-## 1. Create a project
+Prefer to try it before installing anything? [Fleury Pad](/fleury/pad/) runs a
+Dart editor and a live app with hot reload in your browser.
+
+## Before you start
+
+- The [Dart SDK](https://dart.dev/get-dart), version 3.10.4 or later. Check
+  with `dart --version`.
+- Dart's global package directory on your `PATH`, so the `fleury` command you
+  install in step 1 can be found. That is `~/.pub-cache/bin` on macOS and
+  Linux; `dart pub global activate` prints the exact path if it's missing.
+
+## 1. Install the CLI and create a project
 
 Until the packages are published, activate the CLI and scaffold against the
 current Git repository:
@@ -32,47 +41,52 @@ fleury create my_app --dependency-source=git
 cd my_app
 ```
 
-`fleury create` writes a small application, its first widget tests, and runs
-`dart pub get`. To use an existing empty directory, run
+:::note[Once Fleury is on pub.dev]
+Install with `dart pub global activate fleury`, and `fleury create my_app`
+needs no flag. Until then, keep `--dependency-source=git`: the hosted
+packages don't exist yet, so `dart pub get` fails without it.
+:::
+
+`fleury create` writes a small application, its first widget tests, and VS Code
+settings, then runs `dart pub get`. To use an existing empty directory, run
 `fleury create . --dependency-source=git` from inside it.
-Once Fleury is on pub.dev, the normal path becomes simply:
 
-```sh
-dart pub global activate fleury
-fleury create my_app
-```
-
-`fleury` is the framework plus its theme-free primitives (layout, `Text`, text
-editing, focus), and `fleury_widgets` is the theme-driven control library on
-top (buttons, selects, tables, charts). The [core and targets](/fleury/architecture/core-and-targets/)
-page explains the split.
+The project depends on two packages:
+`fleury`, the framework and its core widgets (layout, text and text editing,
+focus, buttons, lists, navigation, theming), and `fleury_widgets`, the larger
+control library on top (checkboxes and selects, tables, charts and meters,
+tabs, dialogs, and more). [Core and targets](/fleury/architecture/core-and-targets/)
+explains the split.
 
 ## 2. Run the app
 
 A Fleury program is a widget tree handed to `runApp`. `FleuryApp` is the
-lightweight app shell: its `home` screen gets app-wide navigation and theming. You build everything
-beneath it with the familiar `Widget` / `build` / `setState` model.
+lightweight app shell: its `home` screen gets app-wide navigation and theming.
+You build everything beneath it with the familiar `Widget` / `build` /
+`setState` model.
 
-Run the app from your terminal:
+From the project directory, run:
 
 ```sh
 fleury run
 ```
 
-The launcher finds `bin/run_app.dart` automatically. You can also use
-`dart run fleury run` without a globally activated CLI. Press `Ctrl-C` in the
-terminal to quit. **Saving a changed file hot reloads the running app in
-place**, keeping widget state, through Fleury's built-in
-[dev supervisor](/fleury/guides/hot-reload/).
+You can also use `dart run fleury run` without a globally activated CLI.
 
-For debugging, open the generated project in VS Code with the official
-[Dart extension](https://marketplace.visualstudio.com/items?itemName=Dart-Code.dart-code)
-and press F5. The launch configuration uses an interactive terminal, so
-rendering and input work while the Dart debugger is attached. The scaffold
-also enables reload on save with `dart.hotReloadOnSave`.
+Press Enter or click **Increment** and watch the counter change. The
+application lives in `lib/app.dart`; `bin/run_app.dart` is the small native
+entrypoint that `fleury run` starts.
 
-Press Enter or click **Increment** and watch the counter change. The application
-lives in `lib/app.dart`; `bin/run_app.dart` is the small native host.
+Leave it running and try a hot reload: in `lib/app.dart`, change the `Count:`
+label to `Clicks:` and save. The running app updates in place, and the count
+keeps its value. Press `Ctrl-C` in the terminal to quit.
+
+In VS Code with the [Dart extension](https://marketplace.visualstudio.com/items?itemName=Dart-Code.dart-code),
+you can press F5 instead: the generated launch configuration runs the app in an
+integrated terminal under the debugger, and saving reloads it the same way.
+Save-to-reload under `fleury run` needs macOS or Linux; on Windows, use F5. A
+plain `dart run bin/run_app.dart` also works; [Hot reload](/fleury/guides/hot-reload/)
+explains the difference.
 
 ## 3. Drive state over time
 
@@ -141,6 +155,11 @@ class _StatusAppState extends State<StatusApp> {
 }
 ```
 
+This edit changes the app's structure and starts a timer in `initState`, which a
+reload doesn't rerun, so **restart** instead: press `Ctrl+G` to open the debug
+shell, then `F5`. (Quitting and running `fleury run` again works too.) The
+uptime line ticks every second, and the progress bar fills over the minute.
+
 The scaffold's test describes the counter you just replaced, so update it at
 the same time:
 
@@ -160,16 +179,15 @@ void main() {
 }
 ```
 
-Run `dart test`, then launch the app again. The uptime line ticks every second,
-and the progress bar fills over the minute.
+Then run `dart test`.
 
 ## 4. Compose widgets
 
-The widget library is broad — [browse the catalog](/fleury/widgets/) for API details and
-live examples across the main widget families. Charts, meters, and the rest
-compose like any other widget. Replace `lib/app.dart` with the stateless panel
-behind the live example at the top of this page — the whole file: `MyApp` stays,
-the timer and its `dart:async` import go:
+The widget library is broad — [browse the reference](/fleury/widgets/) for API
+details and live examples of every widget. Charts, meters, and the rest compose
+like any other widget. Replace `lib/app.dart` with the stateless panel behind
+the live example at the top of this page — the whole file: `MyApp` stays, the
+timer and its `dart:async` import go:
 
 ```dart title="lib/app.dart"
 import 'package:fleury/fleury.dart';
@@ -207,32 +225,39 @@ class StatusApp extends StatelessWidget {
 }
 ```
 
+Restart once more (`Ctrl+G`, then `F5`), since `StatusApp` is now stateless.
+From here, edits reload on save: change the CPU value from `0.62` to `0.95` and
+save, and the gauge updates in place.
+
 Change the test expectation from `uptime: 0s` to `CPU`, then run `dart test`
 again. Those are fixed sample values. To make the panel live, feed them from
 state and call `setState` — exactly the way step 3 drove the progress bar from
 `_tick`. State, lifecycle, composition: the same three moves, however rich the
 screen gets.
 
-## 5. Run the same widget tree in a browser
+## 5. Open it in a browser
 
-Preview the app you already have, without changing its code or adding any
-browser dependencies:
+The same app runs in a browser tab without any changes. The `serve` bridge
+starts the native app and streams its frames to the page:
 
 ```sh
 fleury serve --spawn dart --enable-vm-service=0 run bin/run_app.dart
 ```
 
-Open the printed URL to see the same widget tree in a browser tab, streamed
-from the native process. Saving source files reloads the preview; the
-`--enable-vm-service=0` flag makes that possible. Stop the preview with
-`Ctrl-C` in the terminal running `serve`.
+Open the printed URL. That's your panel, in a browser, streamed from the native
+process. Saving a file reloads it here too: `--enable-vm-service=0` is what lets
+the served app reload, and without it the session runs but never reloads.
+Stop the preview with `Ctrl-C` in the terminal running `serve`.
 
-## 6. Optional: build a standalone browser app
+## 6. Optional: ship a browser bundle
 
-To ship a browser app that runs without the native process, compile the shared
-widget tree to JavaScript. Its host entrypoint and imports are target-specific.
-Add `fleury_web` and `web` to `pubspec.yaml`; during the pre-release window,
-merge these entries into the existing `dependencies:` section:
+`serve` needs the native process running. To ship the app as a static page with
+no backend, compile it to JavaScript instead. That requires a **web-safe**
+library: one that doesn't import `dart:io`, so the compiler can target the
+browser.
+
+Add `fleury_web` and `web` to `pubspec.yaml`, merging these entries into the
+existing `dependencies:` section (do not add a second section):
 
 ```yaml
 dependencies:
@@ -243,68 +268,70 @@ dependencies:
   web: ^1.1.1
 ```
 
-Run `dart pub get` after editing the pubspec.
+Then run `dart pub upgrade`, so every Fleury package resolves from the same
+commit.
 
-Then move `StatusApp` into its own web-safe library, `lib/status_app.dart` —
-body unchanged, with these web-safe imports at the top:
+`lib/app.dart` uses no native-only APIs, so it becomes web-safe by switching its
+two imports to the web-safe libraries. Nothing else in the file changes, and
+`bin/run_app.dart` keeps running it in the terminal:
 
-```dart title="lib/status_app.dart"
+```dart title="lib/app.dart"
 import 'package:fleury/fleury_core.dart';
 import 'package:fleury_widgets/fleury_widgets_web.dart';
 ```
 
-The native entrypoint remains small and target-specific:
-
-```dart title="lib/app.dart"
-import 'package:fleury/fleury.dart';
-import 'package:my_app/status_app.dart';
-
-class MyApp extends StatelessWidget {
-  const MyApp({super.key});
-
-  @override
-  Widget build(BuildContext context) {
-    return const FleuryApp(title: 'Status monitor', home: StatusApp());
-  }
-}
-```
-
-Then mount the shared tree from the browser entrypoint:
+The browser entrypoint mounts the same `MyApp` into a page element:
 
 ```dart title="web/main.dart"
-import 'package:fleury/fleury_core.dart';
 import 'package:fleury_web/fleury_web.dart';
-import 'package:my_app/status_app.dart';
+import 'package:my_app/app.dart';
 import 'package:web/web.dart' as web;
 
 Future<void> main() async {
-  final host = web.document.getElementById('app')!;
   await mountApp(
-    () => const FleuryApp(title: 'Status monitor', home: StatusApp()),
-    into: host,
+    () => const MyApp(),
+    into: web.document.getElementById('app')!,
   );
 }
 ```
 
-Compile the browser entrypoint:
+The page gives that element an explicit size and a monospace font:
+
+```html title="web/index.html"
+<!doctype html>
+<html>
+  <head>
+    <meta charset="utf-8">
+    <title>Status monitor</title>
+  </head>
+  <body>
+    <div id="app" style="width: 40ch; height: 12em; font-family: monospace"></div>
+    <script src="app.js"></script>
+  </body>
+</html>
+```
+
+Compile, then open `web/index.html` in a browser:
 
 ```sh
 dart compile js web/main.dart -o web/app.js -O2
 ```
 
-Host it in a page with a sized `#app` element. The minimal `web/index.html`
-and hosting instructions live in
-[Deployment & distribution](/fleury/guides/deployment/).
+The output is static files you can host anywhere.
+[Deployment & distribution](/fleury/guides/deployment/) covers hosting, and when
+to choose the bundle or the serve bridge.
 
 ## Where to next
 
-- [Widgets](/fleury/widgets/) — every exported higher-level widget plus the most-used
-  core primitives, with live examples where available.
-- [Navigation](/fleury/guides/navigation/) — move between screens, present
-  dialogs, return results, guard back actions, and embed independent flows.
-- [Key handling](/fleury/guides/focus-and-keyboard/) — add shortcuts,
-  sequences, discovery, and lower-level key handling.
-- [Core and targets](/fleury/architecture/core-and-targets/) — how one app runs in a
-  terminal, an embedded browser bundle, and a served browser session.
-- [Built for agents](/fleury/architecture/agents-and-semantics/) — the semantic app
-  graph that lets tests and AI agents drive the UI.
+- [Tutorial: a filterable list](/fleury/tutorial/) — build an interactive app
+  with a text field, live filtering, and tests.
+- [Guides](/fleury/guides/) — task-focused guides with live examples: layout,
+  lists, forms, navigation, key handling, testing, and more.
+- [Widgets & state](/fleury/concepts/widgets-and-state/) — how `build`,
+  `setState`, and the widget lifecycle fit together.
+- [Widget reference](/fleury/widgets/) — every widget, with live examples and
+  generated API tables.
+- [Hot reload](/fleury/guides/hot-reload/) — what survives a reload, and when
+  to restart.
+- [Built for agents](/fleury/architecture/agents-and-semantics/) — the semantic
+  tree that lets tests and AI agents drive the UI.

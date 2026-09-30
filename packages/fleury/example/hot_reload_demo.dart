@@ -1,24 +1,19 @@
-// Hot reload demo — edit any of the constants marked `EDIT ME` below,
-// save the file, and watch the running terminal update without losing
-// the counter value or the cursor position.
+// Hot reload demo — edit the constants marked EDIT ME, then save.
+// Run from packages/fleury with:
 //
-// Supported workflow:
+//   dart run fleury run example/hot_reload_demo.dart
 //
-//   1. VS Code: open packages/fleury, press F5. fleury ships a
-//      `.vscode/launch.json` that points Dart-Code at an integrated
-//      terminal. After editing, run `Dart: Hot Reload` from the command
-//      palette. To reload on save, opt into
-//      `dart.hotReloadOnSave: "allIfDirty"` in your user settings.
+// Press → to change the counter before editing. Reload updates the title
+// and behavior while the existing count and focus remain. Ctrl+G opens the
+// debugger; F5 there restarts the app and resets its state.
 //
-//   2. Another debugger or tool may use the same Dart VM-service
-//      `reloadSources` RPC. Merely enabling the VM service or watching
-//      files is not enough: a VM-service client must request the reload.
+// An editor debug session can request the same Dart VM-service reloadSources
+// RPC. Generated projects enable reload-on-save; in this checkout, use
+// Dart: Hot Reload or configure dart.hotReloadOnSave: "allIfDirty".
 //
-// What hot reload DOES preserve: counter value, focus position,
-// scroll offsets, and State fields. Animation primitives run their
-// documented reassemble behavior.
-// What it does NOT preserve: anything you compute in main() or
-// top-level state that is set once at startup.
+// Existing State fields and initialized globals survive reload; their
+// initializers do not run again. Animation primitives run their documented
+// reassemble behavior. See doc/hot_reload.md for runtime details.
 
 import 'package:fleury/fleury.dart';
 

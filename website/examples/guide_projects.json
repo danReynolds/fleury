@@ -1,0 +1,474 @@
+{
+  "home.pad": [
+    {
+      "label": "hello_fleury.dart",
+      "source": "website/examples/lib/home_pad.dart"
+    }
+  ],
+  "guide.hot-reload": [
+    {
+      "label": "app.dart",
+      "source": "website/examples/lib/registry.dart",
+      "declaration": "example"
+    },
+    {
+      "source": "website/examples/lib/hot_reload_guide.dart",
+      "label": "notes.dart"
+    }
+  ],
+  "keybindings.basic": [
+    {
+      "label": "key_bindings.dart",
+      "source": "website/examples/lib/registry.dart",
+      "declaration": "_KeyBindingsTourState"
+    }
+  ],
+  "keydetector.basic": [
+    {
+      "label": "key_detector.dart",
+      "source": "website/examples/lib/registry.dart",
+      "declaration": "_KeyDetectorTourState"
+    }
+  ],
+  "focusnode.programmatic": [
+    {
+      "label": "focus_tour.dart",
+      "source": "website/examples/lib/registry.dart",
+      "declaration": "_ProgrammaticFocusTourState"
+    }
+  ],
+  "focusdetector.basic": [
+    {
+      "label": "focus_detector.dart",
+      "source": "website/examples/lib/registry.dart",
+      "declaration": "_FocusDetectorTourState"
+    }
+  ],
+  "animation.progress": [
+    {
+      "label": "package_route.dart",
+      "source": "website/examples/lib/registry.dart",
+      "declaration": "_AnimationProgressTourState"
+    }
+  ],
+  "animation.timing": [
+    {
+      "label": "shared_progress.dart",
+      "source": "website/examples/lib/registry.dart",
+      "declaration": "_sharedTimingStatus"
+    },
+    {
+      "label": "independent_timing.dart",
+      "source": "website/examples/lib/registry.dart",
+      "declaration": "_independentTimingStatus"
+    }
+  ],
+  "animation.manual": [
+    {
+      "label": "manual_route.dart",
+      "source": "website/examples/lib/registry.dart",
+      "declaration": "_ManualAnimationTourState"
+    }
+  ],
+  "animation.effects": [
+    {
+      "label": "connection_status.dart",
+      "source": "website/examples/lib/registry.dart",
+      "declaration": "_EntranceEffectTourState"
+    }
+  ],
+  "animation.trigger": [
+    {
+      "label": "pilot_validation.dart",
+      "source": "website/examples/lib/registry.dart",
+      "declaration": "_ValidationFeedbackTourState"
+    }
+  ],
+  "animation.presence": [
+    {
+      "label": "effect_picker.dart",
+      "source": "website/examples/lib/registry.dart",
+      "declaration": "_EffectPickerTourState"
+    }
+  ],
+  "animation.frames": [
+    {
+      "label": "packet_transfer.dart",
+      "source": "website/examples/lib/registry.dart",
+      "declaration": "_FrameCadenceTourState"
+    }
+  ],
+  "animation.ticker": [
+    {
+      "label": "ticker_simulation.dart",
+      "source": "website/examples/lib/registry.dart",
+      "declaration": "_TickerSimulationTourState"
+    }
+  ],
+  "lists.files": [
+    {
+      "source": "website/examples/lib/lists/file_list.dart"
+    }
+  ],
+  "lists.tasks": [
+    {
+      "source": "website/examples/lib/lists/task_browser.dart"
+    }
+  ],
+  "lists.horizontal": [
+    {
+      "source": "website/examples/lib/lists/horizontal_list.dart"
+    }
+  ],
+  "lists.wide-content": [
+    {
+      "source": "website/examples/lib/lists/horizontal_content.dart"
+    }
+  ],
+  "datatable.rows": [
+    {
+      "source": "website/examples/lib/datatable_rows.dart"
+    }
+  ],
+  "lists.document": [
+    {
+      "source": "website/examples/lib/lists/scroll_edges.dart"
+    }
+  ],
+  "input.scrolling": [
+    {
+      "label": "Scroll behavior",
+      "source": "website/examples/lib/input/scroll_panes.dart",
+      "region": "focus"
+    }
+  ],
+  "input.actions": [
+    {
+      "label": "Interaction",
+      "source": "website/examples/lib/input/file_actions.dart",
+      "region": "focus"
+    }
+  ],
+  "input.splitter": [
+    {
+      "label": "Pointer",
+      "source": "website/examples/lib/input/split_pane.dart",
+      "region": "focus"
+    },
+    {
+      "label": "Keyboard",
+      "source": "website/examples/lib/input/split_pane.dart",
+      "region": "keyboard"
+    }
+  ],
+  "input.press": [
+    {
+      "label": "Press lifecycle",
+      "source": "website/examples/lib/input/press_tile.dart",
+      "region": "focus"
+    }
+  ],
+  "input.nesting": [
+    {
+      "label": "Interaction",
+      "source": "website/examples/lib/input/nested_row.dart",
+      "region": "focus"
+    }
+  ],
+  "forms.project": [
+    {
+      "source": "website/examples/lib/forms/project_form.dart"
+    }
+  ],
+  "forms.save": [
+    {
+      "source": "website/examples/lib/forms/save_project.dart"
+    }
+  ],
+  "forms.related": [
+    {
+      "source": "website/examples/lib/forms/related_fields.dart"
+    }
+  ],
+  "forms.custom": [
+    {
+      "source": "website/examples/lib/forms/custom_field.dart"
+    }
+  ],
+  "loading.image": [
+    {
+      "label": "photo_viewer.dart",
+      "source": "website/examples/lib/loading_data_guide.dart",
+      "region": "photo-viewer"
+    },
+    {
+      "label": "fetch_photo.dart",
+      "source": "website/examples/lib/loading_data_guide.dart",
+      "region": "fetch-photo"
+    }
+  ],
+  "loading.snapshot": [
+    {
+      "label": "describe.dart",
+      "source": "website/examples/lib/loading_data_guide.dart",
+      "region": "describe"
+    },
+    {
+      "label": "snapshot_preview.dart",
+      "source": "website/examples/lib/loading_data_guide.dart",
+      "region": "explorer",
+      "block": 0
+    },
+    {
+      "label": "snapshot_explorer.dart",
+      "source": "website/examples/lib/loading_data_guide.dart",
+      "region": "explorer",
+      "block": 1
+    }
+  ],
+  "loading.stream": [
+    {
+      "label": "transmission_view.dart",
+      "source": "website/examples/lib/loading_data_guide.dart",
+      "region": "transmission-view"
+    },
+    {
+      "label": "transmission.dart",
+      "source": "website/examples/lib/loading_data_guide.dart",
+      "region": "transmission"
+    }
+  ],
+  "state.local-counter": [
+    {
+      "label": "local_counter.dart",
+      "source": "website/examples/lib/state_management_guide.dart",
+      "region": "local"
+    }
+  ],
+  "state.project-scope": [
+    {
+      "label": "project_screen.dart",
+      "source": "website/examples/lib/state_management_guide.dart",
+      "region": "project-owner"
+    },
+    {
+      "label": "project_title.dart",
+      "source": "website/examples/lib/state_management_guide.dart",
+      "region": "project-builder"
+    },
+    {
+      "label": "project_path.dart",
+      "source": "website/examples/lib/state_management_guide.dart",
+      "region": "project-context"
+    },
+    {
+      "label": "project.dart",
+      "source": "website/examples/lib/state_management_guide.dart",
+      "region": "project"
+    }
+  ],
+  "state.shop": [
+    {
+      "label": "shop.dart",
+      "source": "website/examples/lib/state_management_guide.dart",
+      "region": "shop-owner"
+    },
+    {
+      "label": "cart_readers.dart",
+      "source": "website/examples/lib/state_management_guide.dart",
+      "region": "shop-readers"
+    }
+  ],
+  "state.cart-notifier": [
+    {
+      "label": "NotifierBuilder",
+      "source": "website/examples/lib/state_management_guide.dart",
+      "region": "cart-builder"
+    },
+    {
+      "label": "context.listen",
+      "source": "website/examples/lib/state_management_guide.dart",
+      "region": "cart-listen"
+    }
+  ],
+  "navigation.basics": [
+    {
+      "label": "navigation_demo.dart",
+      "source": "website/examples/lib/registry.dart",
+      "declaration": "_NavigationBasicsTourState"
+    }
+  ],
+  "navigation.placement": [
+    {
+      "label": "dialog_placement.dart",
+      "source": "website/examples/lib/registry.dart",
+      "declaration": "_DialogPlacementTourState"
+    }
+  ],
+  "navigation.guard": [
+    {
+      "label": "guarded_editor.dart",
+      "source": "website/examples/lib/registry.dart",
+      "declaration": "_GuardedEditorTourState"
+    }
+  ],
+  "navigation.nested-flow": [
+    {
+      "label": "projects_screen.dart",
+      "source": "website/examples/lib/registry.dart",
+      "declaration": "_NestedProjectsTour"
+    },
+    {
+      "label": "setup_flow.dart",
+      "source": "website/examples/lib/registry.dart",
+      "declaration": "_NestedSetupTour"
+    },
+    {
+      "label": "setup_step.dart",
+      "source": "website/examples/lib/registry.dart",
+      "declaration": "_NestedFlowStepTour"
+    }
+  ],
+  "testing.counter": [
+    {
+      "label": "counter.dart",
+      "source": "website/examples/lib/testing_guide.dart",
+      "declaration": "_CounterState"
+    }
+  ],
+  "testing.preferences": [
+    {
+      "label": "preferences.dart",
+      "source": "website/examples/lib/testing_guide.dart",
+      "declaration": "_PreferencesState"
+    }
+  ],
+  "testing.save": [
+    {
+      "label": "save_status.dart",
+      "source": "website/examples/lib/testing_guide.dart",
+      "declaration": "_SaveStatusState"
+    }
+  ],
+  "testing.animation": [
+    {
+      "label": "animated_upload.dart",
+      "source": "website/examples/lib/testing_guide.dart",
+      "declaration": "_AnimatedUploadState"
+    }
+  ],
+  "themes.custom": [
+    {
+      "label": "amber_theme.dart",
+      "source": "website/examples/lib/registry.dart",
+      "declaration": "_buildCustomTheme"
+    }
+  ],
+  "themes.local_style": [
+    {
+      "label": "local_style.dart",
+      "source": "website/examples/lib/registry.dart",
+      "declaration": "_LocalStyleTourState",
+      "member": "build",
+      "expression": "TextInput"
+    }
+  ],
+  "themes.cell_style": [
+    {
+      "label": "cell_style.dart",
+      "source": "website/examples/lib/registry.dart",
+      "declaration": "_CellStyleTour",
+      "member": "build",
+      "expression": "Column"
+    }
+  ],
+  "themes.interactive_styles": [
+    {
+      "label": "interactive_styles.dart",
+      "source": "website/examples/lib/registry.dart",
+      "declaration": "_interactiveStyle"
+    }
+  ],
+  "themes.local_interactive": [
+    {
+      "label": "local_interactive_style.dart",
+      "source": "website/examples/lib/registry.dart",
+      "declaration": "_LocalStateTour",
+      "member": "build",
+      "expression": "Row"
+    }
+  ],
+  "themes.invalid_none": [
+    {
+      "label": "neutral_invalid.dart",
+      "source": "website/examples/lib/registry.dart",
+      "declaration": "_InvalidNoneTourState",
+      "member": "build",
+      "expression": "FormField"
+    }
+  ],
+  "commands.overview": [
+    {
+      "label": "commands_intro.dart",
+      "source": "packages/samples/lib/src/commands_showcase.dart",
+      "declaration": "_CommandIntroState"
+    }
+  ],
+  "layout.responsive": [
+    {
+      "label": "layout.dart",
+      "source": "website/examples/lib/registry.dart",
+      "declaration": "_ResponsiveWorkspaceTourState",
+      "member": "build",
+      "expression": "LayoutBuilder"
+    }
+  ],
+  "agents.release-checklist": [
+    {
+      "label": "agent_guide.dart",
+      "source": "packages/samples/lib/src/agent_guide.dart"
+    }
+  ],
+  "concepts.clock": [
+    {
+      "label": "clock.dart",
+      "source": "website/examples/lib/concepts.dart",
+      "region": "clock"
+    }
+  ],
+  "flutter.counter": [
+    {
+      "label": "counter.dart",
+      "source": "website/examples/lib/flutter_map.dart",
+      "region": "counter"
+    }
+  ],
+  "flutter.cells": [
+    {
+      "label": "cell_boxes.dart",
+      "source": "website/examples/lib/flutter_map.dart",
+      "region": "cells"
+    }
+  ],
+  "flutter.keys": [
+    {
+      "label": "editor_shortcuts.dart",
+      "source": "website/examples/lib/flutter_map.dart",
+      "region": "keys"
+    }
+  ],
+  "flutter.animation": [
+    {
+      "label": "selection_meter.dart",
+      "source": "website/examples/lib/flutter_map.dart",
+      "region": "animation"
+    }
+  ],
+  "flutter.routes": [
+    {
+      "label": "routes.dart",
+      "source": "website/examples/lib/flutter_map.dart",
+      "region": "routes"
+    }
+  ]
+}

@@ -1,34 +1,11 @@
 import 'dart:async' show unawaited;
-import 'dart:io';
 
-import 'package:fleury/fleury.dart';
+import 'package:fleury/fleury_core.dart';
 
+import 'file_source.dart';
+import 'file_source_default_stub.dart'
+    if (dart.library.io) 'file_source_default_io.dart';
 import 'internal/collection_notifications.dart';
-
-/// Type of filesystem entry rendered by [FileBrowser].
-enum FileBrowserEntryType { directory, file, link, other }
-
-/// One filesystem row in a [FileBrowser].
-final class FileBrowserEntry {
-  const FileBrowserEntry({
-    required this.path,
-    required this.name,
-    required this.type,
-    this.sizeBytes,
-    this.modified,
-    this.hidden = false,
-  });
-
-  final String path;
-  final String name;
-  final FileBrowserEntryType type;
-  final int? sizeBytes;
-  final DateTime? modified;
-  final bool hidden;
-
-  bool get isDirectory => type == FileBrowserEntryType.directory;
-  bool get isFile => type == FileBrowserEntryType.file;
-}
 
 /// Filesystem filter applied by [FileBrowser].
 final class FileBrowserFilterDescriptor {
@@ -39,9 +16,6 @@ final class FileBrowserFilterDescriptor {
 
   bool get isEmpty => query.trim().isEmpty && !showHidden;
 }
-
-/// Predicate for filesystem entries before they become browser rows.
-typedef FileBrowserEntityFilter = bool Function(FileSystemEntity entity);
 
 /// Clipboard behavior for [FileBrowser] selected-entry copy.
 final class FileBrowserCopyOptions {
@@ -70,7 +44,7 @@ final class FileBrowserCopyResult {
   /// Index in the current filtered/logical view.
   final int viewIndex;
 
-  final FileBrowserEntry entry;
+  final FileEntry entry;
   final String text;
   final ClipboardWriteReport report;
 }
@@ -111,9 +85,10 @@ class FileBrowserController extends Notifier {
   }
 
   /// Reads the current directory again, applying the browser's current
-  /// `entityFilter`, and keeps the selected entry selected when it is still
-  /// listed. The browser reads its directory only when it opens one or this
-  /// is called: a new filter closure on a rebuild does not re-read the disk.
+  /// `source` and `entryFilter`, and keeps the selected entry selected when it
+  /// is still listed. The browser reads its directory only when it opens one
+  /// or this is called: a new filter closure on a rebuild does not re-read the
+  /// disk.
   void reload() {
     _checkNotDisposed();
     final host = _host;
@@ -181,7 +156,7 @@ class FileBrowserController extends Notifier {
 
 /// Returns source entry indexes in display order after applying [filter].
 List<int> buildFileBrowserEntryOrder(
-  List<FileBrowserEntry> entries, {
+  List<FileEntry> entries, {
   FileBrowserFilterDescriptor filter = const FileBrowserFilterDescriptor(),
 }) {
   final query = _sanitizeFileText(filter.query).trim().toLowerCase();
@@ -198,26 +173,30 @@ List<int> buildFileBrowserEntryOrder(
   return List<int>.unmodifiable(order);
 }
 
-/// Exports one [FileBrowserEntry] as sanitized single-line clipboard text.
+/// Exports one [FileEntry] as sanitized single-line clipboard text.
 String exportFileBrowserEntry(
-  FileBrowserEntry entry, {
+  FileEntry entry, {
   FileBrowserCopyOptions options = const FileBrowserCopyOptions(),
 }) {
   return _sanitizeFileText(options.copyAbsolutePath ? entry.path : entry.name);
 }
 
 /// Keyboard-navigable filesystem browser with semantic rows and safe copy.
+///
+/// It lists directories from [source]: the local disk by default on native
+/// platforms. A browser embed passes one, such as a [MemoryFileSource].
 class FileBrowser extends StatefulWidget {
   const FileBrowser({
     super.key,
     required this.initialDirectory,
+    this.source,
     this.controller,
     this.focusNode,
     this.autofocus = false,
     this.semanticLabel = 'Files',
     this.maxVisible = 12,
     this.filter = const FileBrowserFilterDescriptor(),
-    this.entityFilter,
+    this.entryFilter,
     this.copySelection = true,
     this.copyOptions = const FileBrowserCopyOptions(),
     this.onActivate,
@@ -229,6 +208,11 @@ class FileBrowser extends StatefulWidget {
   /// Directory used on first mount. Use FileBrowserController.openDirectory
   /// for later navigation; changing this seed does not navigate.
   final String initialDirectory;
+
+  /// Where directories are read from. Defaults to the local disk on native
+  /// platforms; in the browser, pass one, such as a [MemoryFileSource]. Like
+  /// [entryFilter], a new source takes effect at the next directory read.
+  final FileSource? source;
 
   /// External selection and visible-range controller.
   final FileBrowserController? controller;
@@ -248,11 +232,11 @@ class FileBrowser extends StatefulWidget {
   /// Text and hidden-file filter applied to loaded entries.
   final FileBrowserFilterDescriptor filter;
 
-  /// Optional filesystem-entity predicate applied when a directory is read:
-  /// on opening one, and on [FileBrowserController.reload]. A new predicate
+  /// Optional predicate applied to entries when a directory is read: on
+  /// opening one, and on [FileBrowserController.reload]. A new predicate
   /// takes effect at the next of those, so an inline closure rebuilt with
   /// its parent never re-reads the disk.
-  final FileBrowserEntityFilter? entityFilter;
+  final FileEntryFilter? entryFilter;
 
   /// Whether Ctrl+C and semantic copy export the selected entry.
   final bool copySelection;
@@ -261,7 +245,7 @@ class FileBrowser extends StatefulWidget {
   final FileBrowserCopyOptions copyOptions;
 
   /// Called when Enter activates a non-directory entry.
-  final void Function(FileBrowserEntry entry)? onActivate;
+  final void Function(FileEntry entry)? onActivate;
 
   /// Called after a navigation interaction changes directories.
   /// Controller commands notify controller listeners instead.
@@ -280,7 +264,8 @@ class _FileBrowserState extends State<FileBrowser> {
   bool _ownsController = false;
   bool _ownsFocusNode = false;
   late String _currentDirectory;
-  List<FileBrowserEntry> _entries = const [];
+  FileSource? _defaultSource;
+  List<FileEntry> _entries = const [];
   String? _error;
   bool _updatingController = false;
 
@@ -293,7 +278,7 @@ class _FileBrowserState extends State<FileBrowser> {
     _ownsController = widget.controller == null;
     _controller._attach(this);
     _controller._notifications.viewChanges.addListener(_onControllerChange);
-    _currentDirectory = Directory(widget.initialDirectory).absolute.path;
+    _currentDirectory = _source.absolute(widget.initialDirectory);
     _reloadCurrentDirectory(preserveCurrent: true);
   }
 
@@ -324,6 +309,9 @@ class _FileBrowserState extends State<FileBrowser> {
       _keepSelection(() {});
     }
   }
+
+  FileSource get _source =>
+      widget.source ?? (_defaultSource ??= defaultFileSource());
 
   void _reload() {
     setState(() {
@@ -396,59 +384,24 @@ class _FileBrowserState extends State<FileBrowser> {
     _resetSelection(preserveCurrent: preserveCurrent);
   }
 
-  List<FileBrowserEntry> _readEntries(String directory) {
+  List<FileEntry> _readEntries(String directory) {
     try {
-      final entities = Directory(directory).listSync(followLinks: false);
-      final entries = <FileBrowserEntry>[];
-      for (final entity in entities) {
-        if (widget.entityFilter != null && !widget.entityFilter!(entity)) {
-          continue;
-        }
-        final entry = _entryFromEntity(entity);
-        if (!widget.filter.showHidden && entry.hidden) continue;
-        entries.add(entry);
-      }
-      entries.sort(_compareEntries);
+      final filter = widget.entryFilter;
+      final entries = <FileEntry>[
+        for (final entry in _source.list(directory))
+          if ((widget.filter.showHidden || !entry.hidden) &&
+              (filter == null || filter(entry)))
+            entry,
+      ]..sort(_compareEntries);
       _error = null;
-      return List<FileBrowserEntry>.unmodifiable(entries);
-    } on FileSystemException catch (error) {
+      return List<FileEntry>.unmodifiable(entries);
+    } on FileSourceException catch (error) {
       _error = error.message;
-      return const <FileBrowserEntry>[];
+      return const <FileEntry>[];
     }
   }
 
-  FileBrowserEntry _entryFromEntity(FileSystemEntity entity) {
-    final path = entity.absolute.path;
-    final name = _basename(path);
-    FileStat? stat;
-    try {
-      stat = entity.statSync();
-    } on FileSystemException {
-      stat = null;
-    }
-    return FileBrowserEntry(
-      path: path,
-      name: name,
-      type: _typeFor(entity, stat),
-      sizeBytes: stat?.type == FileSystemEntityType.file ? stat!.size : null,
-      modified: stat?.modified,
-      hidden: name.startsWith('.'),
-    );
-  }
-
-  FileBrowserEntryType _typeFor(FileSystemEntity entity, FileStat? stat) {
-    if (entity is Directory) return FileBrowserEntryType.directory;
-    if (entity is File) return FileBrowserEntryType.file;
-    if (entity is Link) return FileBrowserEntryType.link;
-    return switch (stat?.type) {
-      FileSystemEntityType.directory => FileBrowserEntryType.directory,
-      FileSystemEntityType.file => FileBrowserEntryType.file,
-      FileSystemEntityType.link => FileBrowserEntryType.link,
-      _ => FileBrowserEntryType.other,
-    };
-  }
-
-  int _compareEntries(FileBrowserEntry a, FileBrowserEntry b) {
+  int _compareEntries(FileEntry a, FileEntry b) {
     if (a.isDirectory != b.isDirectory) return a.isDirectory ? -1 : 1;
     return a.name.toLowerCase().compareTo(b.name.toLowerCase());
   }
@@ -471,7 +424,7 @@ class _FileBrowserState extends State<FileBrowser> {
   // build, arrow key and row callback reads it, and with a query it is a
   // match over every entry.
   List<int>? _order;
-  List<FileBrowserEntry>? _orderEntries;
+  List<FileEntry>? _orderEntries;
   String? _orderQuery;
   bool? _orderShowHidden;
 
@@ -550,7 +503,7 @@ class _FileBrowserState extends State<FileBrowser> {
 
   void _openDirectory(String path, {bool interaction = true}) {
     setState(() {
-      _currentDirectory = Directory(path).absolute.path;
+      _currentDirectory = _source.absolute(path);
       _reloadCurrentDirectory();
     });
     _controller._directoryChanged();
@@ -558,7 +511,7 @@ class _FileBrowserState extends State<FileBrowser> {
   }
 
   void _goUp() {
-    final parent = Directory(_currentDirectory).parent.absolute.path;
+    final parent = _source.parent(_currentDirectory);
     if (parent == _currentDirectory) return;
     _openDirectory(parent);
   }
@@ -718,8 +671,7 @@ class _FileBrowserState extends State<FileBrowser> {
           ),
           // Reuse the separator row for navigation. Keep it outside the list
           // so file indices, maxVisible, and keyboard selection stay intact.
-          if (Directory(_currentDirectory).parent.absolute.path !=
-              _currentDirectory)
+          if (_source.parent(_currentDirectory) != _currentDirectory)
             Semantics(
               role: SemanticRole.button,
               label: 'Parent directory',
@@ -750,7 +702,7 @@ final class _SelectedFileEntry {
 
   final int viewIndex;
   final int sourceIndex;
-  final FileBrowserEntry entry;
+  final FileEntry entry;
 }
 
 class _FileBrowserRow extends StatelessWidget {
@@ -766,7 +718,7 @@ class _FileBrowserRow extends StatelessWidget {
     required this.onCopy,
   });
 
-  final FileBrowserEntry entry;
+  final FileEntry entry;
   final int sourceIndex;
   final int viewIndex;
   final bool selected;
@@ -781,10 +733,10 @@ class _FileBrowserRow extends StatelessWidget {
     final name = _sanitizeFileText(entry.name);
     final displayName = entry.isDirectory ? '$name/' : name;
     final marker = switch (entry.type) {
-      FileBrowserEntryType.directory => '▸ ',
-      FileBrowserEntryType.file => '  ',
-      FileBrowserEntryType.link => '@ ',
-      FileBrowserEntryType.other => '? ',
+      FileEntryType.directory => '▸ ',
+      FileEntryType.file => '  ',
+      FileEntryType.link => '@ ',
+      FileEntryType.other => '? ',
     };
     final prefix = activeSelection ? '> ' : '  ';
     final style = activeSelection
@@ -831,14 +783,14 @@ class _FileBrowserRow extends StatelessWidget {
   }
 }
 
-Map<String, Object?> _safeMetadata(FileBrowserEntry entry) {
+Map<String, Object?> _safeMetadata(FileEntry entry) {
   return <String, Object?>{
     if (entry.sizeBytes != null) 'sizeBytes': entry.sizeBytes,
     if (entry.modified != null) 'modified': entry.modified!.toIso8601String(),
   };
 }
 
-Map<String, Object?> _selectedEntryState(FileBrowserEntry entry) {
+Map<String, Object?> _selectedEntryState(FileEntry entry) {
   return <String, Object?>{
     'selectedKey': _sanitizeFileText(entry.path),
     'selectedPath': _sanitizeFileText(entry.path),
@@ -847,7 +799,7 @@ Map<String, Object?> _selectedEntryState(FileBrowserEntry entry) {
   };
 }
 
-bool _entryMatches(FileBrowserEntry entry, String query) {
+bool _entryMatches(FileEntry entry, String query) {
   final text = [
     entry.name,
     entry.type.name,
@@ -863,20 +815,11 @@ bool _isSubsequence(String needle, String hay) {
   return i == needle.length;
 }
 
-String _basename(String path) {
-  final separator = Platform.pathSeparator;
-  final normalized = path.endsWith(separator) && path.length > 1
-      ? path.substring(0, path.length - 1)
-      : path;
-  final i = normalized.lastIndexOf(separator);
-  return i < 0 ? normalized : normalized.substring(i + 1);
-}
-
 String _sanitizeFileText(String text) {
   return sanitizeSingleLine(text);
 }
 
-bool _entryWasSanitized(FileBrowserEntry entry) {
+bool _entryWasSanitized(FileEntry entry) {
   return entry.name != _sanitizeFileText(entry.name) ||
       entry.path != _sanitizeFileText(entry.path);
 }

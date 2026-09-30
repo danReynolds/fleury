@@ -4,7 +4,7 @@ description: Theme an app, style individual widgets, and customize interactive f
 ---
 
 import FleuryExample from '../../../components/FleuryExample.astro';
-import CodeDemoSplit from '../../../components/CodeDemoSplit.astro';
+import GuidePad from '../../../components/GuidePad.astro';
 
 Themes set the default look of a Fleury app. Define shared colors, text styles,
 borders, and interaction feedback in `ThemeData`, then pass it to `FleuryApp`.
@@ -22,24 +22,9 @@ Use a widget's `style` property when that widget needs a local override.
 themes. Use `copyWith(...)` to change the shared colors, styles, and borders
 your app needs:
 
-<CodeDemoSplit file="amber_theme.dart">
-<Fragment slot="code">
-```dart
-final base = ThemeData.dark();
-final amber = base.copyWith(
-  colorScheme: base.colorScheme.copyWith(
-    primary: RgbColor(0xE8, 0xA3, 0x3D),
-    focus: RgbColor(0xF2, 0xC5, 0x5C),
-    warning: RgbColor(0xE8, 0xA3, 0x3D),
-  ),
-  borderStyle: BorderStyle.double,
-);
-
-FleuryApp(title: 'Dashboard', theme: amber, home: const Dashboard());
-```
-</Fragment>
+<GuidePad id="themes.custom">
 <FleuryExample slot="demo" id="themes.custom" cols={38} rows={14} surfaceTheme="site" />
-</CodeDemoSplit>
+</GuidePad>
 
 Pass the result to `FleuryApp`. If no theme is supplied, Fleury uses its built-in
 defaults, so `Theme.of(context)` always returns a value.
@@ -48,17 +33,9 @@ defaults, so `Theme.of(context)` always returns a value.
 
 Every first-party control keeps the common case direct:
 
-<CodeDemoSplit file="local_style.dart">
-<Fragment slot="code">
-```dart
-TextInput(
-  controller: query,
-  style: const CellStyle(foreground: Colors.cyan),
-)
-```
-</Fragment>
+<GuidePad id="themes.local_style">
 <FleuryExample slot="demo" id="themes.local_style" cols={34} rows={4} interactive />
-</CodeDemoSplit>
+</GuidePad>
 
 That style becomes the control's base appearance. It does not erase the
 framework's focus, disabled, or validation cues; those still layer on when the
@@ -70,24 +47,9 @@ state changes. The same `CellStyle` works on `Text`, `Button`, `Checkbox`,
 A `CellStyle` describes terminal paint: foreground and background colors plus
 attributes such as bold, italic, underline, and strikethrough.
 
-<CodeDemoSplit file="cell_style.dart">
-<Fragment slot="code">
-```dart
-Column(children: [
-  Text('Default text'),
-  Text(
-    'Styled text',
-    style: CellStyle(
-      foreground: RgbColor(0x3D, 0xDC, 0x97),
-      bold: true,
-      underline: true,
-    ),
-  ),
-]);
-```
-</Fragment>
+<GuidePad id="themes.cell_style">
 <FleuryExample slot="demo" id="themes.cell_style" cols={34} rows={5} />
-</CodeDemoSplit>
+</GuidePad>
 
 Styles merge field by field. An unset value inherits; explicitly setting a
 boolean attribute to `false` turns that inherited attribute off.
@@ -99,25 +61,14 @@ it. Assign it to `ThemeData.interactiveStyle` for the whole app, or pass it to
 one widget's ordinary `style` property for a local exception. This reference
 renders each entry directly so the differences are easy to compare:
 
-<CodeDemoSplit file="interactive_styles.dart" layout="demo-wide">
-<Fragment slot="code">
-```dart
-const interactions = CellStyle.interactive(
-  focused: CellStyle(inverse: true, bold: true),
-  hovered: CellStyle(underline: true),
-  selected: CellStyle(foreground: Colors.green, bold: true),
-  invalid: CellStyle(foreground: Colors.red, underline: true),
-  disabled: CellStyle(dim: true),
-);
-```
-</Fragment>
+<GuidePad id="themes.interactive_styles" layout="demo-wide">
 <FleuryExample
   slot="demo"
   id="themes.interactive_styles"
   cols={52}
   rows={13}
 />
-</CodeDemoSplit>
+</GuidePad>
 
 When assigned to `ThemeData.interactiveStyle`, controls apply the relevant
 entry automatically. If states overlap, Fleury layers selected, hovered,
@@ -132,29 +83,9 @@ does not depend on hue alone.
 
 The same `style` property accepts either kind of value:
 
-<CodeDemoSplit file="local_interactive_style.dart">
-<Fragment slot="code">
-```dart
-Row(
-  children: [
-    Button(text: 'Theme focus', onPressed: deploy),
-    SizedBox(width: 2),
-    Button(
-      text: 'Local focus',
-      style: CellStyle.interactive(
-        focused: CellStyle(
-          foreground: Colors.cyan,
-          underline: true,
-        ),
-      ),
-      onPressed: deploy,
-    ),
-  ],
-)
-```
-</Fragment>
+<GuidePad id="themes.local_interactive">
 <FleuryExample slot="demo" id="themes.local_interactive" cols={46} rows={8} interactive />
-</CodeDemoSplit>
+</GuidePad>
 
 A plain `CellStyle` changes the base paint while inherited interaction cues
 remain. `CellStyle.interactive` is the local escape hatch when one control's
@@ -190,22 +121,9 @@ Use `CellStyle.none` for a state when one widget should deliberately suppress
 an inherited visual cue. The validation message and semantics remain intact;
 only the input's invalid paint is neutral:
 
-<CodeDemoSplit file="neutral_invalid.dart">
-<Fragment slot="code">
-```dart
-FormField(
-  validator: () => query.text.isEmpty ? 'Enter a query.' : null,
-  child: TextInput(
-    controller: query,
-    style: const CellStyle.interactive(
-      invalid: CellStyle.none,
-    ),
-  ),
-)
-```
-</Fragment>
+<GuidePad id="themes.invalid_none">
 <FleuryExample slot="demo" id="themes.invalid_none" cols={48} rows={9} interactive />
-</CodeDemoSplit>
+</GuidePad>
 
 Authors of reusable interactive widgets can call `CellStyle.resolve(...)` to
 apply the same theme, local-style, and state cascade as Fleury's controls.

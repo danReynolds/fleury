@@ -1,0 +1,8 @@
+---
+import Default from '@astrojs/starlight/components/TwoColumnContent.astro';
+import FleuryPad from './FleuryPad.astro';
+const isPad = Astro.locals.starlightRoute.entry.id === 'pad';
+---
+{isPad ? <main id="fleury-pad-main" data-pagefind-body><FleuryPad /></main> : (
+  <Default><slot /><slot name="right-sidebar" slot="right-sidebar" /></Default>
+)}

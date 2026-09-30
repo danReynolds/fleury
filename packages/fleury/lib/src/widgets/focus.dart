@@ -92,7 +92,7 @@ abstract interface class KeyBindingSource {
   /// time as the source rebuilds.
   List<KeyBinding> get activeBindings;
 
-  /// Whether unmatched keys stop at this scope (RFC 0020 §14.3).
+  /// Whether unmatched keys stop at this scope.
   ///
   /// Enforced by the dispatcher rather than by truncating the focus chain,
   /// so a binding here that matches and calls `bubble()` still has
@@ -1423,12 +1423,13 @@ class FocusManagerScope extends StatelessWidget {
 // Focus widget
 // ---------------------------------------------------------------------------
 
-/// A widget that wires a [FocusNode] into the tree.
+/// Makes its subtree focusable: wires a [FocusNode] into the tree so the
+/// widget can hold keyboard focus and join Tab and arrow traversal.
 ///
-/// In its simplest form: `Focus(autofocus: true, child: ...)`. Most
-/// apps will move to `KeyBindings` (next slice) for the actual key
-/// handling, and `KeyDetector` is the supported low-level
-/// escape hatch.
+/// In its simplest form: `Focus(autofocus: true, child: ...)`. Pass your own
+/// [focusNode] to move focus from code or to read [FocusNode.hasFocus].
+/// Handle keys with `KeyBindings`, whose shortcuts the hint bar can list, or
+/// with `KeyDetector` inside a custom control.
 class Focus extends StatefulWidget {
   const Focus({
     super.key,
@@ -2157,14 +2158,14 @@ class _ExcludeFocusMarkerElement extends ComponentElement {
 
 /// Reports when keyboard focus enters or leaves its subtree.
 ///
-/// [onFocusChange] fires with `true` when the focused node becomes this
-/// subtree (or any descendant), and `false` when it leaves. It also fires
-/// on mount when focus is ALREADY within, so a consumer never has to assume
-/// an initial value — the
-/// descendant-inclusive focus signal that powers focus-reactive chrome:
-/// a tooltip that appears while its target is focused, an active-pane
-/// highlight, a section that styles itself when something inside has
-/// focus. (For a rebuild, call `setState` from the callback.)
+/// [onFocusChange] fires with `true` when focus moves onto this subtree (the
+/// child or any descendant) and `false` when it leaves. It also fires `true`
+/// on mount if focus is already inside, so state that starts out `false` is
+/// always correct.
+///
+/// Use it for focus-reactive chrome: a tooltip that shows while its target is
+/// focused, an active-pane highlight, a section that styles itself when
+/// something inside has focus. To rebuild, call `setState` from the callback.
 class FocusDetector extends StatefulWidget {
   const FocusDetector({
     super.key,

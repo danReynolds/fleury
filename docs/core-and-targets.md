@@ -75,20 +75,23 @@ That gives a simple rule for any code that might run in the browser:
 
 `fleury_widgets` follows exactly this split:
 
-- **Most widgets are web-safe** — charts, lists, inputs, layout, images loaded
-  from bytes or decoded pixels, document viewers, and agent surfaces. They
-  import the host SPI and compile to JS.
-- **A few are native-only**, because they genuinely touch the platform: file I/O
-  and stdout/stderr log capture. Examples: `FileBrowser`, `FilePicker`,
-  `LogRegion`, and `TerminalOutputRegion`. These
-  can render over the **served** target — the server has `dart:io` — but can't
-  compile into a client-side bundle. `Image` itself is web-safe; only
-  `Image.file` needs the native filesystem, so browser apps load bytes
-  asynchronously and use `Image.bytes` or `Image.decoded`.
-- **`WorkflowSnapshot` is a supporting model, not a widget or an I/O service.**
-  Its current `LogEntry` dependency lives in the native-only log library, so it
-  is also omitted from `fleury_widgets_web.dart` today. Use it in terminal or
-  served apps until that model dependency is split onto the web-safe surface.
+- **Every widget is web-safe** — charts, lists, inputs, layout, document
+  viewers, log views, and agent surfaces all compile to JS and run in a browser.
+  A widget whose usual data comes from the platform takes that source as a
+  parameter instead of reaching for `dart:io`:
+  - `FileBrowser` and `FilePicker` read directories through a `FileSource`.
+    Natively they default to `LocalFileSource`, the local disk. In a browser,
+    pass one: a `MemoryFileSource`, or your own implementation over data the
+    app already has.
+  - `LogRegion` and `TerminalOutputRegion` render log entries and a
+    `LogBuffer`. `runApp` fills that buffer from captured stdout and stderr; a
+    browser app can feed one itself.
+  - `Image` loads bytes or decoded pixels anywhere; only `Image.file` needs the
+    native filesystem, so browser apps load bytes asynchronously and use
+    `Image.bytes` or `Image.decoded`.
+- **`LocalFileSource` is the one native-only export.** It is in
+  `fleury_widgets.dart` but not `fleury_widgets_web.dart`, and a test walks the
+  web barrel's imports to keep `dart:io` out of it.
 
 ## Package map
 
@@ -101,7 +104,7 @@ package; `fleury_widgets` and `fleury_web` are separate packages.
 | `fleury/fleury_host.dart` | the above, plus the host SPI a target plugs into | ✅ |
 | `fleury/fleury_wire.dart` | explicitly unstable remote frames/codecs/transports for matching first-party peers | ✅ |
 | `fleury/fleury.dart` | core + stable host SPI + the native runtime: `runApp`, terminal drivers, file/process/log | ❌ — pulls in `dart:io` |
-| `fleury_widgets` | the widget library | ✅ mostly — a few native-only |
+| `fleury_widgets` | the widget library | ✅ via `fleury_widgets_web.dart`; only `LocalFileSource` is native-only |
 | `fleury_web` | the web/DOM target and the served browser client | ✅ — compiled with dart2js |
 
 ## Why this matters

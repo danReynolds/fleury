@@ -2153,6 +2153,7 @@ abstract class LeafRenderObjectWidget extends RenderObjectWidget {
 abstract class SingleChildRenderObjectWidget extends RenderObjectWidget {
   const SingleChildRenderObjectWidget({super.key, this.child});
 
+  /// The widget below this widget in the tree.
   final Widget? child;
 
   @override
@@ -2164,6 +2165,7 @@ abstract class SingleChildRenderObjectWidget extends RenderObjectWidget {
 abstract class MultiChildRenderObjectWidget extends RenderObjectWidget {
   const MultiChildRenderObjectWidget({super.key, this.children = const []});
 
+  /// The widgets below this widget in the tree, in layout and paint order.
   final List<Widget> children;
 
   @override

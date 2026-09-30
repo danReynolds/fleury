@@ -4,8 +4,7 @@ description: Connect an MCP host to a normal Fleury app, complete a real workflo
 ---
 
 import FleuryExample from '../../../components/FleuryExample.astro';
-import CodeDemoSplit from '../../../components/CodeDemoSplit.astro';
-import AgentGuideCode from '../../../components/AgentGuideCode.astro';
+import GuidePad from '../../../components/GuidePad.astro';
 
 A Fleury app already describes its controls as roles, labels, values, and
 actions. `fleury_mcp` gives an AI agent that semantic view of the app and lets
@@ -21,10 +20,9 @@ This release checklist contains a text field, a checkbox, and a button. Try it
 by hand: change the version, mark **Tests passed**, then choose
 **Prepare release**.
 
-<CodeDemoSplit file="agent_guide.dart" codeLabel="Application code" demoLabel="Release workflow" codeMaxHeight="32rem" layout="code-wide">
-<AgentGuideCode slot="code" focus="class AgentGuideApp" />
+<GuidePad id="agents.release-checklist" layout="code-wide" codeMaxHeight="32rem" codeLabel="Application code" demoLabel="Release workflow">
 <FleuryExample slot="demo" id="agents.release-checklist" cols={46} rows={15} interactive />
-</CodeDemoSplit>
+</GuidePad>
 
 There is no `fleury_mcp` import and no manually assembled agent protocol. The
 controls already publish the useful contract:
@@ -51,10 +49,11 @@ dart pub global activate --source path packages/fleury_mcp
 ```
 
 Then point an MCP host at `fleury_mcp`, followed by `--` and the command that
-starts your app. From a Fleury checkout, this runs the example above:
+starts your app. From the `packages/samples` directory of a Fleury checkout,
+this runs the example above:
 
 ```sh
-fleury_mcp -- dart run packages/samples/bin/samples.dart agent-guide
+fleury_mcp -- dart run bin/samples.dart agent-guide
 ```
 
 For your own application, replace everything after `--`:
@@ -87,11 +86,8 @@ Its terminal rendering is not part of the agent connection.
 
 The server supports [the stateless MCP `2026-07-28`
 revision](https://modelcontextprotocol.io/specification/2026-07-28/changelog)
-through `server/discover` and keeps the `2025-06-18` initialization flow for
-existing hosts. The driving workflow below is the same on both. On `2026-07-28`,
-every request carries its protocol metadata and positional targets carry an
-explicit opaque reference, so unrelated agent tasks cannot replace one
-another's target baseline.
+and the `2025-06-18` initialization flow for existing hosts. The driving
+workflow below is the same on both.
 
 ## Give the agent one outcome
 
@@ -125,9 +121,9 @@ Use the action a control advertises whenever one exists:
 
 The current `2026-07-28` surface deliberately exposes only actions whose target
 travels in the request. Legacy `2025-06-18` clients also have `press_key` for
-keyboard routing and shortcuts, and `type_text` for character-by-character
-editing of the focused field. Those focus-relative tools stay off the stateless
-surface until Fleury can carry an explicit target or focus lease with them.
+keyboard routing and shortcuts, and `type_text`, which types text into the
+focused field. Those focus-relative tools stay off the stateless surface until
+Fleury can carry an explicit target or focus lease with them.
 
 This is the same distinction used in [Testing](/fleury/guides/testing/): test or
 drive application behavior through semantics, then cover keyboard and pointer
@@ -135,20 +131,29 @@ routing separately when those physical paths matter.
 
 ## Use the UI returned by each action
 
-Built-in controls currently receive positional semantic ids. They are safe for
-an immediate read-and-act sequence. A positional node includes `stableId: false`
-and an opaque `targetRef`; a `2026-07-28` client echoes both the node id and that
-reference when it acts. Fleury rejects the call if the slot now contains a
-control with a different observable identity token. A semantically identical
-unkeyed replacement is intentionally indistinguishable; controls representing
-durable records still need distinct keys or stable semantic ids. The reference
-is protocol bookkeeping, not an application id to copy into code or prompts.
-
 Every mutating MCP tool returns the settled UI, which counts as a fresh read.
-Select the next control and its current `targetRef` from that result instead of
-retaining a target from an earlier tree. Use `find_nodes` when the full tree is
-capped or you want a narrower view. Fleury returns `stale_reference` rather
-than dispatching when a positional target is no longer current.
+Select the next control from that result instead of retaining a target from an
+earlier tree. Use `find_nodes` when the full tree is capped or you want a
+narrower view.
+
+Built-in controls currently receive positional semantic ids. They are safe for
+an immediate read-and-act sequence, and Fleury returns `stale_reference` rather
+than dispatching when a positional target is no longer current. Controls that
+represent durable records, such as rows an agent may come back to, still need
+distinct keys or stable semantic ids.
+
+<details>
+<summary>How positional targets are checked</summary>
+
+A positional node includes `stableId: false` and an opaque `targetRef`. A
+`2026-07-28` client echoes both the node id and that reference when it acts,
+taking the current `targetRef` from the latest returned UI. Fleury rejects the
+call if the slot now contains a control with a different observable identity
+token. A semantically identical unkeyed replacement is intentionally
+indistinguishable. The reference is protocol bookkeeping, not an application id
+to copy into code or prompts.
+
+</details>
 
 An explicit `Semantics(id: ...)` gives a custom semantic control a durable id.
 Do not wrap a first-party control just to add one: that duplicates a contract
@@ -181,14 +186,20 @@ surface.
 
 After an action, use its returned `ui` before choosing the next target. For
 changes the app makes on its own, use `wait_for_change` instead of polling. A
-current-protocol client passes the opaque, instance-scoped `uiRevision` from
-its last UI result as `sinceRevision`, so an update that lands between the read
-and the wait is returned immediately rather than missed, while a handle from a
-restarted server fails closed.
+client passes the `uiRevision` from its last UI result as `sinceRevision`, so
+an update that lands between the read and the wait is returned immediately
+rather than missed.
 
-Legacy `2025-06-18` hosts can also subscribe to `fleury://ui/tree`; the
-`2026-07-28` revision replaced that subscription method, so new integrations
-should prefer the tool until Fleury adds a modern streaming transport.
+<details>
+<summary>Revisions and subscriptions</summary>
+
+`uiRevision` is opaque and scoped to one server instance, so a value from a
+restarted server fails closed. Legacy `2025-06-18` hosts can also subscribe to
+`fleury://ui/tree`; the `2026-07-28` revision replaced that subscription
+method, so new integrations should prefer `wait_for_change` until Fleury adds
+a modern streaming transport.
+
+</details>
 
 Large lists and tables publish their visible semantic window. `resize` can make
 more rows visible; `find_nodes` keeps targeted reads small. Do not guess an
@@ -204,9 +215,10 @@ small and explicit:
 |---|---|---|
 | `not_found` | The node is no longer present | Re-read the UI |
 | `stale_reference` | A positional target changed after it was read | Re-read and select the current node |
-| `ambiguous` | A query matched more than one control | Narrow by role, label, or container |
+| `ambiguous` | More than one node shares the id you passed | Use `find_nodes` to pick the control by role and label; give durable controls distinct `Semantics(id:)` values |
 | `out_of_domain` | A value violates the control's schema | Use the advertised type, range, or options |
-| `action_busy` | The same action on this control is still running | Act on the UI it opened (a dialog to answer, say), or wait for it to finish |
+| `action_busy` | The same action on this control is still running, or too many actions are queued | Act on the UI it opened (a dialog to answer, say), or wait for earlier calls to finish and re-read |
+| `rate_limited` | Too many actions in a short window | Pause, then re-read with `get_ui` or `wait_for_change` |
 
 An action whose handler is still running after two seconds, most often one
 that opened a dialog and awaits its answer, is not a failure: `invoke_action`

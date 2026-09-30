@@ -2,11 +2,11 @@ import 'package:fleury/fleury_core.dart';
 
 /// Shows a hint anchored below [child] while focus is anywhere inside it.
 ///
-/// A TUI has no hover, so focus is the trigger: Tab onto the wrapped
-/// widget (or a focusable within it) and the [message] floats beneath it
-/// via the [Anchored] primitive; move focus away and it disappears. Built on
-/// [FocusDetector], so it tracks descendant focus — wrap a button or field and
-/// it just works.
+/// Focus is the trigger, not the mouse: Tab onto the wrapped widget (or a
+/// focusable within it) and the [message] floats beneath it via the
+/// [Anchored] primitive; move focus away and it disappears. Escape hides it
+/// until focus leaves and returns. Built on [FocusDetector], so it tracks
+/// descendant focus: wrap a button or a field and it works without setup.
 class Tooltip extends StatefulWidget {
   const Tooltip({
     super.key,
@@ -51,7 +51,7 @@ class _TooltipState extends State<Tooltip> {
     final entry = OverlayEntry(
       owner: context,
       // BoundsAnchor, not AnchoredFloat: a tooltip is decorative chrome that
-      // shows on focus/hover and is never dismissed by a click, so it must not
+      // shows on focus and is never dismissed by a click, so it must not
       // stack AnchoredFloat's full-screen AbsorbPointer. That barrier ate every
       // click, scroll and click-to-focus in the app for as long as a tooltip
       // was visible. The dismissable floats (Autocomplete, ColorPicker,

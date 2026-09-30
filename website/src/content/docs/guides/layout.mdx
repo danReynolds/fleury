@@ -4,7 +4,7 @@ description: Compose responsive terminal interfaces from rows, columns, flexible
 ---
 
 import FleuryExample from '../../../components/FleuryExample.astro';
-import CodeDemoSplit from '../../../components/CodeDemoSplit.astro';
+import GuidePad from '../../../components/GuidePad.astro';
 
 Fleury lays out whole terminal cells. Parents describe the space available,
 children choose a size within it, and the parent positions them. In practice,
@@ -23,34 +23,7 @@ most interfaces come from a small set of composable widgets:
 This workspace uses fixed gaps, weighted panes, and one local breakpoint. The
 same child becomes two panes when wide and a vertical stack when narrow:
 
-<CodeDemoSplit file="layout_demo.dart" layout="demo-wide">
-<Fragment slot="code">
-```dart
-LayoutBuilder(
-  builder: (context, constraints) {
-    final wide = (constraints.maxCols ?? 0) >= 60;
-
-    if (wide) {
-      return Row(
-        children: [
-          Expanded(flex: 2, child: FilesPanel()),
-          const SizedBox(width: 1),
-          Expanded(flex: 3, child: PreviewPanel()),
-        ],
-      );
-    }
-
-    return Column(
-      children: [
-        Expanded(child: FilesPanel()),
-        const SizedBox(height: 1),
-        Expanded(child: PreviewPanel()),
-      ],
-    );
-  },
-)
-```
-</Fragment>
+<GuidePad id="layout.responsive" layout="demo-wide">
 <FleuryExample
   slot="demo"
   id="layout.responsive"
@@ -58,7 +31,7 @@ LayoutBuilder(
   rows={18}
   interactive
 />
-</CodeDemoSplit>
+</GuidePad>
 
 Activate **Narrow** and **Wide** to change only the workspace's parent width.
 The heading confirms which branch `LayoutBuilder` selected. This is the same
@@ -101,8 +74,8 @@ Row(
 ```
 
 Multiple expanded children divide the space by `flex`. In the workspace demo,
-`2` and `3` make Files receive two-fifths and Preview three-fifths. Any leftover
-cell from integer division is assigned deterministically.
+`2` and `3` make Files receive two-fifths and Preview three-fifths. A cell left
+over from integer division goes to the earliest flexible child.
 
 `Flexible(fit: FlexFit.loose)` offers a child up to its share without forcing
 it to fill. `Spacer()` is an expanded empty gap; `SizedBox` is a fixed gap or
@@ -139,6 +112,8 @@ Container width and height are outer dimensions, including the border. A
 
 `LayoutBuilder` reads the constraints of the exact place where it appears.
 Use it when a reusable pane should respond to its own width, as in the demo.
+An unbounded maximum, such as the width inside a horizontal scroll view, is
+`null`. That is why the demo reads `constraints.maxCols ?? 0`.
 
 `MediaQuery.sizeOf(context)` reads the entire surface size and rebuilds on
 resize. Use it for app-wide decisions such as hiding global chrome below a
@@ -157,8 +132,7 @@ not listen to resize events yourself.
 ### Direct constraints
 
 `ConstrainedBox` adds minimum or maximum dimensions without overriding a
-tighter parent. An unbounded maximum is represented by `null`, so check before
-using it as a number:
+tighter parent:
 
 ```dart
 ConstrainedBox(
@@ -172,7 +146,7 @@ ConstrainedBox(
 are useful for matching a small group to its widest label, but require an extra
 measurement pass; do not wrap large subtrees speculatively.
 
-### Wrap and layer
+### Wrap and stack
 
 `Wrap` flows children into another run when the next one no longer fits:
 
@@ -197,10 +171,11 @@ geometry.
 
 ### Overflow
 
-When a row or column cannot fit its children, Fleury clips them and paints a red
-`▓` marker on the overflowing edge. Fix the constraint mismatch: add an
-`Expanded`, choose a compact layout, bound the child, or make the content
-scroll. Do not hide the marker without addressing the layout.
+When a row or column cannot fit its children, Fleury clips them. With Dart
+assertions enabled, for example `fleury run --enable-asserts`, it also paints a
+red `▓` marker on the overflowing edge; release builds and a plain `dart run`
+only clip. Fix the constraint mismatch: add an `Expanded`, choose a compact
+layout, bound the child, or make the content scroll.
 
 ## API reference
 
@@ -221,5 +196,5 @@ scroll. Do not hide the marker without addressing the layout.
   long content a bounded viewport.
 - [Widgets & state](/fleury/concepts/widgets-and-state/) explains how layout
   widgets participate in the widget tree and rebuild lifecycle.
-- Browse the [widget reference](/fleury/widgets/) for focused examples of every
-  layout primitive.
+- Browse the [widget reference](/fleury/widgets/) for the details of
+  individual widgets.

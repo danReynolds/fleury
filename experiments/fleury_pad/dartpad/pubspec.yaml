@@ -1,0 +1,12 @@
+name: fleury_dartpad_host
+description: Fleury host for the pinned DartPad backend.
+publish_to: none
+environment:
+  sdk: ^3.12.0
+dependencies:
+  analyzer: 14.4.0
+  crypto: 3.0.7
+  dart_services:
+    path: ../.build/dartpad/pkgs/dart_services
+  path: ^1.9.1
+  shelf: ^1.4.2

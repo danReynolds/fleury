@@ -7,11 +7,12 @@
 // retargeting mid-flight continues from the live value AND velocity,
 // so redirects never snap-restart.
 //
+//   const pause = Duration(milliseconds: 300);
 //   final fill = Animation(0.0);
 //   fill.to(0.8);                       // spring (default)
 //   fill.to(0.8, spring: Spring.snappy);
-//   fill.to(0.8, curve: Curves.easeOut, duration: 300.ms);
-//   fill.to(0.8).delay(300.ms).to(0.2); // append a timed chain
+//   fill.to(0.8, curve: Curves.easeOut, duration: pause);
+//   fill.to(0.8).delay(pause).to(0.2);  // append a timed chain
 //   fill.snap(0.0);                     // jump, no animation
 //   fill.value                          // current interpolated value
 //

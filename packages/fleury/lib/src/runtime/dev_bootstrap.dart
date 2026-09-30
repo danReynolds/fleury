@@ -1351,10 +1351,12 @@ String? devEarlyExitHint({
       'supervisor.\n'
       '  Everything in main() before runApp() runs in BOTH the supervisor '
       'and the app process it spawns; work that can only happen once '
-      '(bind a port, take a lock, read stdin) fails in the second.\n'
-      '  Move it after runApp(), guard it, or run without the supervisor: '
-      'FLEURY_HOT_RELOAD=0, or enableHotReload: false. '
-      '(hot-reload guide → "How it works") '
+      '(bind a port, take a lock, read stdin) fails in the second. An app '
+      'that reads its arguments must pass them: runApp(app, args: args).\n'
+      '  Start with `fleury run` (main() then runs once), move the work into '
+      "the app (the root widget's initState, for example), or run without "
+      'the supervisor: FLEURY_HOT_RELOAD=0, or enableHotReload: false. '
+      '(hot-reload guide → "Keep startup work inside the app") '
       'If the app is meant to exit right away, ignore this.';
 }
 

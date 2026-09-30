@@ -49,10 +49,11 @@ and both.
 ## Use the debugger locally
 
 Press **Ctrl+G** in a native development run, or launch the fuller playground
-from a Fleury checkout:
+from the `packages/samples` directory of a Fleury checkout:
 
 ```sh
-dart run packages/samples/bin/samples.dart debug
+cd packages/samples
+dart run bin/samples.dart debug
 ```
 
 Open the debugger once to start recording, then close it so the app receives
@@ -143,10 +144,11 @@ integration, see [Hot reload](/fleury/guides/hot-reload/).
 
 ## Share a reproducible investigation
 
-An agent can drive the same playground and read frame, log, and error records:
+An agent can drive the same playground and read frame, log, and error records.
+From `packages/samples`:
 
 ```sh
-fleury_mcp -- dart run packages/samples/bin/samples.dart debug
+fleury_mcp -- dart run bin/samples.dart debug
 ```
 
 Use `read_frames`, `read_logs`, and `read_errors` after the triggering action;

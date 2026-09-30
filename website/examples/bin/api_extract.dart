@@ -40,6 +40,9 @@ void main(List<String> args) {
   final classFields = _classFields(
     sourceFiles.map((source) => source.$1.readAsStringSync()),
   );
+  final superDefaults = _superDefaults(
+    sourceFiles.map((source) => source.$1.readAsStringSync()),
+  );
 
   for (final (entity, file) in sourceFiles) {
     final extracted = extractApiFromSource(
@@ -47,6 +50,7 @@ void main(List<String> args) {
       file: file,
       frameworkWidgetClasses: frameworkWidgetClasses,
       classFields: classFields,
+      superDefaults: superDefaults,
     );
     for (final entry in extracted.entries) {
       // The first source directory wins on the unlikely event of a clash.
@@ -98,12 +102,14 @@ Map<String, Object?> extractApiFromSource(
   required String file,
   Set<String>? frameworkWidgetClasses,
   Map<String, Map<String, (String, String?)>>? classFields,
+  Map<String, Map<String, String>>? superDefaults,
 }) {
   final parsed = parseString(content: source, throwIfDiagnostics: false);
   final result = <String, Object?>{};
   final widgetClasses =
       frameworkWidgetClasses ?? _frameworkWidgetClasses(<String>[source]);
   final fields = classFields ?? _classFields(<String>[source]);
+  final defaults = superDefaults ?? _superDefaults(<String>[source]);
 
   for (final declaration in parsed.unit.declarations) {
     if (declaration is! ClassDeclaration) continue;
@@ -132,7 +138,13 @@ Map<String, Object?> extractApiFromSource(
         constructors.add(<String, Object?>{
           'name': _constructorName(className, constructor),
           'doc': _docText(constructor.documentationComment),
-          'params': _params(declaration, constructor, widgetClasses, fields),
+          'params': _params(
+            declaration,
+            constructor,
+            widgetClasses,
+            fields,
+            defaults,
+          ),
           'line': parsed.lineInfo
               .getLocation(constructor.returnType.offset)
               .lineNumber,
@@ -143,7 +155,7 @@ Map<String, Object?> extractApiFromSource(
     final primary = _primaryPublicConstructor(publicConstructors);
     final legacyParams = primary == null
         ? <Map<String, Object?>>[]
-        : _params(declaration, primary, widgetClasses, fields);
+        : _params(declaration, primary, widgetClasses, fields, defaults);
     result[className] = <String, Object?>{
       'doc': _docText(declaration.documentationComment),
       'classDoc': _docMarkdown(declaration.documentationComment),
@@ -181,6 +193,7 @@ List<Map<String, Object?>> _params(
   ConstructorDeclaration ctor,
   Set<String> frameworkWidgetClasses,
   Map<String, Map<String, (String, String?)>> classFields,
+  Map<String, Map<String, String>> superDefaults,
 ) {
   final out = <Map<String, Object?>>[];
   for (final parameter in ctor.parameters.parameters) {
@@ -209,9 +222,14 @@ List<Map<String, Object?>> _params(
       'type': type,
       'required': parameter.isRequired,
       'named': parameter.isNamed,
-      'default': parameter is DefaultFormalParameter
-          ? parameter.defaultValue?.toSource()
-          : null,
+      'default':
+          (parameter is DefaultFormalParameter
+              ? parameter.defaultValue?.toSource()
+              : null) ??
+          (normal is SuperFormalParameter
+              ? (superDefaults[cls.name.lexeme] ??
+                    const <String, String>{})[name]
+              : null),
       'doc': ownDoc ?? field?.$2,
     });
   }
@@ -272,6 +290,75 @@ String? _baseTypeName(String? type) {
   return genericStart == -1
       ? unqualified
       : unqualified.substring(0, genericStart);
+}
+
+/// For each class, the defaults its `super.x` constructor parameters inherit.
+///
+/// `Row({super.mainAxisSize})` declares no default of its own, but the call
+/// lands on `Flex({this.mainAxisSize = MainAxisSize.max})`, so a reader of the
+/// Row reference needs `MainAxisSize.max`. A super parameter without a default
+/// takes the one declared by the same-named parameter of the superclass's
+/// primary constructor, following further `super.x` hops up the chain.
+Map<String, Map<String, String>> _superDefaults(Iterable<String> sources) {
+  final declarations = <String, ClassDeclaration>{};
+  for (final source in sources) {
+    final unit = parseString(content: source, throwIfDiagnostics: false).unit;
+    for (final declaration in unit.declarations.whereType<ClassDeclaration>()) {
+      declarations.putIfAbsent(declaration.name.lexeme, () => declaration);
+    }
+  }
+
+  String? declaredDefault(String className, String name, Set<String> seen) {
+    if (!seen.add(className)) return null;
+    final declaration = declarations[className];
+    if (declaration == null) return null;
+    final constructor = _primaryPublicConstructor(
+      declaration.members
+          .whereType<ConstructorDeclaration>()
+          .where(_isPublicConstructor)
+          .toList(),
+    );
+    if (constructor == null) return null;
+    for (final parameter in constructor.parameters.parameters) {
+      if (parameter.name?.lexeme != name) continue;
+      final explicit = parameter is DefaultFormalParameter
+          ? parameter.defaultValue?.toSource()
+          : null;
+      if (explicit != null) return explicit;
+      final normal = parameter is DefaultFormalParameter
+          ? parameter.parameter
+          : parameter;
+      if (normal is! SuperFormalParameter) return null;
+      final parent = _baseTypeName(
+        declaration.extendsClause?.superclass.toSource(),
+      );
+      return parent == null ? null : declaredDefault(parent, name, seen);
+    }
+    return null;
+  }
+
+  final resolved = <String, Map<String, String>>{};
+  for (final entry in declarations.entries) {
+    final parent = _baseTypeName(
+      entry.value.extendsClause?.superclass.toSource(),
+    );
+    if (parent == null) continue;
+    for (final constructor
+        in entry.value.members.whereType<ConstructorDeclaration>()) {
+      for (final parameter in constructor.parameters.parameters) {
+        final normal = parameter is DefaultFormalParameter
+            ? parameter.parameter
+            : parameter;
+        final name = parameter.name?.lexeme;
+        if (normal is! SuperFormalParameter || name == null) continue;
+        final inherited = declaredDefault(parent, name, <String>{});
+        if (inherited != null) {
+          (resolved[entry.key] ??= <String, String>{})[name] = inherited;
+        }
+      }
+    }
+  }
+  return resolved;
 }
 
 Map<String, Map<String, (String, String?)>> _classFields(

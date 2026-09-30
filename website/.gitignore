@@ -20,8 +20,12 @@ examples/.dart_tool/
 src/api.json
 src/examples_code.json
 src/types.json
+src/widget-sidebar.json
 
 # Lazily loaded testing-guide runner
 public/fleury-preferences-test.js*
 
 public/fleury-debugger.js*
+
+# Runnable guide projects generated from canonical Dart source
+src/guide_projects.json

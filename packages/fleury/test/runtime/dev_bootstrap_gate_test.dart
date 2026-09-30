@@ -173,6 +173,8 @@ void main() {
       expect(hint, isNotNull);
       expect(hint, contains('runs in BOTH'));
       expect(hint, contains('FLEURY_HOT_RELOAD=0'));
+      expect(hint, contains('fleury run'));
+      expect(hint, contains('args: args'));
       expect(hint, contains('code 1'));
     });
 

@@ -1,0 +1,107 @@
+{
+  "startedAt": "2026-09-28T14:18:18.288359+00:00",
+  "finishedAt": "2026-09-28T14:18:23.845917+00:00",
+  "url": "https://fleury-pad-staging-vbalblwk3q-uc.a.run.app",
+  "label": "analyzer-aot-early-http-startup-boost-natural-idle",
+  "build": {
+    "sdkVersion": "3.12.2",
+    "buildId": "ecd42e145c5b0e2c",
+    "backend": "dartpad",
+    "upstreamRevision": "70a62b1ebcf9d2b906ec564254bde02a543be895",
+    "protocolVersion": 2,
+    "sourceRevision": "227e387b-dirty-20260928-analyzer-aot"
+  },
+  "httpOnly": true,
+  "coldStartConfirmed": true,
+  "samples": [
+    {
+      "operation": "initialConnection",
+      "roundTripMs": 2616.3,
+      "serverElapsedMs": null,
+      "responseBytes": 221
+    },
+    {
+      "operation": "firstCompile",
+      "roundTripMs": 1314.4,
+      "serverElapsedMs": 821,
+      "responseBytes": 38313
+    },
+    {
+      "operation": "reload1",
+      "roundTripMs": 551.6,
+      "serverElapsedMs": 359,
+      "responseBytes": 23905
+    },
+    {
+      "operation": "reload2",
+      "roundTripMs": 492.8,
+      "serverElapsedMs": 327,
+      "responseBytes": 23905
+    },
+    {
+      "operation": "reload3",
+      "roundTripMs": 578.0,
+      "serverElapsedMs": 363,
+      "responseBytes": 23905
+    }
+  ],
+  "firstConnectionThroughCompileMs": 3930.7,
+  "deployment": {
+    "project": "fleury-pad-20260927",
+    "region": "us-central1",
+    "service": "fleury-pad-staging",
+    "revision": "fleury-pad-staging-00013-qil",
+    "serviceAnnotations": {
+      "run.googleapis.com/maxScale": "1",
+      "run.googleapis.com/scalingMode": "automatic"
+    },
+    "revisionAnnotations": {
+      "autoscaling.knative.dev/maxScale": "1",
+      "run.googleapis.com/cpu-throttling": "false",
+      "run.googleapis.com/execution-environment": "gen2",
+      "run.googleapis.com/startup-cpu-boost": "true"
+    },
+    "resources": {
+      "limits": {
+        "cpu": "1",
+        "memory": "2Gi"
+      }
+    }
+  },
+  "confirmation": {
+    "zeroInstanceMetrics": {
+      "observedAt": "2026-09-28T14:18:11.499870+00:00",
+      "idleStartedAt": "2026-09-28T14:03:22.680327+00:00",
+      "revision": "fleury-pad-staging-00013-qil",
+      "points": {
+        "active": {
+          "interval": {
+            "startTime": "2026-09-28T14:18:00Z",
+            "endTime": "2026-09-28T14:18:00Z"
+          },
+          "value": {
+            "int64Value": "0"
+          }
+        },
+        "idle": {
+          "interval": {
+            "startTime": "2026-09-28T14:18:00Z",
+            "endTime": "2026-09-28T14:18:00Z"
+          },
+          "value": {
+            "int64Value": "0"
+          }
+        }
+      }
+    },
+    "instanceStart": "2026-09-28T14:18:18.729545Z",
+    "httpReady": "2026-09-28T14:18:19.066322Z",
+    "backendReady": "2026-09-28T14:18:20.576236Z",
+    "backendInitMs": 1510,
+    "requestStart": "2026-09-28T14:18:18.706562Z",
+    "sameInstanceId": true,
+    "scalingChanged": false,
+    "note": "One confirmed natural-idle cold HTTP sample. Excludes editor asset downloads, browser evaluation, and preview mounting.",
+    "reloadTimingNote": "The following three reload samples are inside the temporary startup boost window; see the separate steady-state report for one-CPU reload timing."
+  }
+}

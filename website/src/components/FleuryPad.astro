@@ -1,0 +1,176 @@
+---
+import { Icon } from '@astrojs/starlight/components';
+const proxyTarget = import.meta.env.DEV ? import.meta.env.FLEURY_PAD_PROXY_TARGET?.replace(/\/$/, '') : undefined;
+const compilerUrl = proxyTarget ? '/fleury/__pad' : (import.meta.env.PUBLIC_FLEURY_PAD_COMPILER_URL?.replace(/\/$/, '') ?? '');
+if (compilerUrl && !proxyTarget) {
+  const url = new URL(compilerUrl);
+  if (url.protocol !== 'https:' || url.username || url.password || url.search || url.hash || url.pathname !== '/') {
+    throw new Error('PUBLIC_FLEURY_PAD_COMPILER_URL must be an HTTPS origin.');
+  }
+}
+const frameUrl = `${compilerUrl}/frame.html`;
+---
+
+<dialog open role="group" aria-labelledby="_top" class="fleury-pad not-content" data-compiler={compilerUrl} data-frame={frameUrl} data-compact="true" data-mode="editor" data-running="false" data-busy="false">
+  <header class="pad-toolbar">
+    <div class="pad-heading">
+      <h1 id="_top">Fleury Pad<span class="pad-dot" aria-hidden="true"></span></h1>
+      <p>Write Dart. See it run.</p>
+    </div>
+    <div class="pad-actions">
+      <details class="pad-help">
+        <summary aria-label="How to use Fleury Pad"><Icon name="information" size="1.1rem" /></summary>
+        <div class="pad-help-content">
+          <strong>Make a change. Keep your place.</strong>
+          <p>The example starts automatically. Click its counter and write a draft, then edit the code and hot reload: your state stays with you.</p>
+          <dl><dt>⌘ / Ctrl + Enter</dt><dd>Run or hot reload</dd><dt>Ctrl + Space</dt><dd>Dart completions</dd><dt>Restart</dt><dd>Run again with fresh state</dd></dl>
+          <p>Your code is saved in this browser. Restored custom code waits for Run. Download it to keep a copy. The Pad supports one file with Fleury’s bundled packages.</p>
+          <a href="/fleury/guides/hot-reload/">About hot reload <Icon name="right-arrow" size="0.9rem" /></a>
+        </div>
+      </details>
+      <button class="pad-icon-button" data-pad="download" title="Download main.dart" aria-label="Download main.dart"><Icon name="download" size="1.05rem" /></button>
+      <button class="pad-icon-button" data-pad="expand" title="Expand workspace" aria-label="Expand workspace" aria-expanded="false">
+        <svg class="pad-expand-icon" aria-hidden="true" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><path d="M8 3H3v5m13-5h5v5M3 16v5h5m13-5v5h-5" /></svg>
+        <svg class="pad-restore-icon" aria-hidden="true" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><path d="M3 8h5V3m8 0v5h5M8 21v-5H3m13 5v-5h5" /></svg>
+      </button>
+      <span class="pad-action-divider" aria-hidden="true"></span>
+      <button data-pad="restart" disabled title="Restart with fresh app state"><svg aria-hidden="true" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><path d="M3 11a9 9 0 1 1 2.6 7M3 4v7h7" /></svg><span>Restart</span></button>
+      <button data-pad="run" class="pad-primary" disabled><Icon name="right-arrow" size="1rem" /><span>Run</span></button>
+      <button data-pad="reload" class="pad-primary" hidden disabled><svg aria-hidden="true" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><path d="M3 11a9 9 0 1 1 2.6 7M3 4v7h7" /></svg><span>Hot reload</span></button>
+    </div>
+  </header>
+
+  <div class="pad-surface">
+    <div class="pad-mobile-tabs" role="tablist" aria-label="Workspace">
+      <button role="tab" id="pad-editor-tab" aria-controls="pad-editor-pane" aria-selected="true" data-view="editor">Code</button>
+      <button role="tab" id="pad-app-tab" aria-controls="pad-app-pane" aria-selected="false" tabindex="-1" data-view="app">App<span class="app-indicator" aria-hidden="true"></span></button>
+    </div>
+    <div class="pad-workspace">
+      <section class="pad-pane pad-editor-pane" id="pad-editor-pane" aria-label="Dart editor">
+        <div class="pad-pane-bar">
+          <span class="pad-file"><Icon name="document" size="1rem" />main.dart</span>
+          <span class="pad-dirty" data-pad="dirty">Dart</span>
+          <button data-pad="format" disabled title="Format Dart source">Format</button>
+        </div>
+        <div class="pad-editor" data-pad="editor" aria-label="Dart source editor"></div>
+      </section>
+      <section class="pad-pane pad-app-pane" id="pad-app-pane" aria-label="Running app">
+        <div class="pad-pane-bar"><span class="pad-file"><Icon name="laptop" size="1rem" />App</span><span class="pad-live"><span></span>Live output</span></div>
+        <div class="pad-preview" data-pad="preview">
+          <div class="pad-empty">
+            <div class="pad-empty-mark" aria-hidden="true"><Icon name="laptop" size="2rem" /></div>
+            <h2 class="pad-idle-heading">A little code. A live app.</h2>
+          <h2 class="pad-loading-heading">Starting your app…</h2>
+            <p>Run the example, make it your own,<br />and hot reload without losing your place.</p>
+            <button class="pad-empty-run" data-pad="start">Run the example <Icon name="right-arrow" size="1rem" /></button>
+            <span class="pad-shortcut">⌘ / Ctrl + Enter</span>
+          </div>
+        </div>
+      </section>
+    </div>
+    <div class="pad-feedback">
+      <pre data-pad="diagnostics" class="pad-diagnostics" hidden aria-live="polite"></pre>
+      <div class="pad-statusbar"><span class="pad-status-dot" aria-hidden="true"></span><span data-pad="status" role="status">Loading editor…</span><span class="pad-metrics" data-pad="metrics"></span><span class="pad-storage">Saved in this browser</span></div>
+    </div>
+  </div>
+  <noscript>Enable JavaScript to edit and run Dart in Fleury Pad.</noscript>
+</dialog>
+<script>
+  if (document.querySelector('.fleury-pad')) import('./pad/client');
+</script>
+
+<style is:global>
+  #fleury-pad-main { padding: 0; }
+  .fleury-pad { container: fleury-pad / inline-size; box-sizing: border-box; position: relative; inset: auto; width: 100%; max-width: none; max-height: none; margin: 0; border: 0; padding: 0 1.5rem 1.25rem; height: calc(100dvh - var(--sl-nav-height)); min-height: 360px; display: flex; flex-direction: column; background: var(--sl-color-black); color: var(--sl-color-text); font-family: var(--sl-font); }
+  .fleury-pad:modal { position: fixed; inset: 0; width: 100vw; height: 100dvh; }
+  .fleury-pad::backdrop { background: var(--sl-color-black); }
+  .pad-expand-icon, .fleury-pad:modal .pad-restore-icon { display: block; }
+  .pad-restore-icon, .fleury-pad:modal .pad-expand-icon { display: none; }
+  .pad-surface { display: flex; flex-direction: column; flex: 1; min-height: 0; overflow: hidden; border: 1px solid var(--sl-color-gray-5); border-radius: 0.65rem; }
+  .fleury-pad * { box-sizing: border-box; }
+  .fleury-pad [hidden] { display: none !important; }
+  .pad-toolbar { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 0.8rem; padding: 1.15rem 0; position: relative; }
+  .pad-heading h1 { display: flex; align-items: center; gap: 0.65rem; margin: 0; font: 600 1.35rem/1.2 var(--fleury-display); letter-spacing: -0.04em; color: var(--sl-color-white); }
+  .pad-heading p { margin: 0.25rem 0 0; font-size: 0.8rem; color: var(--sl-color-gray-2); }
+  .pad-dot { width: 0.4rem; height: 0.4rem; border-radius: 50%; background: var(--sl-color-text-accent); }
+  .pad-actions { display: flex; align-items: center; gap: 0.5rem; }
+  .fleury-pad button, .pad-help summary { display: inline-flex; align-items: center; justify-content: center; gap: 0.45rem; padding: 0.5rem 0.7rem; border: 1px solid var(--sl-color-gray-5); border-radius: 0.4rem; background: transparent; color: var(--sl-color-gray-1); font: 500 0.8rem/1.3 var(--sl-font); cursor: pointer; white-space: nowrap; }
+  .fleury-pad button:not(:disabled):hover, .pad-help summary:hover { background: var(--sl-color-gray-6); border-color: var(--sl-color-gray-4); }
+  .fleury-pad button:focus-visible, .pad-help summary:focus-visible { outline: 2px solid var(--sl-color-text-accent); outline-offset: 3px; }
+  .fleury-pad button:disabled { opacity: 0.4; cursor: default; }
+  .fleury-pad .pad-primary { background: var(--sl-color-text-accent); border-color: var(--sl-color-text-accent); color: var(--sl-color-black); font-weight: 650; padding-inline: 1rem; min-width: 6.1rem; }
+  .fleury-pad .pad-primary:not(:disabled):hover { background: var(--sl-color-text-accent); border-color: var(--sl-color-text-accent); filter: brightness(1.08); }
+  .fleury-pad .pad-icon-button, .pad-help summary { padding: 0.5rem; border-color: transparent; }
+  .pad-action-divider { height: 1.25rem; width: 1px; margin-inline: 0.1rem; background: var(--sl-color-gray-5); }
+  .pad-workspace { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); flex: 1; min-height: 0; }
+  .pad-pane { display: flex; flex-direction: column; min-width: 0; min-height: 0; }
+  .pad-app-pane { border-left: 1px solid var(--sl-color-gray-5); }
+  .pad-pane-bar { display: flex; flex-shrink: 0; align-items: center; gap: 0.7rem; height: 2.8rem; padding: 0 1rem; border-bottom: 1px solid var(--sl-color-gray-5); background: var(--sl-color-gray-6); font-size: 0.75rem; }
+  .pad-file { display: flex; align-items: center; gap: 0.5rem; color: var(--sl-color-gray-1); font-weight: 550; }
+  .pad-file svg { color: var(--sl-color-gray-3); }
+  .pad-dirty { color: var(--sl-color-gray-3); font-size: 0.7rem; }
+  .pad-pane-bar button { margin-left: auto; padding: 0.25rem 0.45rem; font-size: 0.7rem; border-color: transparent; }
+  .pad-live { display: inline-flex; align-items: center; gap: 0.4rem; margin-left: auto; color: var(--sl-color-gray-3); font-size: 0.7rem; }
+  .pad-live span, .app-indicator { height: 0.35rem; width: 0.35rem; background: var(--sl-color-gray-4); border-radius: 50%; }
+  [data-running='true'] .pad-live span, [data-running='true'] .app-indicator { background: var(--sl-color-text-accent); }
+  .pad-editor, .pad-preview { flex: 1; min-height: 0; overflow: hidden; }
+  .pad-editor { background: #10161e; }
+  [data-theme='light'] .pad-editor { background: #fff; }
+  .pad-preview { position: relative; background: var(--sl-color-black); }
+  .pad-preview iframe { width: 100%; height: 100%; display: block; border: 0; }
+  .pad-empty { height: 100%; display: flex; flex-direction: column; align-items: center; justify-content: center; padding: 1.5rem; text-align: center; background: radial-gradient(ellipse at 50% 35%, color-mix(in srgb, var(--sl-color-text-accent) 5%, transparent), transparent 65%); }
+  .pad-empty-mark { display: grid; place-items: center; width: 3.8rem; height: 3.8rem; border: 1px solid var(--sl-color-gray-5); border-radius: 1rem; color: var(--sl-color-text-accent); background: var(--sl-color-gray-6); margin-bottom: 1.2rem; }
+  .pad-loading-heading { display: none; }
+  [data-busy='true'] .pad-empty .pad-loading-heading { display: block; }
+  [data-busy='true'] .pad-empty :is(.pad-idle-heading, p, button, .pad-shortcut) { display: none; }
+  .pad-empty h2 { font: 500 1.15rem/1.3 var(--fleury-display); color: var(--sl-color-white); margin: 0; letter-spacing: -0.025em; }
+  .pad-empty p { font-size: 0.8rem; line-height: 1.7; color: var(--sl-color-gray-2); margin: 0.65rem 0 1.25rem; }
+  .fleury-pad .pad-empty-run { color: var(--sl-color-text-accent); border-color: color-mix(in srgb, var(--sl-color-text-accent) 35%, transparent); }
+  .pad-shortcut { margin-top: 0.75rem; color: var(--sl-color-gray-3); font-size: 0.65rem; }
+  .pad-statusbar { display: flex; align-items: center; gap: 0.5rem; padding: 0.55rem 1rem; border-top: 1px solid var(--sl-color-gray-5); background: var(--sl-color-gray-6); font-size: 0.7rem; line-height: 1.4; }
+  .pad-status-dot { flex: 0 0 auto; width: 0.35rem; height: 0.35rem; border-radius: 50%; background: var(--sl-color-text-accent); }
+  [data-busy='true'] .pad-status-dot { animation: pad-pulse 1s ease-in-out infinite; }
+  .pad-metrics { margin-left: auto; white-space: nowrap; color: var(--sl-color-gray-2); font-variant-numeric: tabular-nums; }
+  .pad-storage { margin-left: auto; color: var(--sl-color-gray-3); white-space: nowrap; }
+  .pad-metrics:not(:empty) + .pad-storage { display: none; }
+  .pad-diagnostics { max-height: 8rem; overflow: auto; margin: 0; padding: 0.85rem 1rem; border-top: 1px solid var(--sl-color-red); background: var(--sl-color-red-low); color: var(--sl-color-red-high); font: 0.75rem/1.6 var(--sl-font-mono); white-space: pre-wrap; overflow-wrap: anywhere; }
+  .pad-help { position: relative; z-index: 5; }
+  .pad-help summary { list-style: none; }
+  .pad-help summary::-webkit-details-marker { display: none; }
+  .pad-help-content { position: absolute; right: 0; top: calc(100% + 0.75rem); width: min(22rem, calc(100vw - 2rem)); padding: 1.15rem; border: 1px solid var(--sl-color-gray-4); border-radius: 0.65rem; background: var(--sl-color-gray-6); box-shadow: 0 12px 40px #0003; font-size: 0.8rem; line-height: 1.65; }
+  .pad-help-content strong { color: var(--sl-color-white); }
+  .pad-help-content p { margin: 0.65rem 0; color: var(--sl-color-gray-2); }
+  .pad-help-content dl { display: grid; grid-template-columns: auto 1fr; gap: 0.45rem 1rem; padding-block: 0.65rem; border-block: 1px solid var(--sl-color-gray-5); }
+  .pad-help-content dt { color: var(--sl-color-gray-1); font-size: 0.75rem; }
+  .pad-help-content dd { margin: 0; color: var(--sl-color-gray-2); }
+  .pad-help-content a { display: inline-flex; align-items: center; gap: 0.4rem; color: var(--sl-color-text-accent); }
+  .pad-mobile-tabs { display: none; }
+  @keyframes pad-pulse { 50% { opacity: 0.3; } }
+  @media (prefers-reduced-motion: reduce) { [data-busy='true'] .pad-status-dot { animation: none; } }
+  @container fleury-pad (max-width: 48rem) {
+    .pad-toolbar { padding: 0.85rem 0; }
+    .pad-heading p { display: none; }
+    .pad-heading h1 { font-size: 1.1rem; }
+    .pad-storage { display: none; }
+    .pad-actions { gap: 0.2rem; }
+  }
+  @container fleury-pad (max-width: 40rem) {
+    .pad-mobile-tabs { display: flex; gap: 1rem; padding-inline: 1rem; border-bottom: 1px solid var(--sl-color-gray-5); }
+    .pad-mobile-tabs button { border: 0; border-radius: 0; padding: 0.7rem 0.5rem; border-bottom: 2px solid transparent; color: var(--sl-color-gray-2); }
+    .pad-mobile-tabs button[aria-selected='true'] { color: var(--sl-color-text-accent); border-bottom-color: var(--sl-color-text-accent); }
+    .pad-workspace { display: flex; }
+    .pad-pane { width: 100%; }
+    .pad-app-pane { border: 0; }
+    [data-mode='editor'] .pad-app-pane, [data-mode='app'] .pad-editor-pane { display: none; }
+    .pad-help { position: static; }
+    .pad-help-content { left: 0; right: 0; top: calc(100% - 0.25rem); width: auto; }
+  }
+  @container fleury-pad (max-width: 28rem) {
+    .pad-toolbar { gap: 0.7rem; }
+    .pad-heading { width: 100%; }
+    .pad-actions { width: 100%; }
+    .pad-action-divider { margin-right: auto; }
+    .pad-metrics { display: none; }
+  }
+  @media (max-width: 40rem) { .fleury-pad { padding-inline: 0.75rem; padding-bottom: 0.75rem; } }
+</style>

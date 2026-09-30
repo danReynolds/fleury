@@ -22,19 +22,17 @@ class _CartService {
 }
 
 void main() {
-  testWidgets('both project consumers use the nearest matching scope', (
-    tester,
-  ) {
+  testWidgets('both project readers use the nearest matching scope', (tester) {
     tester.pumpWidget(
       const Scope<guide.Project>(
         guide.Project('Atlas'),
         child: Column(
           children: [
-            guide.ProjectName(),
+            guide.ProjectTitle(),
             Scope<guide.Project>(
               guide.Project('Beacon'),
               child: Column(
-                children: [guide.ProjectName(), guide.ProjectLabel()],
+                children: [guide.ProjectTitle(), guide.ProjectPath()],
               ),
             ),
           ],
@@ -43,7 +41,53 @@ void main() {
     );
     final output = tester.renderToString();
     expect('Project: Atlas'.allMatches(output).length, 1);
-    expect('Project: Beacon'.allMatches(output).length, 2);
+    expect('Project: Beacon'.allMatches(output).length, 1);
+    expect(output, contains('Path: ~/projects/beacon'));
+  });
+
+  // The guide says the const readers update because they subscribed, not
+  // because the owner rebuilt them.
+  testWidgets('const readers follow the scope when the owner switches', (
+    tester,
+  ) async {
+    tester.pumpWidget(const guide.ProjectScreen());
+    expect(tester.renderToString(), contains('Project: Atlas'));
+    expect(tester.renderToString(), contains('Path: ~/projects/atlas'));
+    await tester.button('Switch project').press();
+    expect(tester.renderToString(), contains('Project: Beacon'));
+    expect(tester.renderToString(), contains('Path: ~/projects/beacon'));
+  });
+
+  testWidgets('Scope.create shares one cart and disposes it with the scope', (
+    tester,
+  ) async {
+    guide.Cart? created;
+    tester.pumpWidget(
+      Scope<guide.Cart>.create(
+        () => created = guide.Cart(),
+        child: const guide.ShopScreen(),
+      ),
+    );
+    await tester.button('Add coffee').press();
+    await tester.button('Add tea').press();
+    expect(tester.renderToString(), contains('In cart: 2'));
+    expect(created!.itemCount, 2);
+
+    tester.pumpWidget(const SizedBox());
+    expect(created!.addItem, throwsStateError, reason: 'the scope disposed it');
+  });
+
+  testWidgets('a lent cart outlives the scope that shares it', (tester) async {
+    final cart = guide.Cart();
+    addTearDown(cart.dispose);
+    tester.pumpWidget(Scope(cart, child: const guide.ShopScreen()));
+    await tester.button('Add coffee').press();
+    expect(tester.renderToString(), contains('In cart: 1'));
+
+    tester.pumpWidget(const SizedBox());
+    expect(cart.hasListeners, isFalse);
+    cart.addItem();
+    expect(cart.itemCount, 2);
   });
 
   testWidgets('an external cart keeps serving its service after UI unmounts', (
@@ -119,16 +163,8 @@ void main() {
       'Project: Beacon',
       'Project: Atlas',
     ),
-    (
-      'state.project-context',
-      'Project: Atlas',
-      'Switch project',
-      'Project: Beacon',
-      'Project: Atlas',
-    ),
+    ('state.shop', 'In cart: 0', 'Add coffee', 'In cart: 1', 'In cart: 2'),
     ('state.cart-notifier', 'Items: 0', 'Add item', 'Items: 1', 'Items: 2'),
-    ('state.cart-context', 'Items: 0', 'Add item', 'Items: 1', 'Items: 2'),
-    ('state.cart-value', 'Items: 0', 'Add item', 'Items: 1', 'Items: 2'),
   ]) {
     final demo = demos.exampleList.singleWhere((demo) => demo.id == id);
     testWidgets(

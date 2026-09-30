@@ -1,0 +1,49 @@
+---
+// Shows one named region of a compiled example file, so guide code can't
+// drift from the program the snippet tests analyze and the live demo runs.
+//
+//   import source from '../../../../examples/lib/state_management_guide.dart?raw';
+//   <SourceExcerpt code={source} region="cart" />
+//
+// A region is every block between `// #docregion <name>` and
+// `// #enddocregion <name>`; several blocks with one name join in file order.
+// Pass several files to join their blocks in the order given, for a program
+// whose parts live in different libraries. Markers of other regions inside it
+// are dropped, and the result is dedented.
+import { Code } from '@astrojs/starlight/components';
+
+interface Props {
+  /** The complete source file, or files, imported with `?raw`. */
+  code: string | string[];
+  /** The `#docregion` name to show. */
+  region: string;
+  /** Lines to highlight, counted in the excerpt as shown. */
+  mark?: Array<number | { range: string }>;
+}
+const { code, region, mark } = Astro.props;
+const name = region.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+const pattern = new RegExp(
+  `^[ \\t]*// #docregion ${name}[ \\t]*\\r?\\n([\\s\\S]*?)^[ \\t]*// #enddocregion ${name}[ \\t]*$`,
+  'gm',
+);
+const sources = Array.isArray(code) ? code : [code];
+const blocks = sources.flatMap((source, index) => {
+  const found = [...source.matchAll(pattern)].map((match) => match[1]);
+  if (!found.length) {
+    throw new Error(`Source region is missing: ${region} (file ${index + 1} of ${sources.length})`);
+  }
+  return found;
+});
+const dedent = (value: string) => {
+  const lines = value
+    .replace(/^[ \t]*\/\/ #(end)?docregion .*\r?\n/gm, '')
+    .trimEnd()
+    .split('\n');
+  const indent = Math.min(
+    ...lines.filter((line) => line.trim()).map((line) => line.match(/^ */)![0].length),
+  );
+  return lines.map((line) => line.slice(indent)).join('\n');
+};
+const excerpt = blocks.map(dedent).join('\n\n');
+---
+<Code code={excerpt} lang="dart" wrap mark={mark} />

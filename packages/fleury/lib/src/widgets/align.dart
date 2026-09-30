@@ -66,7 +66,9 @@ final class Align extends SingleChildRenderObjectWidget {
   }
 }
 
-/// Convenience for `Align(alignment: Alignment.center, child: …)`.
+/// Centers its child in the available space.
+///
+/// Shorthand for `Align(alignment: Alignment.center, child: …)`.
 @immutable
 final class Center extends SingleChildRenderObjectWidget {
   const Center({super.key, required Widget super.child});

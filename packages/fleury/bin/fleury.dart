@@ -96,8 +96,9 @@ void _printUsage() {
     '  create   Create a Fleury application with tests and a working F5 setup.',
   );
   stderr.writeln(
-    '           Usage: fleury create <directory> [--no-editor-config] [--no-pub]',
+    '           Usage: fleury create <directory> [--dependency-source=git]',
   );
+  stderr.writeln('                  [--no-editor-config] [--no-pub]');
   stderr.writeln(
     '  shell    Proxy fleury-app rendering through this terminal '
     'so the app can be',

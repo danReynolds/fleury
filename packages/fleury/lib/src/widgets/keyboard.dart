@@ -198,43 +198,37 @@ final class KeyboardScope extends Scope<KeyboardStateNotifier> {
       readScope<KeyboardStateNotifier>(context)?.dispatcher;
 }
 
-/// Conditional, widget-internal key handling — the framework's floor.
-///
-/// A detector *peeks* at the key stream flowing through its subtree and
-/// consumes only what it uses:
+/// Low-level key handling inside a widget: sees each key that reaches its
+/// subtree and consumes only the ones it handles.
 ///
 /// ```dart
 /// KeyDetector(
 ///   onKey: (e) {
 ///     if (e.code == KeyCode.arrowDown && _canScroll(1)) {
 ///       _scrollBy(1);
-///       e.consume();          // mine
+///       e.consume(); // handled here
 ///     }
-///     // not consumed → propagates, no ceremony
+///     // Not consumed: the key keeps propagating to ancestors.
 ///   },
 ///   child: Focus(child: view),
 /// )
 /// ```
 ///
-/// **Propagate by default** — the reverse of a binding, and deliberately so
-/// (RFC 0020 §16): a binding *declared* a match, so consumption is its
-/// semantics; a detector is peeking, so observation is the base state. That
-/// also inverts the failure mode of the `Focus.onKey` it replaces, where a
-/// blanket `return handled` silently starved an ancestor's feature. Forget
-/// to consume here and your key visibly does double duty while you test it —
-/// loud and local beats silent and distant.
+/// **Keys propagate unless consumed** — the reverse of a key binding, which
+/// consumes the key it matches. A detector observes by default, so a key it
+/// forgets to consume does visible double duty while you test it, instead of
+/// silently starving an ancestor's shortcut.
 ///
-/// **Not the authoring surface.** Apps declare `KeyBindings`, which is data
-/// the framework can read: the hint bar, which-key, and devtools render from
-/// the binding list and cannot read a closure. Reach for a detector when the
-/// handling is genuinely internal (a reusable scroll region, a bridge, a
-/// terminal pane forwarding raw keys) — see §17.
+/// **Prefer `KeyBindings` for app shortcuts.** Bindings are data the
+/// framework can read: the hint bar, which-key, and devtools list them, and
+/// none of them can read a closure. Use a detector when the handling belongs
+/// inside a reusable control, such as a scroll region or a terminal pane that
+/// forwards raw keys.
 ///
-/// Scope: active while focus is within the subtree, matched deepest-first
-/// like any binding scope. It installs a marker in the focus chain, **not** a
-/// focus node — adding a detector never changes traversal; compose `Focus`
-/// explicitly. Down and repeat only: releases never enter the routed lanes,
-/// because a consumable release would wedge an ancestor's pressed state.
+/// A detector is active while focus is within its subtree and is matched
+/// deepest-first, like a binding scope. It is **not** a focus node: adding
+/// one never changes traversal, so wrap the focusable part in `Focus`
+/// yourself. It sees key presses and repeats, never releases.
 final class KeyDetector extends StatefulWidget {
   const KeyDetector({super.key, required this.onKey, required this.child});
 
