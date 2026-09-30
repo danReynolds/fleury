@@ -69,16 +69,19 @@ class TerminalOutputRegion extends StatelessWidget {
   /// Semantic label (the accessibility name; not rendered) for the output region.
   final String semanticLabel;
 
-  /// Whether rows render stdout/stderr prefixes.
+  /// Whether each row starts with an `[INFO stdout]` or `[ERROR stderr]`
+  /// prefix.
   final bool showPrefix;
 
-  /// Maximum displayed line length per output row.
+  /// Cuts each output line to this many characters, with no ellipsis, on
+  /// screen and when copied; null never cuts. The prefix doesn't count.
   final int? maxLineLength;
 
   /// Optional filter applied to captured output rows.
   final LogRegionFilterDescriptor? filter;
 
-  /// Whether Ctrl+C and semantic copy export the selected output row.
+  /// Whether Ctrl+C (and the semantic copy action) copies the output line
+  /// under the cursor.
   final bool copySelection;
 
   /// Clipboard/export options for copied output.

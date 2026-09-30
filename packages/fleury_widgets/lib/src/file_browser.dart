@@ -181,10 +181,23 @@ String exportFileBrowserEntry(
   return _sanitizeFileText(options.copyAbsolutePath ? entry.path : entry.name);
 }
 
-/// Keyboard-navigable filesystem browser with semantic rows and safe copy.
+/// A directory browser that shows one folder at a time and reports the file
+/// the user opens to [onActivate].
+///
+/// Up and Down move the cursor; PageUp, PageDown, Home, and End jump. Enter,
+/// Right, or a click opens the entry under the cursor: a folder opens in
+/// place, and any other entry is passed to [onActivate]. Left or Backspace,
+/// or a click on the `.. (parent)` row, goes up a level. Ctrl+C copies the
+/// selected entry's path (see [copySelection] and [copyOptions]).
+///
+/// Folders are listed before other entries, and each group is sorted by name,
+/// ignoring case. [filter] narrows the listing by text and shows or hides
+/// hidden entries such as dot-files. A [FileBrowserController] moves the
+/// cursor, opens another directory, and re-reads the current one.
 ///
 /// It lists directories from [source]: the local disk by default on native
-/// platforms. A browser embed passes one, such as a [MemoryFileSource].
+/// platforms. A browser embed passes one, such as a [MemoryFileSource]. A
+/// directory that can't be listed shows the error in place of its entries.
 class FileBrowser extends StatefulWidget {
   const FileBrowser({
     super.key,
@@ -204,9 +217,8 @@ class FileBrowser extends StatefulWidget {
     this.onCopy,
   }) : assert(maxVisible > 0);
 
-  /// Directory opened when the browser mounts.
-  /// Directory used on first mount. Use FileBrowserController.openDirectory
-  /// for later navigation; changing this seed does not navigate.
+  /// The directory shown when the browser first mounts. Changing it later
+  /// does not navigate; call [FileBrowserController.openDirectory] instead.
   final String initialDirectory;
 
   /// Where directories are read from. Defaults to the local disk on native
@@ -229,7 +241,9 @@ class FileBrowser extends StatefulWidget {
   /// Maximum visible rows before the list scrolls.
   final int maxVisible;
 
-  /// Text and hidden-file filter applied to loaded entries.
+  /// Narrows the listing: `query` keeps entries whose name and type (such as
+  /// `directory`) contain its characters in order, ignoring case, and
+  /// `showHidden` includes hidden entries such as dot-files.
   final FileBrowserFilterDescriptor filter;
 
   /// Optional predicate applied to entries when a directory is read: on
@@ -238,17 +252,22 @@ class FileBrowser extends StatefulWidget {
   /// its parent never re-reads the disk.
   final FileEntryFilter? entryFilter;
 
-  /// Whether Ctrl+C and semantic copy export the selected entry.
+  /// Whether Ctrl+C (and the semantic copy action) copies the selected entry
+  /// to the clipboard.
   final bool copySelection;
 
-  /// Clipboard/export options for the selected entry.
+  /// What Ctrl+C copies: the entry's full path (the default) or only its
+  /// name, and the clipboard write policy.
   final FileBrowserCopyOptions copyOptions;
 
-  /// Called when Enter activates a non-directory entry.
+  /// Called when the user opens an entry that isn't a directory, with Enter,
+  /// Right, or a click on its row. Opening a directory navigates into it
+  /// instead.
   final void Function(FileEntry entry)? onActivate;
 
-  /// Called after a navigation interaction changes directories.
-  /// Controller commands notify controller listeners instead.
+  /// Called with the new directory after the user opens a folder or goes up a
+  /// level. [FileBrowserController.openDirectory] notifies the controller's
+  /// listeners instead.
   final void Function(String directory)? onDirectoryChanged;
 
   /// Called after a copy attempt completes.

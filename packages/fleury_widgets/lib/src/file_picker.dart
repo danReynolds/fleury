@@ -4,9 +4,13 @@ import 'file_source.dart';
 import 'file_source_default_stub.dart'
     if (dart.library.io) 'file_source_default_io.dart';
 
-/// A keyboard-driven file picker. Shows the contents of one directory at
-/// a time as a scrollable list; Up/Down navigates, Enter opens a folder
-/// (or selects a file), Backspace / Left goes to the parent directory.
+/// A file picker that shows one directory at a time as a scrollable list and
+/// passes the file the user chooses to [onSelect].
+///
+/// Up and Down move the cursor, wrapping at the ends, and Home and End jump.
+/// Enter, Right, or a click on a row opens a folder in place or chooses a
+/// file. Left or Backspace, or a click on the `..` row, goes to the parent
+/// directory.
 ///
 /// ```dart
 /// FilePicker(
@@ -38,21 +42,27 @@ class FilePicker extends StatefulWidget {
   /// unreadable), the picker renders a dim error row instead of entries.
   final String initialDirectory;
 
-  /// Called with the chosen file when Enter is pressed on a file row.
-  /// Directories are opened in place — not passed to this callback.
+  /// Called with the chosen file when the user presses Enter or Right on a
+  /// file row, or clicks it. Directories open in place instead; links and
+  /// other non-file entries do nothing.
   final void Function(FileEntry file) onSelect;
 
   /// Where directories are read from. Defaults to the local disk on native
   /// platforms; in the browser, pass one, such as a [MemoryFileSource].
   final FileSource? source;
 
-  /// Optional predicate to hide entries. Receives every entry before it's
-  /// rendered; return `false` to skip. Use to filter by extension, hide
-  /// build artifacts, etc.
+  /// Optional predicate that hides entries: return `false` to skip one. It
+  /// runs when a directory is listed, on the entries that pass the
+  /// [showHidden] rule. Use it to filter by extension, hide build artifacts,
+  /// and so on.
+  ///
+  /// Passing a different function re-lists the current directory and moves
+  /// the cursor to the first row, and a closure written inline in a `build`
+  /// method is a different function on every rebuild. When the parent
+  /// rebuilds often, pass a stable function, such as a top-level one.
   final FileEntryFilter? filter;
 
-  /// When `false` (default), entries whose name starts with `.` are
-  /// hidden — matches the unix convention. Set `true` to include them.
+  /// Whether to list hidden entries, such as dot-files. Defaults to `false`.
   final bool showHidden;
 
   /// Maximum rows shown at once; longer directories scroll within this height,
