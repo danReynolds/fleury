@@ -181,6 +181,9 @@ a typed domain value. An agent can invoke `select` on a row, use the table's
 `setValue` action to jump to a row index, or `copy` the current selection,
 without guessing which arrow keys to press.
 
+An agent's `get_ui` result has the same shape, minus any `value` that only
+repeats its `label`, plus agent fields such as `stableId`.
+
 ## Holding a reference — stable ids
 
 An agent that read a node a moment ago needs to act on *that* node, even after the
@@ -339,10 +342,12 @@ uses:
   through them — a typed surface, not a screenshot to interpret.
 - **Tests** assert on meaning (above), so they survive a re-theme, a relayout, or
   a port to the browser.
-- **Accessibility adapters** read the same roles and state. Custom controls
-  still need meaningful semantics, and screen-reader behavior needs validation
-  on each target; sharing the tree does not guarantee equivalent accessibility
-  across terminals and browsers.
+- **Accessibility**, in the browser: both browser paths project the same tree
+  into a visually hidden, accessible DOM (ARIA roles, labels, values, and
+  states), and activating a node there invokes its primary `SemanticAction`.
+  Custom controls still need meaningful semantics, and screen-reader behavior
+  still needs testing. In a terminal, Fleury has no channel for handing the
+  tree to assistive technology.
 
 ## On both surfaces
 
