@@ -47,13 +47,13 @@ Select<int>(
 
 A theme is just a `ThemeData`, so you don't need this package to make one — see
 the [theming guide](https://danreynolds.github.io/fleury/guides/theming/) for
-the roles, the text styles, and the one rule worth knowing (pair colour with an
+the roles, the text styles, and the one rule worth knowing (pair color with an
 attribute, so cues survive `NO_COLOR`).
 
 ## Attribution
 
-These are community colour schemes, each the work of its authors and included
+These are community color schemes, each the work of its authors and included
 here with attribution — see
 [THIRD_PARTY_NOTICES.txt](THIRD_PARTY_NOTICES.txt). No upstream source code is
-vendored, only published colour values; the mapping onto Fleury's nine roles is
+vendored, only published color values; the mapping onto Fleury's nine roles is
 this package's own work.
