@@ -158,6 +158,24 @@ void main() {
       ]);
     });
 
+    test('super parameters without a default inherit the superclass one', () {
+      final api = extractApiFromSource(
+        _inheritedDefaultFixture,
+        file: 'fixture.dart',
+      );
+      Object? defaultOf(String className, String name) =>
+          ((api[className]! as Map<String, Object?>)['params']! as List)
+              .cast<Map<String, Object?>>()
+              .singleWhere((param) => param['name'] == name)['default'];
+
+      expect(defaultOf('Line', 'size'), 'Size.max');
+      expect(defaultOf('Line', 'align'), "'start'");
+      expect(defaultOf('HorizontalLine', 'size'), 'Size.max');
+      expect(defaultOf('Tight', 'flex'), '1');
+      expect(defaultOf('Explicit', 'size'), 'Size.min');
+      expect(defaultOf('Required', 'child'), isNull);
+    });
+
     test('keeps parameterless and implicit public constructors', () {
       final api = extractApiFromSource(
         _visibilityFixture,
@@ -366,6 +384,44 @@ class ChildrenBox extends MultiChildWidget {
     /// Ordered content.
     super.children = const <Widget>[],
   });
+}
+''';
+
+const _inheritedDefaultFixture = r'''
+enum Size { min, max }
+
+class Base {
+  const Base({
+    this.size = Size.max,
+    this.align = 'start',
+    this.flex = 1,
+    this.child,
+  });
+
+  final Size size;
+  final String align;
+  final int flex;
+  final Object? child;
+}
+
+class Line extends Base {
+  const Line({super.size, super.align});
+}
+
+class HorizontalLine extends Line {
+  const HorizontalLine({super.size});
+}
+
+class Tight extends Base {
+  const Tight({super.flex}) : super(size: Size.min);
+}
+
+class Explicit extends Base {
+  const Explicit({super.size = Size.min});
+}
+
+class Required extends Base {
+  const Required({required super.child});
 }
 ''';
 

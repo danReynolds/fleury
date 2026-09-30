@@ -50,14 +50,18 @@ runApp(
 ```
 
 `mode` chooses `TerminalMode.fullScreen()` (the default) or
-`TerminalMode.inline(rows: ...)`, with optional mouse input.
-`enableHotReload` (default `true`) wires up state-
+`TerminalMode.inline(rows: ...)`. Both leave mouse input off unless you pass
+`mouse: true`, as the generated `bin/run_app.dart` does with
+`TerminalMode(mouse: true)`; without it, clicks never reach
+`GestureDetector` or buttons. `enableHotReload` (default `true`) wires up state-
 preserving hot reload under the Dart VM. Because `runApp` depends on `dart:io`,
 it's exported from `fleury.dart` — *not* from the web-safe `fleury_core`.
 
 For a small one-screen program, passing the screen directly is still valid:
-`runApp(const StatusScreen())`. Use `FleuryApp` as soon as the program has an
-app-wide theme, commands/status, extensions, or more than one screen.
+`runApp(const StatusScreen())`. A bare root has no `Navigator`, so it also
+skips the Tab and arrow focus traversal that routes install (see below). Use
+`FleuryApp` as soon as the program has an app-wide theme, commands/status,
+extensions, more than one screen, or more than one focusable control.
 
 ## Full-screen or inline?
 
@@ -159,9 +163,9 @@ import 'package:fleury/fleury_core.dart';
 import 'package:fleury_web/fleury_web.dart';
 import 'package:web/web.dart' as web;
 
-void main() {
+Future<void> main() async {
   final host = web.document.getElementById('app')!;
-  mountApp(
+  await mountApp(
     () => const FleuryApp(title: 'My app', home: MyHomeScreen()),
     into: host,
   );
@@ -171,11 +175,12 @@ void main() {
 Two host-API differences from `runApp` worth flagging:
 
 - It takes a **widget factory** (`() => const MyApp()`), not an instance.
-- It returns a `Future<MountedApp>` (a handle to the running surface), not
-  `void`.
+- Its future completes as soon as the app is **mounted**, with a `MountedApp`
+  handle to the running surface (call `dispose()` on it to unmount). The future
+  from `runApp` completes only when the app **exits**.
 
-The host element must have an explicit size and a monospace font, or the grid
-measures zero cells and paints nothing:
+The host element needs an explicit size, or the grid measures zero cells and
+paints nothing. It also needs a monospace font, or the cells misalign:
 
 ```html
 <div id="app" style="width:80ch;height:24em;font-family:monospace"></div>

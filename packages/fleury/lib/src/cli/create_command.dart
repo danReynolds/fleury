@@ -115,9 +115,12 @@ Future<int> runCreateCommand(List<String> args) async {
         '`dart pub get` from ${target.path}.',
       );
       if (options.dependencySource == _DependencySource.hosted) {
+        // The directory is no longer empty, so a plain rerun would refuse it.
         stderr.writeln(
           "If the fleury packages aren't on pub.dev yet, scaffold against "
-          'the Git checkout instead: rerun with `--dependency-source=git`.',
+          'the Git repository instead: remove ${target.path} and run '
+          '`fleury create ${_commandPath(_displayPath(requestedPath))} '
+          '--dependency-source=git`.',
         );
       }
       return code;
@@ -263,7 +266,6 @@ $dependencies''';
 String _appSource({required String className, required String displayName}) =>
     '''
 import 'package:fleury/fleury.dart';
-import 'package:fleury_widgets/fleury_widgets.dart';
 
 class $className extends StatefulWidget {
   const $className({super.key});

@@ -8,6 +8,7 @@
 // live theme, so swapping two colors cannot pass by preserving the same set.
 
 import 'dart:io';
+import 'dart:convert';
 
 import 'package:fleury/fleury_core.dart';
 import 'package:fleury/fleury_internal.dart';
@@ -20,8 +21,23 @@ int _packed(Color? c) {
   return (rgb.r << 16) | (rgb.g << 8) | rgb.b;
 }
 
+String guideSource(String id) {
+  final project =
+      (jsonDecode(File('../src/guide_projects.json').readAsStringSync())
+              as Map)[id]
+          as Map;
+  return (project['views'] as List)
+      .map(
+        (view) => (project['files'][view['file']] as String).substring(
+          view['start'] as int,
+          view['end'] as int,
+        ),
+      )
+      .join('\n');
+}
+
 String get _guide =>
-    File('../src/content/docs/guides/theming.mdx').readAsStringSync();
+    guideSource('themes.custom').replaceAll('const RgbColor', 'RgbColor');
 
 void main() {
   group('the guide shows the theme it renders', () {
@@ -66,12 +82,7 @@ void main() {
       expect(_guide, contains('borderStyle: BorderStyle.double'));
       expect(customThemeForTest.borderStyle, BorderStyle.double);
       expect(customThemeForTest.interactiveStyle, isNull);
-      expect(
-        _guide,
-        contains(
-          "FleuryApp(title: 'Dashboard', theme: amber, home: const Dashboard());",
-        ),
-      );
+      expect(_guide, contains('ThemeData _buildCustomTheme()'));
       expect(
         customThemeSourceForTest,
         contains(
@@ -97,11 +108,18 @@ void main() {
     ];
     for (final line in stateLines) {
       expect(source, contains(line), reason: 'registry source omitted $line');
-      expect(_guide, contains(line), reason: 'guide source omitted $line');
+      expect(
+        guideSource('themes.interactive_styles'),
+        contains(line),
+        reason: 'guide source omitted $line',
+      );
     }
     expect(source, interactiveStyleSourceForTest);
     expect(source, contains('const interactions = CellStyle.interactive('));
-    expect(_guide, contains('const interactions = CellStyle.interactive('));
+    expect(
+      guideSource('themes.interactive_styles'),
+      contains('const CellStyle _interactiveStyle = CellStyle.interactive('),
+    );
 
     final focused = resolveCellStyle(
       cascade: [interactiveStyleForTest],

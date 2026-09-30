@@ -35,6 +35,8 @@ jobs:
         working-directory: website/examples
         run: dart pub get
       - name: Build GitHub Pages artifact
+        env:
+          PUBLIC_FLEURY_PAD_COMPILER_URL: ${{ vars.FLEURY_PAD_COMPILER_URL }}
         uses: withastro/action@v6
         with:
           path: website

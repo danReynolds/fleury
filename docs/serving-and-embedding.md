@@ -68,13 +68,12 @@ void main() {
 
 **Constraints**
 
-- **Web-safe widgets only.** Anything that reaches `dart:io` won't compile to JS
-  — that includes four native-only widgets (`FileBrowser`, `FilePicker`,
-  `LogRegion`, `TerminalOutputRegion`). The supporting `WorkflowSnapshot`
-  model is also absent from the web barrel today because its `LogEntry`
-  dependency lives in the native-only log library.
-  Import `package:fleury/fleury_core.dart`, not `fleury.dart` (see
-  [Core and targets](core-and-targets.md#the-web-safety-boundary)).
+- **Web-safe code only.** Code that reaches `dart:io` fails in the browser:
+  dart2js compiles it, but the call throws when it runs. Every widget in
+  `fleury_widgets_web.dart` is web-safe; `FileBrowser` and `FilePicker` read a
+  `FileSource` you pass (such as a `MemoryFileSource`), since there is no local
+  disk to list. Import `package:fleury/fleury_core.dart`, not `fleury.dart`
+  (see [Core and targets](core-and-targets.md#the-web-safety-boundary)).
 - **No host machine.** No filesystem, processes, or environment — the browser
   sandbox is all you get.
 - The host element needs an explicit CSS size.
@@ -134,14 +133,16 @@ handle's single-accept socket and wedge the session. `serve` will not inject
 the flag for you: a VM service is a debug port, and opening one is the
 operator's decision, not a side effect of asking for a browser preview.
 
-Two additional spawn-only controls must appear before `--spawn`:
+Two more controls must appear before `--spawn`:
 
-- `--max-sessions=<n>` caps concurrent browser sessions (default `8`). A
+- `--max-sessions=<n>` (spawn mode only) caps concurrent browser sessions
+  (default `8`). A
   browser that arrives at the cap is turned away after the WebSocket upgrade
   with close code `4001` and a reason the page shows in its banner, so the cap
   is visible to the user rather than a blank grid.
 - `--debug` exposes frame timings, captured logs, and full error details over
-  the debug wire. It is off for spawned sessions unless explicitly requested.
+  the debug wire. It is off unless explicitly requested, in both spawn and
+  bridge mode.
 
 ### Trust model
 
@@ -172,10 +173,9 @@ authenticating reverse proxy.
 
 **Properties**
 
-- **Full fidelity.** The app is the real native program, so *every* widget works
-  — including the `dart:io`-backed ones (`FileBrowser`, log/terminal regions)
-  and native-only constructors such as `Image.file`. It
-  has a filesystem, processes, and environment.
+- **Full fidelity.** The app is the real native program, with a filesystem,
+  processes, and environment: `FileBrowser` and `FilePicker` read the real
+  disk, `TerminalOutputRegion` shows captured output, and `Image.file` works.
 - **Browser-visible.** A running terminal app becomes a local URL for preview,
   debugging, and trusted pairing.
 - The wire is tuned: cell-range patches with a style table and varints,

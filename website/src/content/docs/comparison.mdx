@@ -102,15 +102,17 @@ A `setState` marks one subtree dirty; only that path rebuilds, re-lays-out, and
 re-paints, and the target diffs down to the **cell** — an idle app emits nothing, a
 busy one pays only for what moved. A cursor move in a 10,000-character editor costs
 about **0.8 ms in the saved development fixture**, tracking the change rather
-than how much is on screen. Data widgets are virtualized, so a
-hundred-thousand-row table costs about a screenful. The
-[benchmark suite](/fleury/architecture/performance/) measures local pipeline work,
+than how much is on screen. Data widgets are virtualized, so paging through a
+hundred-thousand-row table costs about the same as a screenful (both figures:
+`SB.2` and `SB.3` in the saved
+[peer scorecards](https://github.com/danReynolds/fleury/blob/main/docs/implementation/peer-scorecards.md)).
+The [benchmark suite](/fleury/architecture/performance/) measures local pipeline work,
 real-terminal bytes and process cost, and the browser frame path. The numbers back a
 peer-competitive claim across many matched workloads — not a universal "fastest
-framework" ranking. The dashboard below
-streams on a ticker and repaints only the cells that change:
+framework" ranking. The chart below streams a new point several times a second
+and repaints only the cells that change:
 
-<FleuryExample id="home.monitor" cols={34} rows={9} />
+<FleuryExample id="linechart.basic" cols={60} rows={16} />
 
 ## Why Dart
 
@@ -133,13 +135,14 @@ safety) co-evolved with exactly this kind of declarative tree. Fleury isn't
 bending Dart to fit; it's using it for what it was shaped to do.
 
 **Hot reload, in a terminal.** Save a file and your running TUI updates in
-place — widget state, focus, and scroll intact — with a plain `dart run`, in
-any editor. This is the Dart VM's stateful code-swapping, the loop Flutter
-developers lean on, [built into `runApp`](/fleury/guides/hot-reload/). Peer
-stacks iterate by restarting: Textual live-applies CSS edits but restarts for
-code changes, and the Go and Rust stacks pair with an external watcher that
-reruns the process — either way, your app's state and your place in it are
-lost on every edit.
+place — widget state, focus, and scroll intact — under `fleury run`, in any
+editor. This is the Dart VM's stateful code-swapping, the loop Flutter
+developers lean on, [built into `runApp`](/fleury/guides/hot-reload/). nocterm,
+also written in Dart, reloads the same way. Outside Dart, the stacks here
+iterate by restarting: Textual live-applies CSS edits but restarts for code
+changes, and the Go and Rust stacks pair with an external watcher that reruns
+the process — either way, your app's state and your place in it are lost on
+every edit.
 
 None of this makes Dart the *leanest* option at the floor — Rust boots quicker
 and idles smaller, and [the benchmarks](/fleury/architecture/performance/) say so
@@ -154,7 +157,7 @@ can build with each, how each is put together, and where the others lead. Every
 peer cell is checked against that project's own docs and releases (July 2026);
 corrections welcome.
 
-{/* Sources — hot reload/browser/devtools/images/testing: Textual textual.textualize.io + textual-serve; Bubble Tea github.com/charmbracelet/bubbletea (+ discussion #300, #1374); Ratatui ratatui.rs + ratatui-image + ratzilla; Ink github.com/vadimdemedes/ink (issue #159, ink-testing-library, ink-picture); OpenTUI github.com/anomalyco/opentui (PR #446, issue #92); nocterm github.com/Norbert515/nocterm + pub.dev changelog + HN 46886038. Component counts: Fleury 80+ (widget reference, ~88 pages), Textual ~40 (widget gallery), nocterm 45+ (nocterm.dev). Single-binary: native compile = Dart AOT / Go / Rust; ◐ = PyInstaller / Node SEA / Bun compile. */}
+{/* Sources — hot reload/browser/devtools/images/testing: Textual textual.textualize.io + textual-serve; Bubble Tea github.com/charmbracelet/bubbletea (+ discussion #300, #1374); Ratatui ratatui.rs + ratatui-image + ratzilla; Ink github.com/vadimdemedes/ink (issue #159, ink-testing-library, ink-picture); OpenTUI github.com/anomalyco/opentui (PR #446, issue #92); nocterm github.com/Norbert515/nocterm + pub.dev changelog + HN 46886038. Component counts: Fleury 80+ (widget reference, ~88 pages), Textual ~40 (widget gallery), nocterm 45+ (nocterm.dev). Single-binary: native compile = Dart AOT / Go / Rust; ◐ = PyInstaller / Node SEA / Bun compile. Agents: Textual ◐ = third-party textual-mcp-server 1.0.0 (PyPI, 2026-02-17; github.com/discohead/textual-mcp-server). */}
 
 <div class="compare-block">
 
@@ -164,8 +167,8 @@ corrections welcome.
 
 | Capability | **Fleury** | nocterm | OpenTUI | Textual | Bubble Tea | Ratatui | Ink |
 |---|:--:|:--:|:--:|:--:|:--:|:--:|:--:|
-| **AI-agent drivable** (MCP) | ✅ | — | — | — | — | — | — |
-| **Screen-reader accessible** | <span class="ct" tabindex="0" data-tip="Fleury's semantic tree drives an ARIA accessibility DOM on the web surface; the same tree powers agents and tests.">✅</span> | — | — | — | — | — | <span class="ct" tabindex="0" data-tip="A recent terminal screen-reader text layer.">◐</span> |
+| **AI-agent drivable** (MCP) | ✅ | — | — | <span class="ct" tabindex="0" data-tip="Via the third-party textual-mcp-server package.">◐</span> | — | — | — |
+| **Screen-reader accessible** | <span class="ct" tabindex="0" data-tip="In the browser: the semantic tree drives an ARIA accessibility DOM (the same tree powers agents and tests). Terminal output has no screen-reader layer.">◐</span> | — | — | — | — | — | <span class="ct" tabindex="0" data-tip="A recent terminal screen-reader text layer.">◐</span> |
 | **Stateful hot reload** | ✅ | ✅ | <span class="ct" tabindex="0" data-tip="Not an officially documented feature; Bun's React Fast Refresh may apply to the React binding.">◐</span> | <span class="ct" tabindex="0" data-tip="CSS/TCSS reloads live; Python code changes still need a restart.">◐</span> | — | — | — |
 | **Runs in the browser** | <span class="ct" tabindex="0" data-tip="Client-side (dart2js) plus a fleury serve stream.">✅</span> | <span class="ct" tabindex="0" data-tip="Client-side, experimental.">◐</span> | <span class="ct" tabindex="0" data-tip="In the browser via the community Gridland project (a canvas renderer); a first-party WASM build is future research.">◐</span> | <span class="ct" tabindex="0" data-tip="Server-side: the app runs on a server and streams to the browser.">✅</span> | <span class="ct" tabindex="0" data-tip="No official browser target — only community Go-to-WASM proofs of concept.">—</span> | <span class="ct" tabindex="0" data-tip="Via the community ratzilla crate (WebAssembly).">◐</span> | <span class="ct" tabindex="0" data-tip="Via the community ink-web project.">◐</span> |
 | **Terminal images** (Kitty·iTerm2·Sixel) | ✅ | <span class="ct" tabindex="0" data-tip="Kitty, Sixel, and iTerm2 protocols built in, with a Unicode-block fallback.">✅</span> | <span class="ct" tabindex="0" data-tip="Rasterizes graphics to cells (incl. 3D) — no image protocols.">—</span> | <span class="ct" tabindex="0" data-tip="Via the third-party textual-image package.">◐</span> | <span class="ct" tabindex="0" data-tip="Detects Sixel capability but doesn't render images.">—</span> | <span class="ct" tabindex="0" data-tip="Via the third-party ratatui-image crate.">◐</span> | <span class="ct" tabindex="0" data-tip="Via the third-party ink-picture package.">◐</span> |
@@ -197,10 +200,11 @@ corrections welcome.
 </div>
 
 Two capabilities carry Fleury's edge — **agents** and **accessibility** both fall
-out of a single semantic tree, a pairing no other framework here offers. Hot reload,
-browser, and images it leads or ties; components put it in the batteries-included
-camp, with the largest built-in set. Where it doesn't win: OpenTUI's terminal 3D,
-Rust and Go idle leaner, and — most of all — maturity.
+out of a single semantic tree; no other framework here has first-party support
+for both. Hot reload, browser, and images it leads or ties; components put it in
+the batteries-included camp, with 80+ built-in widgets. Where it doesn't win:
+OpenTUI's terminal 3D, Rust and Go idle leaner, screen readers reach it only in
+the browser, and — most of all — maturity.
 
 ## When to pick something else
 

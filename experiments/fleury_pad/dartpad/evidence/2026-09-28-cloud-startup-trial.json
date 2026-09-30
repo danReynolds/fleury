@@ -1,0 +1,83 @@
+{
+  "date": "2026-09-28",
+  "project": "fleury-pad-20260927",
+  "region": "us-central1",
+  "service": "fleury-pad-staging",
+  "buildId": "ecd42e145c5b0e2c",
+  "imageManifestDigest": "sha256:4aa12ac9b9b8c1ba4a8b3bad8518f6b05fca860b33f3adc2676ac965adf6d5ce",
+  "imageConfigDigest": "sha256:1c841f080db8a49bf33cb95d025002faa7b0cdb61fff519955bd9732c613aa76",
+  "finalRevision": "fleury-pad-staging-00013-qil",
+  "noBoost": {
+    "revision": "fleury-pad-staging-00011-nez",
+    "kind": "deployment startup, not a cold visitor request",
+    "instanceStart": "2026-09-28T13:55:16.497476Z",
+    "httpReady": "2026-09-28T13:55:16.977551Z",
+    "backendReady": "2026-09-28T13:55:20.683454Z",
+    "startupProbe": "2026-09-28T13:55:18.613772Z",
+    "httpReadyAfterInstanceMs": 480.1,
+    "backendReadyAfterInstanceMs": 4186.0,
+    "backendInitMs": 3706
+  },
+  "boost": {
+    "revision": "fleury-pad-staging-00013-qil",
+    "kind": "deployment startup, not a cold visitor request",
+    "instanceStart": "2026-09-28T13:57:58.243792Z",
+    "httpReady": "2026-09-28T13:57:58.621180Z",
+    "backendReady": "2026-09-28T13:58:01.214593Z",
+    "startupProbe": "2026-09-28T13:58:00.362726Z",
+    "httpReadyAfterInstanceMs": 377.4,
+    "backendReadyAfterInstanceMs": 2970.8,
+    "backendInitMs": 2593
+  },
+  "configuration": {
+    "steadyCpu": 1,
+    "startupBoostCpu": 2,
+    "memoryGiB": 2,
+    "serviceMin": 0,
+    "serviceMax": 1,
+    "revisionMin": 0,
+    "revisionMax": 1,
+    "instanceBasedBilling": true,
+    "privateIam": true,
+    "candidateTags": []
+  },
+  "hostedApiTests": {
+    "passed": 9,
+    "failed": 0,
+    "seconds": 16.589
+  },
+  "browser": {
+    "heading": "Fleury Pad starts faster!",
+    "countPreserved": 6,
+    "draftPreserved": "Draft survives startup changes",
+    "serverReloadMs": 585,
+    "warningOrErrorLogs": []
+  },
+  "naturalColdMeasured": true,
+  "localBrowserOutageCheck": {
+    "compilerBuildReturned503": true,
+    "editorRemainedEditable": true,
+    "sourceRestoredAfterPageReload": true,
+    "runRetriedMetadataWithoutPageReload": true,
+    "previewText": "Saved while compiler unavailable",
+    "backend": "Native macOS ARM64 using the pinned SDK; synthetic loopback outage, not Cloud Run"
+  },
+  "configurationVerified": true,
+  "naturalColdEvidence": "2026-09-28-cloud-cold-startup-boost.json",
+  "naturalColdMeasuredAt": "2026-09-28T14:18:18.288359+00:00",
+  "naturalColdFirstConnectionMs": 2616.3,
+  "naturalColdFirstCompileMs": 1314.4,
+  "naturalColdConnectionThroughCompileMs": 3930.7,
+  "postColdBrowser": {
+    "count": 6,
+    "draft": "Draft survives startup changes",
+    "serverReloadMs": 675,
+    "screenshot": "2026-09-28-hosted-reload.png"
+  },
+  "steadyWarmEvidence": "2026-09-28-cloud-steady-warm.json",
+  "steadyWarmReloadMs": [
+    810.2,
+    601.1,
+    856.5
+  ]
+}

@@ -177,11 +177,18 @@ void main() {
       final snippet = File(
         p.join(repo.path, 'website/examples/doc_snippets/web_app_shell.dart'),
       ).readAsStringSync();
+      // Getting started's finished lib/app.dart, which both the terminal and
+      // the browser entrypoints run.
       final sharedTree = File(
-        p.join(repo.path, 'website/examples/doc_snippets/status_app.dart'),
+        p.join(
+          repo.path,
+          'website/examples/doc_snippets/getting_started_app.dart',
+        ),
       ).readAsStringSync();
       expect(snippet, contains("package:fleury/fleury_core.dart"));
       expect(snippet, contains("package:fleury_web/fleury_web.dart"));
+      expect(sharedTree, contains("package:fleury/fleury_core.dart"));
+      expect(sharedTree, isNot(contains("package:fleury/fleury.dart")));
       expect(
         '$snippet\n$sharedTree',
         contains("package:fleury_widgets/fleury_widgets_web.dart"),
@@ -253,7 +260,7 @@ void main() {
         RegExp(r'''Semantics\s*\(\s*id:\s*(?:const\s+)?['"]''').hasMatch(guide),
         isFalse,
       );
-      expect(guide, contains('<AgentGuideCode slot="code"'));
+      expect(guide, contains('<GuidePad id="agents.release-checklist"'));
       expect(compiledSnippet, contains("id: SemanticNodeId('save')"));
     });
 
@@ -296,6 +303,7 @@ void main() {
       ).readAsStringSync();
       expect(guide, contains('fleury create my_app --dependency-source=git'));
       expect(guide, contains('fleury create my_app'));
+      expect(guide, contains('fleury run'));
       expect(guide, contains('dart run bin/run_app.dart'));
       expect(guide, contains('title="lib/app.dart"'));
       expect(guide, contains('title="test/app_test.dart"'));
@@ -309,8 +317,15 @@ void main() {
 
       expect(guide, contains('path: packages/fleury_web'));
       expect(guide, contains('web: ^1.1.1'));
-      expect(guide, contains('title="lib/status_app.dart"'));
-      expect(guide, contains("package:my_app/status_app.dart"));
+      // The browser bundle reuses the same MyApp once lib/app.dart imports the
+      // web-safe libraries.
+      expect(guide, contains("import 'package:fleury/fleury_core.dart';"));
+      expect(
+        guide,
+        contains("import 'package:fleury_widgets/fleury_widgets_web.dart';"),
+      );
+      expect(guide, contains('() => const MyApp()'));
+      expect(guide, contains('title="web/index.html"'));
     });
 
     test('testing guide uses the current Git package boundary', () {
@@ -330,7 +345,7 @@ void main() {
         p.join(repo.path, 'website/src/content/docs/guides/layout.mdx'),
       ).readAsStringSync();
       final flutter = File(
-        p.join(repo.path, 'website/src/content/docs/coming-from-flutter.md'),
+        p.join(repo.path, 'website/src/content/docs/coming-from-flutter.mdx'),
       ).readAsStringSync();
 
       expect(basic, contains('AspectRatio(aspectRatio: 2.0, ...)'));
@@ -369,7 +384,7 @@ void main() {
     // the dev loop off and restart by hand.
     test('hot-reload guide teaches runApp(args:) for argv-driven apps', () {
       final guide = File(
-        p.join(repo.path, 'website/src/content/docs/guides/hot-reload.md'),
+        p.join(repo.path, 'website/src/content/docs/guides/hot-reload.mdx'),
       ).readAsStringSync();
 
       expect(guide, contains('runApp(const MyApp(), args: args)'));
@@ -377,6 +392,24 @@ void main() {
         guide,
         isNot(contains('`FLEURY_HOT_RELOAD=0` and restart manually')),
       );
+    });
+
+    // The supervisor's early-exit hint sends users to a named section of the
+    // hot-reload guide. It pointed at "How it works" long after the advice
+    // there changed; renaming the section must fail here instead.
+    test('the dev supervisor hint names a real hot-reload guide section', () {
+      final bootstrap = File(
+        p.join(repo.path, 'packages/fleury/lib/src/runtime/dev_bootstrap.dart'),
+      ).readAsStringSync();
+      final guide = File(
+        p.join(repo.path, 'website/src/content/docs/guides/hot-reload.mdx'),
+      ).readAsStringSync();
+      final section = RegExp(
+        r'hot-reload guide → "([^"]+)"',
+      ).firstMatch(bootstrap);
+
+      expect(section, isNotNull);
+      expect(guide, contains('\n## ${section!.group(1)}\n'));
     });
 
     // The documented browser command — `--spawn dart run …` — starts no VM
@@ -388,7 +421,7 @@ void main() {
       const recipe = 'dart --enable-vm-service=0 run';
       for (final path in const <String>[
         'docs/serving-and-embedding.md',
-        'website/src/content/docs/guides/hot-reload.md',
+        'website/src/content/docs/guides/hot-reload.mdx',
         'packages/fleury/lib/src/cli/create_command.dart',
       ]) {
         expect(

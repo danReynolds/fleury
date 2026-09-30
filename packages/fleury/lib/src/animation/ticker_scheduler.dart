@@ -168,8 +168,7 @@ class TickerScheduler {
   set onFrameStart(void Function()? callback) => _onFrameStart = callback;
 
   /// Fires every registered reassemble callback. Called by the
-  /// runtime (via the `onReassemble` hook in `runApp`) after the
-  /// build owner has walked the element tree.
+  /// shared runtime after the build owner has rebuilt the element tree.
   ///
   /// Iterates over a snapshot so a callback can safely unregister
   /// itself (e.g. an `Animation.dispose` triggered by a

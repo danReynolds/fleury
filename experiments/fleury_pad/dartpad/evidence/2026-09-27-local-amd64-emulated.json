@@ -1,0 +1,60 @@
+{
+  "startedAt": "2026-09-27T17:21:13.177045+00:00",
+  "finishedAt": "2026-09-27T17:21:21.172877+00:00",
+  "url": "http://127.0.0.1:54858",
+  "label": "local-after-readiness",
+  "build": {
+    "sdkVersion": "3.12.2",
+    "buildId": "395ef1cabf3c468b",
+    "backend": "dartpad",
+    "upstreamRevision": "70a62b1ebcf9d2b906ec564254bde02a543be895",
+    "protocolVersion": 2,
+    "sourceRevision": "227e387b-dirty-20260927"
+  },
+  "httpOnly": true,
+  "coldStartConfirmed": false,
+  "samples": [
+    {
+      "operation": "initialConnection",
+      "roundTripMs": 89.5,
+      "serverElapsedMs": null,
+      "responseBytes": 208
+    },
+    {
+      "operation": "firstCompile",
+      "roundTripMs": 5177.8,
+      "serverElapsedMs": 5118,
+      "responseBytes": 38313
+    },
+    {
+      "operation": "reload1",
+      "roundTripMs": 1497.1,
+      "serverElapsedMs": 1444,
+      "responseBytes": 23905
+    },
+    {
+      "operation": "reload2",
+      "roundTripMs": 621.6,
+      "serverElapsedMs": 607,
+      "responseBytes": 23905
+    },
+    {
+      "operation": "reload3",
+      "roundTripMs": 603.5,
+      "serverElapsedMs": 566,
+      "responseBytes": 23905
+    }
+  ],
+  "firstConnectionThroughCompileMs": 5267.3,
+  "environment": "Local Docker linux/amd64; not Cloud Run",
+  "startupReadinessMs": 41469.3,
+  "allocation": {
+    "cpus": 1,
+    "memoryGiB": 2,
+    "swapEnabled": false
+  },
+  "qualificationPassed": false,
+  "imageId": "sha256:e472174db850b4d48f7ad63c9623824552b39c979fd4d11b72454f8cad19971b",
+  "failure": "Out-of-memory kill during completion in the subsequent API tests; local amd64 emulation with swap disabled.",
+  "oomKilled": true
+}

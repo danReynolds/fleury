@@ -1,0 +1,165 @@
+---
+// An editable, runnable docs demo: the prebuilt live example beside the code
+// that produced it. The code is a Monaco editor as soon as the demo nears the
+// viewport; Run compiles the reader's edit with Fleury Pad and Hot reload
+// applies later edits without losing app state. Reading makes no compiler
+// requests: the preview stays the prebuilt example until the reader runs code.
+//
+//   <GuidePad id="state.local-counter">
+//     <FleuryExample slot="demo" id="state.local-counter" … />
+//   </GuidePad>
+//
+// `id` names a runnable project in src/guide_projects.json, generated from
+// examples/guide_projects.json. See examples/GUIDE_PADS.md.
+import { Code } from '@astrojs/starlight/components';
+import projects from '../guide_projects.json';
+import { SourceProject } from '../../../experiments/fleury_pad/dartpad/web/source-project.mjs';
+
+type Mark = number | { range: string };
+interface Props {
+  id: string;
+  /** Give more room to source or to a larger running example. */
+  layout?: 'balanced' | 'demo-wide' | 'code-wide';
+  /** Bound the code pane; longer code scrolls. */
+  codeMaxHeight?: string;
+  codeLabel?: string;
+  demoLabel?: string;
+  /** Lines to highlight in the first view, counted as shown. */
+  mark?: Mark[];
+  /** Summary for the `references` slot: read-only code such as tests. */
+  referencesLabel?: string;
+  /** Show the references expanded, when they are what the section teaches. */
+  referencesOpen?: boolean;
+  /** Stack the demo above its code for a narrow column, such as a widget
+   * reference page's live demo. */
+  compact?: boolean;
+}
+const {
+  id,
+  layout = 'balanced',
+  codeMaxHeight = '28rem',
+  codeLabel = 'You write',
+  demoLabel = 'Live preview',
+  mark,
+  referencesLabel = 'Test references',
+  referencesOpen = false,
+  compact = false,
+} = Astro.props;
+const project = projects[id as keyof typeof projects];
+if (!project) throw new Error(`Missing runnable guide project: ${id}`);
+const source = new SourceProject(project);
+const proxy = import.meta.env.DEV && import.meta.env.FLEURY_PAD_PROXY_TARGET;
+const compiler = proxy ? '/fleury/__pad' : (import.meta.env.PUBLIC_FLEURY_PAD_COMPILER_URL?.replace(/\/$/, '') ?? '');
+const serialized = JSON.stringify(project).replaceAll('<', '\\u003c');
+const markedLines = (mark ?? []).flatMap((m) => {
+  if (typeof m === 'number') return [m];
+  const [from, to] = m.range.split('-').map(Number);
+  return Array.from({ length: to - from + 1 }, (_, i) => from + i);
+});
+const expandIcon = '<svg viewBox="0 0 20 20" width="13" height="13" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 4h4v4M8 16H4v-4M16 4l-5 5M4 16l5-5"/></svg>';
+---
+<dialog open role="group" aria-label={`${id} playground`} class:list={['cds', 'cds-bounded-code', 'guide-pad', 'not-content', { 'cds-demo-wide': layout === 'demo-wide', 'cds-code-wide': layout === 'code-wide', 'guide-pad-compact': compact }]} data-example={id} data-compiler={compiler} data-marks={markedLines.length ? JSON.stringify(markedLines) : undefined} data-compact="true" data-ready="false" data-running="false" data-busy="false" style={`--guide-code-height:${codeMaxHeight}`}>
+  <script type="application/json" data-project set:html={serialized} />
+  <header class="cds-bar guide-pad-bar">
+    {source.views.length === 1 ? <span class="cds-file">{source.views[0].label}</span> :
+      <div class="cds-file-tabs" role="tablist" aria-label="Example files">
+        {source.views.map((view, index) => <button type="button" class="cds-file-tab" role="tab" aria-selected={index === 0 ? 'true' : 'false'} tabindex={index === 0 ? 0 : -1} data-guide-view={view.id}>{view.label}</button>)}
+      </div>}
+    <div class="guide-pad-actions">
+      <button type="button" class="cds-toggle" data-guide="retry" hidden>Retry editor</button>
+      <button type="button" class="cds-toggle" data-pad="restart" disabled title="Run your code again with fresh app state">Restart</button>
+      <button type="button" class="cds-toggle guide-pad-run" data-pad="run" disabled title="Run your code (⌘/Ctrl+S)">Run</button>
+      <button type="button" class="cds-toggle guide-pad-run" data-pad="reload" disabled hidden>Hot reload</button>
+      <button type="button" class="cds-toggle" data-guide="expand" aria-label={`Expand ${id} playground`} aria-expanded="false" title="Expand playground"><Fragment set:html={expandIcon} /><span data-expand-label>Expand</span></button>
+    </div>
+  </header>
+  <div class="cds-body guide-pad-workspace">
+    <section class="cds-pane guide-pad-code" data-pane="code" aria-label="Example source">
+      <div class="guide-pad-caption">
+        <span class="cds-cap">{codeLabel}<span class="guide-pad-hint"> · editable</span></span>
+        <span class="guide-pad-tools">
+          <button type="button" data-guide="revert" title="Restore the example's code and preview">Revert</button>
+          <button type="button" data-pad="format" disabled>Format</button>
+        </span>
+      </div>
+      <div class="guide-pad-static">
+        {source.views.map((view, index) => <div data-guide-source={view.id} hidden={index !== 0}><Code code={view.text} lang="dart" mark={index === 0 ? mark : undefined} /></div>)}
+      </div>
+      <div class="guide-pad-editor" data-pad="editor" hidden></div>
+    </section>
+    <section class="cds-pane guide-pad-app" data-pane="demo" aria-label={demoLabel}>
+      <span class="cds-cap">{demoLabel}</span>
+      <div class="guide-pad-preview" data-pad="preview"><slot name="demo" /></div>
+    </section>
+  </div>
+  <div class="guide-pad-feedback">
+    <pre data-pad="diagnostics" hidden aria-live="polite"></pre>
+    <div class="guide-pad-status"><span data-pad="status" role="status"></span><span data-pad="dirty"></span><span data-pad="metrics"></span></div>
+  </div>
+  {Astro.slots.has('references') && <details class="guide-pad-references" open={referencesOpen}><summary>{referencesLabel}</summary><slot name="references" /></details>}
+</dialog>
+<script>
+  import './pad/guides';
+</script>
+<style is:global>
+/* Keep the CodeDemoSplit frame, tabs and breakout layout. Pad supplies editing
+   and execution inside it; the docs example remains the visual unit. A build
+   without a compiler shows the code and prebuilt demo only. */
+.guide-pad[data-compiler=""] :is([data-pad="run"],[data-pad="reload"],[data-pad="restart"],[data-pad="format"],[data-guide="revert"],.guide-pad-hint) { display:none !important; }
+.guide-pad { position:relative; inset:auto; max-width:none; max-height:none; padding:0; color:var(--sl-color-text); }
+.guide-pad [hidden] { display:none !important; }
+.guide-pad button:disabled { opacity:.4; cursor:default; }
+.guide-pad button:focus-visible { outline:2px solid var(--cds-accent); outline-offset:2px; }
+.guide-pad .cds-file-tabs { flex:1; }
+.guide-pad .cds-file { min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+.guide-pad .cds-file-tab { font-size:.78rem; }
+.guide-pad-actions { margin-left:auto; display:flex; align-items:center; gap:.35rem; flex-shrink:0; }
+.guide-pad [data-pad="restart"] { display:none; }
+.guide-pad[data-running="true"] [data-pad="restart"] { display:inline-flex; }
+.guide-pad .guide-pad-run { color:var(--cds-accent); }
+.guide-pad-caption { display:flex; justify-content:space-between; align-items:baseline; gap:.5rem; }
+.guide-pad-hint { text-transform:none; letter-spacing:0; }
+.guide-pad-tools { display:flex; gap:.8rem; }
+.guide-pad-tools button { border:0; background:none; padding:0; color:var(--sl-color-gray-3); font:inherit; font-size:.68rem; cursor:pointer; }
+.guide-pad-tools button:not(:disabled):hover { color:var(--sl-color-white); }
+.guide-pad:not([data-revertable="true"]) [data-guide="revert"] { display:none; }
+.guide-pad-static { max-height:var(--guide-code-height); overflow:auto; }
+.guide-pad-static .expressive-code pre { border:0; border-radius:0; background:transparent !important; }
+.guide-pad-static .expressive-code .frame { box-shadow:none; }
+.guide-pad-static .expressive-code .header { display:none; }
+.guide-pad-static .expressive-code { margin:0; }
+.guide-pad-editor { height:var(--guide-content-height,8rem); max-height:var(--guide-code-height); min-height:4rem; }
+.guide-pad-editor .guide-pad-marked { background:color-mix(in srgb,var(--cds-accent) 12%,transparent); }
+.guide-pad-preview { min-width:0; overflow:auto; }
+.guide-pad-preview iframe { display:block; box-sizing:border-box; width:var(--guide-preview-width,100%); max-width:100%; height:var(--guide-preview-height,12rem); border:1px solid var(--sl-color-gray-5); border-radius:.5rem; background:#0b0f14; }
+:root[data-theme='light'] .guide-pad-preview iframe { background:#fff; }
+.guide-pad-preview .fleury-example { margin:0; }
+.guide-pad-preview .fleury-bar { display:none; }
+.guide-pad-preview .fleury-example figcaption { padding:0 0 .5rem; }
+.guide-pad-feedback { padding:0 .9rem; font-size:.72rem; }
+.guide-pad-feedback:has([data-pad="diagnostics"]:not([hidden])),.guide-pad[data-busy="true"] .guide-pad-feedback,.guide-pad[data-running="true"] .guide-pad-feedback { padding:.45rem .9rem; border-top:1px solid var(--cds-line); }
+.guide-pad-feedback pre { overflow:auto; white-space:pre-wrap; color:var(--sl-color-red); max-height:9rem; font:12px/1.5 var(--sl-font-mono); }
+.guide-pad-status { display:flex; justify-content:space-between; gap:.5rem; color:var(--sl-color-gray-3); }
+.guide-pad:not([data-busy="true"]):not([data-running="true"]) [data-pad="status"] { display:none; }
+.guide-pad [data-pad="dirty"],.guide-pad [data-pad="metrics"] { display:none; }
+.guide-pad[data-modified="true"] .guide-pad-run:not(:disabled) { background:color-mix(in srgb,var(--cds-accent) 12%,transparent); border-color:color-mix(in srgb,var(--cds-accent) 45%,var(--cds-line)); }
+.guide-pad-references { margin:0; padding:.6rem .9rem; border-top:1px solid var(--cds-line); }
+.guide-pad-references summary { cursor:pointer; font-size:.78rem; }
+.guide-pad-references p { font-size:.78rem; }
+.guide-pad:modal { position:fixed; inset:1rem; width:calc(100vw - 2rem); height:calc(100dvh - 2rem); margin:0; display:flex; flex-direction:column; }
+.guide-pad::backdrop { background:#000b; }
+.guide-pad:modal .guide-pad-workspace { flex:1; min-height:0; overflow:auto; align-items:stretch; }
+.guide-pad:modal .guide-pad-code,.guide-pad:modal .guide-pad-app { min-height:0; }
+.guide-pad:modal .guide-pad-editor,.guide-pad:modal .guide-pad-static { flex:1; max-height:none; min-height:15rem; }
+.guide-pad:modal .guide-pad-preview { flex:1; }
+.guide-pad:modal .guide-pad-preview iframe { width:100%; height:100%; }
+.guide-pad:modal .guide-pad-references { max-height:30vh; overflow:auto; }
+/* Compact: a narrow column's demo, with its code below it. */
+.guide-pad-compact:not(:modal) { width:100%; margin:0; }
+.guide-pad-compact:not(:modal) .cds-body { grid-template-columns:minmax(0,1fr); padding:.4rem .7rem .7rem; }
+.guide-pad-compact:not(:modal) [data-pane="demo"] { order:-1; }
+.guide-pad-compact:not(:modal) [data-pane="demo"] .cds-cap { display:none; }
+.guide-pad-compact .guide-pad-actions .cds-toggle span { display:none; }
+@media(min-width:760px) { .guide-pad:modal .guide-pad-workspace { grid-template-columns:minmax(0,1fr) minmax(0,1fr); gap:1.25rem; } }
+@media(max-width:759px) { .guide-pad:modal { inset:.4rem; width:calc(100vw - .8rem); height:calc(100dvh - .8rem); } .guide-pad:modal .guide-pad-editor { height:40vh; flex:auto; } .guide-pad:modal .guide-pad-preview { min-height:35vh; } .guide-pad .cds-bar { flex-wrap:wrap; gap:.4rem; } .guide-pad .cds-file-tabs { flex-basis:100%; margin-block:0; } }
+</style>

@@ -1,75 +1,47 @@
-// Compile-checked source behind "Coming from Flutter"
-// (website/src/content/docs/coming-from-flutter.md). Keeps the core migration
-// examples honest: runApp, KeyBindings, context.push/context.pop,
-// AnimationBuilder, AnimatedVisibility, and Effects.
-
-import 'dart:async';
+// Compile-checked source behind the hand-written fences in "Coming from
+// Flutter" (website/src/content/docs/coming-from-flutter.mdx). The page's
+// larger examples are excerpts of lib/flutter_map.dart, which the live demos
+// run; this file covers the short fragments, verbatim, in page order.
 
 import 'package:fleury/fleury.dart';
+import 'package:fleury_widgets/fleury_widgets.dart';
 
-void main() => runApp(const FleuryApp(title: 'Counter', home: CounterApp()));
+// `FleuryApp` is deliberately smaller than `MaterialApp`.
+void main() => runApp(
+  FleuryApp(
+    title: 'My app',
+    theme: ThemeData(
+      colorScheme: const ColorScheme(primary: RgbColor(0x3D, 0xDC, 0x97)),
+    ),
+    home: const MyApp(),
+  ),
+);
 
-class CounterApp extends StatefulWidget {
-  const CounterApp({super.key});
+class MyApp extends StatelessWidget {
+  const MyApp({super.key});
 
   @override
-  State<CounterApp> createState() => _CounterAppState();
+  Widget build(BuildContext context) => const Text('My app');
 }
 
-class _CounterAppState extends State<CounterApp> {
-  int _count = 0;
+/// The page's fragments; the parameters stand in for the app's own names.
+void pageSnippets({required Widget details, required bool open}) {
+  // Renamed or simplified: EdgeInsets values are cells.
+  Padding(
+    padding: const EdgeInsets.symmetric(horizontal: 2, vertical: 1),
+    child: Text('two columns, one row'),
+  );
 
-  @override
-  Widget build(BuildContext context) {
-    return KeyBindings(
-      bindings: [
-        KeyBinding(
-          KeySequence.space,
-          label: 'Increment',
-          onTrigger: (_) => setState(() => _count++),
-        ),
-        KeyBinding(
-          KeySequence.enter,
-          label: 'Details',
-          onTrigger: (_) => unawaited(context.push<void>(const DetailScreen())),
-        ),
-      ],
-      child: Center(
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Text('count: $_count'),
-            const SizedBox(height: 1),
-            const Text('press Space'),
-          ],
-        ),
-      ),
-    );
-  }
-}
+  // Animation is value-first.
+  final fill = Animation(0.0);
 
-class DetailScreen extends StatelessWidget {
-  const DetailScreen({super.key});
+  fill.to(0.8, spring: Spring.snappy);
+  fill.loop(between: (0.3, 1.0));
 
-  @override
-  Widget build(BuildContext context) {
-    return KeyBindings(
-      bindings: [
-        KeyBinding(
-          KeySequence.escape,
-          label: 'Close',
-          onTrigger: (_) => context.pop(),
-        ),
-      ],
-      child: AnimatedVisibility(
-        visible: true,
-        enter: Effects.expand() + Effects.fadeIn(),
-        child: AnimationBuilder<double>(
-          0.8,
-          builder: (context, t, child) =>
-              Text('animated value: ${t.toStringAsFixed(2)}'),
-        ),
-      ),
-    );
-  }
+  Text('Saved').animate().fadeIn().slideIn();
+  AnimatedVisibility(
+    visible: open,
+    enter: Effects.expand(),
+    child: Panel(title: 'Details', child: details),
+  );
 }

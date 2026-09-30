@@ -12,12 +12,15 @@ import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 import { exportedClassNames } from './api-reference-exports.mjs';
+import { GUIDE_GROUPS } from '../src/guides.mjs';
 
 const here = dirname(fileURLToPath(import.meta.url));
 const MANIFEST = join(here, '..', 'src', 'examples.json');
 const API = join(here, '..', 'src', 'api.json');
 const CODE = join(here, '..', 'src', 'examples_code.json');
 const TYPES = join(here, '..', 'src', 'types.json');
+// Read by astro.config.mjs to build the grouped Widgets sidebar.
+const WIDGET_SIDEBAR = join(here, '..', 'src', 'widget-sidebar.json');
 const DOCS = join(here, '..', 'src', 'content', 'docs');
 const WIDGET_BARREL = join(
   here,
@@ -48,6 +51,91 @@ const KNOB_WIDGETS = new Set([
 // real constructor params (see src/api.json); keep them small and accurate.
 const TABS_IMPORT = "import { Tabs, TabItem } from '@astrojs/starlight/components';";
 const EXTRA_EXAMPLES = {
+  barchart: [
+    {
+      label: 'Basic',
+      code: `BarChart(
+  bars: <Bar>[Bar('q1', 12), Bar('q2', 19), Bar('q3', 9), Bar('q4', 22)],
+  showYAxis: true,
+)`,
+    },
+    {
+      label: 'Stacked',
+      code: `// Segments paint bottom to top; segmentLabels feeds the legend.
+BarChart(
+  bars: const <Bar>[
+    Bar.stacked('host-a', [40, 30, 10]),
+    Bar.stacked('host-b', [55, 25, 5]),
+  ],
+  segmentLabels: const ['cpu', 'mem', 'disk'],
+)`,
+    },
+  ],
+  formfield: [
+    {
+      label: 'Wrap a control',
+      code: `FormField(
+  validator: () => slug.text.isEmpty ? 'Enter a slug.' : null,
+  child: TextInput(controller: slug, semanticLabel: 'Slug'),
+)`,
+    },
+    {
+      label: 'Custom value (demo)',
+      code: `// One validated value built from two controls.
+FormField.builder(
+  validator: () => end > start ? null : 'End must be greater than start.',
+  builder: (context, field) => Column(
+    children: [
+      Stepper(
+        label: 'Start',
+        value: start,
+        focusNode: field.focusNode, // where an error moves focus
+        onChanged: (value) {
+          setState(() => start = value);
+          field.valueChanged();
+        },
+      ),
+      Stepper(
+        label: 'End',
+        value: end,
+        onChanged: (value) {
+          setState(() => end = value);
+          field.valueChanged();
+        },
+      ),
+    ],
+  ),
+)`,
+    },
+  ],
+  container: [
+    {
+      label: 'Box',
+      code: `Container(
+  width: 30,
+  padding: const EdgeInsets.symmetric(horizontal: 1),
+  border: const BoxBorder(),
+  alignment: Alignment.center,
+  child: const Text('Build passed'),
+)`,
+    },
+    {
+      label: 'Filled layer',
+      code: `// An opaque theme surface: content underneath doesn't show through.
+Container.filled(
+  padding: const EdgeInsets.all(1),
+  child: const Text('Saved'),
+)`,
+    },
+    {
+      label: 'Floating chrome',
+      code: `// Fill plus the theme's border, for menus, tooltips, and popovers.
+Container.framed(
+  padding: const EdgeInsets.symmetric(horizontal: 1),
+  child: const Text('Container.framed'),
+)`,
+    },
+  ],
   gauge: [
     { label: 'Basic', code: `Gauge(value: 0.62, label: 'CPU')` },
     {
@@ -123,6 +211,18 @@ const REPO = 'https://github.com/danReynolds/fleury/blob/main';
 // API reference + example source, extracted from the Dart source at build time.
 const api = JSON.parse(readFileSync(API, 'utf8'));
 const exampleCode = JSON.parse(readFileSync(CODE, 'utf8'));
+// Runnable Pad projects (npm run guides:projects), keyed by example id: a
+// demo with one is editable in place; the rest stay prebuilt-only.
+const padProjects = JSON.parse(readFileSync(join(here, '..', 'src', 'guide_projects.json'), 'utf8'));
+const PAD_COMPONENT = '../../../components/GuidePad.astro';
+const demoBlock = (e) => {
+  const example = `<FleuryExample${padProjects[e.id] ? ' slot="demo"' : ''} id="${e.id}" cols={${e.cols}} rows={${e.rows}}` +
+    `${e.interactive ? ' interactive' : ''} />`;
+  return padProjects[e.id]
+    ? `<GuidePad id="${e.id}" compact codeLabel="Example" codeMaxHeight="18rem">\n${example}\n</GuidePad>`
+    : example;
+};
+const padImport = (e) => (padProjects[e.id] ? `import GuidePad from '${PAD_COMPONENT}';\n` : '');
 
 // Reference pages are a public contract, so generation must not quietly turn a
 // missing source comment into an em dash. Keep this check beside the generator:
@@ -223,9 +323,6 @@ function assertExportedWidgetCoverage(entries) {
   // behavioral wrappers with no standalone demo. Keep this list tiny and
   // justified; a widget users pick and configure should get a page instead.
   const undocumentedWidgets = new Set([
-    // A which-key popup: wraps a child and reacts to the leader-key dispatcher;
-    // nothing to demo in isolation (see KeyBindings introspection).
-    'WhichKey',
     // The bounds primitive underneath Anchored. BoundsObserver renders
     // nothing of its own (it publishes its child's painted bounds), and
     // BoundsAnchor only positions once a live observer feeds it. Deep-dive
@@ -237,10 +334,14 @@ function assertExportedWidgetCoverage(entries) {
     .filter((name) => api[name] && !api[name].abstract && isWidget(name))
     .filter((name) => !undocumentedWidgets.has(name))
     .sort();
-  const missing = exportedWidgets
-    .filter((name) => !byWidget.has(name))
+  const missing = exportedWidgets.filter((name) => !byWidget.has(name));
   if (missing.length) {
     failures.push(`exported widgets without pages: ${missing.join(', ')}`);
+  }
+  // An exemption that has since gained a page is stale; drop it from the list.
+  const stale = [...undocumentedWidgets].filter((name) => byWidget.has(name));
+  if (stale.length) {
+    failures.push(`undocumentedWidgets entries that now have pages: ${stale.join(', ')}`);
   }
   if (failures.length) {
     throw new Error(`Invalid widget reference coverage:\n- ${failures.join('\n- ')}`);
@@ -279,6 +380,47 @@ const mdxSafe = (md) =>
     )
     .join('');
 
+// Splits a class doc into its opening paragraph and the rest, so a page can
+// lead with the one-paragraph summary, show usage, and then the detail. The
+// split is at the first blank line outside a code fence.
+function splitClassDoc(doc) {
+  const lines = doc.split('\n');
+  let inFence = false;
+  for (let i = 0; i < lines.length; i++) {
+    if (lines[i].trim().startsWith('```')) inFence = !inFence;
+    if (!inFence && lines[i].trim() === '') {
+      return {
+        summary: lines.slice(0, i).join('\n').trim(),
+        details: lines.slice(i + 1).join('\n').trim(),
+      };
+    }
+  }
+  return { summary: doc.trim(), details: '' };
+}
+// A class doc's own code samples are written for IDE readers. On a page that
+// already shows a usage example they repeat it, so the details drop them, and a
+// sentence that introduced one ends with a period instead of a colon.
+function withoutCodeSamples(md) {
+  const lines = md.split('\n');
+  const out = [];
+  for (let i = 0; i < lines.length; i++) {
+    if (!lines[i].trim().startsWith('```')) {
+      out.push(lines[i]);
+      continue;
+    }
+    while (i + 1 < lines.length && !lines[i + 1].trim().startsWith('```')) i++;
+    i++;
+    let lead = out.length - 1;
+    while (lead >= 0 && out[lead].trim() === '') lead--;
+    if (lead >= 0) out[lead] = out[lead].replace(/:\s*$/, '.');
+  }
+  return out.join('\n').replace(/\n{3,}/g, '\n\n').trim();
+}
+const detailsSection = (details, hasUsage) => {
+  const body = hasUsage ? withoutCodeSamples(details) : details;
+  return body ? `## Details\n\n${body}\n\n` : '';
+};
+
 // Markdown-table-safe (and MDX-safe) cell text.
 const cell = (s) =>
   String(s ?? '—')
@@ -292,9 +434,10 @@ const codeCell = (s) => '`' + String(s).replace(/\|/g, '\\|') + '`';
 // name -> repo source path#line, for linking type names back to their source.
 const types = JSON.parse(readFileSync(TYPES, 'utf8'));
 
-// Render a Dart type as a monospaced cell, linking any type name we know about
-// to its definition on GitHub (the dartdoc "click the type" affordance). Built
-// as HTML so the links survive inside a Markdown table cell.
+// Render a Dart type as a monospaced cell, linking each type name to its
+// reference page when it has one and otherwise to its definition on GitHub
+// (the dartdoc "click the type" affordance). Built as HTML so the links survive
+// inside a Markdown table cell.
 function linkType(typeStr) {
   const esc = String(typeStr)
     .replace(/&/g, '&amp;')
@@ -304,7 +447,11 @@ function linkType(typeStr) {
   // A prefixed external type such as `img.Image` must not link its `Image`
   // suffix to Fleury's own class of the same name.
   const linked = esc.replace(/(?<!\.)\b[A-Z][A-Za-z0-9_]*/g, (name) =>
-    types[name] ? `<a href="${REPO}/${types[name]}">${name}</a>` : name
+    PAGE_SLUGS.has(name)
+      ? `<a href="/fleury/widgets/${PAGE_SLUGS.get(name)}/">${name}</a>`
+      : types[name]
+        ? `<a href="${REPO}/${types[name]}">${name}</a>`
+        : name
   );
   return `<code>${linked}</code>`;
 }
@@ -322,6 +469,9 @@ function constructorsSection(widget) {
     throw new Error(`${widget} has no public constructors to document`);
   }
   let out = `## Constructors\n\n`;
+  // Named constructors often repeat a parameter list verbatim (Container,
+  // Container.filled, Container.framed); print each distinct table once.
+  const tables = new Map();
   for (const constructor of constructors) {
     const params = constructor.params ?? [];
     out += `### ${codeCell(`${constructor.name}()`)}\n\n`;
@@ -330,9 +480,29 @@ function constructorsSection(widget) {
       out += `This constructor has no public parameters.\n\n`;
       continue;
     }
+    const signature = JSON.stringify(params);
+    if (tables.has(signature)) {
+      out += `Takes the same parameters as ${codeCell(`${tables.get(signature)}()`)}.\n\n`;
+      continue;
+    }
+    tables.set(signature, constructor.name);
     const rows = params
       .map((p) => {
-        const def = p.required ? '**required**' : p.default ? codeCell(p.default) : '—';
+        // A default that names a private helper (`_defaultStringFor`) means
+        // nothing to a reader, so the parameter's doc has to say what the
+        // default does instead.
+        const privateDefault = p.default && /(^|[^\w.$])_[A-Za-z]/.test(p.default);
+        if (privateDefault && !/\bDefaults? to\b/i.test(p.doc ?? '')) {
+          throw new Error(
+            `${constructor.name}.${p.name} defaults to private ${p.default}; ` +
+              `say what the default does in its doc ("Defaults to …")`
+          );
+        }
+        const def = p.required
+          ? '**required**'
+          : p.default && !privateDefault
+            ? codeCell(p.default)
+            : '—';
         const name = p.named ? `${p.name}:` : p.name;
         return `| ${codeCell(name)} | ${linkType(p.type)} | ${def} | ${cell(p.doc)} |`;
       })
@@ -412,10 +582,105 @@ const SEE_ALSO = {
   multiselect: [['Select', 'select', 'for a single choice']],
   stepper: [['NumberInput', 'numberinput', 'for typed numeric entry']],
   numberinput: [['Stepper', 'stepper', 'for arrow-key increments']],
-  progressbar: [['Gauge', 'gauge', 'for a labelled meter with thresholds']],
+  progressbar: [
+    ['Gauge', 'gauge', 'for a labelled meter with thresholds'],
+    ['Spinner', 'spinner', 'for activity without a known end'],
+  ],
+  spinner: [['ProgressBar', 'progressbar', 'when progress can be measured']],
+  gauge: [['ProgressBar', 'progressbar', 'for a plain progress bar']],
   scrollview: [['ListView', 'listview', 'for virtualized, selectable lists']],
-  listview: [['ScrollView', 'scrollview', 'for one tall non-list child']],
+  listview: [
+    ['ScrollView', 'scrollview', 'for one tall non-list child'],
+    ['DataTable', 'datatable', 'for rows with named columns'],
+  ],
+  linechart: [
+    ['AreaChart', 'areachart', 'for a filled look'],
+    ['Sparkline', 'sparkline', 'for a compact inline trend'],
+  ],
+  areachart: [['LineChart', 'linechart', 'for lines or scatter points']],
+  sparkline: [['LineChart', 'linechart', 'for axes, legends, and several series']],
+  barchart: [['Histogram', 'histogram', 'to bin raw samples into a distribution']],
+  histogram: [['BarChart', 'barchart', 'for values you already have per category']],
+  heatmap: [['CalendarHeatmap', 'calendarheatmap', 'for values keyed by date']],
+  calendarheatmap: [['Heatmap', 'heatmap', 'for any 2-D grid of values']],
+  dialog: [['ApprovalPrompt', 'approvalprompt', 'for a ready-made yes/no decision']],
+  approvalprompt: [['Dialog', 'dialog', 'to build your own modal']],
+  menu: [['Select', 'select', 'to choose a value rather than run an action']],
+  tooltip: [['Anchored', 'anchored', 'to float any content next to a trigger']],
+  text: [['RichText', 'richtext', 'to style parts of a line differently']],
+  richtext: [['Text', 'text', 'when one style covers the whole string']],
+  textspan: [['RichText', 'richtext', 'to render a span tree']],
+  row: [['Column', 'column', 'for a vertical line'], ['Wrap', 'wrap', 'to flow onto more lines']],
+  column: [['Row', 'row', 'for a horizontal line'], ['ListView', 'listview', 'when the content should scroll']],
+  stack: [['IndexedStack', 'indexedstack', 'to show one child at a time']],
+  indexedstack: [['Tabs', 'tabs', 'for a tab strip that switches pages']],
 };
+// The guide that teaches each widget in context, keyed by page slug. Core
+// primitives carry theirs as `guide` in CORE below. A widget page links here
+// so the reference is never a dead end for a reader who needs the bigger
+// picture; widgets without a guide simply get no line.
+const WIDGET_GUIDES = {
+  button: ['input-and-gestures'],
+  textinput: ['forms'],
+  textarea: ['forms'],
+  checkbox: ['forms'],
+  toggle: ['forms'],
+  switch: ['forms'],
+  radio: ['forms'],
+  radiogroup: ['forms'],
+  select: ['forms'],
+  multiselect: ['forms'],
+  rangeslider: ['forms'],
+  stepper: ['forms'],
+  numberinput: ['forms'],
+  passwordinput: ['forms'],
+  autocomplete: ['forms'],
+  completiontextinput: ['forms'],
+  colorpicker: ['forms'],
+  datepicker: ['forms'],
+  form: ['forms'],
+  formfield: ['forms'],
+  formcontroller: ['forms'],
+  commandbutton: ['commands'],
+  commandpalette: ['commands'],
+  datatable: ['lists-and-scrolling'],
+  treetable: ['lists-and-scrolling'],
+  dialog: ['navigation'],
+  navigation: ['navigation'],
+  container: ['layout'],
+  keybindings: ['focus-and-keyboard'],
+  keydetector: ['focus-and-keyboard'],
+  keyhintbar: ['focus-and-keyboard'],
+  whichkey: ['focus-and-keyboard'],
+  focus: ['focus'],
+  focusnode: ['focus'],
+  focusdetector: ['focus'],
+  image: ['loading-data'],
+};
+const GUIDE_TITLES = new Map(
+  GUIDE_GROUPS.flatMap((group) =>
+    group.items.map((item) => [item.slug.replace(/^guides\//, ''), item.label])
+  )
+);
+const guideLink = (guide) => {
+  const title = GUIDE_TITLES.get(guide);
+  if (!title) throw new Error(`Unknown guide "${guide}" linked from a widget page`);
+  return `[${title}](/fleury/guides/${guide}/)`;
+};
+const guideLine = (guides) =>
+  guides?.length ? `**Learn more:** ${guides.map(guideLink).join(' · ')}\n\n` : '';
+
+// The catalog's section for a category. Starlight slugs headings with
+// github-slugger: lowercase, punctuation dropped, spaces to hyphens, so
+// "Inputs & controls" becomes "inputs--controls".
+const categoryLink = (category) => {
+  const anchor = category
+    .toLowerCase()
+    .replace(/[^\p{L}\p{N}\s-]/gu, '')
+    .replace(/\s/g, '-');
+  return `[${category}](/fleury/widgets/#${anchor})`;
+};
+
 const seeAlsoLine = (slug) => {
   const entries = SEE_ALSO[slug];
   if (!entries) return '';
@@ -425,28 +690,145 @@ const seeAlsoLine = (slug) => {
   return `**See also:** ${parts.join(' · ')}.\n\n`;
 };
 
+// ── Source-backed pages ─────────────────────────────────────────────────────
+// Public APIs documented from source rather than a registry entry, borrowing a
+// guide's live example. Every widget should run live: when one depends on a
+// platform service (the disk, captured output), give it a parameter the
+// browser can satisfy, as FileBrowser takes a FileSource, and add a registry
+// example instead of a page here.
+const DOC_ONLY = [
+  { slug: 'image', widget: 'Image', category: 'Text & content', reason: 'image-file', example: 'loading.image',
+    code: "Image.bytes(logoBytes, fit: ImageFit.contain)\n// Image.file(...) needs dart:io — use bytes/decoded in embeds" },
+];
+const DOC_ONLY_REASONS = new Set(['image-file']);
+for (const entry of DOC_ONLY) {
+  if (!DOC_ONLY_REASONS.has(entry.reason)) {
+    throw new Error(
+      `${entry.widget} uses unsupported doc-only reason "${entry.reason}"; ` +
+      `add a live browser example for web-safe widgets`
+    );
+  }
+  if (!entry.example) {
+    throw new Error(`${entry.widget} needs an example: every reference page runs live`);
+  }
+}
+const docNote = (d) => {
+  if (d.reason === 'image-file')
+    return (
+      `:::note[Embed-safe with bytes]\n\`Image\` itself is web-safe — use ` +
+      `\`Image.bytes\` or \`Image.decoded\` in client-side embeds. Only ` +
+      `\`Image.file\` needs \`dart:io\` (terminal or ` +
+      `[\`fleury serve\`](/fleury/architecture/serving-and-embedding/)).\n:::\n`
+    );
+  // Point each primitive at the guide that uses it (layout for the box/flex
+  // primitives, loading-data for the async builders, and so on). An entry
+  // with `guide: null` has no guide that teaches it, so it names none.
+  const guide = 'guide' in d ? d.guide : 'layout';
+  return (
+    `:::note[Core widget]\nA framework primitive from \`package:fleury\`. The ` +
+    `reference below is generated from the source.` +
+    (guide ? ` For how it fits with related widgets, see the ${guideLink(guide)} guide.` : '') +
+    `\n:::\n`
+  );
+};
+
+// Core framework widgets (from package:fleury): the layout, text, async, input,
+// and builder primitives a Flutter developer reaches for. Documented from source
+// like the rest of the reference; usage in context lives in the guides.
+const CORE = [
+  { slug: 'text', category: 'Text & content', guide: 'theming', widget: 'Text', code: "Text('hello', style: CellStyle(bold: true))" },
+  { slug: 'richtext', category: 'Text & content', guide: null, widget: 'RichText',
+    code: "RichText(text: TextSpan(children: [\n  TextSpan(text: 'deploy '),\n  TextSpan(text: 'ok', style: CellStyle(bold: true)),\n]))" },
+  { slug: 'textspan', category: 'Text & content', guide: null, widget: 'TextSpan',
+    code: "TextSpan(\n  text: 'deploy ',\n  children: [TextSpan(text: 'ok', style: CellStyle(bold: true))],\n)" },
+  { slug: 'listview', category: 'Lists & data', guide: 'lists-and-scrolling', widget: 'ListView', example: 'lists.files',
+    code: "ListView.builder(\n  itemCount: rows.length,\n  itemBuilder: (context, i, highlighted) => Text(rows[i].label),\n)" },
+  { slug: 'scrollview', category: 'Lists & data', guide: 'lists-and-scrolling', widget: 'ScrollView', example: 'lists.document',
+    code: "ScrollView(child: Column(children: [/* tall content */]))" },
+  { slug: 'spinner', category: 'Charts & meters', guide: 'animation', widget: 'Spinner',
+    code: "Spinner(label: 'Connecting')" },
+  { slug: 'futurebuilder', category: 'State & async', guide: 'loading-data', widget: 'FutureBuilder', example: 'loading.snapshot',
+    code: "// In your State: create the future once. Calling load() in build would\n// start a new request on every rebuild.\nlate final Future<List<Item>> _items = load();\n\n// In build:\nFutureBuilder<List<Item>>(\n  future: _items,\n  builder: (context, snapshot) {\n    if (snapshot.hasError) return Text('Failed: ${snapshot.error}');\n    if (!snapshot.hasData) return const Text('Loading…');\n    return ItemList(snapshot.data!);\n  },\n)" },
+  { slug: 'streambuilder', category: 'State & async', guide: 'loading-data', widget: 'StreamBuilder', example: 'loading.stream',
+    code: "StreamBuilder<int>(\n  stream: ticks,\n  initialData: 0,\n  builder: (context, snapshot) => Text('tick ${snapshot.data ?? 0}'),\n)" },
+  { slug: 'gesturedetector', category: 'Input handling & focus', guide: 'input-and-gestures', widget: 'GestureDetector', example: 'input.press',
+    code: "GestureDetector(\n  onTap: _select,\n  onTapDown: (details) => _placeAt(details.localPosition),\n  child: child,\n)" },
+  { slug: 'mouseregion', category: 'Input handling & focus', guide: 'input-and-gestures', widget: 'MouseRegion', example: 'input.nesting',
+    code: "MouseRegion(\n  onEnter: () => setHover(true),\n  onExit: () => setHover(false),\n  child: Text('hover me'),\n)" },
+  { slug: 'row', category: 'Layout', widget: 'Row',
+    code: "Row(\n  children: [\n    const Text('Name'),\n    const SizedBox(width: 2),\n    Expanded(child: TextInput(controller: name)),\n  ],\n)" },
+  { slug: 'column', category: 'Layout', widget: 'Column',
+    code: "Column(\n  crossAxisAlignment: CrossAxisAlignment.start,\n  children: [\n    const Text('Deploying'),\n    ProgressBar(value: progress),\n  ],\n)" },
+  { slug: 'expanded', category: 'Layout', widget: 'Expanded',
+    code: "Row(\n  children: [\n    const SizedBox(width: 18, child: Sidebar()),\n    const Expanded(child: Editor()),\n  ],\n)" },
+  { slug: 'center', category: 'Layout', widget: 'Center',
+    code: "Center(child: Text('No results'))" },
+  { slug: 'stack', category: 'Layout', widget: 'Stack',
+    code: "Stack(\n  children: [\n    const Editor(),\n    Positioned(left: 2, top: 0, child: Text('● saved')),\n  ],\n)" },
+  { slug: 'indexedstack', category: 'Layout', widget: 'IndexedStack',
+    code: "IndexedStack(\n  index: selectedTab,\n  children: const [InboxView(), SettingsView()],\n)" },
+  { slug: 'layoutbuilder', category: 'Layout', widget: 'LayoutBuilder', example: 'layout.responsive',
+    code: "LayoutBuilder(\n  builder: (context, constraints) =>\n      (constraints.maxCols ?? 0) > 60 ? Wide() : Narrow(),\n)" },
+  { slug: 'scope', category: 'State & async', guide: 'state-management', widget: 'Scope', example: 'state.project-scope',
+    code: "// Share a value owned elsewhere:\nScope(project, child: const ProjectPath())\n\n// Create and own a model for this subtree:\nScope.create(Cart.new, child: const ShopScreen())\n\n// Read the nearest one in a descendant's build (it rebuilds on change):\nfinal cart = context.scope<Cart>();" },
+  { slug: 'scopebuilder', category: 'State & async', guide: 'state-management', widget: 'ScopeBuilder',
+    code: "ScopeBuilder<Project>(\n  builder: (context, project) => Text('Project: ${project.name}'),\n)" },
+  { slug: 'notifierbuilder', category: 'State & async', guide: 'state-management', widget: 'NotifierBuilder', example: 'state.cart-notifier',
+    code: "NotifierBuilder(\n  notifier: cart,\n  builder: (context, cart) => Text('Items: ${cart.itemCount}'),\n)" },
+  { slug: 'sizedbox', category: 'Layout', widget: 'SizedBox',
+    code: "SizedBox(\n  width: 20,\n  height: 3,\n  child: Text('fixed area'),\n)" },
+  { slug: 'padding', category: 'Layout', widget: 'Padding',
+    code: "Padding(\n  padding: const EdgeInsets.symmetric(horizontal: 2, vertical: 1),\n  child: Text('inset'),\n)" },
+  { slug: 'align', category: 'Layout', widget: 'Align',
+    code: "Align(\n  alignment: Alignment.centerRight,\n  child: Text('status'),\n)" },
+  { slug: 'positioned', category: 'Layout', widget: 'Positioned',
+    code: "Stack(children: [\n  Text('base'),\n  Positioned(left: 4, top: 1, child: Text('overlay')),\n])" },
+  { slug: 'wrap', category: 'Layout', widget: 'Wrap',
+    code: "Wrap(\n  spacing: 1,\n  runSpacing: 1,\n  children: tags.map((tag) => Text('#$tag')).toList(),\n)" },
+  { slug: 'flexible', category: 'Layout', widget: 'Flexible',
+    code: "Row(children: [\n  Flexible(child: Text(longLabel)),\n  Text('ready'),\n])" },
+  { slug: 'spacer', category: 'Layout', widget: 'Spacer',
+    code: "Row(children: [\n  Text('left'),\n  const Spacer(),\n  Text('right'),\n])" },
+  { slug: 'constrainedbox', category: 'Layout', widget: 'ConstrainedBox',
+    code: "ConstrainedBox(\n  minWidth: 24,\n  maxWidth: 48,\n  child: Text('bounded content'),\n)" },
+  { slug: 'aspectratio', category: 'Layout', widget: 'AspectRatio',
+    code: "AspectRatio(\n  aspectRatio: 2.0,\n  child: Heatmap(values: values),\n)" },
+].map((d) => ({ ...d, reason: 'core' }));
+
+// Every reference page by widget name, so API tables can link a parameter's
+// type to its page here rather than to its source.
+const PAGE_SLUGS = new Map([
+  ...widgets.map((e) => [e.widget, e.id.split('.')[0]]),
+  ...[...DOC_ONLY, ...CORE].map((d) => [d.widget, d.slug]),
+]);
+
+// ── Registry widget pages ───────────────────────────────────────────────────
 for (const e of widgets) {
   const slug = e.id.split('.')[0];
   // Prefer the widget's own source doc comment (richer); fall back to the blurb.
-  const intro = api[e.widget]?.classDoc ? mdxSafe(api[e.widget].classDoc) : e.blurb;
+  // Its opening paragraph leads the page; the rest follows the usage example.
+  const { summary: intro, details } = api[e.widget]?.classDoc
+    ? splitClassDoc(mdxSafe(api[e.widget].classDoc))
+    : { summary: e.blurb, details: '' };
   // An explicit `code` override (used by animated examples to keep the snippet
   // static) wins; otherwise show the code extracted from the builder.
   const snippet = e.code ?? exampleCode[e.id];
   // Knob-enabled widgets get an interactive props playground; others a static
   // (but live) example.
+  const usage = usageSection(slug, e.widget, snippet);
   const isKnob = KNOB_WIDGETS.has(slug);
   const importLine = isKnob
     ? `import FleuryKnobs from '${KNOBS_COMPONENT}';`
     : `import FleuryExample from '${COMPONENT}';`;
   const liveBlock = isKnob
     ? `<FleuryKnobs id="${slug}" cols={${e.cols}} rows={${e.rows}} />`
-    : `<FleuryExample id="${e.id}" cols={${e.cols}} rows={${e.rows}}` +
-      `${e.interactive ? ' interactive' : ''} />`;
+    : demoBlock(e);
   writeFileSync(
     join(widgetsDir, `${slug}.mdx`),
     `---\ntitle: ${yaml(e.widget)}\ndescription: ${yaml(e.blurb)}\n` +
       `tableOfContents: false\n---\n\n` +
       `${importLine}\n` +
+      (isKnob ? '' : padImport(e)) +
       `import WidgetLayout from '${LAYOUT_COMPONENT}';\n` +
       (slug === 'datatable' ? `import DataTableExamples from '../../../components/DataTableExamples.astro';\n` : '') +
       (EXTRA_EXAMPLES[slug] ? `${TABS_IMPORT}\n` : '') +
@@ -455,141 +837,19 @@ for (const e of widgets) {
       // Right column: the live (knob-tweakable) demo only — the code below is a
       // fixed usage example, so it lives in the main column, not next to it.
       (slug === 'datatable' ? '' : `<Fragment slot="aside">\n\n${liveBlock}\n\n</Fragment>\n\n`) +
-      // Left column: description → see-also → usage example(s) → API breakdown.
+      // Left column: summary → see-also → guides → usage example(s) → the
+      // rest of the class doc → API breakdown.
       `${intro}\n\n` +
       seeAlsoLine(slug) +
-      usageSection(slug, e.widget, snippet) +
+      guideLine(WIDGET_GUIDES[slug]) +
+      usage +
+      detailsSection(details, usage !== '') +
       constructorsSection(e.widget) +
       sourceSection(e.widget) +
-      `**Category:** ${e.category} · [All widgets](/fleury/widgets/)\n\n` +
+      `**Category:** ${categoryLink(e.category)} · [All widgets](/fleury/widgets/)\n\n` +
       (slug === 'datatable' ? '' : `</WidgetLayout>\n`)
   );
 }
-
-// ── Source-backed pages ─────────────────────────────────────────────────────
-// Public APIs without an embedded registry example still get a full reference
-// page. Keep this list narrow: native-only APIs, supporting models, and APIs
-// that cannot be represented without an imperative call. Web-safe widgets
-// belong in registry.dart with a live example instead.
-const DOC_ONLY = [
-  { slug: 'filebrowser', widget: 'FileBrowser', category: 'Inputs & controls', reason: 'native',
-    code: "FileBrowser(\n  initialDirectory: Directory.current.path,\n  onActivate: (entry) => openFile(entry.path),\n)" },
-  { slug: 'filepicker', widget: 'FilePicker', category: 'Inputs & controls', reason: 'native',
-    code: "FilePicker(\n  initialDirectory: Directory.current.path,\n  filter: (entity) => entity is Directory || entity.path.endsWith('.dart'),\n  onSelect: (file) => openFile(file.path),\n)" },
-  { slug: 'image', widget: 'Image', category: 'Data & lists', reason: 'image-file',
-    code: "Image.bytes(logoBytes, fit: ImageFit.contain)\n// Image.file(...) needs dart:io — use bytes/decoded in embeds" },
-  { slug: 'logregion', widget: 'LogRegion', category: 'Agent surfaces', reason: 'native',
-    code: "LogRegion(\n  entries: const [\n    LogEntry(message: 'Starting build', source: 'build'),\n    LogEntry(message: 'Tests failed', severity: LogSeverity.error),\n  ],\n  filter: const LogRegionFilterDescriptor(query: 'build'),\n)" },
-  { slug: 'terminaloutputregion', widget: 'TerminalOutputRegion', category: 'Agent surfaces', reason: 'native',
-    code: "TerminalOutputRegion(\n  buffer: LogBuffer(),\n  label: 'Build output',\n  filter: const LogRegionFilterDescriptor(severities: {LogSeverity.error}),\n)" },
-  { slug: 'workflowsnapshot', widget: 'WorkflowSnapshot', category: 'Supporting models', reason: 'native-model',
-    code: "final snapshot = WorkflowSnapshot(\n  title: 'Release check',\n  tasks: const [\n    TaskGraphNode(id: 'tests', label: 'Tests', status: TaskGraphStatus.running),\n  ],\n);\n\nfinal health = snapshot.summary.health;" },
-  { slug: 'toaster', widget: 'Toaster', category: 'Navigation & overlays', reason: 'imperative',
-    code: "// Wrap your app once:\nToaster(child: app)\n\n// …then from anywhere below it:\nToaster.show(context, 'Saved', severity: ToastSeverity.success);" },
-];
-const DOC_ONLY_REASONS = new Set(['native', 'native-model', 'imperative', 'image-file']);
-for (const entry of DOC_ONLY) {
-  if (!DOC_ONLY_REASONS.has(entry.reason)) {
-    throw new Error(
-      `${entry.widget} uses unsupported doc-only reason "${entry.reason}"; ` +
-      `add a live browser example for web-safe widgets`
-    );
-  }
-}
-const docNote = (d) => {
-  const reason = d.reason;
-  if (reason === 'image-file')
-    return (
-      `:::note[Embed-safe with bytes]\n\`Image\` itself is web-safe — use ` +
-      `\`Image.bytes\` or \`Image.decoded\` in client-side embeds. Only ` +
-      `\`Image.file\` needs \`dart:io\` (terminal or ` +
-      `[\`fleury serve\`](/fleury/architecture/serving-and-embedding/)). ` +
-      `This page has no live browser demo yet; the reference below is generated ` +
-      `from the source.\n:::\n`
-    );
-  if (reason === 'native')
-    return (
-      `:::note[Runs locally]\nThis widget uses \`dart:io\` (filesystem or processes), ` +
-      `so it runs in a terminal or through ` +
-      `[\`fleury serve\`](/fleury/architecture/serving-and-embedding/) — which is ` +
-      `why this page has no live browser demo. The reference below is generated ` +
-      `from the source.\n:::\n`
-    );
-  if (reason === 'native-model')
-    return (
-      `:::note[Supporting model]\nA plain data model, not a widget — it bundles ` +
-      `a workflow's task and process records for widgets to display. Because it ` +
-      `depends on the native-only log library, use it in a terminal or through ` +
-      `[\`fleury serve\`](/fleury/architecture/serving-and-embedding/), not in a ` +
-      `client-side embed.\n:::\n`
-    );
-  if (reason === 'core') {
-    // Point each primitive at the guide that actually shows it in context
-    // (layout for the box/flex primitives, loading-data for the async
-    // builders, and so on) instead of sending everyone to the layout guide.
-    const guide = d.guide ?? 'layout';
-    return (
-      `:::note[Core widget]\nA framework primitive from \`package:fleury\` — the ` +
-      `same model you know from Flutter. The reference below is generated from ` +
-      `the source; the [${guide.replace(/-/g, ' ')} guide](/fleury/guides/${guide}/) ` +
-      `shows it in context.\n:::\n`
-    );
-  }
-  return (
-    `:::note[Imperative]\nToasts are raised at runtime with ` +
-    `\`Toaster.show(context, …)\`, so there's no static preview on this ` +
-    `page.\n:::\n`
-  );
-};
-
-// Core framework widgets (from package:fleury): the layout, text, async, input,
-// and builder primitives a Flutter developer reaches for. Documented from source
-// like the rest of the reference; usage in context lives in the guides.
-const CORE = [
-  { slug: 'text', guide: 'theming', widget: 'Text', code: "Text('hello', style: CellStyle(bold: true))" },
-  { slug: 'richtext', guide: 'theming', widget: 'RichText',
-    code: "RichText(text: TextSpan(children: [\n  TextSpan(text: 'deploy '),\n  TextSpan(text: 'ok', style: CellStyle(bold: true)),\n]))" },
-  { slug: 'textspan', guide: 'theming', widget: 'TextSpan',
-    code: "TextSpan(\n  text: 'deploy ',\n  children: [TextSpan(text: 'ok', style: CellStyle(bold: true))],\n)" },
-  { slug: 'listview', guide: 'lists-and-scrolling', widget: 'ListView',
-    code: "ListView.builder(\n  itemCount: rows.length,\n  itemBuilder: (context, i, selected) => Text(rows[i].label),\n)" },
-  { slug: 'scrollview', guide: 'lists-and-scrolling', widget: 'ScrollView',
-    code: "ScrollView(child: Column(children: [/* tall content */]))" },
-  { slug: 'futurebuilder', guide: 'loading-data', widget: 'FutureBuilder',
-    code: "FutureBuilder<List<Item>>(\n  future: load(),\n  builder: (context, snapshot) => snapshot.hasData\n      ? ItemList(snapshot.data!)\n      : const Text('Loading…'),\n)" },
-  { slug: 'streambuilder', guide: 'loading-data', widget: 'StreamBuilder',
-    code: "StreamBuilder<int>(\n  stream: ticks,\n  initialData: 0,\n  builder: (context, snapshot) => Text('tick ${snapshot.data ?? 0}'),\n)" },
-  { slug: 'gesturedetector', guide: 'input-and-gestures', widget: 'GestureDetector',
-    code: "GestureDetector(\n  onTap: _select,\n  onTapDown: (details) => _placeAt(details.localPosition),\n  child: child,\n)" },
-  { slug: 'mouseregion', guide: 'input-and-gestures', widget: 'MouseRegion',
-    code: "MouseRegion(\n  onEnter: () => setHover(true),\n  onExit: () => setHover(false),\n  child: Text('hover me'),\n)" },
-  { slug: 'layoutbuilder', widget: 'LayoutBuilder',
-    code: "LayoutBuilder(\n  builder: (context, constraints) =>\n      (constraints.maxCols ?? 0) > 60 ? Wide() : Narrow(),\n)" },
-  { slug: 'scope', guide: 'state-management', widget: 'Scope',
-    code: "Scope(\n  project,\n  child: const ProjectLabel(),\n)" },
-  { slug: 'scopebuilder', guide: 'state-management', widget: 'ScopeBuilder',
-    code: "ScopeBuilder<Project>(\n  builder: (context, project) => Text('Project: ${project.name}'),\n)" },
-  { slug: 'notifierbuilder', guide: 'state-management', widget: 'NotifierBuilder',
-    code: "NotifierBuilder(\n  notifier: cart,\n  builder: (context, cart) => Text('Items: ${cart.itemCount}'),\n)" },
-  { slug: 'sizedbox', widget: 'SizedBox',
-    code: "SizedBox(\n  width: 20,\n  height: 3,\n  child: Text('fixed area'),\n)" },
-  { slug: 'padding', widget: 'Padding',
-    code: "Padding(\n  padding: const EdgeInsets.symmetric(horizontal: 2, vertical: 1),\n  child: Text('inset'),\n)" },
-  { slug: 'align', widget: 'Align',
-    code: "Align(\n  alignment: Alignment.centerRight,\n  child: Text('status'),\n)" },
-  { slug: 'positioned', widget: 'Positioned',
-    code: "Stack(children: [\n  Text('base'),\n  Positioned(left: 4, top: 1, child: Text('overlay')),\n])" },
-  { slug: 'wrap', widget: 'Wrap',
-    code: "Wrap(\n  spacing: 1,\n  runSpacing: 1,\n  children: tags.map((tag) => Text('#$tag')).toList(),\n)" },
-  { slug: 'flexible', widget: 'Flexible',
-    code: "Row(children: [\n  Flexible(child: Text(longLabel)),\n  Text('ready'),\n])" },
-  { slug: 'spacer', widget: 'Spacer',
-    code: "Row(children: [\n  Text('left'),\n  const Spacer(),\n  Text('right'),\n])" },
-  { slug: 'constrainedbox', widget: 'ConstrainedBox',
-    code: "ConstrainedBox(\n  minWidth: 24,\n  maxWidth: 48,\n  child: Text('bounded content'),\n)" },
-  { slug: 'aspectratio', widget: 'AspectRatio',
-    code: "AspectRatio(\n  aspectRatio: 2.0,\n  child: Heatmap(values: values),\n)" },
-].map((d) => ({ ...d, category: 'Core widgets', reason: 'core' }));
 
 const DOC_PAGES = [...DOC_ONLY, ...CORE];
 const exportedWidgetCount = assertExportedWidgetCoverage([
@@ -601,82 +861,112 @@ assertReferenceComplete(DOC_PAGES.map((entry) => entry.widget), 'doc-only widget
 // description, catalog bullets) where the whole first paragraph is too much.
 const firstSentence = (s) => s.split(/(?<=\.)\s+(?=[A-Z`(])/)[0];
 for (const d of DOC_PAGES) {
-  const intro = api[d.widget]?.classDoc ? mdxSafe(api[d.widget].classDoc) : '';
+  const { summary: intro, details } = api[d.widget]?.classDoc
+    ? splitClassDoc(mdxSafe(api[d.widget].classDoc))
+    : { summary: '', details: '' };
+  // An entry can borrow a guide's live example that shows the widget at work;
+  // it goes in the same aside as a registry page's demo.
+  const example = d.example ? all.find((x) => x.id === d.example) : null;
+  if (d.example && !example) {
+    throw new Error(`${d.widget} names example "${d.example}", which the registry lacks`);
+  }
+  const body =
+    (intro ? `${intro}\n\n` : '') +
+    seeAlsoLine(d.slug) +
+    `${docNote(d)}\n` +
+    (d.code ? `## Usage\n\n\`\`\`dart\n${d.code}\n\`\`\`\n\n` : '') +
+    detailsSection(details, Boolean(d.code)) +
+    constructorsSection(d.widget) +
+    sourceSection(d.widget) +
+    `**Category:** ${categoryLink(d.category)} · [All widgets](/fleury/widgets/)\n`;
   writeFileSync(
     join(widgetsDir, `${d.slug}.mdx`),
     `---\ntitle: ${yaml(d.widget)}\n` +
-      `description: ${yaml(firstSentence(api[d.widget]?.doc ?? d.widget))}\n---\n\n` +
-      (intro ? `${intro}\n\n` : '') +
-      seeAlsoLine(d.slug) +
-      `${docNote(d)}\n` +
-      (d.code ? `## Usage\n\n\`\`\`dart\n${d.code}\n\`\`\`\n\n` : '') +
-      constructorsSection(d.widget) +
-      sourceSection(d.widget) +
-      `**Category:** ${d.category} · [All widgets](/fleury/widgets/)\n`
+      `description: ${yaml(firstSentence(api[d.widget]?.doc ?? d.widget))}\n` +
+      (example ? `tableOfContents: false\n` : '') +
+      `---\n\n` +
+      (example
+        ? `import FleuryExample from '${COMPONENT}';\n` +
+          padImport(example) +
+          `import WidgetLayout from '${LAYOUT_COMPONENT}';\n\n` +
+          `<WidgetLayout>\n\n<Fragment slot="aside">\n\n` +
+          `${demoBlock(example)}\n\n</Fragment>\n\n` +
+          `${body}\n</WidgetLayout>\n`
+        : body)
   );
 }
 
 const byCategory = new Map();
-for (const e of widgets) {
-  if (!byCategory.has(e.category)) byCategory.set(e.category, []);
-  byCategory.get(e.category).push(e);
-}
-// Fold the intentionally doc-only APIs into the catalog index and explain why
-// they do not have a client-side live demo.
-for (const d of DOC_PAGES) {
-  const tag = d.reason === 'native'
-    ? ' *(runs locally)*'
-    : d.reason === 'core'
-      ? ' *(core)*'
-      : d.reason === 'native-model'
-        ? ' *(supporting model; runs locally)*'
-        : ' *(imperative)*';
-  // One sentence only — several core/native doc comments open with a full
-  // paragraph, which read as walls of text next to the curated one-line blurbs.
-  const blurb = firstSentence(api[d.widget]?.doc ?? '') + tag;
-  if (!byCategory.has(d.category)) byCategory.set(d.category, []);
-  byCategory.get(d.category).push({ widget: d.widget, id: d.slug, blurb });
-}
+const addToCategory = (category, entry) => {
+  if (!byCategory.has(category)) byCategory.set(category, []);
+  byCategory.get(category).push(entry);
+};
+// Within a category the framework primitives lead (Text before MarkdownView,
+// ListView before DataTable), then the registry's widgets, then the doc-only
+// pages.
+const catalogEntry = (d) => {
+  // One sentence only — several core doc comments open with a full paragraph,
+  // which read as walls of text next to the curated one-line blurbs.
+  const blurb = firstSentence(api[d.widget]?.doc ?? '');
+  return { widget: d.widget, id: d.slug, blurb };
+};
+for (const d of CORE) addToCategory(d.category, catalogEntry(d));
+for (const e of widgets) addToCategory(e.category, e);
+for (const d of DOC_ONLY) addToCategory(d.category, catalogEntry(d));
 let widgetIndex =
-  `---\ntitle: Overview\ndescription: Every exported Fleury higher-level widget, plus the most-used core primitives — live where useful and source-backed throughout.\n---\n\n` +
+  `---\ntitle: Widget reference\ndescription: Every exported Fleury higher-level widget, plus the most-used core primitives — live where useful and source-backed throughout.\n---\n\n` +
   `This reference covers every widget exported by \`fleury_widgets\`, plus ` +
   `the core layout, text, async, and input primitives most apps reach for. ` +
   `Most pages embed the real widget running live in your browser; every ` +
   `page's API tables are generated from the current Dart source.\n\n`;
 // Deliberate reading order: the control families a first visit scans for come
-// first; the framework primitives close the page. Unlisted categories (if a new
-// one appears in the registry) fall in after the listed ones, before Core.
+// first; the framework primitives close the page. Categories group widgets by
+// what they are for, not by package, so core and fleury_widgets pages mix.
+// Unlisted categories (if a new one appears in the registry) fall in last.
 const CATEGORY_ORDER = [
   'Inputs & controls',
-  'Data & lists',
+  'Forms',
+  'Lists & data',
   'Charts & meters',
-  'Documents',
+  'Text & content',
   'Agent surfaces',
   'Navigation & overlays',
   'Layout',
-  'Supporting models',
-  'Core widgets',
+  'Input handling & focus',
+  'State & async',
 ];
 const categoryRank = (c) => {
   const i = CATEGORY_ORDER.indexOf(c);
-  return i === -1 ? CATEGORY_ORDER.length - 2 : i;
+  return i === -1 ? CATEGORY_ORDER.length : i;
 };
 const orderedCategories = [...byCategory.entries()].sort(
   (a, b) => categoryRank(a[0]) - categoryRank(b[0])
 );
 for (const [category, items] of orderedCategories) {
   widgetIndex += `## ${category}\n\n`;
-  if (category === 'Layout') {
-    widgetIndex +=
-      `The core layout primitives — \`Row\`, \`Column\`, \`Padding\`, ` +
-      `\`SizedBox\`, and friends — are under ` +
-      `[Core widgets](#core-widgets).\n\n`;
-  }
   for (const e of items)
     widgetIndex += `- [${e.widget}](/fleury/widgets/${e.id.split('.')[0]}/) — ${e.blurb}\n`;
   widgetIndex += `\n`;
 }
 writeFileSync(join(widgetsDir, 'index.mdx'), widgetIndex);
+
+// The Widgets sidebar mirrors this catalog: one collapsible group per category,
+// in the same order, so the sidebar and the index agree and a reader browsing
+// for "an input" scans one group instead of an alphabetical list of ~100.
+writeFileSync(
+  WIDGET_SIDEBAR,
+  JSON.stringify(
+    orderedCategories.map(([category, items]) => ({
+      label: category,
+      items: items.map((e) => ({
+        label: e.widget,
+        slug: `widgets/${e.id.split('.')[0]}`,
+      })),
+    })),
+    null,
+    2
+  ) + '\n'
+);
 
 // ── Showcase pages (one app per page) ───────────────────────────────────────
 const showDir = join(DOCS, 'showcases');
@@ -721,20 +1011,21 @@ const SHOWCASE_GOALS = {
     'handled, so "the preview matches the file" comes down to a `switch` in ' +
     '`build()`.',
   commands:
-    'A compact workspace built to make command architecture visible. Edit a ' +
-    'draft and one `AppCommand` enables its dedicated button, Ctrl+S shortcut, ' +
-    'palette row, semantic action, and programmatic identity together.\n\n' +
-    'Switch between Editor and Files and the active-command panel changes with ' +
-    'the current `CommandScope`, while app-wide commands remain available. The ' +
-    'demo is deterministic and local: every moving part exists to show how a ' +
-    'discoverable action catalog prevents invocation surfaces from drifting.',
+    'A small editor built to make command architecture visible. **New file** ' +
+    'and **Save current file** are each defined once as an `AppCommand`, which ' +
+    'supplies its shortcut, palette row, semantic action, and stable ID ' +
+    'together.\n\n' +
+    'Edit a file and Save becomes available on every surface at once; save it ' +
+    'and they all disable together. The palette opener is itself a command ' +
+    'bound to Ctrl+K, so the palette lists exactly what the editor\'s ' +
+    '`CommandScope` offers. The demo is deterministic and local.',
   agent:
     'A Claude-Code-style streaming session — prose, tool cards, a live todo list, ' +
     'a colored diff, a prompt box.\n\n' +
     'None of it uses special "agent" widgets: it is just the Fleury primitives ' +
     'over a cell grid, expressive enough that a rich agent UI comes down to ' +
     'layout and color. And because it is an ordinary Fleury tree, the same UI is ' +
-    'inspectable as a semantic graph — so a test, or another agent, can read it. ' +
+    'inspectable as a semantic tree — so a test, or another agent, can read it. ' +
     'See [Built for agents](/fleury/architecture/agents-and-semantics/).',
   editor:
     'One buffer, two editors. The same text, the same widget tree — but ' +
@@ -750,7 +1041,7 @@ const SHOWCASE_GOALS = {
     'The modal behaviour underneath is ordinary app state. In vim NORMAL the ' +
     'editor declines typed text, so printables route to `KeyBindings` as ' +
     'commands; in INSERT it claims them. See ' +
-    '[Focus & keyboard](/fleury/guides/focus-and-keyboard/).',
+    '[Key handling](/fleury/guides/focus-and-keyboard/).',
   finance:
     'A personal-finance workspace that feels immediately familiar: balances, ' +
     'cash flow, category spending, filters, and a transaction ledger filled ' +
@@ -807,10 +1098,9 @@ const SHOWCASE_TRY = {
     '*Try it: arrow through the tree — the preview swaps viewers as the ' +
     'selection changes.*',
   commands:
-    '*Try it: edit the draft and watch **Save draft** become available everywhere. ' +
-    'Save with Ctrl+S, or press Ctrl+K and choose it from the palette. Then switch ' +
-    'to Files and watch the local command ' +
-    'catalog change while the workspace commands remain.*',
+    '*Try it: edit the file, then save it with Ctrl+S or press Ctrl+K and ' +
+    'choose **Save current file**. Choose **New file** from the palette to ' +
+    'open an untitled file; the last-command line reports each invocation.*',
   agent:
     '*Try it: type a message in the prompt (or just press Enter) and the ' +
     'next turn streams in.*',
@@ -845,7 +1135,7 @@ for (const e of widgets)
   catalog.set(e.widget, { slug: e.id.split('.')[0], category: e.category });
 for (const d of DOC_ONLY) catalog.set(d.widget, { slug: d.slug, category: d.category });
 for (const d of CORE.filter((entry) => entry.guide === 'state-management'))
-  catalog.set(d.widget, { slug: d.slug, category: 'State management' });
+  catalog.set(d.widget, { slug: d.slug, category: d.category });
 const widgetsUsedIn = (file) => {
   const src = readFileSync(join(SAMPLES_DIR, file), 'utf8');
   const used = [];

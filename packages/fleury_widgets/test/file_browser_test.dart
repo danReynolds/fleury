@@ -157,15 +157,15 @@ void main() {
   test('query filtering does not match the shared parent directory', () {
     final parent = ['', 'tmp', 'deploy-project'].join(Platform.pathSeparator);
     final entries = [
-      FileBrowserEntry(
+      FileEntry(
         path: '$parent${Platform.pathSeparator}alpha.txt',
         name: 'alpha.txt',
-        type: FileBrowserEntryType.file,
+        type: FileEntryType.file,
       ),
-      FileBrowserEntry(
+      FileEntry(
         path: '$parent${Platform.pathSeparator}deploy.log',
         name: 'deploy.log',
-        type: FileBrowserEntryType.file,
+        type: FileEntryType.file,
       ),
     ];
 
@@ -180,7 +180,7 @@ void main() {
 
   testWidgets('Enter opens directories and activates files', (tester) {
     final dir = _scratchDir();
-    FileBrowserEntry? activated;
+    FileEntry? activated;
     String? changedDirectory;
     tester.pumpWidget(
       FileBrowser(
@@ -259,7 +259,7 @@ void main() {
       initialDirectory: dir,
       controller: controller,
       autofocus: true,
-      entityFilter: (entity) => !entity.path.endsWith('.tmp'),
+      entryFilter: (entry) => !entry.path.endsWith('.tmp'),
     );
     tester.pumpWidget(browser());
     tester.sendKey(const KeyEvent(KeyCode.arrowDown));
@@ -399,7 +399,7 @@ void main() {
     tester,
   ) async {
     final dir = _scratchDir();
-    FileBrowserEntry? activated;
+    FileEntry? activated;
     String? changedDirectory;
     tester.pumpWidget(
       FileBrowser(
@@ -491,10 +491,10 @@ void main() {
 
     test('exportFileBrowserEntry sanitizes path controls', () {
       final text = exportFileBrowserEntry(
-        const FileBrowserEntry(
+        const FileEntry(
           path: '/tmp/bad\x1b]52;c;secret\x07\nname',
           name: 'bad',
-          type: FileBrowserEntryType.file,
+          type: FileEntryType.file,
         ),
       );
 
@@ -588,10 +588,10 @@ void main() {
 
     expect(
       buildFileBrowserEntryOrder([
-        const FileBrowserEntry(
+        const FileEntry(
           path: '/tmp/bad\x1b]52;c;secret\x07\nname.txt',
           name: 'bad\x1b]52;c;secret\x07\nname.txt',
-          type: FileBrowserEntryType.file,
+          type: FileEntryType.file,
         ),
       ], filter: const FileBrowserFilterDescriptor(query: 'secret')),
       isEmpty,

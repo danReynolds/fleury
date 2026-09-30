@@ -2,7 +2,7 @@ import 'dart:async' show unawaited;
 import 'dart:collection' show ListBase;
 
 import 'package:characters/characters.dart';
-import 'package:fleury/fleury.dart';
+import 'package:fleury/fleury_core.dart';
 
 import 'component_theme.dart';
 import 'internal/collection_notifications.dart';

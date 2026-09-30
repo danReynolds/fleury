@@ -1,13 +1,20 @@
 ---
 title: Fleury
-description: A fast, retained-mode UI framework for the terminal — and the browser.
+description: A fast Dart UI framework for the terminal — and the browser.
 template: splash
+head:
+  - tag: title
+    content: Fleury — a Dart UI framework for the terminal and the browser
 hero:
-  tagline: A fast, retained-mode UI framework for the terminal — and the browser. One widget tree, two surfaces, and a semantic tree agents can drive.
+  tagline: A fast Dart UI framework for the terminal — and the browser. One widget tree, two surfaces, and a semantic tree agents can drive.
   actions:
     - text: Get started
       link: /fleury/getting-started/
       icon: right-arrow
+    - text: Try Fleury Pad
+      link: /fleury/pad/
+      icon: laptop
+      variant: secondary
     - text: View on GitHub
       link: https://github.com/danReynolds/fleury
       icon: external
@@ -18,18 +25,20 @@ import { CardGrid, LinkCard } from '@astrojs/starlight/components';
 import FleuryExample from '../../components/FleuryExample.astro';
 import FeatureCard from '../../components/FeatureCard.astro';
 import HomeSplit from '../../components/HomeSplit.astro';
-import InlineShowcase from '../../components/InlineShowcase.astro';
+import GuidePad from '../../components/GuidePad.astro';
 
 <HomeSplit files={[{ name: 'clock.dart' }, { name: 'table.dart' }, { name: 'bars.dart' }]}>
 <Fragment slot="code-0">
 ```dart
-// A live world clock — the selected tab's Digits tick every
-// second; click a tab (or press ← / →) to switch zone.
+// A live world clock: Digits tick every second.
+// Click a tab, or press ← / →, to switch zones.
 Tabs(
   tabs: [
     TabItem(label: 'UTC', content: Digits(utcTime)),
     TabItem(label: 'EST', content: Digits(estTime)),
     TabItem(label: 'PST', content: Digits(pstTime)),
+    TabItem(label: 'CET', content: Digits(cetTime)),
+    TabItem(label: 'JST', content: Digits(jstTime)),
   ],
 )
 ```
@@ -72,7 +81,7 @@ JavaScript with `dart2js`, running live in your browser: the clock ticks, the
 bars stream, the table takes your clicks. The same trees also run native in a
 terminal. [How that works →](/fleury/architecture/serving-and-embedding/)
 
-## Why Fleury
+## What you get
 
 <CardGrid>
   <FeatureCard icon="puzzle" title="A Real Widget Tree, for Cells" href="/fleury/architecture/core-and-targets/" cta="How it fits together">
@@ -81,9 +90,10 @@ terminal. [How that works →](/fleury/architecture/serving-and-embedding/)
     emits nothing.
   </FeatureCard>
   <FeatureCard icon="open-book" title="Built for Agents" href="/fleury/guides/driving-with-agents/" cta="Drive it with an agent">
-    Every widget publishes its role, state, and actions to a live semantic tree.
-    Agents drive your app through it over MCP — and your tests assert on the same
-    tree — instead of scraping the screen. Nothing extra to wire up.
+    Controls and content publish their role, state, and actions to a live
+    semantic tree. Agents drive your app through it over MCP — and your tests
+    assert on the same tree — instead of scraping the screen. Nothing extra to
+    wire up.
   </FeatureCard>
   <FeatureCard icon="laptop" title="One App, Multiple Targets" href="/fleury/architecture/serving-and-embedding/" cta="Serving & embedding">
     The same widget tree renders natively to a terminal, or to the browser —
@@ -100,14 +110,40 @@ terminal. [How that works →](/fleury/architecture/serving-and-embedding/)
 
 <p class="home-more"><a href="/fleury/comparison/">Read the full case for Fleury — and how it compares →</a></p>
 
-## Full-screen apps. Interactive CLI commands.
+## Start building
 
-A small setup command can have a real UI, too. Choose a template, review the
-configuration, and finish back at the prompt.
+<CardGrid>
+  <LinkCard
+    title="Getting started"
+    href="/fleury/getting-started/"
+    description="Install the CLI, create a project, and run your first app in a few minutes."
+  />
+  <LinkCard
+    title="Tutorial: a filterable list"
+    href="/fleury/tutorial/"
+    description="Build a small interactive app end to end: state, a text input, live filtering, and layout."
+  />
+  <LinkCard
+    title="Guides"
+    href="/fleury/guides/"
+    description="Task-focused guides to layout, state, input, testing, and shipping, with live examples."
+  />
+  <LinkCard
+    title="Widget reference"
+    href="/fleury/widgets/"
+    description="Every widget by category, with live demos and API tables generated from source."
+  />
+</CardGrid>
 
-<InlineShowcase />
+## Write Dart. See it run.
 
-[Explore inline mode and run it in your terminal →](/fleury/showcases/inline/)
+This one is yours to change. Edit the greeting, make the button count by two,
+or add a widget, then press **Run**. Edit again and **Hot reload** keeps your
+count. For a full-page editor, open [Fleury Pad](/fleury/pad/).
+
+<GuidePad id="home.pad" layout="demo-wide" demoLabel="Your app">
+<FleuryExample slot="demo" id="home.pad" cols={34} rows={11} interactive surfaceTheme="site" />
+</GuidePad>
 
 ## See it in action
 

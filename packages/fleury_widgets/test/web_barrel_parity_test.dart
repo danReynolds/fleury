@@ -9,18 +9,12 @@ import 'dart:io';
 
 import 'package:test/test.dart';
 
-/// The declared native-only exclusions — widgets that depend on dart:io
-/// directly (file I/O, log capture, process running) or transitively
-/// (built on the log/process widgets). Adding a file here is a policy
-/// decision: update the fleury_widgets_web.dart header comment and
-/// docs/serving-and-embedding.md alongside it.
-const nativeOnly = {
-  'src/file_browser.dart',
-  'src/file_picker.dart',
-  'src/log_region.dart',
-  'src/terminal_output_region.dart',
-  'src/workflow_snapshot.dart',
-};
+/// The declared native-only exclusions: libraries that depend on dart:io.
+/// Keep this set small. A widget should take its platform service as a
+/// parameter (as FileBrowser takes a FileSource) rather than land here.
+/// Adding a file here is a policy decision: update the fleury_widgets_web.dart
+/// header comment and docs/serving-and-embedding.md alongside it.
+const nativeOnly = {'src/local_file_source.dart'};
 
 void main() {
   test('web barrel = native barrel minus the declared native-only set', () {

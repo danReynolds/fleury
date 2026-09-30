@@ -1,0 +1,71 @@
+{
+  "startedAt": "2026-09-27T17:43:11.604845+00:00",
+  "finishedAt": "2026-09-27T17:43:14.848981+00:00",
+  "url": "https://fleury-pad-staging-vbalblwk3q-uc.a.run.app",
+  "label": "after-deployment",
+  "build": {
+    "sdkVersion": "3.12.2",
+    "buildId": "395ef1cabf3c468b",
+    "backend": "dartpad",
+    "upstreamRevision": "70a62b1ebcf9d2b906ec564254bde02a543be895",
+    "protocolVersion": 2,
+    "sourceRevision": "227e387b-dirty-20260927"
+  },
+  "httpOnly": true,
+  "coldStartConfirmed": false,
+  "samples": [
+    {
+      "operation": "initialConnection",
+      "roundTripMs": 259.6,
+      "serverElapsedMs": null,
+      "responseBytes": 208
+    },
+    {
+      "operation": "firstCompile",
+      "roundTripMs": 738.9,
+      "serverElapsedMs": 587,
+      "responseBytes": 38313
+    },
+    {
+      "operation": "reload1",
+      "roundTripMs": 808.3,
+      "serverElapsedMs": 656,
+      "responseBytes": 23905
+    },
+    {
+      "operation": "reload2",
+      "roundTripMs": 718.3,
+      "serverElapsedMs": 561,
+      "responseBytes": 23905
+    },
+    {
+      "operation": "reload3",
+      "roundTripMs": 715.7,
+      "serverElapsedMs": 562,
+      "responseBytes": 23905
+    }
+  ],
+  "firstConnectionThroughCompileMs": 998.5,
+  "deployment": {
+    "project": "fleury-pad-20260927",
+    "region": "us-central1",
+    "service": "fleury-pad-staging",
+    "revision": "fleury-pad-staging-00003-gax",
+    "serviceAnnotations": {
+      "run.googleapis.com/maxScale": "1",
+      "run.googleapis.com/scalingMode": "automatic"
+    },
+    "revisionAnnotations": {
+      "autoscaling.knative.dev/maxScale": "1",
+      "run.googleapis.com/cpu-throttling": "false",
+      "run.googleapis.com/execution-environment": "gen2",
+      "run.googleapis.com/startup-cpu-boost": "false"
+    },
+    "resources": {
+      "limits": {
+        "cpu": "1",
+        "memory": "2Gi"
+      }
+    }
+  }
+}

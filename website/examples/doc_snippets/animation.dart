@@ -21,7 +21,6 @@ class AnimationGuideDemo extends StatelessWidget {
       ConnectionEntrance(),
       ValidationFeedback(),
       EffectPicker(),
-      PacketRoute(),
       PacketTransferFrames(),
       TickerSimulation(),
     ],
@@ -144,6 +143,7 @@ class ManualRoute extends StatefulWidget {
   State<ManualRoute> createState() => _ManualRouteState();
 }
 
+// #docregion manual-route
 class _ManualRouteState extends State<ManualRoute> {
   final progress = Animation<double>(0.0, debugLabel: 'manual package route');
   var running = false;
@@ -200,6 +200,7 @@ class _ManualRouteState extends State<ManualRoute> {
     );
   }
 }
+// #enddocregion manual-route
 
 class ProgressDemo extends StatefulWidget {
   const ProgressDemo({super.key});
@@ -208,6 +209,7 @@ class ProgressDemo extends StatefulWidget {
   State<ProgressDemo> createState() => _ProgressDemoState();
 }
 
+// #docregion progress
 class _ProgressDemoState extends State<ProgressDemo> {
   var delivered = false;
 
@@ -243,6 +245,7 @@ class _ProgressDemoState extends State<ProgressDemo> {
     ],
   );
 }
+// #enddocregion progress
 
 class TimingComparison extends StatefulWidget {
   const TimingComparison({super.key});
@@ -251,6 +254,7 @@ class TimingComparison extends StatefulWidget {
   State<TimingComparison> createState() => _TimingComparisonState();
 }
 
+// #docregion shared-timing
 Widget sharedTimingStatus(bool active) {
   const inactive = RgbColor(110, 120, 135);
   const activeColor = RgbColor(70, 220, 145);
@@ -271,7 +275,9 @@ Widget sharedTimingStatus(bool active) {
     },
   );
 }
+// #enddocregion shared-timing
 
+// #docregion independent-timing
 Widget independentTimingStatus(bool active) {
   const inactive = RgbColor(110, 120, 135);
   const activeColor = RgbColor(70, 220, 145);
@@ -297,6 +303,7 @@ Widget independentTimingStatus(bool active) {
     ),
   );
 }
+// #enddocregion independent-timing
 
 class _TimingComparisonState extends State<TimingComparison> {
   var active = false;
@@ -331,6 +338,7 @@ class _ConnectionEntranceState extends State<ConnectionEntrance> {
         text: connected ? 'Disconnect' : 'Connect',
         onPressed: () => setState(() => connected = !connected),
       ),
+      // #docregion connection
       if (connected)
         Padding(
           padding: const EdgeInsets.only(left: 4),
@@ -344,10 +352,12 @@ class _ConnectionEntranceState extends State<ConnectionEntrance> {
         )
       else
         const Text('○ Offline'),
+      // #enddocregion connection
     ],
   );
 }
 
+// #docregion effect-mapping
 enum EntryEffect { fade, slide, wipe, expand }
 
 enum ExitEffect { fade, slide, wipe, shrink }
@@ -377,6 +387,7 @@ Duration exitDuration(ExitEffect effect) => switch (effect) {
   ExitEffect.slide || ExitEffect.wipe => const Duration(milliseconds: 800),
   ExitEffect.shrink => const Duration(milliseconds: 300),
 };
+// #enddocregion effect-mapping
 
 class EffectPicker extends StatefulWidget {
   const EffectPicker({super.key});
@@ -419,6 +430,7 @@ class _EffectPickerState extends State<EffectPicker> {
         text: visible ? 'Hide sample' : 'Show sample',
         onPressed: () => setState(() => visible = !visible),
       ),
+      // #docregion effect-picker
       AnimatedVisibility(
         visible: visible,
         enter: entryEffect(entry),
@@ -427,6 +439,7 @@ class _EffectPickerState extends State<EffectPicker> {
         curve: Curves.linear,
         child: const BuildPreview(),
       ),
+      // #enddocregion effect-picker
     ],
   );
 }
@@ -462,6 +475,7 @@ class _ValidationFeedbackState extends State<ValidationFeedback> {
   var message = 'Enter a pilot name, then validate it.';
   var success = false;
 
+  // #docregion feedback
   void submit() {
     final value = name.text.trim();
     setState(() {
@@ -485,6 +499,7 @@ class _ValidationFeedbackState extends State<ValidationFeedback> {
     );
     return effect.wipeIn(from: Edge.left);
   }
+  // #enddocregion feedback
 
   @override
   void dispose() {
@@ -513,87 +528,6 @@ class _ValidationFeedbackState extends State<ValidationFeedback> {
   );
 }
 
-class PacketController {
-  final position = Animation<int>(0, debugLabel: 'packet position');
-
-  Future<void> send() async {
-    position.snap(0);
-    await position
-        .to(
-          10,
-          curve: Curves.easeInOut,
-          duration: const Duration(milliseconds: 900),
-        )
-        .delay(const Duration(milliseconds: 350))
-        .to(
-          20,
-          curve: Curves.easeInOut,
-          duration: const Duration(milliseconds: 1000),
-        )
-        .delay(const Duration(milliseconds: 350))
-        .to(
-          30,
-          curve: Curves.easeOut,
-          duration: const Duration(milliseconds: 1100),
-        )
-        .orCancel;
-  }
-
-  void dispose() => position.dispose();
-}
-
-class PacketRoute extends StatefulWidget {
-  const PacketRoute({super.key});
-
-  @override
-  State<PacketRoute> createState() => _PacketRouteState();
-}
-
-class _PacketRouteState extends State<PacketRoute> {
-  final packet = PacketController();
-  var sending = false;
-
-  Future<void> send() async {
-    setState(() => sending = true);
-    try {
-      await packet.send();
-    } on TickerCanceled {
-      return;
-    }
-    if (mounted) setState(() => sending = false);
-  }
-
-  @override
-  Widget build(BuildContext context) => Column(
-    children: <Widget>[
-      PacketTrack(position: packet.position.value),
-      Button(text: sending ? 'Restart route' : 'Send packet', onPressed: send),
-    ],
-  );
-
-  @override
-  void dispose() {
-    packet.dispose();
-    super.dispose();
-  }
-}
-
-class PacketTrack extends StatelessWidget {
-  const PacketTrack({super.key, required this.position});
-
-  final int position;
-
-  @override
-  Widget build(BuildContext context) {
-    final route = List<String>.filled(31, '·');
-    route[10] = '1';
-    route[20] = '2';
-    route[30] = '◆';
-    route[position.clamp(0, 30)] = position >= 30 ? '◉' : '●';
-    return Text(route.join());
-  }
-}
-
 class PacketTransferFrames extends StatefulWidget {
   const PacketTransferFrames({super.key});
 
@@ -602,6 +536,7 @@ class PacketTransferFrames extends StatefulWidget {
 }
 
 class _PacketTransferFramesState extends State<PacketTransferFrames> {
+  // #docregion frames
   static const frames = <String>[
     '●··········◇',
     '──●········◇',
@@ -610,6 +545,7 @@ class _PacketTransferFramesState extends State<PacketTransferFrames> {
     '────────●··◇',
     '──────────◆',
   ];
+  // #enddocregion frames
   var fast = true;
   var running = true;
 
@@ -632,6 +568,7 @@ class _PacketTransferFramesState extends State<PacketTransferFrames> {
           ),
         ],
       ),
+      // #docregion frames
       FrameBuilder(
         interval: interval,
         enabled: running,
@@ -645,6 +582,7 @@ class _PacketTransferFramesState extends State<PacketTransferFrames> {
           );
         },
       ),
+      // #enddocregion frames
     ],
   );
 }
@@ -656,6 +594,7 @@ class TickerSimulation extends StatefulWidget {
   State<TickerSimulation> createState() => _TickerSimulationState();
 }
 
+// #docregion ticker
 class _TickerSimulationState extends State<TickerSimulation>
     with SingleTickerProviderStateMixin {
   Ticker? ticker;
@@ -705,3 +644,4 @@ class _TickerSimulationState extends State<TickerSimulation>
     ],
   );
 }
+// #enddocregion ticker

@@ -1,0 +1,7 @@
+{
+  "editorAvailableBeforeAnalyzerMs": 1854.4,
+  "queuedCompilationPassed": true,
+  "stalledInitializationKilledMs": 28922.9,
+  "passed": true,
+  "note": "Fault injection; these are not normal startup latency measurements."
+}

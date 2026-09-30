@@ -1,0 +1,277 @@
+diff --git a/pkgs/dart_services/lib/src/analysis.dart b/pkgs/dart_services/lib/src/analysis.dart
+index 64a1d19..aa18a53 100644
+--- a/pkgs/dart_services/lib/src/analysis.dart
++++ b/pkgs/dart_services/lib/src/analysis.dart
+@@ -3,6 +3,7 @@
+ // BSD-style license that can be found in the LICENSE file.
+ 
+ import 'dart:async';
++import 'dart:convert';
+ import 'dart:io';
+ 
+ import 'package:analysis_server_lib/analysis_server_lib.dart';
+@@ -86,9 +87,36 @@ class AnalysisServerWrapper {
+       '(sdk: ${path.relative(sdkPath)}, args: ${serverArgs.join(' ')})',
+     );
+ 
+-    analysisServer = await AnalysisServer.create(
+-      sdkPath: sdkPath,
+-      serverArgs: serverArgs,
++    // The SDK ships an AOT analyzer. Keep the upstream protocol client while
++    // avoiding AnalysisServer.create's hardcoded JIT launcher.
++    final process = await Process.start(
++      path.join(
++        sdkPath,
++        'bin',
++        Platform.isWindows ? 'dartaotruntime.exe' : 'dartaotruntime',
++      ),
++      [
++        path.join(
++          sdkPath,
++          'bin',
++          'snapshots',
++          'analysis_server_aot.dart.snapshot',
++        ),
++        '--sdk',
++        sdkPath,
++        ...serverArgs,
++      ],
++    );
++    final exited = Completer<int>();
++    unawaited(process.exitCode.then(exited.complete));
++    // Drain diagnostics so an unread pipe cannot stall the worker. Protocol
++    // errors and its exit code are reported by the existing handlers below.
++    unawaited(process.stderr.drain<void>());
++    analysisServer = AnalysisServer(
++      process.stdout.transform(utf8.decoder).transform(const LineSplitter()),
++      process.stdin.writeln,
++      exited,
++      process.kill,
+     );
+ 
+     try {
+@@ -121,12 +149,17 @@ class AnalysisServerWrapper {
+     });
+   }
+ 
+-  Future<api.CompleteResponse> complete(String source, int offset) async {
++  Future<api.CompleteResponse> complete(
++    String source,
++    int offset, {
++    Map<String, String>? files,
++    String activeFile = kMainDart,
++  }) async {
+     const maxResults = 500;
+ 
+     final results = await _completeImpl(
+-      {kMainDart: source},
+-      kMainDart,
++      files ?? {kMainDart: source},
++      activeFile,
+       offset,
+       maxResults: maxResults,
+     );
+@@ -247,10 +280,15 @@ class AnalysisServerWrapper {
+         });
+   }
+ 
+-  Future<api.DocumentResponse> dartdoc(String src, int offset) async {
+-    final sourcePath = _getPathFromName(kMainDart);
++  Future<api.DocumentResponse> dartdoc(
++    String src,
++    int offset, {
++    Map<String, String>? files,
++    String activeFile = kMainDart,
++  }) async {
++    final sourcePath = _getPathFromName(activeFile);
+ 
+-    await _loadSources(_getOverlayMapWithPaths({kMainDart: src}));
++    await _loadSources(_getOverlayMapWithPaths(files ?? {kMainDart: src}));
+ 
+     final result = await analysisServer.analysis.getHover(sourcePath, offset);
+ 
+@@ -389,6 +427,35 @@ class AnalysisServerWrapper {
+     );
+   }
+ 
++  /// Analyze an embedding application's bounded virtual project. Paths in the
++  /// response are logical project names, never server filesystem paths.
++  Future<Map<String, dynamic>> analyzeFiles(Map<String, String> files) async {
++    final sources = _getOverlayMapWithPaths(files);
++    await _loadSources(sources);
++    final issues = <Map<String, dynamic>>[];
++    for (final entry in files.entries) {
++      final errors = await analysisServer.analysis.getErrors(
++        _getPathFromName(entry.key),
++      );
++      for (final error in errors.errors) {
++        if (error.severity == 'INFO') continue;
++        issues.add({
++          'file': entry.key,
++          'kind': error.severity.toLowerCase(),
++          'message': utils.normalizeImports(error.message),
++          'code': error.code.toLowerCase(),
++          'location': {
++            'charStart': error.location.offset,
++            'charLength': error.location.length,
++            'line': error.location.startLine,
++            'column': error.location.startColumn,
++          },
++        });
++      }
++    }
++    return {'issues': issues};
++  }
++
+   /// Cleanly shutdown the Analysis Server.
+   Future<void> shutdown() async {
+     await analysisServer.server.shutdown().timeout(const Duration(seconds: 1));
+diff --git a/pkgs/dart_services/lib/src/compiling.dart b/pkgs/dart_services/lib/src/compiling.dart
+index ef497e1..48db507 100644
+--- a/pkgs/dart_services/lib/src/compiling.dart
++++ b/pkgs/dart_services/lib/src/compiling.dart
+@@ -46,15 +46,24 @@ class Compiler {
+     return await _compileDDC(source, useNew: false);
+   }
+ 
+-  Future<DDCCompilationResults> compileNewDDC(String source) async {
+-    return await _compileDDC(source, useNew: true);
++  Future<DDCCompilationResults> compileNewDDC(
++    String source, {
++    Map<String, String> files = const {},
++  }) async {
++    return await _compileDDC(source, useNew: true, files: files);
+   }
+ 
+   Future<DDCCompilationResults> compileNewDDCReload(
+     String source,
+-    String deltaDill,
+-  ) async {
+-    return await _compileDDC(source, deltaDill: deltaDill, useNew: true);
++    String deltaDill, {
++    Map<String, String> files = const {},
++  }) async {
++    return await _compileDDC(
++      source,
++      deltaDill: deltaDill,
++      useNew: true,
++      files: files,
++    );
+   }
+ 
+   /// Compile the given string and return the resulting [DDCCompilationResults].
+@@ -67,6 +76,7 @@ class Compiler {
+     String source, {
+     String? deltaDill,
+     required bool useNew,
++    Map<String, String> files = const {},
+   }) async {
+     final imports = getAllImportsFor(source);
+ 
+@@ -83,6 +93,13 @@ class Compiler {
+ 
+       Directory(path.join(temp.path, 'lib')).createSync(recursive: true);
+ 
++      // The embedding host validates logical paths and every import before this
++      // boundary. Each request gets a fresh project; no files persist across users.
++      for (final entry in files.entries) {
++        final file = File(path.join(temp.path, 'lib', entry.key));
++        file.parent.createSync(recursive: true);
++        file.writeAsStringSync(entry.value);
++      }
+       final mainPath = path.join(temp.path, 'lib', kMainDart);
+       File(mainPath).writeAsStringSync(source);
+ 
+@@ -94,9 +111,9 @@ class Compiler {
+         // All hot restart (or initial compile) requests should include the
+         // bootstrap library.
+         final bootstrapPath = path.join(temp.path, 'lib', kBootstrapDart);
+-        final bootstrapContents = usingFlutter
+-            ? kBootstrapFlutterCode
+-            : kBootstrapDartCode;
++        final bootstrapContents =
++            _projectTemplates.bootstrapSource ??
++            (usingFlutter ? kBootstrapFlutterCode : kBootstrapDartCode);
+ 
+         File(bootstrapPath).writeAsStringSync(bootstrapContents);
+         compilePath = bootstrapPath;
+@@ -130,6 +147,10 @@ class Compiler {
+         ],
+         if (!useNew) ...['--modules=amd', '--module-name=dartpad_main'],
+         '--no-summarize',
++        for (final summary in _projectTemplates.additionalSummaries) ...[
++          '-s',
++          summary,
++        ],
+         if (usingFlutter) ...[
+           '-s',
+           _projectTemplates.summaryFilePath,
+diff --git a/pkgs/dart_services/lib/src/project_templates.dart b/pkgs/dart_services/lib/src/project_templates.dart
+index c4986d4..4cfb081 100644
+--- a/pkgs/dart_services/lib/src/project_templates.dart
++++ b/pkgs/dart_services/lib/src/project_templates.dart
+@@ -16,8 +16,30 @@ class ProjectTemplates {
+     required this.dartPath,
+     required this.flutterPath,
+     required this.summaryFilePath,
++    this.bootstrapSource,
++    this.additionalSummaries = const [],
++    this.additionalPackages = const {},
+   });
+ 
++  /// A prepared non-Flutter project hosted by an embedding application.
++  factory ProjectTemplates.custom({
++    required String projectPath,
++    required String bootstrapSource,
++    required List<String> summaries,
++    required Set<String> packages,
++  }) => ProjectTemplates._(
++    dartPath: projectPath,
++    flutterPath: projectPath,
++    summaryFilePath: '',
++    bootstrapSource: bootstrapSource,
++    additionalSummaries: List.unmodifiable(summaries),
++    additionalPackages: Set.unmodifiable(packages),
++  );
++
++  final String? bootstrapSource;
++  final List<String> additionalSummaries;
++  final Set<String> additionalPackages;
++
+   factory ProjectTemplates._factory() {
+     final templatesDirectory = _templatesDirectoryPath();
+     return ProjectTemplates._(
+@@ -194,7 +216,9 @@ bool isSupportedDartPackage(String package) =>
+     supportedBasicDartPackages.contains(package);
+ 
+ bool isSupportedPackage(String package) =>
+-    isSupportedFlutterPackage(package) || isSupportedDartPackage(package);
++    isSupportedFlutterPackage(package) ||
++    isSupportedDartPackage(package) ||
++    ProjectTemplates.instance.additionalPackages.contains(package);
+ 
+ /// If the specified [package] is deprecated in DartPad and
+ /// slated to be removed in a future update.
+diff --git a/pkgs/dart_services/lib/src/sdk.dart b/pkgs/dart_services/lib/src/sdk.dart
+index 5adfacd..9b65996 100644
+--- a/pkgs/dart_services/lib/src/sdk.dart
++++ b/pkgs/dart_services/lib/src/sdk.dart
+@@ -60,6 +60,18 @@ final class Sdk {
+     required this.engineVersion,
+   });
+ 
++  /// Use a standalone Dart SDK for a non-Flutter embedding application.
++  factory Sdk.fromDartSdk(String dartSdkPath) => Sdk._(
++    channel: 'stable',
++    dartSdkPath: dartSdkPath,
++    dartVersion: _readDartSdkVersionFile(dartSdkPath),
++    flutterBinPath: '',
++    flutterToolPath: '',
++    flutterSdkPath: '',
++    flutterVersion: '',
++    engineVersion: '',
++  );
++
+   /// Create an [Sdk] to track the location and version information
+   /// of the Flutter SDK used to run `dart_services`, or if not valid,
+   /// the one configured using the `FLUTTER_ROOT` environment variable.

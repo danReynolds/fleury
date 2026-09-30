@@ -4,11 +4,9 @@ description: Select list items, scroll content, and move between panes.
 ---
 
 import FleuryExample from '../../../components/FleuryExample.astro';
-import CodeDemoSplit from '../../../components/CodeDemoSplit.astro';
+import GuidePad from '../../../components/GuidePad.astro';
 import InputGuideCode from '../../../components/InputGuideCode.astro';
 import ListsGuideCode from '../../../components/ListsGuideCode.astro';
-import DemoSource from '../../../components/DemoSource.astro';
-import tableRows from '../../../../examples/lib/datatable_rows.dart?raw';
 
 Use `ListView` for a collection and `ScrollView` for a block of content.
 Both support the keyboard, mouse wheel, and an optional scrollbar.
@@ -18,11 +16,12 @@ Both support the keyboard, mouse wheel, and an optional scrollbar.
 Use **↑ / ↓** to focus a file, then **Enter** to select it. Clicking a row
 selects it too. Moving to another row leaves **Selected** unchanged:
 
-<CodeDemoSplit files={['file_list.dart', 'file_list_test.dart']} codeLabel="Source and test" demoLabel="Focus, then select" codeMaxHeight="27rem" layout="code-wide">
-<ListsGuideCode slot="code-0" file="file_list.dart" focus="child: ListView(" />
-<ListsGuideCode slot="code-1" file="file_list_test.dart" test />
+<GuidePad id="lists.files" layout="code-wide" codeMaxHeight="27rem" codeLabel="Source" demoLabel="Focus, then select">
 <FleuryExample slot="demo" id="lists.files" cols={34} rows={9} interactive />
-</CodeDemoSplit>
+<Fragment slot="references">
+<ListsGuideCode file="file_list_test.dart" test />
+</Fragment>
+</GuidePad>
 
 `ListView` highlights the current row automatically. `onSelect` handles both
 click and Enter; the only state this example keeps is the chosen filename.
@@ -41,11 +40,12 @@ the list and your code both update its live `currentIndex` afterward.
 Try **Scroll to 500**, then **Go to 25**. Scrolling leaves the current item
 alone; **Go to 25** brings it back into view. Neither selects a task.
 
-<CodeDemoSplit files={['task_browser.dart', 'task_browser_test.dart']} codeLabel="Source and test" demoLabel="Focus and selection" codeMaxHeight="29rem" layout="code-wide">
-<ListsGuideCode slot="code-0" file="task_browser.dart" focus="child: ListView.builder(" />
-<ListsGuideCode slot="code-1" file="task_browser_test.dart" test />
+<GuidePad id="lists.tasks" layout="code-wide" codeMaxHeight="29rem" codeLabel="Source" demoLabel="Focus and selection">
 <FleuryExample slot="demo" id="lists.tasks" cols={40} rows={22} interactive />
-</CodeDemoSplit>
+<Fragment slot="references">
+<ListsGuideCode file="task_browser_test.dart" test />
+</Fragment>
+</GuidePad>
 
 `onFocusedItemChanged` reports arrow-key or pointer navigation; `onSelect`
 reports the choice. `ListController.currentIndex` remembers the current item
@@ -63,23 +63,25 @@ the wheel and arrow keys give finer control.
 ## Horizontal scrolling
 
 Set `scrollDirection: Axis.horizontal` to arrange list items from left to right.
-Use **← / →** to browse, then **Enter** or click to select. The scrollbar moves
-to the bottom:
+Use **← / →** to browse, then **Enter** or click to select. The scrollbar runs
+along the bottom edge:
 
-<CodeDemoSplit files={['horizontal_list.dart', 'horizontal_list_test.dart']} codeLabel="Source and test" demoLabel="Browse sideways" codeMaxHeight="29rem">
-<ListsGuideCode slot="code-0" file="horizontal_list.dart" focus="child: ListView.separated(" />
-<ListsGuideCode slot="code-1" file="horizontal_list_test.dart" test />
+<GuidePad id="lists.horizontal" codeMaxHeight="29rem" codeLabel="Source" demoLabel="Browse sideways">
 <FleuryExample slot="demo" id="lists.horizontal" cols={40} rows={8} interactive />
-</CodeDemoSplit>
+<Fragment slot="references">
+<ListsGuideCode file="horizontal_list_test.dart" test />
+</Fragment>
+</GuidePad>
 
 `ScrollView` accepts the same property for wide content. This report keeps each
 line intact. Try **Home / End** to reach its first and last columns:
 
-<CodeDemoSplit files={['horizontal_content.dart', 'horizontal_content_test.dart']} codeLabel="Source and test" demoLabel="Read the whole line" codeMaxHeight="29rem">
-<ListsGuideCode slot="code-0" file="horizontal_content.dart" focus="child: ScrollView(" />
-<ListsGuideCode slot="code-1" file="horizontal_content_test.dart" test />
+<GuidePad id="lists.wide-content" codeMaxHeight="29rem" codeLabel="Source" demoLabel="Read the whole line">
 <FleuryExample slot="demo" id="lists.wide-content" cols={40} rows={10} interactive />
-</CodeDemoSplit>
+<Fragment slot="references">
+<ListsGuideCode file="horizontal_content_test.dart" test />
+</Fragment>
+</GuidePad>
 
 Both support sideways trackpad gestures, **Shift + wheel**, and dragging the
 scrollbar. A regular vertical wheel can still scroll a surrounding vertical
@@ -99,10 +101,9 @@ place as you scroll.
 Try **↑ / ↓** and **Page Down** to browse, then click or press **Enter** to
 select a row:
 
-<CodeDemoSplit file="datatable_rows.dart" codeLabel="Source" demoLabel="Browse a table" codeMaxHeight="29rem" layout="code-wide">
-<DemoSource slot="code" code={tableRows} focus="child: DataTable(" />
+<GuidePad id="datatable.rows" layout="code-wide" codeMaxHeight="29rem" codeLabel="Source" demoLabel="Browse a table">
 <FleuryExample slot="demo" id="datatable.rows" cols={36} rows={13} interactive />
-</CodeDemoSplit>
+</GuidePad>
 
 For spreadsheet-style interaction, the [DataTable examples](/fleury/widgets/datatable/)
 show selecting and copying cell ranges.
@@ -116,11 +117,12 @@ With **Bubble (leave pane)**, press **↓** at **BOTTOM**: focus moves to **Next
 Choose **Contain (stay in pane)** from **Edge behavior**, Tab back into the pane,
 and try again. Now **↓** stays in the pane; **Tab** still leaves it.
 
-<CodeDemoSplit files={['scroll_edges.dart', 'scroll_edges_test.dart']} codeLabel="Source and test" demoLabel="Reach the bottom" codeMaxHeight="31rem" layout="code-wide">
-<ListsGuideCode slot="code-0" file="scroll_edges.dart" focus="child: ScrollView(" />
-<ListsGuideCode slot="code-1" file="scroll_edges_test.dart" test />
+<GuidePad id="lists.document" layout="code-wide" codeMaxHeight="31rem" codeLabel="Source" demoLabel="Reach the bottom">
 <FleuryExample slot="demo" id="lists.document" cols={40} rows={18} interactive />
-</CodeDemoSplit>
+<Fragment slot="references">
+<ListsGuideCode file="scroll_edges_test.dart" test />
+</Fragment>
+</GuidePad>
 
 `EdgeBehavior.bubble` lets an unused arrow move focus onward.
 `EdgeBehavior.contain` keeps it in the pane. Lists have the same option.
@@ -134,11 +136,12 @@ Scroll **Recent** to the end, then keep scrolling: the outer **All notes** pane
 moves and reveals older months. Enable **Keep scrolling in Recent** and try
 again. `EdgeBehavior.contain` keeps wheel input in the inner pane at its edge.
 
-<CodeDemoSplit files={['Scroll behavior', 'Full source']} codeLabel="Choose what happens at the edge" demoLabel="Reach the end of Recent" codeMaxHeight="29rem">
-<InputGuideCode slot="code-0" file="scroll_panes.dart" />
-<InputGuideCode slot="code-1" file="scroll_panes.dart" full />
+<GuidePad id="input.scrolling" codeMaxHeight="29rem" codeLabel="Choose what happens at the edge" demoLabel="Reach the end of Recent" referencesLabel="Full source">
 <FleuryExample slot="demo" id="input.scrolling" cols={38} rows={14} interactive />
-</CodeDemoSplit>
+<Fragment slot="references">
+<InputGuideCode file="scroll_panes.dart" full />
+</Fragment>
+</GuidePad>
 
 `EdgeBehavior.bubble` is the default: an ancestor can use wheel input the inner
 pane cannot consume. Containment is useful when scrolling a small pane should

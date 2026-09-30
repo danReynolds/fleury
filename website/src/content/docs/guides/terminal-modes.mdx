@@ -139,10 +139,12 @@ then calls `runApp` again:
 <TerminalModesCode file="repeat.dart" />
 </details>
 
-Try the native flow from a Fleury checkout:
+Try the native flow from the `packages/samples` directory of a Fleury
+checkout:
 
 ```sh
-dart run packages/samples/bin/samples.dart inline --repeat
+cd packages/samples
+dart run bin/samples.dart inline --repeat
 ```
 
 Await each UI before opening the next. Keep shared data in the command's host;
@@ -165,10 +167,10 @@ brings you back to the same form, with your name, template, and review step pres
 <InlineRecording recording="inline-handoff" label="Watch setup open less and resume" duration="Native terminal recording" />
 
 This is a recording of the real native app launching `less`, not a browser
-simulation. Try it yourself from a Fleury checkout:
+simulation. Try it yourself from `packages/samples`:
 
 ```sh
-dart run packages/samples/bin/samples.dart inline --handoff
+dart run bin/samples.dart inline --handoff
 ```
 
 Choose **Review →**, then **View in pager**. The preview uses a temporary file
@@ -202,11 +204,12 @@ lifecycle.
 
 The browser examples illustrate the buffers around a real shared Fleury form.
 They cannot exercise a terminal emulator's cursor reports, scrollback, or raw
-input. From a Fleury checkout, compare the actual host modes:
+input. From `packages/samples` in a Fleury checkout, compare the actual host
+modes:
 
 ```sh
-dart run packages/samples/bin/samples.dart inline
-dart run packages/samples/bin/samples.dart inline --full-screen
+dart run bin/samples.dart inline
+dart run bin/samples.dart inline --full-screen
 ```
 
 Neither command writes project files. Resize the terminal during review, go
@@ -217,9 +220,9 @@ input should work again. This recording captures the inline run on a native PTY:
 
 ## Current inline support
 
-Inline needs terminal input/output and cursor position reporting. If the
-terminal cannot report its cursor position, Fleury restores its modes and
-reports the error.
+Inline mode currently runs on macOS and Linux. It needs terminal input/output
+and cursor position reporting. If the terminal cannot report its cursor
+position, Fleury restores its modes and reports the error.
 
 Natural content height, permanent log insertion above a running region, and
 retaining the final frame are not implemented. Native image protocols fall back

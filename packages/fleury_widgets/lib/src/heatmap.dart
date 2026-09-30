@@ -13,9 +13,10 @@ import 'glyphs.dart';
 ///
 /// ```dart
 /// Heatmap(
-///   values: weeklyActivity,                 // List<List<num>>
+///   values: weeklyActivity, // List<List<num>>: 7 rows (days) × 4 columns
 ///   rowLabels: const ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'],
-///   colLabels: const ['J', 'F', 'M', 'A', 'M', 'J', ...],
+///   colLabels: const ['W1', 'W2', 'W3', 'W4'], // clipped to cellWidth
+///   showLegend: true,
 /// )
 /// ```
 ///

@@ -1,0 +1,91 @@
+name: Fleury Pad
+on:
+  pull_request:
+    paths: ['experiments/fleury_pad/**', 'packages/fleury/lib/**', 'packages/fleury_web/lib/**', 'packages/fleury_widgets/lib/**', 'packages/fleury_themes/lib/**', 'website/examples/**', 'website/src/components/pad/**', 'website/src/components/GuidePad.astro', 'packages/*/pubspec.yaml', '.github/workflows/fleury-pad.yml']
+  push:
+    tags: ['fleury-v*', 'fleury_web-v*']
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: fleury-pad-${{ github.event_name == 'pull_request' && github.ref || 'staging' }}
+  cancel-in-progress: false
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dart-lang/setup-dart@v1
+        with:
+          sdk: 3.12.2
+      - name: Generate canonical guide projects
+        working-directory: website/examples
+        run: dart pub get && dart run bin/guide_projects.dart
+      - name: Build the pinned compiler and editor
+        env:
+          SOURCE_REVISION: ${{ github.sha }}
+        run: docker build --platform linux/amd64 --build-arg "SOURCE_REVISION=$SOURCE_REVISION" -t fleury-pad:verified -f experiments/fleury_pad/dartpad/Dockerfile .
+      - name: Test the exact deployable image
+        run: python3 experiments/fleury_pad/dartpad/container_check.py --image fleury-pad:verified --guides
+      - name: Verify startup availability and stalled analyzer recovery
+        run: python3 experiments/fleury_pad/dartpad/startup_check.py --image fleury-pad:verified
+      - name: Save verified image
+        if: github.event_name != 'pull_request' && vars.FLEURY_PAD_STAGING_ENABLED == 'true'
+        run: docker save fleury-pad:verified | gzip > /tmp/fleury-pad.tar.gz
+      - uses: actions/upload-artifact@v4
+        if: github.event_name != 'pull_request' && vars.FLEURY_PAD_STAGING_ENABLED == 'true'
+        with:
+          name: verified-pad-image
+          path: /tmp/fleury-pad.tar.gz
+          retention-days: 1
+          compression-level: 0
+  staging:
+    needs: verify
+    if: github.event_name != 'pull_request' && vars.FLEURY_PAD_STAGING_ENABLED == 'true'
+    environment: fleury-pad-staging
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    permissions:
+      contents: read
+      id-token: write
+    env:
+      PROJECT: ${{ vars.FLEURY_PAD_PROJECT }}
+      REGION: ${{ vars.FLEURY_PAD_REGION }}
+      REPOSITORY: ${{ vars.FLEURY_PAD_REPOSITORY }}
+      RUNTIME_ACCOUNT: ${{ vars.FLEURY_PAD_RUNTIME_ACCOUNT }}
+      DEPLOY_ACCOUNT: ${{ vars.FLEURY_PAD_DEPLOY_ACCOUNT }}
+      CHECKPOINT_SECRET: ${{ vars.FLEURY_PAD_CHECKPOINT_SECRET }}
+      SOURCE_REVISION: ${{ github.sha }}
+      DOCS_ORIGIN: ${{ vars.FLEURY_PAD_DOCS_ORIGIN || 'https://danreynolds.github.io' }}
+      # The published docs' compiler is invocable anonymously; see DEPLOYMENT.md.
+      PUBLIC: ${{ vars.FLEURY_PAD_PUBLIC == 'true' && '--public' || '' }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          name: verified-pad-image
+          path: /tmp
+      - run: docker load -i /tmp/fleury-pad.tar.gz
+      - uses: google-github-actions/auth@v3
+        with:
+          workload_identity_provider: ${{ vars.FLEURY_PAD_WIF_PROVIDER }}
+          service_account: ${{ vars.FLEURY_PAD_DEPLOY_ACCOUNT }}
+          project_id: ${{ vars.FLEURY_PAD_PROJECT }}
+      - uses: google-github-actions/setup-gcloud@v3
+      - name: Publish and deploy verified image to private staging
+        shell: bash
+        run: |
+          set -euo pipefail
+          : "${PROJECT:?}" "${REGION:?}" "${REPOSITORY:?}" "${RUNTIME_ACCOUNT:?}" "${DEPLOY_ACCOUNT:?}" "${CHECKPOINT_SECRET:?}"
+          registry="$REGION-docker.pkg.dev"
+          image="$registry/$PROJECT/$REPOSITORY/fleury-pad:$SOURCE_REVISION"
+          gcloud auth configure-docker "$registry" --quiet
+          docker tag fleury-pad:verified "$image"
+          docker push "$image"
+          digest=$(gcloud artifacts docker images describe "$image" --project "$PROJECT" --format='value(image_summary.digest)')
+          python3 experiments/fleury_pad/dartpad/deploy.py \
+            --project "$PROJECT" --region "$REGION" \
+            --image "$registry/$PROJECT/$REPOSITORY/fleury-pad@$digest" \
+            --runtime-account "$RUNTIME_ACCOUNT" --checkpoint-secret "$CHECKPOINT_SECRET" \
+            --invoker-account "$DEPLOY_ACCOUNT" --docs-origin "$DOCS_ORIGIN" --cpu-boost --promote $PUBLIC

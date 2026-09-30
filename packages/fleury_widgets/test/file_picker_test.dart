@@ -105,7 +105,7 @@ void main() {
 
     testWidgets('clicking a file row selects it', (tester) {
       final dir = _scratchDir();
-      File? picked;
+      FileEntry? picked;
       tester.pumpWidget(
         FilePicker(
           initialDirectory: dir,
@@ -164,7 +164,7 @@ void main() {
 
     testWidgets('Enter on a file calls onSelect with that File', (tester) {
       final dir = _scratchDir();
-      File? picked;
+      FileEntry? picked;
       tester.pumpWidget(
         FilePicker(
           initialDirectory: dir,
@@ -415,7 +415,7 @@ void main() {
 
     testWidgets('semantic open on a file selects it', (tester) async {
       final dir = _scratchDir();
-      File? picked;
+      FileEntry? picked;
       tester.pumpWidget(
         FilePicker(
           initialDirectory: dir,

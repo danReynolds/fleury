@@ -1,5 +1,8 @@
 # Changelog
 
+- `LogBuffer`, `LogLine`, `LogSource`, `LogBufferScope`, `OutputCaptureView`,
+  and `OutputCaptureConsole` are exported from `fleury_core.dart`, so browser
+  apps can fill a log buffer and show it. `fleury.dart` still exports them.
 - Keyed eager and lazy ListView rows retain semantic action targets across
   reordering. Owned overlays re-read previously missing optional scopes and
   propagate owner moves through nested floating content.

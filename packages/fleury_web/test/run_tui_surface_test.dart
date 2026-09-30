@@ -498,6 +498,119 @@ MeasuredCellBox _box({
 
 void main() {
   test(
+    'reload preserves state and awaits visual and semantic presentation',
+    () async {
+      final root = web.document.createElement('div');
+      final surface = DomGridSurface(root: root, size: const CellSize(20, 2));
+      final semantics = _FakeSemanticPresenter();
+      final semanticFlush = _FakeSemanticFlush();
+      final flush = _FakeFlush();
+      final key = GlobalKey<_CounterState>();
+      final host = await runTuiSurface(
+        () => _Counter(key: key),
+        surface: surface,
+        semanticPresenter: semantics,
+        semanticFlushScheduler: semanticFlush,
+        flushScheduler: flush.schedule,
+      );
+      addTearDown(host.dispose);
+      flush.fire();
+      semanticFlush.fire();
+      final state = key.currentState!;
+      state.increment();
+      var schedulerCalls = 0;
+      TuiBinding.of(
+        key.currentContext!,
+      ).tickerScheduler.registerReassembleCallback(() => schedulerCalls++);
+      var completed = false;
+      final reload = host.reassemble().then((_) => completed = true);
+      expect(schedulerCalls, 1);
+      expect(key.currentState, same(state));
+      expect(state.count, 1);
+      expect(completed, isFalse);
+      expect(root.textContent, contains('count 0'));
+      flush.fire();
+      await Future<void>.delayed(Duration.zero);
+      expect(root.textContent, contains('count 1'));
+      expect(
+        completed,
+        isFalse,
+        reason: 'accessibility presentation is still pending',
+      );
+      semanticFlush.fire();
+      await reload;
+      expect(completed, isTrue);
+      expect(
+        semantics.trees.last.nodes.any(
+          (node) => node.label?.contains('count 1') ?? false,
+        ),
+        isTrue,
+      );
+
+      // Unchanged output must still finish; the frame driver can skip painting.
+      final unchanged = host.reassemble();
+      flush.fire();
+      if (semanticFlush.pending) semanticFlush.fire();
+      await unchanged;
+      expect(schedulerCalls, 2);
+    },
+  );
+
+  test('disposing a mount rejects pending and subsequent reloads', () async {
+    final surface = DomGridSurface(
+      root: web.document.createElement('div'),
+      size: const CellSize(10, 1),
+    );
+    final flush = _FakeFlush();
+    final host = await runTuiSurface(
+      () => const Text('app'),
+      surface: surface,
+      flushScheduler: flush.schedule,
+    );
+    flush.fire();
+    final rejection = expectLater(host.reassemble(), throwsStateError);
+    await host.dispose();
+    await rejection;
+    expect(flush.pending, isFalse);
+    await expectLater(host.reassemble(), throwsStateError);
+  });
+
+  test(
+    'a remote mount rejects local reload without disposing its surface',
+    () async {
+      final surface = DomGridSurface(
+        root: web.document.createElement('div'),
+        size: const CellSize(10, 1),
+      );
+      final host = MountedApp.forFrameSource(surface: surface);
+      await expectLater(host.reassemble(), throwsUnsupportedError);
+      await host.dispose();
+    },
+  );
+
+  test(
+    'presentation failure rejects reload instead of acknowledging it',
+    () async {
+      final error = StateError('reload presentation failed');
+      final surface = _ThrowingPresentSurface(
+        error,
+        size: const CellSize(10, 1),
+      );
+      final flush = _FakeFlush();
+      final host = await runTuiSurface(
+        () => const Text('app'),
+        surface: surface,
+        flushScheduler: flush.schedule,
+      );
+      final rejection = expectLater(host.reassemble(), throwsA(same(error)));
+      expect(flush.fire, throwsA(same(error)));
+      await rejection;
+      await host.dispose();
+      expect(surface.disposed, isTrue);
+    },
+  );
+
+  test(
     'idle and dismissed errors leave root overlay caches disengaged',
     () async {
       BuildContext? context;

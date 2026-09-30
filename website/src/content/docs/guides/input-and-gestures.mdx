@@ -3,7 +3,7 @@ title: Input & gestures
 description: Choose controls for actions, translate gestures into app behavior, and combine input in nested widgets.
 ---
 
-import CodeDemoSplit from '../../../components/CodeDemoSplit.astro';
+import GuidePad from '../../../components/GuidePad.astro';
 import InputGuideCode from '../../../components/InputGuideCode.astro';
 import InputPractice from '../../../components/InputPractice.astro';
 import FleuryExample from '../../../components/FleuryExample.astro';
@@ -20,11 +20,12 @@ Use `CellStyle.interactive` to style a button while it is held. Fleury clears th
 pressed state on release or cancellation and preserves the button's keyboard
 and semantic actions.
 
-<CodeDemoSplit files={['Interaction', 'Full source']} codeLabel="Pressed feedback on a standard button" demoLabel="Hold the button, then drag away to cancel" codeMaxHeight="32rem">
-<InputGuideCode slot="code-0" file="file_actions.dart" />
-<InputGuideCode slot="code-1" file="file_actions.dart" full />
+<GuidePad id="input.actions" codeMaxHeight="32rem" codeLabel="Pressed feedback on a standard button" demoLabel="Hold the button, then drag away to cancel" referencesLabel="Full source">
 <FleuryExample slot="demo" id="input.actions" cols={38} rows={11} interactive />
-</CodeDemoSplit>
+<Fragment slot="references">
+<InputGuideCode file="file_actions.dart" full />
+</Fragment>
+</GuidePad>
 
 Pressed styling currently follows primary pointer input; keyboard and semantic
 activation are immediate. For a custom tile, use the button's custom content
@@ -37,12 +38,12 @@ covers secondary-click actions.
 movement outside the handle. Apply the reported horizontal delta to the pane's
 width.
 
-<CodeDemoSplit files={['Pointer', 'Keyboard', 'Full source']} codeLabel="Translate movement into a width change" demoLabel="Drag past the divider, then try the arrow keys" codeMaxHeight="32rem">
-<InputGuideCode slot="code-0" file="split_pane.dart" />
-<InputGuideCode slot="code-1" file="split_pane.dart" region="keyboard" />
-<InputGuideCode slot="code-2" file="split_pane.dart" full />
+<GuidePad id="input.splitter" codeMaxHeight="32rem" codeLabel="Translate movement into a width change" demoLabel="Drag past the divider, then try the arrow keys" referencesLabel="Full source">
 <FleuryExample slot="demo" id="input.splitter" cols={38} rows={10} interactive />
-</CodeDemoSplit>
+<Fragment slot="references">
+<InputGuideCode file="split_pane.dart" full />
+</Fragment>
+</GuidePad>
 
 Use the reported delta, in terminal cells, rather than comparing local
 positions: resizing moves the handle's origin. Apply it only in the update
@@ -61,17 +62,16 @@ Use the press lifecycle when cancellation needs custom feedback. In Fleury,
 moving to another terminal cell cancels a tap, even while the pointer remains
 inside the target.
 
-<CodeDemoSplit files={['Press lifecycle', 'Full source']} codeLabel="Transient feedback, persistent preview" demoLabel="Open the note, then cancel another press" codeMaxHeight="30rem">
-<InputGuideCode slot="code-0" file="press_tile.dart" />
-<Fragment slot="code-1">
+<GuidePad id="input.press" codeMaxHeight="30rem" codeLabel="Transient feedback, persistent preview" demoLabel="Open the note, then cancel another press" referencesLabel="Full source">
+<InputPractice slot="demo" id="input.press" cols={38} rows={19} />
+<Fragment slot="references">
 <InputGuideCode file="press_tile.dart" full />
 <details>
 <summary>Preview rendering</summary>
 <InputGuideCode file="note_preview.dart" full />
 </details>
 </Fragment>
-<InputPractice slot="demo" id="input.press" cols={38} rows={19} />
-</CodeDemoSplit>
+</GuidePad>
 
 Keep press feedback separate from the preview state. The cancellation handler
 clears the held appearance and reports cancellation without closing an already
@@ -93,15 +93,19 @@ if the target disappears, the gesture is cancelled.
 Wrap a row in `MouseRegion` when its hover state should include child controls.
 This adds enter/exit callbacks without intercepting the children's presses.
 
-<CodeDemoSplit files={['Interaction', 'Full source']} codeLabel="Hover on the parent, action on the button" demoLabel="Move from the filename to Pin, then outside the row" codeMaxHeight="32rem">
-<InputGuideCode slot="code-0" file="nested_row.dart" />
-<InputGuideCode slot="code-1" file="nested_row.dart" full />
+<GuidePad id="input.nesting" codeMaxHeight="32rem" codeLabel="Hover on the parent, action on the button" demoLabel="Move from the filename to Pin, then outside the row" referencesLabel="Full source">
 <FleuryExample slot="demo" id="input.nesting" cols={38} rows={9} interactive />
-</CodeDemoSplit>
+<Fragment slot="references">
+<InputGuideCode file="nested_row.dart" full />
+</Fragment>
+</GuidePad>
 
-Tap and drag handling belongs to the innermost target. Wrapping a button in a
-gesture detector won't observe its taps or add secondary-click handling; use
-the button's own callbacks. Hover remains active on containing mouse regions.
+A press goes to the innermost target that handles taps or drags, and only that
+target's `onTap` or `onSecondaryTap` fires on release. Wrapping a button in a
+gesture detector therefore won't observe its taps or add secondary-click
+handling; use the button's own callbacks. A drag that starts on the button goes
+to the nearest ancestor that handles drags, which also receives `onTapDown`.
+Hover remains active on containing mouse regions.
 
 Wheel input can pass to an ancestor at a scroll edge; see
 [nested scrolling](/fleury/guides/lists-and-scrolling/#nested-wheel-input) for containment.
@@ -109,13 +113,16 @@ Wheel input can pass to an ancestor at a scroll edge; see
 <details>
 <summary>Keep copied text separate from controls</summary>
 
-FleuryApp makes ordinary text selectable. Use a `SelectionArea` for a region
-with its own selection callback or options. Set `allowSelect: false` on handle
-text so dragging it doesn't also select its label.
+In a terminal app, `runApp` makes ordinary text selectable. Use a
+`SelectionArea` for a region with its own selection callback or options. Set
+`allowSelect: false` on decorative text inside a control, such as a resize
+handle's `│`, so a selection dragged across it doesn't copy the glyph. Dragging
+the handle itself resizes: its detector is the nearest target that handles
+drags, so the selection never sees that drag.
 
 </details>
 
-## Enable pointer input in a terminal
+## Enable mouse input in a terminal
 
 Native terminals require mouse reporting to be enabled at startup. These
 browser demos already receive pointer events.
