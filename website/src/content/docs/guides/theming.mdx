@@ -60,9 +60,11 @@ Use `CellStyle.interactive` when a widget should change as users interact with
 it. Assign it to `ThemeData.interactiveStyle` for the whole app, or pass it to
 one widget's ordinary `style` property for a local exception. Native hover
 feedback also needs `TerminalMode(mouseMotion: true)` in `runApp`;
-`mouse: true` alone does not report hover. Browser hosts already provide
-pointer motion. This reference renders each entry directly so the differences
-are easy to compare:
+`mouse: true` alone does not report hover, so `hovered` then changes only on
+clicks. An app created by `fleury create` starts with `mouse: true`;
+[Enable mouse input in a terminal](/fleury/guides/input-and-gestures/#enable-mouse-input-in-a-terminal)
+shows the change. Browser hosts already provide pointer motion. This reference
+renders each entry directly so the differences are easy to compare:
 
 <GuidePad id="themes.interactive_styles" layout="demo-wide">
 <FleuryExample
@@ -77,10 +79,9 @@ When assigned to `ThemeData.interactiveStyle`, controls apply the relevant
 entry automatically. If states overlap, Fleury layers selected, hovered,
 focused, pressed, and invalid paint in that order; disabled paint stands alone.
 `pressed: CellStyle(…)` styles a held primary pointer press on buttons and other
-activatable controls. Release or cancellation clears it; keyboard and semantic
-activation remain immediate actions. Pair
-color with an attribute such as bold, underline, inverse, or dim so feedback
-does not depend on hue alone.
+activatable controls; [Input & gestures](/fleury/guides/input-and-gestures/#customize-a-controls-feedback)
+explains when it applies. Pair color with an attribute such as bold, underline,
+inverse, or dim so feedback does not depend on hue alone.
 
 ### Local interactive styles
 
