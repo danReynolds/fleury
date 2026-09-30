@@ -775,6 +775,7 @@ class MarkdownView extends StatefulWidget {
        assert(tabSize > 0);
 
   /// Creates a viewer from an already parsed [MarkdownDocument].
+  /// [maxLineLength] and [tabSize] have no effect here.
   ///
   /// The document's sanitized blocks, links, and parsing statistics are reused
   /// without parsing Markdown source again.
@@ -821,8 +822,7 @@ class MarkdownView extends StatefulWidget {
 
   /// Cuts each block's text, inline Markdown markers included, to this many
   /// characters before styling, ending it with `…`; null never cuts. Copying
-  /// still copies the full source. [MarkdownView.document] shows the document
-  /// as it was parsed and ignores this.
+  /// still copies the full source.
   final int? maxLineLength;
 
   /// Number of spaces used when expanding tabs.

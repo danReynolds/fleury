@@ -343,7 +343,9 @@ class CodeView extends StatefulWidget {
        assert(tabSize > 0),
        assert(maxVisible > 0);
 
-  /// Creates a viewer from an already parsed [CodeDocument].
+  /// Creates a viewer from an already parsed [CodeDocument]. The parsing
+  /// options ([language], [filePath], [maxLineLength], [tabSize], and
+  /// [showLineNumbers]) have no effect here.
   ///
   /// The document's prepared rows and parsing metadata are used as supplied;
   /// source parsing is not repeated.
@@ -390,8 +392,7 @@ class CodeView extends StatefulWidget {
 
   /// Cuts each displayed row, line number included, to this many characters,
   /// ending it with `…`; null never cuts. Copying still copies the whole
-  /// line. [CodeView.document] shows the document as it was parsed and
-  /// ignores this.
+  /// line.
   final int? maxLineLength;
 
   /// Number of spaces used when expanding tabs.

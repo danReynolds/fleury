@@ -473,7 +473,8 @@ class DiffView extends StatefulWidget {
   }) : document = parseUnifiedDiff(diff, maxLineLength: maxLineLength),
        assert(maxLineLength == null || maxLineLength >= 0);
 
-  /// Creates a viewer from an already parsed [DiffDocument].
+  /// Creates a viewer from an already parsed [DiffDocument]. [maxLineLength]
+  /// has no effect here: rows keep the length they were parsed with.
   ///
   /// The document's sanitized, optionally truncated rows are reused without
   /// parsing the unified-diff source again.
@@ -508,8 +509,7 @@ class DiffView extends StatefulWidget {
 
   /// Cuts each displayed row (not counting the line-number gutter) to this
   /// many characters, ending it with `…`; null never cuts. Copying still
-  /// copies the whole row. [DiffView.document] shows the document as it was
-  /// parsed and ignores this.
+  /// copies the whole row.
   final int? maxLineLength;
 
   /// Whether to show the old | new line-number gutter. Each row's line

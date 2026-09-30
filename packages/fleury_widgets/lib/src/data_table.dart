@@ -723,10 +723,10 @@ class DataTable extends StatefulWidget {
   /// Style merged onto the current row in row mode or selected cells in cell mode.
   final CellStyle? selectedStyle;
 
-  /// Id of the column your data is sorted by. When that column is
-  /// [DataTableColumn.sortable], its header shows ▲ or ▼ for [sortDirection].
-  /// The sort is also exposed through semantics; the table never reorders
-  /// rows itself.
+  /// Id of the column your data is sorted by. If that column is sortable
+  /// ([DataTableColumn.sortable]), its header shows ▲ or ▼ for
+  /// [sortDirection]. The sort is also exposed through semantics; the table
+  /// never reorders rows itself.
   final String? sortColumnId;
 
   /// Direction of the current sort: the [sortColumnId] header shows ▲ for
