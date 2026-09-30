@@ -1083,14 +1083,27 @@ class _RouteStack extends MultiChildRenderObjectWidget {
   }
 }
 
-/// Intercepts a back/Esc (maybePop) for the route it sits in.
+/// Guards the route it sits in against a user's request to go back.
 ///
-/// While [canPop] is false, a back/Esc on this route is vetoed and
-/// [onBlocked] fires instead — the place to confirm "discard changes?"
-/// or to gate an app exit at the root. A programmatic
-/// [NavigatorState.pop] is NOT intercepted; only [NavigatorState.maybePop]
-/// (Esc/back) is. Multiple PopScopes in one route compose: any with
-/// `canPop == false` blocks.
+/// A back request is an Escape the screen doesn't handle itself, a call to
+/// [NavigatorState.maybePop] (a Back button or command), or the route's
+/// semantic close or dismiss action. While [canPop] is false, such a request
+/// leaves the route open and calls [onBlocked] instead — the place to confirm
+/// "discard changes?". [NavigatorState.pop] (`context.pop()`) is NOT
+/// intercepted, so the screen can still close itself once the user confirms;
+/// nor are the other stack changes, such as [NavigatorState.popUntil] and
+/// [NavigatorState.pushReplacement].
+///
+/// A PopScope guards the route of its nearest [Navigator], and only the top
+/// route's guards are consulted, so a guarded screen beneath a dialog doesn't
+/// stop the dialog from closing. Multiple PopScopes in one route compose: any
+/// with `canPop == false` blocks, and each that blocks has its [onBlocked]
+/// called.
+///
+/// At the root, where there is nothing to pop, an Escape passes on to key
+/// bindings outside the navigator. A PopScope there with [canPop] false
+/// consumes that Escape and calls [onBlocked], so a screen can confirm before
+/// an app exit bound to Escape. It never intercepts Ctrl+C.
 ///
 /// ```dart
 /// PopScope(
@@ -1107,13 +1120,21 @@ class PopScope extends StatefulWidget {
     super.key,
   });
 
-  /// Whether a back/Esc may pop this route. When false the attempt is
+  /// Whether a back request may pop this route. When false the attempt is
   /// vetoed and [onBlocked] fires.
+  ///
+  /// Read at each attempt, so rebuilding with a new value (for example when
+  /// unsaved changes appear) applies to the next one.
   final bool canPop;
 
-  /// Called when a back/Esc was vetoed (because [canPop] was false).
+  /// Called when a back request was vetoed (because [canPop] was false).
+  ///
+  /// Runs during the attempt, once per vetoed attempt, and never for
+  /// [NavigatorState.pop].
   final VoidCallback? onBlocked;
 
+  /// The guarded content, typically the route's screen. PopScope builds it
+  /// unchanged.
   final Widget child;
 
   @override

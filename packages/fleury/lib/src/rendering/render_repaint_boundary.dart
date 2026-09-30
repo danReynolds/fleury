@@ -124,17 +124,19 @@ final class RepaintBoundaryCacheVerification {
 /// A render object that owns a [CellBuffer] cache for its subtree's paint.
 ///
 /// On the first frame (and any frame after something inside it changed), the
-/// boundary repaints its subtree into the cache and clears [_needsPaint]. On
+/// boundary repaints its subtree into the cache and clears [needsPaint]. On
 /// subsequent frames it skips the subtree walk entirely and composites the
 /// cache into the destination ([CellBuffer.compositeRectFrom]) — one pass
 /// over the cached cells instead of a recursive paint chain.
 ///
 /// This is a CPU paint-memoization, NOT Flutter's GPU compositing layer —
 /// there is no layer tree here, and it does not isolate the subtree from
-/// repaint the way a GPU layer does. Two limits to keep in mind: layout still
-/// runs for the whole tree every frame (this caches paint only), and the
-/// `AnsiRenderer` still diffs every cell every frame (the blit just
-/// repopulates the cells the diff then re-examines).
+/// repaint the way a GPU layer does. Two limits to keep in mind: it caches
+/// paint, not layout (a render object that isn't marked for layout and gets
+/// the same constraints returns its cached size from [RenderObject.layout],
+/// with or without a boundary), and every rendered frame is still compared
+/// cell by cell with the previous one ([CellBuffer.diffAgainst]), so the blit
+/// just repopulates cells that comparison re-examines.
 ///
 /// The win is the skipped paint *walk*: on a localized update, a boundary'd
 /// subtree blits its cache instead of re-running its paint chain. Measured on
@@ -142,13 +144,13 @@ final class RepaintBoundaryCacheVerification {
 /// styled ones — the walk over N siblings costs more than blitting N-1 caches
 /// regardless of per-row cost, so the historical "neutral for cheap subtrees"
 /// guidance held only for a SINGLE boundary in isolation, not for the
-/// one-of-many-changes shape [ListView] auto-wraps. The cost is one reused
+/// one-of-many-changes shape `ListView` auto-wraps. The cost is one reused
 /// cache buffer per boundary (bounded by what's on screen). Reach for a direct
 /// boundary when a subtree's neighbour churns and it doesn't; the list case is
 /// handled for you.
 ///
 /// The boundary is opaque to its caller: parents call `paint(buffer, offset)`
-/// as usual; the cache discipline is internal. Use the [RepaintBoundary]
+/// as usual; the cache discipline is internal. Use the `RepaintBoundary`
 /// widget to wrap subtrees that are expensive to paint and change rarely.
 class RenderRepaintBoundary extends RenderObject
     implements RenderObjectWithSingleChild {
@@ -165,7 +167,7 @@ class RenderRepaintBoundary extends RenderObject
   /// reports false so the invalidation walk ignores it, and [paint]
   /// delegates straight to the child. This lets an owner keep the boundary
   /// in the tree unconditionally (element-stable — flipping never reparents
-  /// the subtree) and engage caching only while it can pay; [Overlay] does
+  /// the subtree) and engage caching only while it can pay; `Overlay` does
   /// this per entry, engaging only while more than one entry is visible.
   ///
   /// Flipping mid-life is safe because nothing snapshots

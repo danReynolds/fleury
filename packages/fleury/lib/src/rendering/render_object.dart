@@ -7,22 +7,22 @@ import 'cell_buffer.dart';
 import 'layout.dart';
 import 'render_layout_stats.dart';
 
-/// Frame-level signal for whether the terminal presenter can trust
-/// paint-buffer damage bounds.
-///
-/// Paint-only mutations can be bounded by the cells repainted into the frame
-/// buffer. Layout-affecting mutations cannot: cells may disappear or move
-/// without being rewritten, so the presenter must fall back to full-buffer
-/// diffing for that frame.
-///
-/// One instance is owned per [BuildOwner]/runtime: render objects publish
-/// into the tracker attached at their tree's root, so two Fleury runtimes in
-/// one isolate never observe each other's damage. The signal accumulates
-/// across frames until [takeRequiresFullDiff] consumes it, so deferred
-/// consumers can coalesce several invalidations into one read.
 /// Where the owner is in its frame; see [RenderDamageTracker.onInvalidate].
 enum RenderFramePhase { idle, build, layout, paint }
 
+/// The per-runtime record of render invalidations: whether the next frame can
+/// differ from the last one, when to request it, and when derived screen
+/// geometry is stale. It also numbers root paint passes, so a subtree that
+/// stops painting can retract what it published ([PaintPassParticipant]).
+///
+/// It does not record which cells changed. The frame loop derives that by
+/// comparing each painted frame with the previous one
+/// ([CellBuffer.diffAgainst]), so nothing has to report damage, and a layout
+/// change needs no special handling when the frame is presented.
+///
+/// One instance is owned per `BuildOwner`/runtime: render objects publish
+/// into the tracker attached at their tree's root, so two Fleury runtimes in
+/// one isolate never observe each other's invalidations.
 final class RenderDamageTracker {
   // ---- Frame phase and the invalidation hook ------------------------------
   //
@@ -88,8 +88,10 @@ final class RenderDamageTracker {
     _paintPassListeners.remove(listener);
   }
 
-  /// Records a layout invalidation: geometry may move, so the next frame
-  /// diffs in full and every derived geometry is recomputed.
+  /// Records a layout invalidation: geometry may move, so every derived
+  /// geometry is recomputed and, as with [recordVisualChange], the next frame
+  /// renders rather than being skipped. It doesn't change which cells are
+  /// presented; those are derived by comparing buffers.
   void recordLayout() {
     _requiresFullDiff = true;
     _visualChange = true;
@@ -119,6 +121,12 @@ final class RenderDamageTracker {
     return result;
   }
 
+  /// Whether [recordLayout] ran since the last call (or [reset]), clearing the
+  /// flag.
+  ///
+  /// The frame loop drains it in each frame it renders, so it cannot leak into
+  /// a later one, but no longer acts on it: a frame's damage is derived by
+  /// comparing its buffer with the previous frame's ([CellBuffer.diffAgainst]).
   bool takeRequiresFullDiff() {
     final result = _requiresFullDiff;
     _requiresFullDiff = false;
@@ -341,8 +349,8 @@ abstract class RenderObject implements ScreenGeometrySource {
   /// Attaches the per-runtime damage tracker at this (root) render object.
   ///
   /// Returns true when the tracker was not already attached — a fresh root —
-  /// so callers can record conservative damage for invalidations that may
-  /// have happened while the subtree was being built detached.
+  /// so callers can record a layout invalidation for changes made while the
+  /// subtree was built detached, which never reached a tracker.
   bool attachFrameDamageTracker(RenderDamageTracker tracker) {
     final isNew = !identical(_frameDamage, tracker);
     _frameDamage = tracker;
@@ -352,7 +360,6 @@ abstract class RenderObject implements ScreenGeometrySource {
     return isNew;
   }
 
-  /// The damage tracker attached at this tree's root, if any.
   /// The frame damage tracker attached at this tree's root — the per-owner
   /// object a render object publishes frame-scoped facts into — or null while
   /// detached or before the first frame.
@@ -395,8 +402,10 @@ abstract class RenderObject implements ScreenGeometrySource {
     _paintOverflowDirty = true;
     final parent = _parent;
     if (parent == null) {
-      // Terminal node of the invalidation walk: publish frame damage at the
-      // root so the presenter falls back to a full diff this frame.
+      // Terminal node of the invalidation walk: record the layout at the
+      // root's tracker, which keeps the next frame from being skipped and
+      // invalidates derived geometry. (The frame's changed cells are derived
+      // later, by comparing buffers.)
       _frameDamage?.recordLayout();
       return;
     }
@@ -662,9 +671,10 @@ abstract class RenderObject implements ScreenGeometrySource {
   bool get hitTestsBeyondBounds => false;
 
   /// Visits this render object's children in paint order. The default reads
-  /// the single-child / multi-child interfaces; a container whose [children]
-  /// accessor copies its list overrides this to iterate in place, since
-  /// hit-testing and geometry tooling walk the tree on every event.
+  /// the single-child / multi-child interfaces; a container whose
+  /// [RenderObjectWithChildren.children] accessor copies its list overrides
+  /// this to iterate in place, since hit-testing and geometry tooling walk
+  /// the tree on every event.
   void visitRenderChildren(void Function(RenderObject child) visitor) {
     final self = this;
     if (self is RenderObjectWithSingleChild) {
