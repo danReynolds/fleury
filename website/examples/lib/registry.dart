@@ -4222,8 +4222,6 @@ class _CellStyleTour extends StatelessWidget {
   );
 }
 
-void _noop() {}
-
 const String _localInteractiveSource = '''
 Row(
   children: [
@@ -4247,28 +4245,30 @@ class _LocalStateTour extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) => Theme(
+    // Overrides the app theme below this point: every control's inherited
+    // focus cue becomes inverse and bold.
     data: Theme.of(context).copyWith(
       interactiveStyle: const CellStyle.interactive(
         focused: CellStyle(inverse: true, bold: true),
       ),
     ),
-    child: const Padding(
-      padding: EdgeInsets.all(1),
+    child: Padding(
+      padding: const EdgeInsets.all(1),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: <Widget>[
-          Text('LOCAL INTERACTION STYLE', style: CellStyle(bold: true)),
-          Text('Tab or click to compare focus cues'),
+          const Text('LOCAL INTERACTION STYLE', style: CellStyle(bold: true)),
+          const Text('Tab or click to compare focus cues'),
           Row(
             children: <Widget>[
-              Button(text: 'Theme focus', autofocus: true, onPressed: _noop),
-              SizedBox(width: 2),
+              Button(text: 'Theme focus', autofocus: true, onPressed: () {}),
+              const SizedBox(width: 2),
               Button(
                 text: 'Local focus',
-                style: CellStyle.interactive(
+                style: const CellStyle.interactive(
                   focused: CellStyle(foreground: Colors.cyan, underline: true),
                 ),
-                onPressed: _noop,
+                onPressed: () {},
               ),
             ],
           ),

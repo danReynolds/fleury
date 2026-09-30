@@ -434,8 +434,7 @@
       "label": "local_interactive_style.dart",
       "source": "website/examples/lib/registry.dart",
       "declaration": "_LocalStateTour",
-      "member": "build",
-      "expression": "Row"
+      "member": "build"
     }
   ],
   "themes.invalid_none": [
