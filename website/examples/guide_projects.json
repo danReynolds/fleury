@@ -289,6 +289,11 @@
       "label": "context.listen",
       "source": "website/examples/lib/state_management_guide.dart",
       "region": "cart-listen"
+    },
+    {
+      "label": "Shared cart",
+      "source": "website/examples/lib/state_management_guide.dart",
+      "region": "cart-owner"
     }
   ],
   "navigation.basics": [
