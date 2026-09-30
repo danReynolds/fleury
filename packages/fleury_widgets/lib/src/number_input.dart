@@ -6,9 +6,10 @@ import 'package:fleury/fleury_core.dart';
 /// [onChanged] fires with the parsed [num] (or `null` for empty /
 /// in-progress edits like `"-"` or `"1."`).
 ///
-/// Wraps [TextInput] under the hood — all of its placeholder, focus,
-/// cursor, and Enter/Esc semantics carry over. Use this when you'd
-/// otherwise pair a [TextInput] with `int.tryParse` everywhere.
+/// Wraps [TextInput] under the hood — its placeholder, focus, cursor, and
+/// Enter-to-submit behavior carry over. There is no Escape callback, so
+/// Escape passes on to enclosing widgets. Use this when you'd otherwise pair
+/// a [TextInput] with `int.tryParse` everywhere.
 ///
 /// ```dart
 /// NumberInput(

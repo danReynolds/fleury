@@ -29,10 +29,9 @@ final class SelectOption<T> {
 /// bullet marks the currently-selected option as you navigate. Focus is
 /// trapped in the open list and returns to the trigger on close.
 ///
-/// Controlled: hold [value] yourself and update it from [onChanged]. Built
-/// on the [Anchored] overlay primitive so it floats over everything and
-/// flips/clamps to stay on screen. Passing null for [onChanged] disables the
-/// picker.
+/// Controlled: hold [value] yourself and update it from [onChanged]. The list
+/// floats over other content and moves to stay on screen when there isn't
+/// room below the trigger. Passing null for [onChanged] disables the picker.
 class Select<T> extends StatefulWidget {
   const Select({
     super.key,

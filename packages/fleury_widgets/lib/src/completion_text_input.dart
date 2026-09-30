@@ -56,7 +56,8 @@ TextCompletionRequest defaultTextCompletionRequest(TextEditingValue value) {
 /// The field uses core [TextCompletionController] semantics for option state
 /// and acceptance. This widget supplies provider-driven options plus the
 /// floating menu UI; [TextInput] still owns editing, Tab acceptance, Escape
-/// dismissal, and Up/Down completion navigation.
+/// dismissal, and Up/Down completion navigation. Clicking a completion also
+/// accepts it; Enter submits the text rather than accepting.
 class CompletionTextInput extends StatefulWidget {
   const CompletionTextInput({
     super.key,
@@ -457,7 +458,7 @@ class _CompletionTextInputState extends State<CompletionTextInput> {
                         return;
                     }
                   },
-                  // Click a completion to accept it (same as Tab/Enter).
+                  // Click a completion to accept it (same as Tab).
                   child: GestureDetector(
                     onTap: () {
                       _list.currentIndex = i;
