@@ -1561,6 +1561,208 @@ void main() {
     });
   });
 
+  group('Sequences at a modal key boundary (§14.3)', () {
+    // A modal scope stops the keys nothing inside it claims. A key that
+    // begins a sequence bound inside IS claimed: it has to start pending
+    // there — every dialog shown with `present` sits in a modal scope — while
+    // nothing beyond the boundary joins the sequence at any step.
+    for (final bound in ['at', 'inside']) {
+      test('a sequence bound $bound a modal scope starts and completes', () {
+        final calls = <String>[];
+        final h = _TestHarness();
+        final bindings = [
+          KeyBinding(
+            KeySequence.ctrl.x.ctrl.s,
+            onTrigger: (_) => calls.add('save'),
+          ),
+          KeyBinding(KeySequence.g.g, onTrigger: (_) => calls.add('gg')),
+        ];
+        const focused = Focus(autofocus: true, child: EmptyBox());
+        h.mountRoot(
+          bound == 'at'
+              ? KeyBindings(modal: true, bindings: bindings, child: focused)
+              : KeyBindings(
+                  modal: true,
+                  bindings: const <KeyBinding>[],
+                  child: KeyBindings(bindings: bindings, child: focused),
+                ),
+        );
+
+        expect(h.dispatch(_char('x', ctrl: true)), KeyEventResult.handled);
+        expect(h.dispatcher.hasPendingSequence, isTrue);
+        h.dispatch(_char('s', ctrl: true));
+        h.dispatch(_char('g'));
+        h.dispatch(_char('g'));
+        expect(calls, ['save', 'gg']);
+        expect(h.dispatcher.hasPendingSequence, isFalse);
+      });
+    }
+
+    test('a sequence bound outside a modal scope never starts inside it', () {
+      final calls = <String>[];
+      final h = _TestHarness();
+      h.mountRoot(
+        KeyBindings(
+          bindings: [
+            KeyBinding(
+              KeySequence.g.g,
+              onTrigger: (_) => calls.add('outer gg'),
+            ),
+          ],
+          child: const KeyBindings(
+            modal: true,
+            bindings: <KeyBinding>[],
+            child: Focus(autofocus: true, child: EmptyBox()),
+          ),
+        ),
+      );
+
+      expect(h.dispatch(_char('g')), KeyEventResult.ignored);
+      expect(h.dispatcher.hasPendingSequence, isFalse);
+      h.dispatch(_char('g'));
+      expect(calls, isEmpty);
+    });
+
+    test('a sequence opened outside cannot complete once focus moves inside '
+        'a modal scope', () {
+      // A dialog can open between two keys of an app-level sequence (a click,
+      // a timer). The app's scope is still an ancestor of the dialog's focus,
+      // so without the boundary the next key would finish the app's sequence
+      // from inside the dialog.
+      final calls = <String>[];
+      final page = FocusNode(debugLabel: 'page');
+      final dialog = FocusNode(debugLabel: 'dialog');
+      final h = _TestHarness(
+        rootBindings: [
+          KeyBinding(KeySequence.space.q, onTrigger: (_) => calls.add('quit')),
+        ],
+      );
+      addTearDown(() {
+        page.dispose();
+        dialog.dispose();
+      });
+      h.mountRoot(
+        Column(
+          children: [
+            Focus(focusNode: page, autofocus: true, child: const EmptyBox()),
+            KeyBindings(
+              modal: true,
+              bindings: const <KeyBinding>[],
+              child: Focus(focusNode: dialog, child: const EmptyBox()),
+            ),
+          ],
+        ),
+      );
+
+      h.dispatch(_char(' '));
+      expect(h.dispatcher.hasPendingSequence, isTrue);
+      dialog.requestFocus();
+      h.dispatch(_char('q'));
+      expect(calls, isEmpty, reason: 'the app behind the modal saw the q');
+      expect(h.dispatcher.hasPendingSequence, isFalse);
+    });
+
+    test('a key the boundary lets through can open an outer sequence, and '
+        'its later steps follow it through', () {
+      // The per-key passthrough: a binding AT the modal scope that matches and
+      // bubbles. The sequence it opens beyond the boundary stays completable.
+      final calls = <String>[];
+      final h = _TestHarness();
+      h.mountRoot(
+        KeyBindings(
+          bindings: [
+            KeyBinding(
+              KeySequence.ctrl.x.ctrl.s,
+              onTrigger: (_) => calls.add('outer save'),
+            ),
+          ],
+          child: KeyBindings(
+            modal: true,
+            bindings: [
+              KeyBinding(
+                KeySequence.ctrl.x,
+                onTrigger: (event) {
+                  calls.add('boundary passes Ctrl+X');
+                  event.bubble();
+                },
+              ),
+            ],
+            child: const Focus(autofocus: true, child: EmptyBox()),
+          ),
+        ),
+      );
+
+      h.dispatch(_char('x', ctrl: true));
+      expect(h.dispatcher.hasPendingSequence, isTrue);
+      h.dispatch(_char('s', ctrl: true));
+      expect(calls, ['boundary passes Ctrl+X', 'outer save']);
+      expect(h.dispatcher.hasPendingSequence, isFalse);
+    });
+
+    test('on timeout a held key replays inside the modal scope only', () async {
+      final calls = <String>[];
+      final h = _TestHarness(
+        rootBindings: [
+          KeyBinding(KeySequence.g, onTrigger: (_) => calls.add('outer g')),
+          KeyBinding(KeySequence.d, onTrigger: (_) => calls.add('outer d')),
+        ],
+      );
+      h.mountRoot(
+        KeyBindings(
+          modal: true,
+          bindings: [
+            KeyBinding(KeySequence.g, onTrigger: (_) => calls.add('g')),
+            KeyBinding(KeySequence.g.g, onTrigger: (_) => calls.add('gg')),
+            KeyBinding(KeySequence.d.d, onTrigger: (_) => calls.add('dd')),
+          ],
+          child: const Focus(autofocus: true, child: EmptyBox()),
+        ),
+      );
+
+      // The modal scope's own g shares a prefix with g g: it waits, then
+      // fires once the timeout rules g g out (harness timeout is 50ms).
+      h.dispatch(_char('g'));
+      expect(calls, isEmpty, reason: 'g waits while g g is still possible');
+      expect(h.dispatcher.hasPendingSequence, isTrue);
+      await Future<void>.delayed(const Duration(milliseconds: 100));
+      expect(calls, ['g']);
+      expect(h.dispatcher.hasPendingSequence, isFalse);
+
+      // Nothing inside commits a lone d, and the outer d is out of reach, so
+      // d d is a pure prefix: it holds open rather than firing through.
+      h.dispatch(_char('d'));
+      await Future<void>.delayed(const Duration(milliseconds: 100));
+      expect(calls, ['g']);
+      expect(h.dispatcher.hasPendingSequence, isTrue);
+    });
+
+    test('a key that breaks a sequence inside a modal scope replays the held '
+        'key there and stays inside itself', () {
+      final calls = <String>[];
+      final h = _TestHarness(
+        rootBindings: [
+          KeyBinding(KeySequence.g, onTrigger: (_) => calls.add('outer g')),
+          KeyBinding(KeySequence.z, onTrigger: (_) => calls.add('outer z')),
+        ],
+      );
+      h.mountRoot(
+        KeyBindings(
+          modal: true,
+          bindings: [
+            KeyBinding(KeySequence.g, onTrigger: (_) => calls.add('g')),
+            KeyBinding(KeySequence.g.g, onTrigger: (_) => calls.add('gg')),
+          ],
+          child: const Focus(autofocus: true, child: EmptyBox()),
+        ),
+      );
+
+      h.dispatch(_char('g'));
+      h.dispatch(_char('z'));
+      expect(calls, ['g']);
+      expect(h.dispatcher.hasPendingSequence, isFalse);
+    });
+  });
+
   group('Acceptance tests — disabled bindings', () {
     test('20. Disabled bindings do not fire', () {
       final calls = <String>[];

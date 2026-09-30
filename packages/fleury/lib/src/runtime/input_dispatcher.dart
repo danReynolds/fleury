@@ -712,8 +712,9 @@ class InputDispatcher {
     if (live.isEmpty) {
       // Input topology changed while the prefix was held: the scope left the
       // active chain (an ErrorBoundary contained the focused subtree, focus
-      // moved out), or its rebuild removed or disabled every binding that
-      // opened the sequence. Never fire a captured handler after that.
+      // moved out or into a dialog in front of it), or its rebuild removed or
+      // disabled every binding that opened the sequence. Never fire a
+      // captured handler after that.
       _cancelPendingAndRedispatchHeld();
       return null;
     }
@@ -759,7 +760,8 @@ class InputDispatcher {
 
   /// [pending]'s candidates as the live tree has them NOW: every enabled,
   /// non-hold binding on a scope the sequence was collected from — still in
-  /// the active chain, deepest first — whose multi-step sequence has the held
+  /// the active chain, deepest first, and not behind a modal scope the
+  /// opening key wasn't let through — whose multi-step sequence has the held
   /// events as a strict prefix. Instances are read fresh from the scope, so a
   /// scope that rebuilt since the last step contributes its current bindings
   /// (and its current handlers). In a stable tree this is exactly the set the
@@ -769,24 +771,34 @@ class InputDispatcher {
     for (final node in focusManager.activeChain()) {
       final source = node.bindingSource;
       if (source == null) continue;
-      if (!pending.sources.any((s) => identical(s, source))) continue;
-      for (final binding in source.activeBindings) {
-        if (binding.isHold) continue;
-        for (final sequence in binding.sequences) {
-          if (!sequence.isSequence) continue;
-          if (sequence.stepCount <= pending.events.length) continue;
-          if (_prefixMatches(
-            sequence,
-            pending.events,
-            pending.lanes,
-            pending.texts,
-          )) {
-            // Asked only of a binding whose sequence is still in play: a live
-            // binding's predicate runs per match, not per binding per step.
-            if (binding.enabled) out.add(binding);
-            break;
+      if (pending.sources.any((s) => identical(s, source))) {
+        for (final binding in source.activeBindings) {
+          if (binding.isHold) continue;
+          for (final sequence in binding.sequences) {
+            if (!sequence.isSequence) continue;
+            if (sequence.stepCount <= pending.events.length) continue;
+            if (_prefixMatches(
+              sequence,
+              pending.events,
+              pending.lanes,
+              pending.texts,
+            )) {
+              // Asked only of a binding whose sequence is still in play: a
+              // live binding's predicate runs per match, not per binding per
+              // step.
+              if (binding.enabled) out.add(binding);
+              break;
+            }
           }
         }
+      }
+      // The key boundary (§14.3) holds for every step, not just the first.
+      // Focus that moved into a dialog mid-sequence puts a modal scope
+      // between it and the app's scopes, which are then out of reach exactly
+      // as if they had left the chain.
+      if (source.isModalScope &&
+          !pending.passedBoundaries.any((s) => identical(s, source))) {
+        break;
       }
     }
     return out;
@@ -1085,6 +1097,10 @@ class InputDispatcher {
     // its candidates from these on every step (see [_liveCandidates]).
     // Allocated only when a sequence actually starts: this runs per key.
     List<KeyBindingSource>? sequenceSources;
+    // The modal scopes this key was let through (a binding there matched and
+    // bubbled). A sequence that starts beyond one may cross the same ones on
+    // its later steps, and no others. Allocated only when that happens.
+    List<KeyBindingSource>? passedBoundaries;
 
     for (final node in focusManager.activeChain()) {
       final source = node.bindingSource;
@@ -1153,10 +1169,15 @@ class InputDispatcher {
       // see it. Reaching this point means no binding here matched, OR one
       // matched and bubbled; a bubble is the deliberate per-key passthrough,
       // so it must NOT be trapped.
-      if (source != null && source.isModalScope && !bubbledHere) {
-        // Globals are suppressed with everything else: a modal surface
-        // traps the unmatched remainder completely.
-        return KeyEventResult.ignored;
+      if (source != null && source.isModalScope) {
+        if (bubbledHere) {
+          (passedBoundaries ??= <KeyBindingSource>[]).add(source);
+        } else {
+          // Stop walking, but a sequence that begins at or inside this scope
+          // still starts below: its first key is claimed, not unmatched.
+          // Only ancestors are cut off — globals with everything else.
+          break;
+        }
       }
     }
 
@@ -1166,6 +1187,7 @@ class InputDispatcher {
         event,
         sequenceCandidates,
         sequenceSources ?? const <KeyBindingSource>[],
+        passedBoundaries ?? const <KeyBindingSource>[],
         textOrigin,
         lane,
       );
@@ -1239,6 +1261,7 @@ class InputDispatcher {
     KeyEvent firstEvent,
     List<KeyBinding> candidates,
     List<KeyBindingSource> sources,
+    List<KeyBindingSource> passedBoundaries,
     String? textOrigin,
     _BindingLane lane,
   ) {
@@ -1247,6 +1270,7 @@ class InputDispatcher {
       events: [firstEvent],
       candidates: candidates,
       sources: sources,
+      passedBoundaries: passedBoundaries,
       texts: [textOrigin],
       lanes: [lane],
     );
@@ -1430,6 +1454,7 @@ class _PendingSequence {
     required this.events,
     required this.candidates,
     required this.sources,
+    required this.passedBoundaries,
     required this.texts,
     required this.lanes,
   });
@@ -1450,6 +1475,11 @@ class _PendingSequence {
   /// first). Scopes are stable across rebuilds where binding instances are
   /// not, so the sequence is anchored to them.
   final List<KeyBindingSource> sources;
+
+  /// The modal scopes the opening key was let through on its way to
+  /// [sources] (a binding at each matched and bubbled). Every other modal
+  /// scope between focus and a source cuts that source off; usually empty.
+  final List<KeyBindingSource> passedBoundaries;
 
   /// Per-held-event text origin: `texts[i]` is the original typed text
   /// when `events[i]` was synthesized from a [TextInputEvent], null for a
@@ -1533,6 +1563,7 @@ class _PendingSequence {
       events: [...events, event],
       candidates: survivors,
       sources: sources,
+      passedBoundaries: passedBoundaries,
       texts: [...texts, textOrigin],
       lanes: [...lanes, lane],
     );
@@ -1544,6 +1575,7 @@ class _PendingSequence {
         events: events,
         candidates: candidates,
         sources: sources,
+        passedBoundaries: passedBoundaries,
         texts: texts,
         lanes: lanes,
       );
