@@ -430,25 +430,7 @@ final class ActiveKeyBinding {
 /// what they answered for that widget, and the focus manager asks them again
 /// at the start of each frame: when one answers differently, the widget
 /// rebuilds. A resolution outside a build remembers nothing.
-List<ActiveKeyBinding> resolveActiveKeyBindings(FocusManager manager) =>
-    _resolveKeyBindings(manager, stopAtModalScope: true);
-
-/// Framework-internal: [resolveActiveKeyBindings] without the stop at modal
-/// scopes, so it also lists the bindings a dialog keeps keys from while it is
-/// open.
-///
-/// The dispatcher's dead-control check asks whether a binding carries a key
-/// at all. A pause dialog over a running game doesn't take the game's
-/// fallback bindings away; it only holds their keys until it closes.
-@internal
-List<ActiveKeyBinding> resolveKeyBindingsPastModalScopes(
-  FocusManager manager,
-) => _resolveKeyBindings(manager, stopAtModalScope: false);
-
-List<ActiveKeyBinding> _resolveKeyBindings(
-  FocusManager manager, {
-  required bool stopAtModalScope,
-}) {
+List<ActiveKeyBinding> resolveActiveKeyBindings(FocusManager manager) {
   final result = <ActiveKeyBinding>[];
   // Canonical sequence identity mirrors dispatch. Differently spelled aliases
   // for the same firing event must not evade deeper-binding precedence.
@@ -495,7 +477,7 @@ List<ActiveKeyBinding> _resolveKeyBindings(
     }
     // Dispatch stops here too, for every key no binding at this scope
     // handled (see `InputDispatcher`'s plain dispatch).
-    if (stopAtModalScope && source.isModalScope) break;
+    if (source.isModalScope) break;
   }
   manager.recordLiveAnswers(liveAnswers);
   return List<ActiveKeyBinding>.unmodifiable(result);
