@@ -460,11 +460,19 @@ class InputDispatcher {
       KeyPosition() => sequence.usTwin,
       _ => null,
     };
-    // Past modal scopes: a dialog holds keys from the bindings behind it
-    // only until it closes, so they still carry their keys.
+    // Every enabled press binding in the focus chain carries its keys,
+    // whatever the hint bar shows of it: a binding with no label or hidden
+    // from the bar fires all the same, and a printable key a focused text
+    // field holds comes back when focus leaves the field. Bindings past a
+    // modal scope count too: a dialog holds their keys only until it closes.
+    // Holds don't count. They need key releases, which this surface doesn't
+    // report, so they do nothing here.
     final covered = <KeyCode>{
-      for (final active in resolveKeyBindingsPastModalScopes(focusManager))
-        for (final sequence in active.sequences) ?lower(sequence),
+      for (final node in focusManager.activeChain())
+        if (node.bindingSource case final source?)
+          for (final binding in source.activeBindings)
+            if (!binding.isHold && binding.enabled)
+              for (final sequence in binding.sequences) ?lower(sequence),
     };
     for (final selector in sampled) {
       // Compare on the logical key: a positional sample is satisfied by a

@@ -1823,6 +1823,42 @@ void main() {
     expect(viaTool, viaResource); // single-sourced
   });
 
+  test('get_ui names the control focused inside a focused pane', () async {
+    // A pane reports focus while focus is anywhere inside it, and it comes
+    // first in tree order. The focused node is the log that has the keys.
+    pushRoot(<String, Object?>{
+      'id': 'root',
+      'role': 'app',
+      'children': <Object?>[
+        <String, Object?>{
+          'id': 'pane',
+          'role': 'region',
+          'label': 'Build',
+          'focused': true,
+          'children': <Object?>[
+            <String, Object?>{
+              'id': 'build-log',
+              'role': 'log',
+              'label': 'Build output',
+              'focused': true,
+              'actions': <String>['focus'],
+            },
+          ],
+        },
+      ],
+    });
+    await bridge.ready;
+
+    await server.handleLine(
+      _rpc(4, 'tools/call', <String, Object?>{
+        'name': 'get_ui',
+        'arguments': <String, Object?>{},
+      }),
+    );
+
+    expect(toolJson(lastResult())['focusedNodeId'], 'build-log');
+  });
+
   test(
     'find_nodes filters by role and by case-insensitive label substring',
     () async {

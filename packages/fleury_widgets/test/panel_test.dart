@@ -251,6 +251,64 @@ void main() {
     );
   });
 
+  group('what has focus is the control in the panel, not the panel', () {
+    // The panel's region reports focus while focus is anywhere inside it,
+    // and it comes first in tree order. What agents read (the inspection
+    // snapshot's focusedNodeId) and the accessibility snapshot must still
+    // name the control that holds focus.
+    void expectFocused(FleuryTester tester, Widget child, SemanticRole role) {
+      tester.pumpWidget(
+        Theme(
+          data: _theme,
+          child: Panel(title: 'Pane', child: child),
+        ),
+      );
+      tester.render(size: const CellSize(24, 6));
+      final tree = tester.semantics();
+      expect(
+        tree.single(role: SemanticRole.region, label: 'Pane').focused,
+        isTrue,
+        reason: 'the panel reports focus within it',
+      );
+      expect(tree.focusedNode?.role, role);
+
+      final inspection = tester.semanticInspectionSnapshot();
+      expect(inspection.nodeById(inspection.focusedNodeId!)?.role, role.name);
+      final accessibility = tester.accessibilitySnapshot();
+      expect(accessibility.focusedNode?.role, role);
+      expect(
+        accessibility.summary.focusedNodeId,
+        accessibility.focusedNode?.sourceId,
+      );
+    }
+
+    testWidgets('a LogRegion', (tester) {
+      expectFocused(
+        tester,
+        const LogRegion(
+          autofocus: true,
+          entries: [
+            LogEntry(
+              id: 'a',
+              severity: LogSeverity.info,
+              source: 'system',
+              message: 'booted',
+            ),
+          ],
+        ),
+        SemanticRole.log,
+      );
+    });
+
+    testWidgets('a Button', (tester) {
+      expectFocused(
+        tester,
+        Button(text: 'Deploy', autofocus: true, onPressed: () {}),
+        SemanticRole.button,
+      );
+    });
+  });
+
   testWidgets('is a semantic region named by the title', (tester) {
     tester.pumpWidget(_panel());
     final region = tester.semantics().single(role: SemanticRole.region);

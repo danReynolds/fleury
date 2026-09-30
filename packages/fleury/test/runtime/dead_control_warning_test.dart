@@ -207,6 +207,86 @@ void main() {
     expect(named, isNot(contains('KeyPosition.w')), reason: 'thrust WAS bound');
   });
 
+  group('coverage is every enabled binding, not the hint bar list', () {
+    // The hint bar lists labelled, visible bindings a key can fire right
+    // now. Coverage asks whether a binding carries the key at all.
+
+    test('a binding with no label covers its key', () {
+      mountBindings([KeyBinding(KeyPosition.a, onTrigger: (_) {})]);
+      settleAndTrip(KeyPosition.a);
+      expect(warnings, isEmpty);
+    });
+
+    test('a binding hidden from the hint bar covers its key', () {
+      mountBindings([
+        KeyBinding(
+          KeyPosition.a,
+          label: 'Turn left',
+          hideFromHintBar: true,
+          onTrigger: (_) {},
+        ),
+      ]);
+      settleAndTrip(KeyPosition.a);
+      expect(warnings, isEmpty);
+    });
+
+    test(
+      'a printable-key binding covers its key while a text field has focus',
+      () {
+        // A chat field over a game holds printable keys only until focus
+        // leaves it; the game's fallback still exists.
+        final field = FocusNode(debugLabel: 'chat')
+          ..textInputClaimant = _TextClaimant();
+        owner.mountRoot(
+          FocusManagerScope(
+            manager: focusManager,
+            child: KeyBindings(
+              bindings: [
+                KeyBinding(KeyCode.a, label: 'Turn left', onTrigger: (_) {}),
+              ],
+              child: Focus(
+                focusNode: field,
+                autofocus: true,
+                child: const EmptyBox(),
+              ),
+            ),
+          ),
+        );
+        expect(focusManager.focusedNodeClaimsText, isTrue);
+        settleAndTrip(KeyPosition.a);
+        expect(warnings, isEmpty);
+      },
+    );
+
+    test('a hold binding does not cover its key', () {
+      // A hold needs key releases, so it does nothing on the surfaces this
+      // check runs on, however the hint bar lists it.
+      mountBindings([
+        KeyBinding.hold(
+          KeyPosition.a,
+          label: 'Turn left',
+          onHoldStart: (_) {},
+          onHoldEnd: (_) {},
+        ),
+      ]);
+      settleAndTrip(KeyPosition.a);
+      expect(warnings, hasLength(1));
+    });
+
+    test('a disabled binding does not cover its key', () {
+      mountBindings([
+        KeyBinding(
+          KeyPosition.a,
+          label: 'Turn left',
+          enabled: false,
+          onTrigger: (_) {},
+        ),
+      ]);
+      settleAndTrip(KeyPosition.a);
+      expect(warnings, hasLength(1));
+    });
+  });
+
   test('a binding behind an open dialog still covers its key', () {
     // A pause dialog over a running game: its modal scope keeps keys from
     // the game's bindings until it closes, but the fallback exists. "Can
@@ -229,4 +309,12 @@ void main() {
     settleAndTrip(KeyPosition.a);
     expect(warnings, isEmpty);
   });
+}
+
+class _TextClaimant implements TextInputClaimant {
+  @override
+  KeyEventResult onTextInput(String text) => KeyEventResult.handled;
+
+  @override
+  KeyEventResult onPaste(String text) => KeyEventResult.handled;
 }
