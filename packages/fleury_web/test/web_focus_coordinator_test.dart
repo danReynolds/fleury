@@ -63,6 +63,39 @@ void main() {
     expect(coordinator.activeCaretRect, CellRect.fromLTWH(1, 1, 1, 1));
   });
 
+  test('WebFocusCoordinator activates the control focused inside a pane', () {
+    // A pane reports focus while focus is anywhere inside it, and it comes
+    // first in tree order. The active node is the log that holds focus.
+    final coordinator = WebFocusCoordinator();
+    const logId = SemanticNodeId('build-log');
+    const tree = SemanticTree(
+      root: SemanticNode(
+        id: SemanticNodeId('root'),
+        role: SemanticRole.app,
+        children: [
+          SemanticNode(
+            id: SemanticNodeId('pane'),
+            role: SemanticRole.region,
+            label: 'Build',
+            focused: true,
+            children: [
+              SemanticNode(
+                id: logId,
+                role: SemanticRole.log,
+                label: 'Build output',
+                focused: true,
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
+
+    coordinator.syncFromSemanticTree(tree, activeCaretRect: null);
+
+    expect(coordinator.activeSemanticNode, logId);
+  });
+
   test('WebFocusCoordinator clears stale semantic browser target', () {
     final coordinator = WebFocusCoordinator();
 

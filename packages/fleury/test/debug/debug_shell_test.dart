@@ -514,6 +514,51 @@ void main() {
       expect(output, contains('select semantic node'));
     });
 
+    testWidgets('tree tab names the control focused inside a focused pane', (
+      tester,
+    ) {
+      // The pane reports focus within it and comes first in tree order; the
+      // node that holds focus is the button inside it.
+      final controller = DebugController(
+        const DebugConfig(startMode: DebugMode.fullscreen),
+      )..selectTab(DebugTab.tree);
+      controller.setSemanticTreeProvider(
+        () => const SemanticTree(
+          root: SemanticNode(
+            id: SemanticNodeId('root'),
+            role: SemanticRole.app,
+            children: [
+              SemanticNode(
+                id: SemanticNodeId('pane'),
+                role: SemanticRole.region,
+                label: 'Release',
+                focused: true,
+                children: [
+                  SemanticNode(
+                    id: SemanticNodeId('deploy'),
+                    role: SemanticRole.button,
+                    label: 'Deploy',
+                    focused: true,
+                  ),
+                ],
+              ),
+            ],
+          ),
+        ),
+      );
+
+      tester.pumpWidget(
+        DebugShell(controller: controller, child: const Text('app')),
+      );
+      final output = tester.renderToString(
+        size: const CellSize(42, 14),
+        emptyMark: ' ',
+      );
+
+      expect(output, contains('Focus id  deploy'));
+      expect(output, contains('Focused  button Deploy'));
+    });
+
     testWidgets('tree tab renders a semantic graph outline', (tester) {
       final controller = DebugController(
         const DebugConfig(startMode: DebugMode.fullscreen),

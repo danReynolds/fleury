@@ -403,7 +403,7 @@ class _DebugPanelState extends State<DebugPanel> {
 
     final inspection = tree.toInspectionSnapshot();
     final nodes = tree.nodes.toList(growable: false);
-    final focused = nodes.where((node) => node.focused).toList(growable: false);
+    final focused = tree.focusedNode;
     final appNode = _appNode(nodes);
     final commands = nodes
         .where((node) => node.role == SemanticRole.command)
@@ -433,7 +433,7 @@ class _DebugPanelState extends State<DebugPanel> {
       _row('Inspection', 'v${inspection.schemaVersion}'),
       _row('Actions', '${inspection.actionCount}'),
       _row('Focus id', inspection.focusedNodeId ?? '-'),
-      _row('Focused', focused.isEmpty ? '-' : _nodeSummary(focused.first)),
+      _row('Focused', focused == null ? '-' : _nodeSummary(focused)),
       ..._semanticOutlineRows(tree.root, inspection: inspection),
       ..._appRows(appNode, commands),
       ..._commandRows(commands),

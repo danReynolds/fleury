@@ -14,12 +14,13 @@ final class AccessibilitySnapshot {
   AccessibilitySnapshotSummary get summary =>
       AccessibilitySnapshotSummary._from(this);
 
-  AccessibilityNode? get focusedNode {
-    for (final node in nodes) {
-      if (node.focused) return node;
-    }
-    return null;
-  }
+  /// The node that holds focus, the deepest node on the focus path (see
+  /// [SemanticTree.focusedNode]), or null when no node is focused.
+  AccessibilityNode? get focusedNode => innermostFocusedNode(
+    root,
+    isFocused: (node) => node.focused,
+    childrenOf: (node) => node.children,
+  );
 
   Iterable<AccessibilityNode> get actionableNodes =>
       nodes.where((node) => node.actions.isNotEmpty);
@@ -165,16 +166,11 @@ final class AccessibilitySnapshotSummary {
     var redactedValueCount = 0;
     var actionableNodeCount = 0;
     var actionCount = 0;
-    SemanticNodeId? focusedNodeId;
-    String? focusedLabel;
+    final focused = snapshot.focusedNode;
 
     for (final node in snapshot.nodes) {
       nodeCount += 1;
       roleCounts[node.role] = (roleCounts[node.role] ?? 0) + 1;
-      if (node.focused && focusedNodeId == null) {
-        focusedNodeId = node.sourceId;
-        focusedLabel = node.label;
-      }
       if (node.selected) selectedCount += 1;
       if (!node.enabled) disabledCount += 1;
       if (node.busy) busyCount += 1;
@@ -198,14 +194,19 @@ final class AccessibilitySnapshotSummary {
       redactedValueCount: redactedValueCount,
       actionableNodeCount: actionableNodeCount,
       actionCount: actionCount,
-      focusedNodeId: focusedNodeId,
-      focusedLabel: focusedLabel,
+      focusedNodeId: focused?.sourceId,
+      focusedLabel: focused?.label,
     );
   }
 
   final int nodeCount;
   final Map<SemanticRole, int> roleCounts;
+
+  /// Source id of [AccessibilitySnapshot.focusedNode], the node that holds
+  /// focus.
   final SemanticNodeId? focusedNodeId;
+
+  /// Label of [AccessibilitySnapshot.focusedNode].
   final String? focusedLabel;
   final int selectedCount;
   final int disabledCount;

@@ -8,6 +8,16 @@
   that watches focus itself; nested panels all accent; and a `Tooltip` around
   such a widget shows.
 
+- **"What has focus" names the node that holds it.** A semantic node's
+  `focused` flag is also set by a region with focus inside it, such as a
+  `Panel` around a focused `Button` or `LogRegion`, and that region comes
+  first in tree order. The inspection snapshot's `focusedNodeId` (what agents
+  read through `fleury_mcp`), `AccessibilitySnapshot.focusedNode`, the browser
+  host's active semantic node, and the debug shell's focus rows named the
+  panel. They now take the deepest focused node, which the new
+  `SemanticTree.focusedNode` returns: the control with the keys, or the row a
+  focused `DataTable` marks as current.
+
 - **Debug tooling defaults on only for development runs.** A null
   `DebugConfig.enabled` (the default) enables the Ctrl+G debug shell, F12 logs,
   and the `read_frames`/`read_logs`/`read_errors` records when the Dart VM runs

@@ -90,14 +90,10 @@ final class SemanticInspectionSnapshot {
     final nodes = root.selfAndDescendants.toList(growable: false);
     var actionCount = 0;
     final roleCounts = <String, int>{};
-    String? firstFocusedNodeId;
 
     for (final node in nodes) {
       roleCounts[node.role] = (roleCounts[node.role] ?? 0) + 1;
       actionCount += node.actions.length;
-      if (firstFocusedNodeId == null && node.focused) {
-        firstFocusedNodeId = node.id;
-      }
     }
 
     final sortedRoleCounts = <String, int>{
@@ -112,7 +108,11 @@ final class SemanticInspectionSnapshot {
           preferredFocusedNodeId != null &&
               nodes.any((node) => node.id == preferredFocusedNodeId)
           ? preferredFocusedNodeId
-          : firstFocusedNodeId,
+          : innermostFocusedNode(
+              root,
+              isFocused: (node) => node.focused,
+              childrenOf: (node) => node.children,
+            )?.id,
       roleCounts: sortedRoleCounts,
       actionCount: actionCount,
     );
@@ -121,6 +121,10 @@ final class SemanticInspectionSnapshot {
   final int schemaVersion;
   final SemanticInspectionNode root;
   final int nodeCount;
+
+  /// Id of the node that holds focus, the deepest node on the focus path (see
+  /// [SemanticTree.focusedNode]), or null when no node is focused. A snapshot
+  /// parsed from JSON keeps the producer's id while that node is in the tree.
   final String? focusedNodeId;
   final Map<String, int> roleCounts;
   final int actionCount;
