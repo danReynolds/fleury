@@ -299,10 +299,12 @@ export function mountPad(root, { monaco, sample, createWorker, compilerUrl = '',
     if (hadApp) onReset();
     controls();
   }
-  $('status').textContent = deferLanguageServices ? '' : 'Editor ready. Starting Dart tools…';
-  controls();
   // Only the known starter runs on arrival. Restored custom drafts still wait
   // for Run, and first compilation takes priority over background analysis.
+  const restored = !workspace && model.getValue() !== sample;
+  $('status').textContent = deferLanguageServices ? ''
+    : restored ? 'Your earlier edit is restored. Press Run to see it.' : 'Editor ready. Starting Dart tools…';
+  controls();
   if (autoRunSample && model.getValue() === sample) {
     void compile('run').finally(() => { if (!disposed) void analyze(); });
   } else if (languageServicesActive) {
