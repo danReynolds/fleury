@@ -5,8 +5,9 @@ with a small Monaco editor and Fleury browser preview. Source is compiled by
 the official Dart development compiler; hot reload preserves the live widget
 tree. No requests go to Google's public DartPad service.
 
-The browser integration runs locally and on private Cloud Run staging in the
-dedicated `fleury-pad-20260927` project. The trial uses 1 CPU / 2 GiB, scaling from
+The browser integration runs locally and on Cloud Run in the dedicated
+`fleury-pad-20260927` project, which since September 30, 2026 is the public
+compiler for the published docs (see [DEPLOYMENT.md](DEPLOYMENT.md#public-docs-compiler-september-30-2026)). The trial uses 1 CPU / 2 GiB, scaling from
 zero to one instance. Hosted API tests and browser reload/restart checks pass.
 The editor opens while Dart tools initialize; the official AOT analyzer and
 temporary startup CPU boost reduce startup work. Cost controls and public
@@ -62,10 +63,9 @@ and accepts the `FLEURY_PAD_DOCS_ORIGIN` repository variable. User code stays in
 the compiler site. Its CSP blocks network access except to the image service
 the loading-data guide fetches from (`picsum.photos`).
 
-These settings do not grant anonymous Cloud Run access. The currently deployed
-service is still private; the updated origin policy needs deployment alongside
-the docs before public access is enabled. Missing compiler configuration leaves
-the editor usable and reports a connection error when using language tools.
+These settings do not grant anonymous Cloud Run access; `deploy.py --public`
+does, for the docs compiler only. Without a compiler URL, docs demos stay
+read-only beside their prebuilt previews.
 
 ## Editable demo projects
 
@@ -81,9 +81,7 @@ ranges are generated from the same canonical Dart examples used by the
 prebuilt previews. See [the authoring guide](../../website/examples/GUIDE_PADS.md)
 for adding or changing a demo. CI compiles every catalogue entry against the
 deployable image. This integration is verified locally, where every project
-compiles and runs in the docs; the hosted compiler must be redeployed from this
-source (protocol 3, the docs font, and the frame's grid sizing) before published
-editors can use it.
+compiles and runs in the docs, and against the public compiler.
 
 ## Run locally
 

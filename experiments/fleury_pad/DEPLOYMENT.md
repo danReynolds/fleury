@@ -1,6 +1,10 @@
 # Fleury Pad deployment
 
-The first target is **private Cloud Run staging**. A dedicated project,
+**Since September 30, 2026, `fleury-pad-staging` is the public compiler for the
+published docs**, invocable anonymously and embeddable only from
+`https://danreynolds.github.io`. See [Public docs compiler](#public-docs-compiler-september-30-2026).
+
+The first target was **private Cloud Run staging**. A dedicated project,
 `fleury-pad-20260927`, is provisioned in `us-central1` and linked to the approved
 billing account. The private `fleury-pad-staging` service uses 1 CPU / 2 GiB,
 minimum zero and maximum one. Startup CPU boost temporarily provides a second
@@ -594,3 +598,61 @@ Staging is useful evidence, not completion of public production readiness:
 
 Opening public access, choosing a domain, and configuring GitHub deployment
 credentials remain explicit follow-up rollout actions.
+
+## Public docs compiler, September 30, 2026
+
+The docs' editable demos use this service, so it is now public. The verified
+image `sha256:d89e66a073c70cd74e58eb2e0a3a78a031ef8d2bfb934235f3fe6bab9a67673b`
+(build `8684acc4465f2c79`, protocol 3, source `7ac2cbe7`) serves as revision
+`fleury-pad-staging-00015-vuv`, released with:
+
+```sh
+python3 experiments/fleury_pad/dartpad/deploy.py \
+  --project fleury-pad-20260927 --region us-central1 \
+  --image "$FLEURY_IMAGE_DIGEST" \
+  --runtime-account fleury-pad-runtime@fleury-pad-20260927.iam.gserviceaccount.com \
+  --checkpoint-secret fleury-pad-checkpoints:1 \
+  --docs-origin https://danreynolds.github.io --cpu-boost --promote --public
+```
+
+`--public` grants `run.invoker` to `allUsers` and drops the loopback proxy
+origin; the invoker IAM check stays on. Every other setting is the private
+profile: 1 CPU / 2 GiB, minimum zero, maximum one instance, concurrency 8, the
+CA$20 Cloud Run spend cap, and the whole-project budget alerts. Release later
+images with `--public` too; the release workflow passes it when the
+`FLEURY_PAD_PUBLIC` repository variable is `true`. Without it, `deploy.py`
+refuses the now-public service instead of making it private. The Pages build
+reads the compiler origin from `FLEURY_PAD_COMPILER_URL`
+(`https://fleury-pad-staging-vbalblwk3q-uc.a.run.app`).
+
+Verified before and after the release:
+
+- The exact image passed `container_check.py --guides` locally: the eleven API
+  tests, all 125 docs projects, graceful shutdown, checkpoint continuation, and
+  recovery from a frozen compiler worker. Its cgroup peak was 1.17 GB of 2 GiB.
+- Anonymously, `/api/build` reports protocol 3. The docs origin's preflight
+  and compiles succeed with its CORS headers; another origin's compile gets 403.
+  The frame's CSP limits embedding to the docs origin, and its runtime and font
+  are served build-versioned and immutable.
+- All 125 docs projects compiled from the docs origin in 136 seconds, one
+  instance, sequentially. A hosted-compiled demo ran in the hosted frame.
+
+Still open from the list above: per-user rate limits and abuse controls beyond
+per-instance admission, monitoring beyond the budget alerts, and a hang test of
+the embedded frame. Demand beyond one instance receives busy responses; the
+docs keep working, because every demo stays its prebuilt preview until a reader
+runs an edit.
+
+To withdraw public access, remove the binding (published demos then report a
+connection error on Run), and unset `FLEURY_PAD_COMPILER_URL` so the next docs
+build makes demos read-only:
+
+```sh
+gcloud run services remove-iam-policy-binding fleury-pad-staging \
+  --project fleury-pad-20260927 --region us-central1 \
+  --member=allUsers --role=roles/run.invoker
+```
+
+Suspending the service with `--scaling=0` (above) also stops all compilation.
+Roll back a release by routing traffic to the previous revision
+(`fleury-pad-staging-00013-qil` was the last private one).
