@@ -8,22 +8,17 @@ Future<void> _settle() async {
 }
 
 void main() {
-  test('DebugConfig is public API and defaults to enabled under JIT', () {
+  test('DebugConfig is public API', () {
     // Constructing via package:fleury/fleury.dart is itself the export
-    // assertion — this file has no src/ imports.
+    // assertion — this file has no src/ imports. The enabled default is
+    // decided per launch: test/debug/debug_default_test.dart.
     const config = DebugConfig(
       startMode: DebugMode.docked,
       side: DebugPanelSide.bottom,
       panelWidth: 40,
     );
-    expect(
-      config.enabled,
-      isTrue,
-      reason:
-          'JIT runs are development runs (dart.vm.product is false); '
-          'release AOT builds flip the default off',
-    );
     expect(config.startMode, DebugMode.docked);
+    expect(config.side, DebugPanelSide.bottom);
   });
 
   test('Tab cycles the shell tabs; Shift+Tab cycles back', () async {

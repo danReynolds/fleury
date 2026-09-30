@@ -652,7 +652,7 @@ Future<MountedApp> _runTuiSurface(
       ),
       planner: planner,
       isDebugWatching: () =>
-          debugController?.config.enabled == true && DebugEvents.hasListeners,
+          debugController?.enabled == true && DebugEvents.hasListeners,
       onBeforeFrame: dispatchPendingWork,
       // Input bookkeeping runs ahead of every production gate so per-frame
       // edges expire even on frames that render nothing (RFC 0020 §5.6/§7).

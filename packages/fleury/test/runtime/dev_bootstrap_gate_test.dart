@@ -274,4 +274,46 @@ void main() {
       );
     });
   });
+
+  group('sourceEntrypointBlocker — the one "run from source" rule', () {
+    // Hot-reload supervision and the debug-tooling default both ask it.
+    String? blocker(Uri script) =>
+        sourceEntrypointBlocker(script, scriptExists: (_) => true);
+
+    test('the Dart VM running a .dart entrypoint is a source run', () {
+      // `dart run bin/main.dart`, `fleury run`, an editor's debug session.
+      expect(blocker(Uri.file('/app/bin/main.dart')), isNull);
+    });
+
+    test('compiled entrypoints are not', () {
+      for (final compiled in [
+        // `dart pub global activate`, or `dart run <package>:<exe>`.
+        '/app/.dart_tool/pub/bin/app/main.dart-3.12.2.snapshot',
+        '/home/me/.pub-cache/global_packages/app/bin/main.dart-3.12.2.snapshot',
+        '/tmp/app.dill', // dart compile kernel
+        '/tmp/app.jit', // dart compile jit-snapshot
+        '/usr/local/bin/app', // dart compile exe
+      ]) {
+        expect(
+          blocker(Uri.file(compiled)),
+          contains('.dart'),
+          reason: compiled,
+        );
+      }
+      expect(
+        blocker(Uri.parse('data:application/dart;charset=utf-8,main(){}')),
+        contains('not a file'),
+      );
+    });
+
+    test('a .dart path that does not exist is not', () {
+      expect(
+        sourceEntrypointBlocker(
+          Uri.file('/app/bin/gone.dart'),
+          scriptExists: (_) => false,
+        ),
+        contains('exist'),
+      );
+    });
+  });
 }

@@ -1384,6 +1384,24 @@ String? supervisionBlocker({
       (implicitHandle?.call() ?? false)) {
     return 'the app is driven through a fleury handle (serve, mcp)';
   }
+  return sourceEntrypointBlocker(script, scriptExists: scriptExists);
+}
+
+/// Why [script] is not a Dart source entrypoint, or null when it is: a `file:`
+/// URI naming an existing `.dart` file, which is what the Dart VM runs for
+/// `dart run app.dart`, `fleury run`, and an editor's debug session. Anything
+/// else was compiled first — a snapshot pub precompiles (`dart pub global
+/// activate`, or an executable started by name: bare `dart run`,
+/// `dart run <package>:<exe>`), a `dart compile kernel` or `jit-snapshot`
+/// file, or an executable.
+///
+/// The one "is this a development run from source" rule: hot-reload
+/// supervision ([supervisionBlocker]) and the default of Fleury's debug
+/// tooling (`DebugConfig.enabled`) both ask it, so they cannot disagree.
+String? sourceEntrypointBlocker(
+  Uri script, {
+  bool Function(Uri script)? scriptExists,
+}) {
   if (script.scheme != 'file') return 'the entrypoint is not a file';
   if (!script.path.endsWith('.dart')) {
     return 'the entrypoint is not a .dart source file';

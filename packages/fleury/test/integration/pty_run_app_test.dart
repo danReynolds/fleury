@@ -311,6 +311,45 @@ void main() {
       skip: skipPty,
     );
 
+    test(
+      'raw Ctrl+Z in a focused text field undoes instead of suspending',
+      () async {
+        // Launch audit 3.a: the press is dispatched first, like Ctrl+C. The
+        // field's undo claims it, so the process never stops — no SIGCONT is
+        // ever sent here, and a job-control stop would time the capture out.
+        final resultFile = File('${tempDir.path}/undo-result.json');
+        final capture = await _capturePty(
+          tempDir,
+          'ctrl-z-undo',
+          extraArgs: const [
+            '--cols',
+            '40',
+            '--rows',
+            '8',
+            '--input-hex',
+            '781a', // type "x", then Ctrl+Z
+            '--input-after-output-ms',
+            '700',
+          ],
+          fixtureArgs: ['--undo-result=${resultFile.path}'],
+        );
+        if (capture == null) return;
+
+        expect(capture.metadata['timedOut'], isFalse);
+        expect(capture.metadata['exitCode'], 0);
+        expect(capture.output, contains('UNDO-READY'));
+        expect(_signalNames(capture.metadata), isEmpty);
+        expect(jsonDecode(resultFile.readAsStringSync()), ['x', '']);
+        _expectTerminalRestored(capture.output);
+        expect(
+          _countOccurrences(capture.output, '\x1B[?1049h'),
+          1,
+          reason: 'the session never left for the shell and re-entered',
+        );
+      },
+      skip: skipPty,
+    );
+
     test('terminal handoff restores, runs operation, and re-enters', () async {
       final capture = await _capturePty(
         tempDir,

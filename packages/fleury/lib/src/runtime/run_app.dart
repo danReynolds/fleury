@@ -337,6 +337,10 @@ const _semanticActionQueueHold = Duration(milliseconds: 500);
 /// and call [exitApp] when finished. Preserve the original signal yourself:
 /// that later exit returns [AppExit.requested]. Raw Ctrl+C reaches widget key
 /// bindings first; if unhandled it exits before [onEvent] with an interrupt.
+/// Ctrl+Z follows the same rule in a native POSIX terminal: a focused text
+/// field undoes, an app binding fires, and only a press nothing handled
+/// suspends the process (before [onEvent]) until the shell's `fg` —
+/// see [PosixTerminalDriver.suspendOnCtrlZ].
 ///
 /// [onStrayOutput] takes ownership of captured output instead of replaying it
 /// after exit. A throwing hook is disabled and reported through the runtime
@@ -457,7 +461,8 @@ Future<AppExit> runApp(
 ///      events. On each event, optionally consult
 ///      [onEvent]; if it returns [ExitRequested], or the event is an
 ///      unhandled Ctrl+C, or it is a [SignalEvent] the handler did not
-///      claim with [EventHandled], exit the loop. [exitApp] exits
+///      claim with [EventHandled], exit the loop. An unhandled Ctrl+Z
+///      suspends a native POSIX session instead. [exitApp] exits
 ///      programmatically from anywhere in the app.
 ///   7. Schedule a render frame after every event and after every
 ///      `setState` (via [BuildOwner.onScheduleBuild]).
@@ -557,9 +562,13 @@ Future<AppExit> _runAppImpl(
   // RemoteTerminalDriver over a fake transport never has its runner's
   // descriptors captured.
   var remoteFdMirror = false;
+  // Debug tooling's default follows how this process was launched: on for a
+  // development run of `.dart` source (or with assertions), off for compiled
+  // code — the same source-entrypoint rule hot-reload supervision uses.
+  final runsFromSource = sourceEntrypointBlocker(Platform.script) == null;
   Future<void> startRemoteFdCapture() async {
     if (fdCapture != null) return;
-    if (!debug.enabled) return;
+    if (!debugToolingEnabled(debug, runsFromSource: runsFromSource)) return;
     if (Platform.isWindows) return;
     if (Platform.environment['FLEURY_FD_CAPTURE'] == '0') return;
     try {
@@ -584,7 +593,10 @@ Future<AppExit> _runAppImpl(
   // Long-lived shell-state holder. Survives setState / rebuilds; the
   // root is rebuilt whenever the viewport resizes, so a per-build
   // controller would lose mode + tab selection on every SIGWINCH.
-  final debugController = DebugController(debug);
+  final debugController = DebugController(
+    debug,
+    runsFromSource: runsFromSource,
+  );
   TerminalDiagnosis currentTerminalDiagnosis() => diagnoseTerminal(
     usedDriver,
     environment: Platform.environment,
@@ -906,6 +918,24 @@ Future<AppExit> _runAppImpl(
         if (!exit.isCompleted) {
           exit.complete(const AppExit.signal(AppSignal.interrupt));
         }
+        return;
+      }
+
+      // Ctrl+Z suspends by the same rule: only a press the app did not
+      // handle. A focused text field's undo or an app binding claims the
+      // chord; one nothing claims becomes the terminal's job control. Only a
+      // driver that owns an orderly suspend starts one (native POSIX, see
+      // PosixTerminalDriver.suspendOnCtrlZ); on every other surface — the
+      // browser, a served or remote session, Windows — the chord stays an
+      // ordinary key and continues below. The exact chord: Ctrl+Shift+Z is
+      // redo wherever a terminal can tell them apart.
+      if (event is KeyEvent &&
+          event.type == KeyEventType.down &&
+          event.code.character == 'z' &&
+          event.hasCtrl &&
+          event.modifiers.length == 1 &&
+          dispatchResult != KeyEventResult.handled &&
+          requestCtrlZSuspend(usedDriver)) {
         return;
       }
 
@@ -1551,7 +1581,7 @@ Future<AppExit> _runAppImpl(
           final supervisorDebugWire = negotiatedSink is RemoteTerminalDriver
               ? negotiatedSink.supervisorDebugWire
               : null;
-          if (debugController.config.enabled &&
+          if (debugController.enabled &&
               Platform.environment['FLEURY_DEBUG_WIRE'] != '0' &&
               (supervisorDebugWire ?? true)) {
             debugFrameLog = DebugFrameLog();
@@ -1740,7 +1770,7 @@ Future<AppExit> _runAppImpl(
                 // live listeners — when no one's watching this
                 // short-circuits to zero per-frame debug cost. NOTE: do NOT
                 // gate on `DebugEvents.stream.isBroadcast`.
-                debugController.config.enabled && DebugEvents.hasListeners,
+                debugController.enabled && DebugEvents.hasListeners,
             // Backstop errors (escaped every boundary; session continues
             // on a full-screen error frame) surface like other survivable
             // errors: stderr + banner.
@@ -1775,7 +1805,7 @@ Future<AppExit> _runAppImpl(
                   report.failureDescription(
                     canRestart:
                         DevBootstrap.isSupervisedChild &&
-                        debugController.config.enabled,
+                        debugController.enabled,
                   ),
                 );
               }
@@ -1787,7 +1817,7 @@ Future<AppExit> _runAppImpl(
             // never grow the affordance from an inherited environment.
             if (!driverInjected &&
                 DevBootstrap.isSupervisedChild &&
-                debugController.config.enabled) {
+                debugController.enabled) {
               debugController.setHotRestartHandler(
                 DevBootstrap.requestRestartFromApp,
               );
