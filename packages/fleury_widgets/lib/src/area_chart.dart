@@ -23,9 +23,9 @@ class AreaSeries {
   final List<Color>? gradient;
 }
 
-/// A filled **area chart**: each series is drawn as a solid, gradient- (or
-/// flat-) shaded region using block-element columns — the "premium" filled
-/// look that reads as a continuous surface on every surface.
+/// A filled area chart: each series is shaded from the bottom of the plot up
+/// to its line, in a flat color or a vertical gradient, using block
+/// characters so the fill reads as one continuous surface.
 ///
 /// [AreaChart] shares [LineChart]'s cartesian engine — axes, legend, ranges,
 /// grid, references, and the interactive crosshair all behave identically.

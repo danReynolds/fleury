@@ -16,9 +16,8 @@ import 'glyphs.dart';
 /// SizedBox(width: 32, child: Gauge(value: 0.78, label: 'CPU'));
 /// ```
 ///
-/// Semantics: contributes one summary node (chart role, label, and data
-/// state) by design. Terminal charts are announced and asserted as
-/// summaries; per-element semantic children are intentionally omitted.
+/// Screen readers and agents get one chart node: [semanticLabel] (or
+/// [label]) with the percentage as its value.
 class Gauge extends StatelessWidget {
   const Gauge({
     super.key,

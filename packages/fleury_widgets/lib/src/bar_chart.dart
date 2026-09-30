@@ -78,9 +78,8 @@ class Bar {
 /// ]);
 /// ```
 ///
-/// Semantics: contributes one summary node (chart role, label, and data
-/// state) by design. Terminal charts are announced and asserted as
-/// summaries; per-element semantic children are intentionally omitted.
+/// Screen readers and agents get one chart node: [semanticLabel] plus the
+/// bar count and the smallest and largest bar totals, not a node per bar.
 class BarChart extends StatelessWidget {
   const BarChart({
     super.key,

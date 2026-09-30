@@ -14,9 +14,9 @@ import 'bar_chart.dart';
 /// are the midpoint of each bucket; turn them off with `showLabels: false`
 /// when packing many bins into a narrow space.
 ///
-/// Semantics: contributes one summary node (chart role, label, and data
-/// state) by design. Terminal charts are announced and asserted as
-/// summaries; per-element semantic children are intentionally omitted.
+/// Screen readers and agents get one chart node: [semanticLabel] plus the
+/// bin count, how many values fell in the range, and the range's low and high
+/// ends, not a node per bin.
 class Histogram extends StatelessWidget {
   const Histogram({
     super.key,
