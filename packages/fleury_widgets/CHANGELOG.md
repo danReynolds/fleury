@@ -12,6 +12,14 @@
   `fleury_widgets_web.dart`; none of them needed `dart:io`. A test now walks the
   web barrel's imports so `dart:io` can't reach it: dart2js compiles `dart:io`
   code, which only fails when it runs.
+- **Layout contract:** DataTable requires bounded height by default. Place it in
+  Expanded/SizedBox or opt into `shrinkWrap: true` for content height.
+- New LogRegion, LineChart, BarChart, Sparkline, Heatmap and Canvas widgets refresh mutable inputs,
+  even when list/painter identity is unchanged. Reuse an unchanged widget
+  instance to retain expensive paint caches. Shrinking chart data clamps the
+  active cursor.
+- First-party dropdowns, menus, tooltips, color pickers and toasts inherit live
+  scopes from their logical owner and disappear when that owner unmounts.
 
 - FileBrowser exposes a clickable, semantic parent-directory action in its
   existing separator row, including empty and unreadable directories.

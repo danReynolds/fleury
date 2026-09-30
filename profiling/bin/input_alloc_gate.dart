@@ -1,53 +1,23 @@
-// Per-key allocation regression gate (G5) — RFC 0020 §19.
-//
-// Drives raw terminal bytes through the REAL input path — InputParser ->
-// InputDispatcher -> session regularizer -> binding walk / detector walk /
-// text lane — and sums the bytes allocated by `package:fleury` classes, giving
-// deterministic bytes/key of project churn.
-//
-// Why this needs its own gate, distinct from the per-frame alloc gate:
-//
-//   * The per-frame gate never presses a key. Every allocation in the parser,
-//     the press-record regularizer, the frame latch, and the deepest-first
-//     binding walk sits entirely outside its window.
-//   * RFC 0020 made the input path do strictly more work: lifecycle mode
-//     turns one press into a down/repeat/up trio, adds a press record per
-//     held key, and adds an observation lane. "Sampling cannot cause an
-//     input-rate storm" (§19) is an allocation claim, and until now nothing
-//     measured it.
-//   * A held key in a game repeats at the terminal's auto-repeat rate for as
-//     long as the player leans on it. Churn here lands on the same GC that
-//     has to not drop frames.
-//
-// The scenario deliberately holds a key down across the window (down, then a
-// long run of repeats, then up) rather than tapping distinct keys: that is the
-// shape that exercises press records, the repeat-policy filter, and the
-// snapshot latch simultaneously, and it is the shape a game produces.
-//
-// MUST be launched with the VM service enabled and --deterministic, for the
-// same reason as alloc_gate (background JIT tiering mid-window):
-//   dart --deterministic --enable-vm-service=0 --disable-service-auth-codes \
-//     bin/input_alloc_gate.dart [--gate] [--update-baseline] [--keys=N]
-//
-// Exit codes: 0 pass, 1 regression, 64 usage/setup error.
+// Object-creation regression gate using bounded VM allocation trace windows.
+// Heap inventories are not churn counters on Dart 3.12.2. Counts include
+// discarded objects and survive GC; the public trace API does not expose
+// allocation sizes, so these are objects, never mislabeled bytes.
+// Run through fleury_dev.dart benchmark for the required profiler flags.
+// Old byte baselines are intentionally incompatible with this measurement.
 
 import 'dart:developer' as developer;
 import 'dart:io';
 
 import 'package:fleury/fleury.dart';
-import 'package:fleury/src/input/keyboard_state.dart';
-import 'package:fleury/src/runtime/input_dispatcher.dart';
-import 'package:fleury/src/terminal/input_parser.dart';
-import 'package:fleury/src/widgets/focus.dart';
-import 'package:vm_service/vm_service.dart';
 import 'package:vm_service/vm_service_io.dart';
 
 import 'gate_support.dart';
+import 'allocation_trace_measure.dart';
 
 const _defaultKeys = 2000;
 const _defaultWarmup = 1500;
 
-/// bytes/key fails beyond this relative increase. Deterministic measurement,
+/// objects/key fails beyond this relative increase. Deterministic measurement,
 /// so the headroom is for SDK / machine drift, not run noise.
 const _failFraction = 0.10;
 
@@ -108,33 +78,6 @@ List<int> _heldKeyBytes({required int repeats}) {
   return out;
 }
 
-Future<({int totalBytes, List<({String name, int bytes, int instances})> top})>
-    _measure(
-  VmService service,
-  String isolateId, {
-  required void Function() work,
-}) async {
-  await service.getAllocationProfile(isolateId, gc: true, reset: true);
-  work();
-  final after = await service.getAllocationProfile(isolateId);
-  var total = 0;
-  final classes = <({String name, int bytes, int instances})>[];
-  for (final m in after.members ?? const <ClassHeapStats>[]) {
-    final uri = m.classRef?.library?.uri ?? '';
-    if (!uri.startsWith('package:fleury')) continue;
-    final bytes = m.accumulatedSize ?? 0;
-    if (bytes == 0) continue;
-    total += bytes;
-    classes.add((
-      name: m.classRef?.name ?? '?',
-      bytes: bytes,
-      instances: m.instancesAccumulated ?? 0,
-    ));
-  }
-  classes.sort((a, b) => b.bytes.compareTo(a.bytes));
-  return (totalBytes: total, top: classes);
-}
-
 Future<void> main(List<String> args) async {
   var keys = _defaultKeys;
   var warmup = _defaultWarmup;
@@ -147,7 +90,7 @@ Future<void> main(List<String> args) async {
       gate = true;
     } else if (arg == '--update-baseline') {
       update = true;
-    } else if (parseIntFlag(arg, 'keys') case final v?) {
+    } else if (parsePositiveIntFlag(arg, 'keys') case final v?) {
       keys = v;
     } else if (parseIntFlag(arg, 'warmup') case final v?) {
       warmup = v;
@@ -160,6 +103,12 @@ Future<void> main(List<String> args) async {
       exitCode = 64;
       return;
     }
+  }
+
+  if (warmup < 0 || top < 0) {
+    stderr.writeln('--warmup and --top must be nonnegative');
+    exitCode = 64;
+    return;
   }
 
   final info = await developer.Service.getInfo();
@@ -223,54 +172,52 @@ Future<void> main(List<String> args) async {
 
     final cycles = (keys / keysPerCycle).ceil();
     final measuredKeys = cycles * keysPerCycle;
-    final result = await _measure(
-      service,
-      isolateId,
-      work: () {
-        for (var i = 0; i < cycles; i++) {
-          pressCycle();
-        }
-      },
-    );
-    final perKey = result.totalBytes / measuredKeys;
+    final result = await measureAllocations(isolateId,
+        iterations: cycles, work: pressCycle, includeCore: false);
+    final perKey = result.project / measuredKeys;
 
     if (update) {
       writeBaselineJson(baselinePath, {
-        'bytesPerKey': perKey,
-        'totalBytes': result.totalBytes,
+        'measurement': 'allocation-traces-v1-objects',
+        'sdk': Platform.version.split(' ').first,
+        'objectsPerKey': perKey,
+        'projectObjects': result.project,
         'keys': measuredKeys,
       });
       stdout.writeln(
         'input alloc gate: wrote baseline $baselinePath '
-        '(${perKey.toStringAsFixed(1)} B/key over $measuredKeys keys).',
+        '(${perKey.toStringAsFixed(1)} objects/key over $measuredKeys keys).',
       );
       return;
     }
 
     stdout.writeln('per-key project (package:fleury) allocation churn:');
     stdout.writeln(
-      '  ${result.totalBytes} B over $measuredKeys key events = '
-      '${perKey.toStringAsFixed(1)} B/key',
+      '  ${result.project} objects over $measuredKeys key events = '
+      '${perKey.toStringAsFixed(1)} objects/key',
     );
     stdout.writeln('  top $top allocating project classes (window):');
-    for (final c in result.top.take(top)) {
-      stdout.writeln(
-        '    ${c.bytes.toString().padLeft(9)} B  '
-        '${c.instances.toString().padLeft(7)} inst  ${c.name}',
-      );
+    final ranked = result.classes.entries
+        .where((e) => e.key.startsWith('package:fleury/'))
+        .toList()
+      ..sort((a, b) => b.value.compareTo(a.value));
+    for (final c in ranked.take(top)) {
+      stdout.writeln('    ${c.value.toString().padLeft(9)} objects  ${c.key}');
     }
 
     if (!gate) return;
 
     final base = readBaselineOrNull(baselinePath, gateName: 'input alloc gate');
-    if (base == null) {
+    if (base == null || base['measurement'] != 'allocation-traces-v1-objects') {
+      stderr.writeln('Missing or incompatible trace-count baseline.');
       exitCode = 64;
       return;
     }
-    final basePerKey = (base['bytesPerKey'] as num).toDouble();
+    final basePerKey = (base['objectsPerKey'] as num).toDouble();
     final limit = basePerKey * (1 + _failFraction);
     final delta = (perKey - basePerKey) / basePerKey * 100;
-    final line = 'input alloc gate: ${perKey.toStringAsFixed(1)} B/key vs '
+    final line =
+        'input alloc gate: ${perKey.toStringAsFixed(1)} objects/key vs '
         'baseline ${basePerKey.toStringAsFixed(1)} '
         '(${delta >= 0 ? '+' : ''}${delta.toStringAsFixed(1)}%, '
         'limit +${(_failFraction * 100).toStringAsFixed(0)}%)';

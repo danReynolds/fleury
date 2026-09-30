@@ -1,5 +1,7 @@
 {
-  "bytesPerKey": 207.8881118881119,
-  "totalBytes": 416192,
+  "measurement": "allocation-traces-v1-objects",
+  "sdk": "3.12.2",
+  "objectsPerKey": 6.0,
+  "projectObjects": 12012,
   "keys": 2002
 }

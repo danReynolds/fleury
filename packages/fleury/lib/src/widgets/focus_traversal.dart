@@ -207,7 +207,7 @@ KeyEventResult moveFocusInDirection({
     direction: direction,
   );
   if (target == null) return KeyEventResult.ignored;
-  target.requestFocus();
+  target.requestFocus(reveal: false);
   target.reveal();
   return KeyEventResult.handled;
 }

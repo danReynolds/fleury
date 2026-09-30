@@ -357,7 +357,7 @@ class _LineChartState extends State<LineChart> {
   @override
   void didUpdateWidget(covariant LineChart oldWidget) {
     super.didUpdateWidget(oldWidget);
-    if (!identical(widget.series, oldWidget.series)) _cursorXsCache = null;
+    _cursorXsCache = null; // A rebuilt series or its points may be mutated.
   }
 
   @override
@@ -436,6 +436,9 @@ class _LineChartState extends State<LineChart> {
         [cs.primary, cs.info, cs.warning, cs.success, cs.error];
 
     final cursorXs = widget.interactive ? _cursorXs : const <num>[];
+    _cursorIdx = cursorXs.isEmpty
+        ? 0
+        : _cursorIdx.clamp(0, cursorXs.length - 1);
     final showCursor = widget.interactive && _focused && cursorXs.isNotEmpty;
     final cursorX = showCursor ? cursorXs[_cursorIdx] : null;
 
@@ -743,7 +746,7 @@ class RenderLineChart extends RenderObject {
 
   List<LineSeries> _series;
   set series(List<LineSeries> v) {
-    if (identical(_series, v)) return;
+    // A widget update is an explicit refresh, including mutated point lists.
     _series = v;
     markNeedsPaintOnly();
   }
@@ -835,7 +838,7 @@ class RenderLineChart extends RenderObject {
 
   List<ReferenceLine> _references;
   set references(List<ReferenceLine> v) {
-    if (identical(_references, v)) return;
+    // Reference lists can be mutated between widget updates.
     _references = v;
     markNeedsPaintOnly();
   }

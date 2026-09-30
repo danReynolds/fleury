@@ -47,6 +47,7 @@ final class AppCommand {
     this.visible = _alwaysCommandPredicate,
     this.showInPalette = true,
     this.semanticAction,
+    this.availability,
   });
 
   final CommandId id;
@@ -56,6 +57,13 @@ final class AppCommand {
   final String? category;
   final List<KeySequence> shortcuts;
   final AppCommandPredicate enabled;
+
+  /// Optional source that notifies whenever [enabled] or [visible] can change.
+  /// CommandScope then refreshes hints and semantics from those notifications,
+  /// avoiding per-frame predicate polling. Predicates are still read at input
+  /// dispatch and invocation, so a press between frames uses current state.
+  /// Omit for arbitrary predicates whose dependencies cannot be observed.
+  final Listenable? availability;
 
   /// Whether the command participates in its scope at all.
   ///
@@ -551,6 +559,7 @@ class _CommandScopeState extends State<CommandScope> {
           aliases: command.shortcuts.skip(1).toList(),
           label: command.title,
           isEnabled: () => command.visible(context) && command.enabled(context),
+          availability: command.availability,
           onTrigger: (_) {
             registry.dispatchCommand(command, buildContext: this.context);
           },
@@ -571,6 +580,10 @@ class _CommandScopeState extends State<CommandScope> {
     final registry = _registry;
     if (registry == null) {
       throw StateError('CommandScope built before dependencies were resolved.');
+    }
+    for (final command in registry.localCommands) {
+      final source = command.availability;
+      if (source != null) context.listen(source);
     }
     return CommandRegistryScope(
       registry: registry,
@@ -606,11 +619,14 @@ final class _CommandScopeSemanticsElement extends ComponentElement
     implements SemanticContributor, SemanticActionContributor {
   _CommandScopeSemanticsElement(_CommandScopeSemantics super.widget);
 
+  final _observedAvailability = CommandAvailabilitySnapshot();
+
   @override
   _CommandScopeSemantics get widget => super.widget as _CommandScopeSemantics;
 
   @override
   void update(covariant _CommandScopeSemantics newWidget) {
+    _observedAvailability.clear();
     super.update(newWidget);
     rebuild(force: true);
   }
@@ -627,7 +643,8 @@ final class _CommandScopeSemanticsElement extends ComponentElement
       buildContext: widget.buildContext,
     );
     for (final command in widget.registry.localCommands) {
-      if (!command.visible(context)) continue;
+      final availability = _observedAvailability.read(command, context);
+      if (!availability.visible) continue;
       final shortcut = command.primaryShortcutLabel;
       final category = command.category;
       final state = <String, Object?>{'commandId': command.id.value};
@@ -647,7 +664,7 @@ final class _CommandScopeSemanticsElement extends ComponentElement
           label: command.title,
           value: command.description,
           hint: command.description,
-          enabled: command.enabled(context),
+          enabled: availability.enabled,
           actions: <SemanticAction>{
             SemanticAction.activate,
             if (command.semanticAction != null) command.semanticAction!,
@@ -707,5 +724,30 @@ bool semanticOutcomeOf(CommandInvocationResult result) {
     case CommandInvocationStatus.disabled:
     case CommandInvocationStatus.notFound:
       return false;
+  }
+}
+
+/// Internal presentation cache. Invocation and input dispatch always recheck.
+@internal
+class CommandAvailabilitySnapshot {
+  final _values = <AppCommand, ({bool visible, bool enabled})>{};
+  BuildContext? _context;
+  void clear() => _values.clear();
+  ({bool visible, bool enabled}) read(
+    AppCommand command,
+    CommandContext context,
+  ) {
+    if (!identical(_context, context.buildContext)) {
+      _context = context.buildContext;
+      clear();
+    }
+    ({bool visible, bool enabled}) evaluate() {
+      final visible = command.visible(context);
+      return (visible: visible, enabled: visible && command.enabled(context));
+    }
+
+    return command.availability == null
+        ? evaluate()
+        : _values.putIfAbsent(command, evaluate);
   }
 }

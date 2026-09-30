@@ -12,6 +12,7 @@ import 'package:meta/meta.dart';
 
 import 'events.dart';
 import 'keyboard_layout.dart';
+import 'key_tables.dart';
 
 /// What a keyboard surface has been *confirmed* to guarantee (RFC 0020
 /// §5.7): semantic capabilities, never raw protocol flags, projected from
@@ -128,7 +129,7 @@ final class _PressRecord {
   /// position only; an unknown one degrades one-way to the selector's US
   /// twin. Mirrors [KeyEvent.matches].
   bool matches(KeySelector selector) {
-    if (selector is KeyCode) return code == selector;
+    if (selector is KeyCode) return matchesLogicalKey(code, position, selector);
     if (selector is KeyPosition) {
       final p = position;
       if (p != null) return p == selector;

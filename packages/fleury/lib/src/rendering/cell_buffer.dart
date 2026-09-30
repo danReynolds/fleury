@@ -80,10 +80,9 @@ void applyCellBackground(CellBuffer buffer, CellRect rect, Color color) {
         previousStyle = cell.style;
         merged = cell.style.merge(background);
       }
-      buffer._cells[index] = Cell.leading(
-        grapheme: cell.grapheme!,
-        style: merged,
-      );
+      buffer._cells[index] = cell.isDecoration
+          ? Cell.decoration(grapheme: cell.grapheme!, style: merged)
+          : Cell.leading(grapheme: cell.grapheme!, style: merged);
       final wide =
           col + 1 < cols &&
           buffer._cells[index + 1].role == CellRole.continuation;
@@ -605,10 +604,10 @@ final class CellBuffer {
     if (srcCol + colEnd < source._size.cols &&
         from[srcBase + colEnd].role == CellRole.continuation) {
       // The clip cut the last pair's continuation off.
-      cells[dstBase + colEnd - 1] = Cell.leading(
-        grapheme: '?',
-        style: from[srcBase + colEnd - 1].style,
-      );
+      final cut = from[srcBase + colEnd - 1];
+      cells[dstBase + colEnd - 1] = cut.isDecoration
+          ? Cell.decoration(grapheme: '?', style: cut.style)
+          : Cell.leading(grapheme: '?', style: cut.style);
     }
     if (dstCol0 + colEnd < _size.cols &&
         cells[dstBase + colEnd].role == CellRole.continuation) {
@@ -750,12 +749,20 @@ final class CellBuffer {
       return true;
     }
 
-    while (top <= bottom && rowEmpty(top)) top++;
+    while (top <= bottom && rowEmpty(top)) {
+      top++;
+    }
     if (top > bottom) return null;
-    while (bottom > top && rowEmpty(bottom)) bottom--;
+    while (bottom > top && rowEmpty(bottom)) {
+      bottom--;
+    }
     // A non-empty cell exists in [top..bottom], so both trims terminate.
-    while (colEmpty(left)) left++;
-    while (colEmpty(right)) right--;
+    while (colEmpty(left)) {
+      left++;
+    }
+    while (colEmpty(right)) {
+      right--;
+    }
     return CellRect(
       offset: CellOffset(left, top),
       size: CellSize(right - left + 1, bottom - top + 1),
@@ -772,6 +779,9 @@ final class CellBuffer {
   /// through `sanitizeForDisplay` first, so a replacement glyph shows where a
   /// control was instead of nothing.
   ///
+  /// Set [decorative] for borders or other paint that should not become
+  /// automatic readable-text semantics. Ordinary text overwrites clear it.
+  ///
   /// Returns the number of columns the write actually advanced (0, 1, or
   /// 2). A grapheme of width 0 (combining-only) is dropped. Out-of-bounds
   /// writes are clipped and return 0; reads still throw.
@@ -779,6 +789,7 @@ final class CellBuffer {
     CellOffset position,
     String grapheme, {
     CellStyle style = CellStyle.none,
+    bool decorative = false,
     WidthResolver widthResolver = const DefaultWidthResolver(),
     CellWidthPolicy policy = CellWidthPolicy.spec,
   }) {
@@ -790,6 +801,7 @@ final class CellBuffer {
       style: _paintStyle(style),
       widthResolver: widthResolver,
       policy: policy,
+      decorative: decorative,
     );
   }
 
@@ -800,12 +812,20 @@ final class CellBuffer {
     int row,
     String grapheme, {
     CellStyle style = CellStyle.none,
+    bool decorative = false,
     WidthResolver widthResolver = const DefaultWidthResolver(),
     CellWidthPolicy policy = CellWidthPolicy.spec,
   }) {
     final width = widthResolver.widthOfGrapheme(grapheme, policy);
     if (width == 0) return 0;
-    return _placeGrapheme(col, row, grapheme, width, style);
+    return _placeGrapheme(
+      col,
+      row,
+      grapheme,
+      width,
+      style,
+      decorative: decorative,
+    );
   }
 
   /// The structural half of a grapheme write: lay [grapheme] down over
@@ -817,8 +837,9 @@ final class CellBuffer {
     int row,
     String grapheme,
     int width,
-    CellStyle style,
-  ) {
+    CellStyle style, {
+    bool decorative = false,
+  }) {
     assert(
       !hasCellStyleStates(style),
       'interaction-aware styles must resolve first',
@@ -838,18 +859,24 @@ final class CellBuffer {
     if (width == 2) {
       if (col + 1 >= _size.cols) {
         _evictWideNeighbors(col, row, base);
-        _cells[base] = Cell.leading(grapheme: '?', style: style);
+        _cells[base] = decorative
+            ? Cell.decoration(grapheme: '?', style: style)
+            : Cell.leading(grapheme: '?', style: style);
         return 1;
       }
       _evictWideNeighbors(col, row, base);
       _evictWideNeighbors(col + 1, row, base + 1);
-      _cells[base] = Cell.leading(grapheme: grapheme, style: style);
+      _cells[base] = decorative
+          ? Cell.decoration(grapheme: grapheme, style: style)
+          : Cell.leading(grapheme: grapheme, style: style);
       _cells[base + 1] = Cell.continuation(style: style);
       return 2;
     }
 
     _evictWideNeighbors(col, row, base);
-    _cells[base] = Cell.leading(grapheme: grapheme, style: style);
+    _cells[base] = decorative
+        ? Cell.decoration(grapheme: grapheme, style: style)
+        : Cell.leading(grapheme: grapheme, style: style);
     return 1;
   }
 
@@ -898,6 +925,7 @@ final class CellBuffer {
       cell.grapheme!,
       wide ? 2 : 1,
       _paintStyle(style ?? cell.style),
+      decorative: cell.isDecoration,
     );
   }
 
@@ -921,7 +949,9 @@ final class CellBuffer {
       !hasCellStyleStates(paint),
       'interaction-aware styles must resolve first',
     );
-    _cells[base] = Cell.leading(grapheme: cell.grapheme!, style: paint);
+    _cells[base] = cell.isDecoration
+        ? Cell.decoration(grapheme: cell.grapheme!, style: paint)
+        : Cell.leading(grapheme: cell.grapheme!, style: paint);
     final wide =
         col + 1 < _size.cols && _cells[base + 1].role == CellRole.continuation;
     if (wide) _cells[base + 1] = Cell.continuation(style: paint);
@@ -1303,6 +1333,7 @@ final class CellBuffer {
     final hasOverlayCells =
         _imagePlacements.isNotEmpty || previous._imagePlacements.isNotEmpty;
     Set<int>? rows;
+    Set<int>? decorationRows;
     var dirtyCells = 0;
     var left = cols;
     var right = 0;
@@ -1326,9 +1357,16 @@ final class CellBuffer {
                 identical(previousCell, equalTheirs))) {
           continue;
         }
+        final decorationChanged =
+            cell.isDecoration != previousCell.isDecoration;
+        if (decorationChanged) (decorationRows ??= <int>{}).add(row);
         if (cell == previousCell) {
-          equalMine = cell;
-          equalTheirs = previousCell;
+          // Reuse only pairs whose semantic provenance also agrees. Otherwise
+          // a repeated pair on another row still owes coverage invalidation.
+          if (!decorationChanged) {
+            equalMine = cell;
+            equalTheirs = previousCell;
+          }
         } else {
           dirtyCells++;
           if (first < 0) first = col;
@@ -1382,6 +1420,7 @@ final class CellBuffer {
         bounds: null,
         dirtyCells: 0,
         hasOverlayCells: hasOverlayCells,
+        decorationRows: decorationRows ?? const <int>{},
       );
     }
     return CellBufferDiff(
@@ -1389,6 +1428,7 @@ final class CellBuffer {
       bounds: CellRect.fromLTWH(left, top, right - left, bottom - top),
       dirtyCells: dirtyCells,
       hasOverlayCells: hasOverlayCells,
+      decorationRows: decorationRows ?? const <int>{},
     );
   }
 
@@ -1507,6 +1547,7 @@ final class CellBufferDiff {
     required this.dirtyCells,
     required this.hasOverlayCells,
     this.isComparable = true,
+    this.decorationRows = const <int>{},
   });
 
   /// The frames cannot be compared (different sizes), so nothing about them is
@@ -1523,6 +1564,9 @@ final class CellBufferDiff {
 
   /// Rows containing at least one changed cell.
   final Set<int> rows;
+
+  /// Rows whose decoration provenance changed, even if pixels did not.
+  final Set<int> decorationRows;
 
   /// Bounding rect of every changed cell, or null when nothing changed.
   final CellRect? bounds;

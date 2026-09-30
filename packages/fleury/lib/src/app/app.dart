@@ -351,6 +351,7 @@ class _FleuryAppState extends State<FleuryApp> {
             return _commandVisible(command, source) &&
                 _commandEnabled(command, source);
           },
+          availability: command.availability,
           onTrigger: (_) {
             _commands.dispatch(
               command.id,
@@ -411,6 +412,10 @@ class _FleuryAppState extends State<FleuryApp> {
 
   @override
   Widget build(BuildContext context) {
+    for (final command in _commands.localCommands) {
+      final source = command.availability;
+      if (source != null) context.listen(source);
+    }
     final Widget body;
     if (widget.home != null) {
       body = Navigator(key: _navigatorKey, home: widget.home!);
@@ -557,11 +562,14 @@ final class _FleuryAppSemanticsElement extends ComponentElement
     implements SemanticContributor, SemanticActionContributor {
   _FleuryAppSemanticsElement(_FleuryAppSemantics super.widget);
 
+  final _observedAvailability = CommandAvailabilitySnapshot();
+
   @override
   _FleuryAppSemantics get widget => super.widget as _FleuryAppSemantics;
 
   @override
   void update(covariant _FleuryAppSemantics newWidget) {
+    _observedAvailability.clear();
     super.update(newWidget);
     rebuild(force: true);
   }
@@ -579,7 +587,8 @@ final class _FleuryAppSemanticsElement extends ComponentElement
         commands: widget.controller.commands,
         buildContext: buildContext,
       );
-      if (!command.visible(context)) continue;
+      final availability = _observedAvailability.read(command, context);
+      if (!availability.visible) continue;
       final shortcut = command.primaryShortcutLabel;
       final category = command.category;
       final state = <String, Object?>{'commandId': command.id.value};
@@ -596,7 +605,7 @@ final class _FleuryAppSemanticsElement extends ComponentElement
           label: command.title,
           value: command.description,
           hint: command.description,
-          enabled: command.enabled(context),
+          enabled: availability.enabled,
           actions: <SemanticAction>{
             SemanticAction.activate,
             if (command.semanticAction != null) command.semanticAction!,

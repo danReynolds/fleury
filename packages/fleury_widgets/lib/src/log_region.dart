@@ -348,6 +348,7 @@ class _LogRegionState extends State<LogRegion> {
   @override
   void didUpdateWidget(covariant LogRegion oldWidget) {
     super.didUpdateWidget(oldWidget);
+    _cachedOrder = null; // The parent may have mutated entries in place.
     if (widget.controller != oldWidget.controller) {
       _controller._notifications.viewChanges.removeListener(
         _onControllerChange,

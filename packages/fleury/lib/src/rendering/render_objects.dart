@@ -1191,6 +1191,7 @@ class RenderBorder extends RenderObject implements RenderObjectWithSingleChild {
       CellOffset(col, row),
       glyph,
       style: cs,
+      decorative: true,
       policy: widths,
     );
 

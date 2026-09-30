@@ -91,6 +91,56 @@ final class _LiveContributorElement extends ComponentElement
 }
 
 void main() {
+  test('visually identical decoration changes refresh semantic coverage', () {
+    final owner = BuildOwner();
+    final root = owner.mountRoot(const SizedBox());
+    addTearDown(root.unmount);
+    final presenter = _CapturingPresenter();
+    final pipeline = FrameSemanticsPipeline(
+      presenter: presenter,
+      dirtyTracker: owner.semanticDirtyTracker,
+      readRoot: () => root,
+    );
+    addTearDown(pipeline.dispose);
+    final loop = TuiFrameLoop();
+    const planner = FramePresentationPlanner();
+    void present(bool decoration) {
+      final frame = loop.render(
+        size: const CellSize(4, 2),
+        paint: (buffer) {
+          for (var row = 0; row < 2; row++) {
+            buffer.writeGrapheme(
+              CellOffset(0, row),
+              '+',
+              decorative: decoration,
+            );
+          }
+        },
+      )!;
+      final plan = planner.build(reason: 'test', frame: frame);
+      if (!decoration) expect(plan.dirtyRows.isEmpty, isTrue);
+      pipeline.onFramePresented(frame, plan);
+      pipeline.flushNow('test');
+      loop.commit(frame);
+    }
+
+    present(true);
+    expect(
+      presenter.presented.last.nodes.where((n) => n.label == '+'),
+      isEmpty,
+    );
+    present(false);
+    expect(
+      presenter.presented.last.nodes.where((n) => n.label == '+'),
+      hasLength(2),
+    );
+    present(true);
+    expect(
+      presenter.presented.last.nodes.where((n) => n.label == '+'),
+      isEmpty,
+    );
+  });
+
   test(
     'input dirt supersedes pending leaf updates and presents current values',
     () {

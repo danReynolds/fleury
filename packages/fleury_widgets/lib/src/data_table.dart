@@ -593,6 +593,7 @@ class DataTable extends StatefulWidget {
   const DataTable({
     super.key,
     required this.rowCount,
+    this.shrinkWrap = false,
     required this.columns,
     required this.cellBuilder,
     this.rowKeyBuilder,
@@ -634,6 +635,11 @@ class DataTable extends StatefulWidget {
          selectionMode == DataTableSelectionMode.cell || onRangeChanged == null,
          'onRangeChanged is available in cell mode.',
        );
+
+  /// Whether an unbounded parent may size the table to all source rows.
+  /// Keep false for virtualization; use Expanded in a Column or a SizedBox
+  /// with height. Enable only for deliberately content-sized small tables.
+  final bool shrinkWrap;
 
   /// Number of source rows available to the table.
   final int rowCount;
@@ -1183,6 +1189,7 @@ class _DataTableState extends State<DataTable> {
         : theme.mutedStyle;
     final table = _DataTableRenderWidget(
       rowCount: widget.rowCount < 0 ? 0 : widget.rowCount,
+      shrinkWrap: widget.shrinkWrap,
       columns: widget.columns,
       cellBuilder: widget.cellBuilder,
       semanticLabel: widget.semanticLabel,
@@ -1448,6 +1455,7 @@ final class DataTableViewportMetrics {
 class _DataTableRenderWidget extends LeafRenderObjectWidget {
   const _DataTableRenderWidget({
     required this.rowCount,
+    this.shrinkWrap = false,
     required this.columns,
     required this.cellBuilder,
     required this.semanticLabel,
@@ -1475,6 +1483,11 @@ class _DataTableRenderWidget extends LeafRenderObjectWidget {
     this.sortDirection,
     this.filterText,
   });
+
+  /// Whether an unbounded parent may size the table to all source rows.
+  /// Keep false for virtualization; use Expanded in a Column or a SizedBox
+  /// with height. Enable only for deliberately content-sized small tables.
+  final bool shrinkWrap;
 
   final int rowCount;
   final List<DataTableColumn> columns;
@@ -1511,6 +1524,7 @@ class _DataTableRenderWidget extends LeafRenderObjectWidget {
     return RenderDataTable(
       policy: MediaQuery.textPolicyOf(context).widths,
       rowCount: rowCount,
+      shrinkWrap: shrinkWrap,
       columns: columns,
       cellBuilder: cellBuilder,
       selectedRow: selectedRow,
@@ -1537,6 +1551,7 @@ class _DataTableRenderWidget extends LeafRenderObjectWidget {
   ) {
     renderObject
       ..policy = MediaQuery.textPolicyOf(context).widths
+      ..shrinkWrap = shrinkWrap
       ..rowCount = rowCount
       ..columns = columns
       ..cellBuilder = cellBuilder
@@ -1820,6 +1835,7 @@ class RenderDataTable extends RenderObject {
   RenderDataTable({
     CellWidthPolicy policy = CellWidthPolicy.spec,
     required int rowCount,
+    bool shrinkWrap = false,
     required List<DataTableColumn> columns,
     required DataTableCellBuilder cellBuilder,
     required int selectedRow,
@@ -1837,6 +1853,7 @@ class RenderDataTable extends RenderObject {
     required DataTableSortDirection? sortDirection,
     required void Function(DataTableViewportMetrics viewport) onViewport,
   }) : _rowCount = rowCount,
+       _shrinkWrap = shrinkWrap,
        _columns = columns,
        _cellBuilder = cellBuilder,
        _selectedRow = selectedRow,
@@ -1864,6 +1881,13 @@ class RenderDataTable extends RenderObject {
   set policy(CellWidthPolicy value) {
     if (_policy == value) return;
     _policy = value;
+    markNeedsLayout();
+  }
+
+  bool _shrinkWrap;
+  set shrinkWrap(bool value) {
+    if (_shrinkWrap == value) return;
+    _shrinkWrap = value;
     markNeedsLayout();
   }
 
@@ -2008,6 +2032,12 @@ class RenderDataTable extends RenderObject {
 
   @override
   CellSize performLayout(CellConstraints constraints) {
+    assert(
+      constraints.maxRows != null || _shrinkWrap,
+      'DataTable needs bounded height. Place it in Expanded inside a Column '
+      'or a SizedBox(height: ...). Use shrinkWrap: true only for a small '
+      'table that should lay out all rows.',
+    );
     if (_columns.isEmpty) {
       _visibleFirst = 0;
       _visibleRows = 0;
@@ -2020,12 +2050,13 @@ class RenderDataTable extends RenderObject {
         _columnSpacing * (_columns.length - 1);
     final headerRows = 1 + (_headerSeparator ? 1 : 0);
     final maxRows = constraints.maxRows;
-    final bodyRows = maxRows == null
+    final available = maxRows == null
         ? _rowCount
         : (maxRows - headerRows).clamp(0, maxRows);
+    final bodyRows = _shrinkWrap ? available.clamp(0, _rowCount) : available;
     _syncVisibleRange(bodyRows);
     _syncViewport(headerRows);
-    final naturalRows = headerRows + (maxRows == null ? _rowCount : bodyRows);
+    final naturalRows = headerRows + bodyRows;
     return constraints.constrain(CellSize(_tableWidth, naturalRows));
   }
 

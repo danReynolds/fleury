@@ -253,13 +253,13 @@ class _FocusableControlState extends State<FocusableControl>
               // A click focuses the control and activates it, so pointer users
               // get the same affordance as keyboard users.
               onTap: () {
-                _node.requestFocus();
+                _node.requestFocus(reveal: false);
                 _activate();
               },
               onSecondaryTap: widget.onSecondaryActivate == null
                   ? null
                   : () {
-                      _node.requestFocus();
+                      _node.requestFocus(reveal: false);
                       try {
                         widget.onSecondaryActivate!();
                       } on SemanticActionDeclined {

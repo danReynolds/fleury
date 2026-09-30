@@ -128,9 +128,6 @@ class _AutocompleteState<T extends Object> extends State<Autocomplete<T>> {
   OverlayEntry? _entry;
   List<T> _filtered = const [];
 
-  // The overlay builds the suggestions above any Theme the app set, so they
-  // carry the theme where this field sits.
-  ThemeData? _theme;
   String _lastQuery = '';
 
   /// The text just filled in by a pick; suppresses suggestions until the
@@ -142,11 +139,6 @@ class _AutocompleteState<T extends Object> extends State<Autocomplete<T>> {
   /// Parent rebuilds must not reopen it until the query changes or a new focus
   /// session starts.
   String? _dismissedQuery;
-
-  // Captured from the in-tree theme on each build; the dropdown lives in
-  // an Overlay (outside this subtree) so it can't read the theme itself.
-  CellStyle _selectionStyle = const CellStyle(inverse: true);
-  BorderStyle _borderStyle = BorderStyle.rounded;
 
   String _display(T option) => widget.displayStringForOption(option);
 
@@ -203,11 +195,6 @@ class _AutocompleteState<T extends Object> extends State<Autocomplete<T>> {
       _manager?.removeListener(_sync);
       _manager = manager;
       _manager?.addListener(_sync);
-    }
-    final theme = Theme.of(context);
-    if (theme != _theme) {
-      _theme = theme;
-      _entry?.markNeedsBuild();
     }
   }
 
@@ -266,13 +253,11 @@ class _AutocompleteState<T extends Object> extends State<Autocomplete<T>> {
     }
     if (_entry == null) {
       final entry = OverlayEntry(
-        builder: (context) => Theme(
-          data: _theme!,
-          child: AnchoredFloat(
-            notifier: _bounds,
-            onTapOutside: _dismiss,
-            child: _suggestions(context),
-          ),
+        owner: context,
+        builder: (context) => AnchoredFloat(
+          notifier: _bounds,
+          onTapOutside: _dismiss,
+          child: _suggestions(context),
         ),
       );
       _entry = entry;
@@ -319,6 +304,7 @@ class _AutocompleteState<T extends Object> extends State<Autocomplete<T>> {
   }
 
   Widget _suggestions(BuildContext context) {
+    final theme = Theme.of(context);
     // Display width, not code units: a BMP wide character (CJK, Kana, Hangul,
     // fullwidth) is one code unit but two cells, so `length` under-sizes the
     // box and the rows reflow into each other. Measure with the same ambient
@@ -375,7 +361,7 @@ class _AutocompleteState<T extends Object> extends State<Autocomplete<T>> {
       // row shorter than the panel doesn't let the app underneath show through
       // its trailing interior cells.
       child: Container.framed(
-        border: BoxBorder(style: _borderStyle),
+        border: BoxBorder(style: theme.borderStyle),
         child: SizedBox(
           width: boxWidth,
           height: height,
@@ -423,7 +409,7 @@ class _AutocompleteState<T extends Object> extends State<Autocomplete<T>> {
                   },
                   child: Text(
                     '${selected ? '› ' : '  '}$label',
-                    style: selected ? _selectionStyle : CellStyle.none,
+                    style: selected ? theme.selectionStyle : CellStyle.none,
                     // One row per option, always: a label too wide for the box
                     // is cut with an ellipsis rather than wrapped into the row
                     // that belongs to the next option.
@@ -453,9 +439,6 @@ class _AutocompleteState<T extends Object> extends State<Autocomplete<T>> {
 
   @override
   Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    _selectionStyle = theme.selectionStyle;
-    _borderStyle = theme.borderStyle;
     return KeyBindings(
       bindings: [
         KeyBinding(

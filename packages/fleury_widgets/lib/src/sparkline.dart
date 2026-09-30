@@ -165,16 +165,18 @@ class RenderSparkline extends RenderObject {
     required num min,
     required CellStyle style,
     required GlyphTier glyphTier,
-  }) : _data = data,
+  }) : _dataLength = data.length,
+       _data = data,
        _max = max,
        _min = min,
        _style = style,
        _glyphTier = glyphTier;
 
+  int _dataLength;
   List<num> _data;
   set data(List<num> v) {
-    if (identical(_data, v)) return;
-    final layoutChanged = _data.length != v.length;
+    final layoutChanged = _dataLength != v.length;
+    _dataLength = v.length;
     _data = v;
     if (layoutChanged) {
       markNeedsLayout();

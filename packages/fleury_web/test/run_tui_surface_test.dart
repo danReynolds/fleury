@@ -611,6 +611,111 @@ void main() {
   );
 
   test(
+    'idle and dismissed errors leave root overlay caches disengaged',
+    () async {
+      BuildContext? context;
+      final root = web.document.createElement('div');
+      final flush = _FakeFlush();
+      final errors = RuntimeErrorReporter(autoDismiss: Duration.zero);
+      addTearDown(errors.dispose);
+      final host = await runTuiSurface(
+        () => _NavigationProbe(
+          onBuild: (value) => context = value,
+          child: const Text('Ready'),
+        ),
+        surface: DomGridSurface(root: root, size: const CellSize(60, 12)),
+        flushScheduler: flush.schedule,
+        errorReporter: errors,
+      );
+      addTearDown(host.dispose);
+      flush.fire();
+      void expectIdle() {
+        expect(Overlay.of(context!).entries, hasLength(1));
+        var render = context!.findRenderObject();
+        while (render != null) {
+          if (render is RenderRepaintBoundary)
+            expect(render.cachingEnabled, isFalse);
+          render = render.parent;
+        }
+      }
+
+      expectIdle();
+      errors.report(StateError('visible error'), StackTrace.current);
+      await Future<void>.delayed(Duration.zero);
+      flush.fire();
+      expect(root.textContent, contains('visible error'));
+      errors.dismiss();
+      await Future<void>.delayed(Duration.zero);
+      flush.fire();
+      expectIdle();
+      expect(root.textContent, isNot(contains('visible error')));
+      // A queued mount cannot resurrect the overlay during teardown, even when
+      // its reporter belongs to the caller and survives the host.
+      errors.report(StateError('pending during dispose'), StackTrace.current);
+      await host.dispose();
+      final scheduled = flush.scheduleCount;
+      errors.report(StateError('after dispose'), StackTrace.current);
+      await Future<void>.delayed(Duration.zero);
+      expect(flush.scheduleCount, scheduled);
+      expect(flush.pending, isFalse);
+    },
+  );
+
+  test(
+    'new browser errors appear above panels already in the overlay',
+    () async {
+      BuildContext? context;
+      final root = web.document.createElement('div');
+      final flush = _FakeFlush();
+      final errors = RuntimeErrorReporter(autoDismiss: Duration.zero);
+      addTearDown(errors.dispose);
+      final host = await runTuiSurface(
+        () => _NavigationProbe(
+          onBuild: (value) => context = value,
+          child: const Text('Ready'),
+        ),
+        surface: DomGridSurface(root: root, size: const CellSize(60, 12)),
+        flushScheduler: flush.schedule,
+        errorReporter: errors,
+      );
+      addTearDown(host.dispose);
+      flush.fire();
+      Overlay.of(context!).insert(
+        OverlayEntry(
+          opaque: true,
+          builder: (_) => const Text('Takeover panel'),
+        ),
+      );
+      flush.fire();
+      errors.report(StateError('Async operation failed'), StackTrace.current);
+      await Future<void>.delayed(Duration.zero);
+      flush.fire();
+      expect(root.textContent, contains('Async operation failed'));
+      expect(root.textContent, contains('Takeover panel'));
+    },
+  );
+
+  test(
+    'a preexisting error is displayed after the browser host mounts',
+    () async {
+      final root = web.document.createElement('div');
+      final flush = _FakeFlush();
+      final errors = RuntimeErrorReporter(autoDismiss: Duration.zero)
+        ..report(StateError('Existing failure'), StackTrace.current);
+      addTearDown(errors.dispose);
+      final host = await runTuiSurface(
+        () => const Text('Ready'),
+        surface: DomGridSurface(root: root, size: const CellSize(60, 12)),
+        flushScheduler: flush.schedule,
+        errorReporter: errors,
+      );
+      addTearDown(host.dispose);
+      flush.fire();
+      expect(root.textContent, contains('Existing failure'));
+    },
+  );
+
+  test(
     'the default host displays unawaited errors without a supplied reporter',
     () async {
       final root = web.document.createElement('div');

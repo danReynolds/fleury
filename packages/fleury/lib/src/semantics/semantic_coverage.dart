@@ -303,7 +303,7 @@ int _fallbackCandidateWidth(
 ) {
   if (covered[row * buffer.size.cols + col]) return 0;
   final cell = buffer.atColRow(col, row);
-  if (cell.role != CellRole.leading) return 0;
+  if (cell.role != CellRole.leading || cell.isDecoration) return 0;
   final grapheme = cell.grapheme;
   if (grapheme == null || grapheme.trim().isEmpty) return 0;
   if (_isDrawingGlyph(grapheme)) return 0;

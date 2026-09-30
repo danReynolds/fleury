@@ -110,6 +110,211 @@ Map<String, Object?> textClipboardSemanticState(TextClipboardPolicy policy) {
 
 enum _EditTransaction { edit, typing, paste }
 
+/// An anchored, incremental paste into a [TextEditingController].
+///
+/// Appends stay at the original insertion point as other edits move it. The
+/// paste remains one undo transaction; later edits keep their own undo steps.
+/// Call [close] at the stream's end. Resetting the controller or undoing the
+/// paste closes it too, and later appends are ignored. Bounded controllers
+/// accept complete pastes atomically through [TextEditingController.paste].
+final class TextEditingPaste {
+  TextEditingPaste._(this._controller, this._singleLine);
+
+  final TextEditingController _controller;
+  final bool _singleLine;
+  final Map<TextEditingValue, ({int anchor, bool follow, int tailLength})>
+  _history = Map.identity();
+  final _tails = StringBuffer();
+  String? _tailText;
+  int _anchor = 0;
+  bool _started = false;
+  bool _follow = true;
+  TextEditingValue? _unchangedBaseline;
+  int _undoStart = 0;
+
+  bool get isActive => identical(_controller._streamingPaste, this);
+
+  void close() {
+    if (isActive) {
+      // Each retained snapshot absorbs the tail once, not on every segment.
+      for (final stack in [_controller._undoStack, _controller._redoStack]) {
+        for (var i = 0; i < stack.length; i++) {
+          stack[i] = _materialize(stack[i]);
+        }
+      }
+    }
+    _discard();
+  }
+
+  void _discard() {
+    if (isActive) _controller._streamingPaste = null;
+    _history.clear();
+    _tails.clear();
+    _tailText = null;
+    _unchangedBaseline = null;
+  }
+
+  void _remember(TextEditingValue value) {
+    if (_started) {
+      _history[value] = (
+        anchor: _anchor,
+        follow: _follow,
+        tailLength: _tails.length,
+      );
+    }
+  }
+
+  TextEditingValue _materialize(TextEditingValue value) {
+    final saved = _history[value];
+    if (saved == null || saved.tailLength == _tails.length) return value;
+    final tail = (_tailText ??= _tails.toString()).substring(saved.tailLength);
+    final updated = _insert(value, tail, saved.anchor, saved.follow);
+    _history.remove(value);
+    _history[updated] = (
+      anchor: saved.anchor + tail.length,
+      follow: saved.follow,
+      tailLength: _tails.length,
+    );
+    return updated;
+  }
+
+  void _changed(
+    TextEditingValue before,
+    TextEditingValue after, {
+    required bool restoringHistory,
+  }) {
+    if (restoringHistory) {
+      final saved = _history[after];
+      if (saved == null) {
+        close(); // Undo reached the value before this paste began.
+      } else {
+        _anchor = saved.anchor;
+        _follow = saved.follow;
+      }
+      return;
+    }
+    if (!_started) return;
+    if (before.text != after.text) {
+      // Controller edits already copy the document. This scan is needed only
+      // for an intervening edit during an active stream, never ordinary input.
+      final a = before.text;
+      final b = after.text;
+      // Prefer the actual edit's selection boundaries. A common-prefix diff
+      // alone mistakes inserting A at the start of AAA for appending it.
+      var start = before.selection.range.normalizedStart;
+      if (after.selection.range.normalizedStart < start) {
+        start = after.selection.range.normalizedStart;
+      }
+      var newEnd = after.selection.extentOffset;
+      var oldEnd = newEnd - (b.length - a.length);
+      var matches =
+          after.selection.isCollapsed &&
+          oldEnd >= start &&
+          oldEnd <= a.length &&
+          newEnd >= start &&
+          newEnd <= b.length;
+      if (matches) {
+        for (var i = 0; i < start && matches; i++) {
+          matches = a.codeUnitAt(i) == b.codeUnitAt(i);
+        }
+        for (var i = 0; i < a.length - oldEnd && matches; i++) {
+          matches = a.codeUnitAt(oldEnd + i) == b.codeUnitAt(newEnd + i);
+        }
+      }
+      if (!matches) {
+        // Non-contiguous operations (such as transpose) have no insertion
+        // range at the caret. Find their changed span conservatively.
+        start = 0;
+        while (start < a.length &&
+            start < b.length &&
+            a.codeUnitAt(start) == b.codeUnitAt(start)) {
+          start++;
+        }
+        oldEnd = a.length;
+        newEnd = b.length;
+        while (oldEnd > start &&
+            newEnd > start &&
+            a.codeUnitAt(oldEnd - 1) == b.codeUnitAt(newEnd - 1)) {
+          oldEnd--;
+          newEnd--;
+        }
+      }
+      if (_anchor > start) {
+        _anchor = _anchor >= oldEnd ? _anchor + newEnd - oldEnd : start;
+      }
+    }
+    if (before != after) _follow = false;
+  }
+
+  /// Adds the next text segment without moving a caret the user has moved.
+  void append(String text) {
+    if (!isActive || text.isEmpty) return;
+    _controller._cancelComposingForEdit();
+    if (!isActive) return;
+    final prepared = TextEditingModel.prepareInput(
+      text,
+      singleLine: _singleLine,
+      preserveText: _controller.preserveText,
+    );
+    if (prepared.isEmpty) return;
+    if (!_started) {
+      final next = TextEditingModel.insert(
+        _controller.value,
+        prepared,
+        singleLine: _singleLine,
+      );
+      _undoStart = _controller._undoStack.length;
+      if (next.text == _controller.text) _unchangedBaseline = _controller.value;
+      _started = true;
+      _anchor = next.selection.extentOffset;
+      _controller._applyEdit(
+        next,
+        transaction: _EditTransaction.paste,
+        pasteEdit: this,
+      );
+      return;
+    }
+    final next = _insert(_controller.value, prepared, _anchor, _follow);
+    final baseline = _unchangedBaseline;
+    if (baseline != null) {
+      // The first segment may replace a selection with identical text. Create
+      // its undo entry only when a later segment actually changes the value,
+      // before any intervening edits that already have history entries.
+      _controller._undoStack.insert(
+        _undoStart.clamp(0, _controller._undoStack.length),
+        baseline,
+      );
+      _unchangedBaseline = null;
+      _controller._trimUndoHistory();
+    }
+    // No extra paste buffer on the ordinary path without intervening edits.
+    // Once history needs a tail, share it and materialize only on undo/close.
+    if (_history.isNotEmpty) {
+      _tails.write(prepared);
+      _tailText = null;
+    }
+    _anchor += prepared.length;
+    _controller._setValue(next, clearTransaction: false, pasteEdit: this);
+  }
+
+  TextEditingValue _insert(
+    TextEditingValue value,
+    String text,
+    int at,
+    bool follow,
+  ) {
+    int move(int offset) =>
+        offset > at || (follow && offset == at) ? offset + text.length : offset;
+    return value.copyWith(
+      text: value.text.replaceRange(at, at, text),
+      selection: TextSelection(
+        baseOffset: move(value.selection.baseOffset),
+        extentOffset: move(value.selection.extentOffset),
+      ),
+    );
+  }
+}
+
 /// Mutable model for text input widgets.
 ///
 /// [selection] follows Flutter's range-valued controller contract, while
@@ -224,6 +429,7 @@ class TextEditingController extends Notifier {
   final List<TextEditingValue> _undoStack = <TextEditingValue>[];
   final List<TextEditingValue> _redoStack = <TextEditingValue>[];
   _EditTransaction? _lastTransaction;
+  TextEditingPaste? _streamingPaste;
   bool _disposed = false;
 
   /// Current editing value. Assigning it resets undo/redo and composition
@@ -306,6 +512,19 @@ class TextEditingController extends Notifier {
       next,
       transaction: coalesce ? _EditTransaction.typing : _EditTransaction.edit,
     );
+  }
+
+  /// Starts a streamed paste whose insertion point survives intervening edits.
+  /// Close the returned transaction after its last segment. A new transaction
+  /// closes the previous one. Controllers with an [editPolicy] require atomic
+  /// admission: collect an admissible complete payload and use [paste] instead.
+  TextEditingPaste beginPaste({bool singleLine = false}) {
+    _checkNotDisposed();
+    if (editPolicy != null) {
+      throw StateError('A bounded controller requires an atomic paste.');
+    }
+    _streamingPaste?.close();
+    return _streamingPaste = TextEditingPaste._(this, singleLine);
   }
 
   /// Inserts bracketed paste content as one undoable transaction.
@@ -515,6 +734,12 @@ class TextEditingController extends Notifier {
     _compositionBase = null;
     if (next.text != base.text) {
       _pushUndoValue(base);
+      final paste = _streamingPaste;
+      if (paste != null) {
+        for (final value in _redoStack) {
+          paste._history.remove(value);
+        }
+      }
       _redoStack.clear();
       _lastTransaction = _EditTransaction.edit;
     } else {
@@ -593,9 +818,10 @@ class TextEditingController extends Notifier {
       return;
     }
     if (_undoStack.isEmpty) return;
+    _streamingPaste?._remember(_value);
     _redoStack.add(_value);
     _lastTransaction = null;
-    _setValue(_undoStack.removeLast());
+    _setValue(_undoStack.removeLast(), restoringHistory: true);
   }
 
   void redo() {
@@ -605,15 +831,26 @@ class TextEditingController extends Notifier {
       return;
     }
     if (_redoStack.isEmpty) return;
+    _streamingPaste?._remember(_value);
     _undoStack.add(_value);
     _lastTransaction = null;
-    _setValue(_redoStack.removeLast());
+    _setValue(_redoStack.removeLast(), restoringHistory: true);
   }
 
-  void _pushUndoValue(TextEditingValue value) {
+  void _pushUndoValue(TextEditingValue value, {bool capturePaste = true}) {
+    if (capturePaste) _streamingPaste?._remember(value);
     _undoStack.add(value);
+    _trimUndoHistory();
+  }
+
+  void _trimUndoHistory() {
     if (_undoStack.length > _maxHistoryEntries) {
-      _undoStack.removeAt(0);
+      final removed = _undoStack.removeAt(0);
+      final paste = _streamingPaste;
+      if (paste != null) {
+        paste._history.remove(removed);
+        if (paste._undoStart > 0) paste._undoStart--;
+      }
     }
   }
 
@@ -631,6 +868,7 @@ class TextEditingController extends Notifier {
     TextEditingValue next, {
     _EditTransaction transaction = _EditTransaction.edit,
     bool coalesceWithPrevious = false,
+    TextEditingPaste? pasteEdit,
   }) {
     _checkNotDisposed();
     if (!_accept(editPolicy?.check(next.text))) return;
@@ -644,22 +882,31 @@ class TextEditingController extends Notifier {
               _lastTransaction == _EditTransaction.typing) ||
           (coalesceWithPrevious && _lastTransaction == transaction);
       if (!shouldCoalesce) {
-        _pushUndoValue(_value);
+        _pushUndoValue(_value, capturePaste: pasteEdit == null);
+      }
+      final paste = _streamingPaste;
+      if (paste != null) {
+        for (final value in _redoStack) {
+          paste._history.remove(value);
+        }
       }
       _redoStack.clear();
       _lastTransaction = transaction;
     } else {
       _lastTransaction = null;
     }
-    _setValue(next, clearTransaction: false);
+    _setValue(next, clearTransaction: false, pasteEdit: pasteEdit);
   }
 
   void _setValue(
     TextEditingValue next, {
     bool resetHistory = false,
     bool clearTransaction = true,
+    bool restoringHistory = false,
+    TextEditingPaste? pasteEdit,
   }) {
     _checkNotDisposed();
+    if (restoringHistory) next = _streamingPaste?._materialize(next) ?? next;
     if (!_accept(editPolicy?.check(next.text))) return;
     if (next.preserveText != preserveText) {
       next = TextEditingValue(
@@ -677,10 +924,25 @@ class TextEditingController extends Notifier {
         (_compositionBase != null ||
             _undoStack.isNotEmpty ||
             _redoStack.isNotEmpty);
+    if (resetHistory) {
+      _streamingPaste?._discard();
+    } else if (pasteEdit == null) {
+      _streamingPaste?._changed(
+        _value,
+        next,
+        restoringHistory: restoringHistory,
+      );
+    }
     _value = next;
     if (resetHistory) {
       _compositionBase = null;
       _undoStack.clear();
+      final paste = _streamingPaste;
+      if (paste != null) {
+        for (final value in _redoStack) {
+          paste._history.remove(value);
+        }
+      }
       _redoStack.clear();
     }
     if (resetHistory || clearTransaction) {
@@ -701,6 +963,7 @@ class TextEditingController extends Notifier {
   @override
   void dispose() {
     if (_disposed) return;
+    _streamingPaste?._discard();
     _disposed = true;
     _value = TextEditingValue(text: '', preserveText: preserveText);
     _compositionBase = null;
@@ -905,16 +1168,29 @@ class _TextInputState extends State<TextInput>
   bool _ownsFocusNode = false;
   bool _hovered = false;
   FormControlRegistration? _formRegistration;
+  TextEditingPaste? _pasteTransaction;
   late final TextPasteDriver _paste = TextPasteDriver(
     policy: () => widget.pastePolicy,
     atomic: () => _controller.editPolicy != null,
     checkSegment: (text, preceding) =>
         _controller.checkInsertion(text, precedingCodeUnits: preceding),
     onRejected: (reason) => _controller.onEditRejected?.call(reason),
+    beginTransaction: () {
+      _pasteTransaction = _controller.beginPaste(singleLine: true);
+    },
+    endTransaction: () {
+      _pasteTransaction?.close();
+      _pasteTransaction = null;
+    },
     documentLength: () => _controller.text.length,
-    applyEdit: (text, {required coalesce}) => _edit(
-      () => _controller.paste(text, singleLine: true, coalesce: coalesce),
-    ),
+    applyEdit: (text, {required coalesce}) => _edit(() {
+      final transaction = _pasteTransaction;
+      if (transaction != null) {
+        transaction.append(text);
+      } else {
+        _controller.paste(text, singleLine: true, coalesce: coalesce);
+      }
+    }),
     isAttached: () => mounted,
     onProgressChanged: () => setState(() {}),
     schedulePostFrame: _schedulePasteStep,
@@ -1148,6 +1424,7 @@ class _TextInputState extends State<TextInput>
 
   void _onControllerChange() {
     _paste.discardAtomic();
+    if (_pasteTransaction?.isActive == false) _paste.discard();
     setState(() {
       // Typing resets the blink to ON so the cursor is immediately
       // visible after a keystroke — matches native terminal cursor
@@ -1648,7 +1925,7 @@ class _TextInputState extends State<TextInput>
       details,
       obscured: widget.obscureText,
     );
-    _focusNode.requestFocus();
+    _focusNode.requestFocus(reveal: false);
   }
 
   void _pointerDrag(PointerDragDetails details) {

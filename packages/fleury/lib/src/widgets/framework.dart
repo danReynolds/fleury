@@ -606,6 +606,7 @@ abstract class Element implements BuildContext {
   Widget get widget => _widget;
 
   Element? _parent;
+  Set<void Function(bool)>? _scopeLinks;
   BuildOwner? _owner;
   int _depth = 0;
   _ElementLifecycle _lifecycle = _ElementLifecycle.initial;
@@ -647,6 +648,13 @@ abstract class Element implements BuildContext {
   @mustCallSuper
   void unmount() {
     final errors = _TeardownErrors();
+    final links = _scopeLinks;
+    _scopeLinks = null;
+    if (links != null) {
+      for (final callback in links.toList()) {
+        errors.capture(() => callback(false));
+      }
+    }
     final key = _widget.key;
     if (key is GlobalKey) key._deregister(this);
 
@@ -817,6 +825,12 @@ abstract class Element implements BuildContext {
       markNeedsBuild();
     }
     activate();
+    final links = _scopeLinks;
+    if (links != null) {
+      for (final callback in links.toList()) {
+        callback(true);
+      }
+    }
   }
 
   /// Subclass hook mirroring [State.deactivate]; the default is a no-op.
@@ -1058,7 +1072,9 @@ abstract class Element implements BuildContext {
     var element = _parent;
     while (element != null) {
       if (element is ScopeElement && element._key == key) return element;
-      element = element._parent;
+      element = element is _ScopeLinkElement
+          ? element.source._parent
+          : element._parent;
     }
     return null;
   }
@@ -1072,7 +1088,9 @@ abstract class Element implements BuildContext {
       if (element is ScopeElement && element._optionalKey == key) {
         return element;
       }
-      element = element._parent;
+      element = element is _ScopeLinkElement
+          ? element.source._parent
+          : element._parent;
     }
     return null;
   }
@@ -3050,3 +3068,122 @@ T? readScope<T extends Object>(BuildContext context) =>
 /// in `didChangeDependencies`, because reading a value there is ordinary.
 void dependOnListenable(Element element, Listenable source) =>
     element._dependOnListenable(source);
+
+/// Framework bridge used by an owned overlay entry. Scope readers subscribe
+/// directly to the owner's live providers; rendering and input stay in Overlay.
+@internal
+class ScopeLink extends ProxyWidget {
+  const ScopeLink({
+    required this.source,
+    required this.onOwnerUnmount,
+    required super.child,
+  });
+  final BuildContext source;
+  final VoidCallback onOwnerUnmount;
+  @override
+  Element createElement() => _ScopeLinkElement(this);
+}
+
+class _ScopeLinkElement extends ComponentElement {
+  _ScopeLinkElement(ScopeLink super.widget);
+  Element get source => (widget as ScopeLink).source as Element;
+
+  @override
+  void mount(Element? parent) {
+    if (!source.mounted || !identical(source._owner, parent?._owner)) {
+      throw StateError('An overlay owner must be mounted in the same app.');
+    }
+    (source._scopeLinks ??= {}).add(_ownerChanged);
+    super.mount(parent);
+  }
+
+  @override
+  void update(covariant ScopeLink newWidget) {
+    validateScopeOwner(newWidget.source, this);
+    final previous = source;
+    super.update(newWidget);
+    if (!identical(previous, source)) {
+      previous._scopeLinks?.remove(_ownerChanged);
+      (source._scopeLinks ??= {}).add(_ownerChanged);
+      _ownerChanged(true);
+    }
+    rebuild(force: true);
+  }
+
+  void _ownerChanged(bool alive) {
+    if (!mounted) return;
+    if (!alive) {
+      // Dispose the floating subtree before an owned Scope above the source
+      // releases its value. The host removes the empty layer on its next build.
+      final child = _child;
+      _child = null;
+      final errors = _TeardownErrors();
+      if (child != null) errors.capture(child.unmount);
+      errors.capture((widget as ScopeLink).onOwnerUnmount);
+      errors.throwIfAny();
+      return;
+    }
+    void rebind(Element element) {
+      final previous = element._scopeDependencies;
+      if (previous != null) {
+        final keys = [for (final scope in previous) scope._key];
+        for (final scope in previous) {
+          scope._dependents.remove(element);
+        }
+        element._scopeDependencies = null;
+        for (final key in keys) {
+          final scope = element._findScopeElementByKey(key);
+          if (scope != null) element._addScopeEdge(scope);
+        }
+      }
+      // An optional lookup that found no provider has no dependency edge.
+      // It must still re-read after the logical owner moves under a provider.
+      ScopeElement._markDependencyChanged(element);
+      element.markNeedsBuild();
+      element.visitChildren(rebind);
+      // Floating descendants are not physical children. Their owners can sit
+      // inside this entry, so carry the ancestry change across those links too.
+      final links = element._scopeLinks;
+      if (links != null) {
+        for (final callback in links.toList()) {
+          callback(true);
+        }
+      }
+    }
+
+    visitChildren(rebind);
+  }
+
+  @override
+  Widget buildChild() => (widget as ScopeLink).child;
+
+  @override
+  void unmount() {
+    source._scopeLinks?.remove(_ownerChanged);
+    super.unmount();
+  }
+}
+
+/// Registers an owned overlay before its floating subtree has mounted.
+@internal
+VoidCallback watchScopeOwner(
+  BuildContext source,
+  void Function(bool) callback,
+) {
+  if (source is! Element || !source.mounted) {
+    throw StateError('An overlay owner must be mounted.');
+  }
+  (source._scopeLinks ??= {}).add(callback);
+  return () => source._scopeLinks?.remove(callback);
+}
+
+/// Validate the logical owner before an overlay takes ownership of an entry.
+@internal
+void validateScopeOwner(BuildContext source, BuildContext host) {
+  if (source is! Element ||
+      !source.mounted ||
+      host is! Element ||
+      !identical(source._owner, host._owner)) {
+    throw StateError('An overlay owner must be mounted in the same app.');
+  }
+}

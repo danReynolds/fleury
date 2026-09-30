@@ -181,16 +181,15 @@ class _ToasterState extends State<Toaster> {
   TuiBinding? _binding;
   var _nextToastId = 0;
 
-  // The overlay builds the toast layer above any Theme the app set, so it
-  // carries the theme where this Toaster sits.
-  ThemeData? _theme;
-
   // Created once (layer state survives), mounted lazily: the entry is only
   // inserted while toasts exist. An idle Toaster must not keep the host
   // overlay multi-entry — that would keep the overlay's adaptive repaint
   // boundaries engaged and tax every app-dirty frame with a full-screen
   // cache write + blit for an empty layer.
-  late final OverlayEntry _entry = OverlayEntry(builder: (_) => _buildLayer());
+  late final OverlayEntry _entry = OverlayEntry(
+    owner: context,
+    builder: _buildLayer,
+  );
   late final OverlayMount _entrySync = OverlayMount(
     entry: _entry,
     // Guard mounted: after unmount the context is defunct, and the ancestor
@@ -203,11 +202,6 @@ class _ToasterState extends State<Toaster> {
   void didChangeDependencies() {
     super.didChangeDependencies();
     _binding ??= TuiBinding.maybeOf(context);
-    final theme = Theme.of(context);
-    if (theme != _theme) {
-      _theme = theme;
-      _entry.markNeedsBuild();
-    }
   }
 
   @override
@@ -311,7 +305,7 @@ class _ToasterState extends State<Toaster> {
     if (mounted) setState(() {});
   }
 
-  Widget _buildLayer() {
+  Widget _buildLayer(BuildContext context) {
     final Widget layer = Align(
       alignment: widget.alignment,
       child: Column(
@@ -349,7 +343,7 @@ class _ToasterState extends State<Toaster> {
               child: Container.framed(
                 border: const BoxBorder(style: BorderStyle.rounded),
                 padding: const EdgeInsets.symmetric(horizontal: 1),
-                child: _toastContent(toast),
+                child: _toastContent(context, toast),
               ),
             ),
         ],
@@ -359,10 +353,7 @@ class _ToasterState extends State<Toaster> {
     // user's clipboard via the app's ambient selection. Stated here rather
     // than inherited from the fact that an overlay entry happens to mount
     // outside DefaultRootSelection.
-    return Theme(
-      data: _theme!,
-      child: SelectionArea.disabled(child: layer),
-    );
+    return SelectionArea.disabled(child: layer);
   }
 
   SemanticState _toastSemanticState(_Toast toast) {
@@ -379,7 +370,7 @@ class _ToasterState extends State<Toaster> {
     });
   }
 
-  Widget _toastContent(_Toast toast) {
+  Widget _toastContent(BuildContext context, _Toast toast) {
     final action = toast.action;
     // Sparse color: only the status dot carries the severity color; the message
     // is neutral and the frame is plain. The action (if any) gets the one

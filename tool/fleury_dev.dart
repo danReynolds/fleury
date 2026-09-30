@@ -1677,11 +1677,11 @@ Uint8List remoteClientJs() => base64.decode(_remoteClientJsBase64);
   /// Per-frame allocation regression gate (G3). Drives a steady-state reactive
   /// scenario through the real per-frame path (build → reconcile → layout →
   /// paint → AnsiRenderer diff) against a reused double-buffer and measures
-  /// `package:fleury` allocation churn per frame via a self-connected VM
-  /// service — deterministic byte-for-byte. Pass `--gate` to fail on a
+  /// `package:fleury` allocation churn per frame via an external VM-service
+  /// controller — counting traced object creations. Pass `--gate` to fail on a
   /// regression past tolerance, `--update-baseline` to rebaseline (after an
   /// intentional change or an SDK bump). The VM-service flags are required so
-  /// the gate can self-connect for the allocation profile; `--deterministic`
+  /// the controller can collect allocation traces; `--deterministic`
   /// keeps background-JIT allocation sinking from nondeterministically
   /// deflating a window.
   Future<void> benchmarkAllocGate(List<String> args) async {
@@ -1690,6 +1690,9 @@ Uint8List remoteClientJs() => base64.decode(_remoteClientJsBase64);
       // allocation-sinking tier can land mid-window at a nondeterministic
       // frame and collapse the measured churn (see bin/alloc_gate.dart).
       '--deterministic',
+      '--profiler',
+      '--max-profile-depth=2',
+      '--profile-startup',
       '--enable-vm-service=0',
       '--disable-service-auth-codes',
       'bin/alloc_gate.dart',
@@ -1710,13 +1713,16 @@ Uint8List remoteClientJs() => base64.decode(_remoteClientJsBase64);
 
   /// Per-key input-path allocation gate (RFC 0020 §19). Drives raw terminal
   /// bytes through parser -> dispatcher -> session -> binding walk and gates
-  /// on bytes/key of `package:fleury` churn — the axis the per-frame gate
+  /// on objects/key of `package:fleury` churn — the axis the per-frame gate
   /// cannot see, because it never presses a key.
   Future<void> benchmarkInputAllocGate(List<String> args) async {
     await _run('dart', [
       // Same reason as alloc-gate: without --deterministic a background JIT
       // tier can land mid-window and collapse the measured churn.
       '--deterministic',
+      '--profiler',
+      '--max-profile-depth=2',
+      '--profile-startup',
       '--enable-vm-service=0',
       '--disable-service-auth-codes',
       'bin/input_alloc_gate.dart',
@@ -1836,6 +1842,9 @@ Uint8List remoteClientJs() => base64.decode(_remoteClientJsBase64);
       (name: 'bundle-size', cmd: ['run', 'bin/bundle_size_gate.dart', '--gate']),
       (name: 'alloc-gate', cmd: [
         '--deterministic',
+        '--profiler',
+        '--max-profile-depth=2',
+        '--profile-startup',
         '--enable-vm-service=0',
         '--disable-service-auth-codes',
         'bin/alloc_gate.dart',
@@ -1843,6 +1852,9 @@ Uint8List remoteClientJs() => base64.decode(_remoteClientJsBase64);
       ]),
       (name: 'input-alloc-gate', cmd: [
         '--deterministic',
+        '--profiler',
+        '--max-profile-depth=2',
+        '--profile-startup',
         '--enable-vm-service=0',
         '--disable-service-auth-codes',
         'bin/input_alloc_gate.dart',

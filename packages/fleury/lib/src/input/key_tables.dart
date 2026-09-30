@@ -195,3 +195,18 @@ const Map<SpecialKey, KeyCode> keypadMeaning = {
   SpecialKey.keypadInsert: KeyCode.insert,
   SpecialKey.keypadDelete: KeyCode.delete,
 };
+
+/// Matches a logical selector, including legacy keypad selectors.
+///
+/// Keypad aliases require the matching known physical position. With no
+/// position, preserve their historical identity-only behavior; never mistake
+/// an ordinary number-row key for a keypad press.
+bool matchesLogicalKey(KeyCode code, KeyPosition? position, KeyCode selector) {
+  if (code == selector) return true;
+  final special = selector.special;
+  if (special == null || position == null) return false;
+  final meaning = keypadMeaning[special];
+  if (meaning == null || positionBySpecial[special] != position) return false;
+  if (special == SpecialKey.keypadDecimal) return code.isCharacter;
+  return code == meaning;
+}

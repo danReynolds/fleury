@@ -26,6 +26,7 @@ final class MountedApp {
     SemanticsOwner? semanticsOwner,
     SemanticFramePresenter? semanticPresenter,
     FrameSemanticsPipeline? semanticsPipeline,
+    OverlayMount? errorOverlay,
     FutureOr<void> Function()? disposeHostResources,
     required void Function() markDisposed,
     SemanticFlushScheduler? semanticFlushScheduler,
@@ -38,6 +39,7 @@ final class MountedApp {
        _semanticsOwner = semanticsOwner,
        _semanticPresenter = semanticPresenter,
        _semanticsPipeline = semanticsPipeline,
+       _errorOverlay = errorOverlay,
        _semanticFlushScheduler = semanticFlushScheduler,
        _awaitSemanticIdle = awaitSemanticIdle,
        _disposeHostResources = disposeHostResources,
@@ -61,6 +63,7 @@ final class MountedApp {
        _semanticsOwner = null,
        _semanticPresenter = semanticPresenter,
        _semanticsPipeline = null,
+       _errorOverlay = null,
        _semanticFlushScheduler = semanticFlushScheduler,
        _awaitSemanticIdle = null,
        _disposeHostResources = disposeHostResources,
@@ -74,6 +77,7 @@ final class MountedApp {
   final SemanticsOwner? _semanticsOwner;
   final SemanticFramePresenter? _semanticPresenter;
   final FrameSemanticsPipeline? _semanticsPipeline;
+  final OverlayMount? _errorOverlay;
   final SemanticFlushScheduler? _semanticFlushScheduler;
   final Future<void> Function()? _awaitSemanticIdle;
   final FutureOr<void> Function()? _disposeHostResources;
@@ -169,6 +173,7 @@ final class MountedApp {
       frameDriver: _frameDriver,
       cellMetrics: _cellMetrics,
       semanticsPipeline: _semanticsPipeline,
+      errorOverlay: _errorOverlay,
       semanticFlushScheduler: _semanticFlushScheduler,
       semanticsOwner: _semanticsOwner,
       semanticPresenter: _semanticPresenter,
@@ -353,6 +358,7 @@ Future<MountedApp> _runTuiSurface(
   // coverage fallback); host-specific focus sync + instrumentation ride
   // its callbacks. Assigned right after the host closures it needs exist.
   FrameSemanticsPipeline? semanticsPipeline;
+  OverlayMount? errorOverlay;
   var semanticFocusSyncTimeForFlush = Duration.zero;
 
   Future<void> cleanupSetupFailure() async {
@@ -363,6 +369,7 @@ Future<MountedApp> _runTuiSurface(
       frameDriver: frameDriver,
       cellMetrics: cellMetrics,
       semanticsPipeline: semanticsPipeline,
+      errorOverlay: errorOverlay,
       semanticFlushScheduler: semanticScheduler,
       semanticsOwner: semanticsOwner,
       semanticPresenter: semanticPresenter,
@@ -379,11 +386,17 @@ Future<MountedApp> _runTuiSurface(
 
   final rootEntry = OverlayEntry(builder: (_) => rootFactory());
   final overlayKey = GlobalKey<OverlayState>();
-  final errorEntry = errorReporter == null
-      ? null
-      : OverlayEntry(
-          builder: (_) => RuntimeErrorOverlay(reporter: errorReporter),
-        );
+  if (errorReporter != null) {
+    // An idle error layer would engage the root overlay's repaint caches.
+    // Insert only while reporting, above any panels the app already opened.
+    errorOverlay = OverlayMount(
+      entry: OverlayEntry(
+        builder: (_) => RuntimeErrorOverlay(reporter: errorReporter),
+      ),
+      overlay: () => disposed ? null : overlayKey.currentState,
+      mountWhen: () => errorReporter.current != null,
+    )..attachTo(errorReporter);
+  }
   debugController?.setErrorHistoryProvider(() => errorReporter?.history ?? []);
   debugController?.setSemanticTreeProvider(() {
     final root = frameDriver?.rootElement;
@@ -410,7 +423,7 @@ Future<MountedApp> _runTuiSurface(
     pointerRouter: pointerRouter,
     clipboard: effectiveClipboard,
     overlayKey: overlayKey,
-    overlayEntries: [rootEntry, if (errorEntry != null) errorEntry],
+    overlayEntries: [rootEntry],
     logBuffer: logBuffer,
     debugController: debugController,
     pendingSequenceNotifier: inputDispatcher.pendingSequenceNotifier,
@@ -720,6 +733,8 @@ Future<MountedApp> _runTuiSurface(
     }
 
     driver.mountRoot(buildRoot);
+    // Covers errors supplied up front or reported during the first build.
+    errorOverlay?.update();
     scheduleFrame('initial');
 
     final host = MountedApp._(
@@ -731,6 +746,7 @@ Future<MountedApp> _runTuiSurface(
       semanticsOwner: semanticsOwner,
       semanticPresenter: semanticPresenter,
       semanticsPipeline: semanticsPipeline,
+      errorOverlay: errorOverlay,
       semanticFlushScheduler: semanticScheduler,
       awaitSemanticIdle: () =>
           semanticsPipeline?.awaitIdle() ?? Future<void>.value(),
@@ -761,6 +777,7 @@ Future<void> _disposeHostResourcesBestEffort({
   FrameDriver? frameDriver,
   CellMetrics? cellMetrics,
   FrameSemanticsPipeline? semanticsPipeline,
+  OverlayMount? errorOverlay,
   SemanticFlushScheduler? semanticFlushScheduler,
   SemanticsOwner? semanticsOwner,
   SemanticFramePresenter? semanticPresenter,
@@ -785,6 +802,9 @@ Future<void> _disposeHostResourcesBestEffort({
   });
   await runStep(() {
     frameDriver?.dispose();
+  });
+  await runStep(() {
+    errorOverlay?.dispose();
   });
   await runStep(() {
     cellMetrics?.dispose();

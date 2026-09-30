@@ -3,10 +3,12 @@
 
 import '../foundation/change_notifier.dart';
 import '../foundation/geometry.dart';
+import '../foundation/key.dart';
 import '../rendering/cell_buffer.dart';
 import '../rendering/cell.dart';
 import '../rendering/layout.dart';
 import '../rendering/scroll_axis.dart';
+import '../rendering/scroll_reveal.dart';
 import '../rendering/render_flex.dart';
 import '../rendering/render_object.dart';
 import '../input/events.dart';
@@ -1114,7 +1116,7 @@ class _ListViewState extends State<ListView> {
     if (index < 0 || index >= widget.effectiveItemCount) return;
     _pressedItem = _itemIdentity(index);
     _moveCurrentItem(index, reveal: false);
-    _focusNode.requestFocus();
+    _focusNode.requestFocus(reveal: false);
   }
 
   void _handleItemTap(int index) {
@@ -1134,8 +1136,17 @@ class _ListViewState extends State<ListView> {
     child: item,
   );
 
-  Widget _maybeBoundary(Widget item) =>
-      widget.addRepaintBoundaries ? RepaintBoundary(child: item) : item;
+  Widget _maybeBoundary(Widget item, {Key? key}) => widget.addRepaintBoundaries
+      ? RepaintBoundary(key: key, child: item)
+      : item;
+
+  // A local child key must identify the outer row too: framework wrappers
+  // must not turn keyed rows into positional siblings. GlobalKeys remain on
+  // their app-owned widget, where the framework registers them exactly once.
+  Key? _eagerItemKey(int index) {
+    final key = widget.children![index].key;
+    return key is LocalKey ? key : null;
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -1177,6 +1188,7 @@ class _ListViewState extends State<ListView> {
           for (var i = 0; i < widget.children!.length; i++)
             _maybeBoundary(
               GestureDetector(
+                key: _eagerItemKey(i),
                 onTapDown: (_) => _handleItemDown(i),
                 onTap: () => _handleItemTap(i),
                 onTapCancel: () => _pressedItem = null,
@@ -1185,6 +1197,7 @@ class _ListViewState extends State<ListView> {
                   i == _controller.currentIndex,
                 ),
               ),
+              key: _eagerItemKey(i),
             ),
         ],
       );
@@ -1284,6 +1297,12 @@ class _ListViewportLayout {
   int anchor = 0;
   int itemOffset = 0;
   bool _axisChanged = false;
+  int _revealBefore = 0;
+  int _revealAfter = 0;
+
+  // Reveal only needs the mounted window. Keep these bounds local so focus
+  // never measures or mounts the rest of a virtualized list.
+  int clampRevealDelta(int delta) => delta.clamp(_revealBefore, _revealAfter);
 
   void changeAxis() {
     itemOffset = 0;
@@ -1297,6 +1316,7 @@ class _ListViewportLayout {
     required int Function(int index) measure,
   }) {
     if (count == 0 || viewportExtent == 0) {
+      _revealBefore = _revealAfter = 0;
       // A temporarily collapsed viewport must not discard follow intent.
       if (viewportExtent == 0 && controller._isFollowing) {
         controller._pendingBottom = true;
@@ -1435,6 +1455,11 @@ class _ListViewportLayout {
       normalize();
       offsets = window();
     }
+    _revealBefore = offsets.isEmpty ? 0 : offsets.values.first;
+    final visibleEnd = offsets.isEmpty
+        ? 0
+        : offsets.values.last + itemExtent(offsets.keys.last);
+    _revealAfter = (visibleEnd - viewportExtent).clamp(0, visibleEnd);
     final first = offsets.isEmpty ? null : offsets.keys.first;
     final last = offsets.isEmpty ? null : offsets.keys.last;
     final atTop = anchor == 0 && itemOffset == 0;
@@ -1498,7 +1523,24 @@ CellBuffer? _paintListViewport(
   return scratch;
 }
 
-class _RenderListView extends RenderObject implements RenderObjectWithChildren {
+mixin _ListRevealViewport on RenderObject implements RenderScrollViewport {
+  ListController get controller;
+  _ListViewportLayout get _viewport;
+  Axis get _scrollDirection;
+
+  @override
+  Axis get scrollAxis => _scrollDirection;
+
+  @override
+  int clampScrollDelta(int delta) => _viewport.clampRevealDelta(delta);
+
+  @override
+  void scrollContentBy(int delta) => controller.scrollBy(delta);
+}
+
+class _RenderListView extends RenderObject
+    with _ListRevealViewport
+    implements RenderObjectWithChildren {
   @override
   CellOffset childOffsetOf(RenderObject child) =>
       _childOffsets[child] ?? CellOffset.zero;
@@ -1516,6 +1558,7 @@ class _RenderListView extends RenderObject implements RenderObjectWithChildren {
   }) : _controller = controller,
        _scrollDirection = scrollDirection;
 
+  @override
   Axis _scrollDirection;
   set scrollDirection(Axis value) {
     if (_scrollDirection == value) return;
@@ -1525,6 +1568,7 @@ class _RenderListView extends RenderObject implements RenderObjectWithChildren {
   }
 
   ListController _controller;
+  @override
   ListController get controller => _controller;
   set controller(ListController value) {
     if (identical(_controller, value)) return;
@@ -1541,6 +1585,7 @@ class _RenderListView extends RenderObject implements RenderObjectWithChildren {
   /// Index of the first item that should appear at the top of the
   /// viewport. Persists across layouts so scroll position is stable
   /// when only cursor / item count changes.
+  @override
   final _viewport = _ListViewportLayout();
 
   @override
@@ -1834,7 +1879,14 @@ class _LazyListElement extends RenderObjectElement {
     for (final entry in _mountedChildren.entries.toList()) {
       final i = entry.key;
       final oldEl = entry.value;
-      final newWidget = widget.itemBuilder(this, i, i == widget.currentIndex);
+      final newWidget = _LazyListItem(
+        // Reconciliation above owns row lifetime. Retain this wrapper's key
+        // when leaving keyed mode, which keeps the existing rows by position.
+        key: oldEl.widget.key,
+        builder: widget.itemBuilder,
+        index: i,
+        highlighted: i == widget.currentIndex,
+      );
       if (identical(oldEl.widget, newWidget)) continue;
       if (Widget.canUpdate(oldEl.widget, newWidget)) {
         oldEl.update(newWidget);
@@ -1858,10 +1910,11 @@ class _LazyListElement extends RenderObjectElement {
       return _findRootRenderObject(existing);
     }
     final itemKey = itemKeyAt(index);
-    final newWidget = widget.itemBuilder(
-      this,
-      index,
-      index == widget.currentIndex,
+    final newWidget = _LazyListItem(
+      key: itemKey == null ? null : ValueKey(itemKey),
+      builder: widget.itemBuilder,
+      index: index,
+      highlighted: index == widget.currentIndex,
     );
     final element = newWidget.createElement();
     element.mount(this);
@@ -1927,6 +1980,7 @@ class _LazyListElement extends RenderObjectElement {
 /// items it visits. It then unmounts items outside the final visible range.
 /// Cursor is revealed only on request; ordinary rebuilds keep the anchor.
 class _RenderLazyListView extends RenderObject
+    with _ListRevealViewport
     implements RenderObjectWithChildren {
   @override
   CellOffset childOffsetOf(RenderObject child) =>
@@ -1944,6 +1998,7 @@ class _RenderLazyListView extends RenderObject
   }) : _controller = controller,
        _scrollDirection = scrollDirection;
 
+  @override
   Axis _scrollDirection;
   set scrollDirection(Axis value) {
     if (_scrollDirection == value) return;
@@ -1953,6 +2008,7 @@ class _RenderLazyListView extends RenderObject
   }
 
   ListController _controller;
+  @override
   ListController get controller => _controller;
   set controller(ListController value) {
     if (identical(_controller, value)) return;
@@ -1982,6 +2038,7 @@ class _RenderLazyListView extends RenderObject
   /// so reparenting is well-defined.
   final Set<RenderObject> _adopted = Set<RenderObject>.identity();
 
+  @override
   final _viewport = _ListViewportLayout();
   int get _scrollAnchor => _viewport.anchor;
   set _scrollAnchor(int value) => _viewport.anchor = value;
@@ -2115,4 +2172,21 @@ class _RenderLazyListView extends RenderObject
       _scratch,
     );
   }
+}
+
+/// Each mounted row owns its build context and dependencies, including Focus
+/// and inherited scopes. Layout can mount it without making the whole list a
+/// dependent of every scope a row reads.
+class _LazyListItem extends StatelessWidget {
+  const _LazyListItem({
+    super.key,
+    required this.builder,
+    required this.index,
+    required this.highlighted,
+  });
+  final Widget Function(BuildContext, int, bool) builder;
+  final int index;
+  final bool highlighted;
+  @override
+  Widget build(BuildContext context) => builder(context, index, highlighted);
 }

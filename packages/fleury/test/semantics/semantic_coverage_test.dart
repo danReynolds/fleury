@@ -2,6 +2,63 @@ import 'package:fleury/fleury_host.dart';
 import 'package:test/test.dart';
 
 void main() {
+  test(
+    'decoration provenance survives copy, replay, restyle and overwrite',
+    () {
+      final tree = SemanticTree(
+        root: SemanticNode(
+          id: const SemanticNodeId('root'),
+          role: SemanticRole.app,
+        ),
+      );
+      final source = CellBuffer(const CellSize(4, 2));
+      source.writeGrapheme(CellOffset.zero, '+', decorative: true);
+      source.writeGrapheme(const CellOffset(1, 0), '-', decorative: true);
+      source.writeGrapheme(const CellOffset(2, 0), '|', decorative: true);
+      source.writeText(const CellOffset(0, 1), '+-|');
+      final target = CellBuffer(source.size);
+      target.compositeRectFrom(
+        source,
+        CellRect(offset: CellOffset.zero, size: source.size),
+        CellOffset.zero,
+      );
+      expect(
+        applySemanticTextFallback(tree: tree, buffer: target).tree.nodes
+            .where((n) => n.state['semanticFallback'] == true)
+            .map((n) => n.label),
+        ['+-|'],
+      );
+      target.replayCellFrom(
+        source,
+        0,
+        0,
+        3,
+        0,
+        style: const CellStyle(bold: true),
+      );
+      target.restyleCell(3, 0, const CellStyle(italic: true));
+      expect(target.atColRow(3, 0).isDecoration, isTrue);
+      target.writeGrapheme(const CellOffset(3, 0), '+');
+      expect(target.atColRow(3, 0).isDecoration, isFalse);
+      expect(
+        applySemanticTextFallback(
+          tree: tree,
+          buffer: target,
+        ).audit.uncoveredCellCount,
+        4,
+      );
+      target.clear();
+      target.writeText(CellOffset.zero, '+');
+      expect(
+        applySemanticTextFallback(
+          tree: tree,
+          buffer: target,
+        ).audit.uncoveredCellCount,
+        1,
+      );
+    },
+  );
+
   test('semantic coverage leaves fully covered visible text unchanged', () {
     final buffer = CellBuffer(const CellSize(8, 1))
       ..writeText(const CellOffset(0, 0), 'covered');
