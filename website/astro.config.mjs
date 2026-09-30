@@ -47,7 +47,7 @@ export default defineConfig({
   base,
   // Renamed pages keep their published URLs working.
   redirects: {
-    '/guides/focus-and-keyboard/': '/guides/key-handling/',
+    '/guides/focus-and-keyboard/': `${base}/guides/key-handling/`,
   },
   markdown: {
     processor: unified({ remarkPlugins: [[remarkWidgetLinks, { base }]] }),
