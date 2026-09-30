@@ -115,6 +115,16 @@
       "source": "website/examples/lib/lists/task_browser.dart"
     }
   ],
+  "lists.log": [
+    {
+      "source": "website/examples/lib/lists/build_log.dart"
+    }
+  ],
+  "lists.reorder": [
+    {
+      "source": "website/examples/lib/lists/reorder_tasks.dart"
+    }
+  ],
   "lists.horizontal": [
     {
       "source": "website/examples/lib/lists/horizontal_list.dart"
