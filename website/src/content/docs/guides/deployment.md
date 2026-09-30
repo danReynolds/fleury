@@ -115,8 +115,8 @@ browser, use `serve` instead.
 ## Preview a native app with `serve`
 
 The socket-based tools — `fleury serve`, `fleury shell`, and `fleury_mcp` —
-currently require macOS or Linux. They use Unix-domain sockets and are not
-available with the Windows preview driver.
+require macOS or Linux. They reach the app over a Unix-domain socket, which
+the Dart SDK supports only on Linux, macOS, and Android.
 
 `fleury serve` carries a **native** app's rendered frames to a browser over a
 WebSocket, painting into a DOM cell grid. (The `fleury` command comes from the
