@@ -985,8 +985,9 @@ class TextEditingController extends Notifier {
 /// such as `Ctrl+S`, pass on to enclosing widgets. With the default [keymap]
 /// ([TextEditingKeymap.defaultSingleLine]):
 ///
-/// - Left and Right move the caret. At either end of the text, an unmodified
-///   press passes on instead, so arrow-key focus traversal can move on.
+/// - Left and Right move the caret. At either end of the text, with nothing
+///   selected, an unmodified press passes on instead, so arrow-key focus
+///   traversal can move on.
 ///   Ctrl+Left and Ctrl+Right (or Alt+Left and Alt+Right) move by word, and
 ///   Home and End jump to the start and end. Add Shift to any of these to
 ///   extend the selection.
