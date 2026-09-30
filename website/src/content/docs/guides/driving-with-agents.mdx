@@ -272,7 +272,8 @@ During development, `read_frames`, `read_logs`, and `read_errors` expose the
 same evidence as Fleury's debug shell. An agent can trigger an action, then
 check whether it threw, logged an unexpected result, or caused expensive
 frames. They need the app's debug tooling, which is on when the app runs from
-a `.dart` source file, as with `dart run`, or with assertions enabled. A
+a `.dart` source file, as with `dart run bin/run_app.dart`, or with assertions
+enabled. A
 compiled app or a snapshot turns it off, and the tools return
 `available: false`, unless the app passes `DebugConfig(enabled: true)` to
 `runApp`.

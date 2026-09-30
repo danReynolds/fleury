@@ -151,8 +151,8 @@ sends F11 to the app, the same fix that page describes for F5.
 ## Configuring it
 
 The debug shell and its **F12** logs are on when the app runs from a `.dart`
-source file (`fleury run`, `dart run`, `fleury serve --spawn dart run …`,
-`fleury_mcp -- dart run …`) or with assertions enabled (`--enable-asserts`).
+source file (`fleury run`, `dart run bin/run_app.dart`,
+`fleury serve --spawn dart run …`, `fleury_mcp -- dart run …`) or with assertions enabled (`--enable-asserts`).
 They’re off in AOT executables (`dart compile exe`) and in snapshots, such as
 the ones `dart pub global activate` installs; browser bundles don’t include
 them. Pass a `DebugConfig` to `runApp` to change that either way, or to open
