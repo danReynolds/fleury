@@ -254,15 +254,17 @@ class FleuryApp extends StatefulWidget {
   final String title;
 
   /// App-wide commands: named actions that shortcuts, command palettes,
-  /// agents, and tests can run from anywhere in the app.
+  /// agents, and tests can run on any screen.
   ///
   /// Each command's [AppCommand.shortcuts] are bound at the app root and run
   /// it only while it is visible and enabled; otherwise the key passes on.
-  /// Each visible command also appears as a `command` node under the app's
-  /// semantic node, which an agent or test can activate. A shortcut or
-  /// semantic activation runs the command with [CommandContext.buildContext]
-  /// set to the focused widget's context when focus is inside the app, else
-  /// to the active route's when there is one.
+  /// While a presented dialog is on top, keys it doesn't handle stop at the
+  /// dialog, so app shortcuts wait until it closes. Each visible command also
+  /// appears as a `command` node under the app's semantic node, which an
+  /// agent or test can activate. A shortcut or semantic activation runs the
+  /// command with [CommandContext.buildContext] set to the focused widget's
+  /// context when focus is inside the app, else to the active route's when
+  /// there is one.
   ///
   /// Ids must be unique within the list; a duplicate throws an
   /// [ArgumentError]. Commands contributed by [FleuryAppExtension]s follow
