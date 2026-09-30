@@ -21,6 +21,8 @@
 - `Select`: pressing a disabled option no longer moves the highlight onto it or
   stops the arrow keys and Enter from working; the open list reports its
   highlight as it moves.
+- `Autocomplete`: a click on a suggestion picks it. The press used to take
+  focus from the field, which closed the list before the click completed.
 - `Image` in half-block mode draws a transparent top pixel as empty instead of
   in the terminal's default text color.
 - A pinned `Panel` keeps tracking focus, so unpinning it shows current chrome.
