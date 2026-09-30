@@ -127,18 +127,13 @@ void main() {
       expect(out[1], '█');
     });
 
-    testWidgets('a stacked bar with no segments is an empty column', (
-      tester,
-    ) {
+    testWidgets('a stacked bar with no segments is an empty column', (tester) {
       tester.pumpWidget(
         const SizedBox(
           width: 3,
           height: 3,
           child: BarChart(
-            bars: [
-              Bar.stacked('a', []),
-              Bar('b', 2),
-            ],
+            bars: [Bar.stacked('a', []), Bar('b', 2)],
             max: 2,
             barWidth: 1,
             gap: 1,

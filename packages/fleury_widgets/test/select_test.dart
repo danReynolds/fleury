@@ -401,7 +401,10 @@ void main() {
       tester.pumpWidget(_Host(initial: 'red'));
       tester.sendKey(const KeyEvent(KeyCode.enter)); // open at Red
       int? highlighted() =>
-          tester.semantics().single(role: SemanticRole.menu).state['selectedKey']
+          tester
+                  .semantics()
+                  .single(role: SemanticRole.menu)
+                  .state['selectedKey']
               as int?;
       expect(highlighted(), 0);
 

@@ -10,8 +10,6 @@
 // controls behind a fallback covering one, and four terminals' worth of
 // testing said nothing.
 import 'package:fleury/fleury.dart';
-import 'package:fleury/src/foundation/fleury_error.dart';
-import 'package:fleury/src/runtime/input_dispatcher.dart';
 import 'package:test/test.dart';
 
 void main() {

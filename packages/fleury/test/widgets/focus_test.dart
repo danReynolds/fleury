@@ -679,9 +679,11 @@ void main() {
       expect(inner, [true]);
 
       sibling.requestFocus();
-      expect(outer, [
-        true,
-      ], reason: 'moving between the outer region\'s descendants is no leave');
+      expect(
+        outer,
+        [true],
+        reason: 'moving between the outer region\'s descendants is no leave',
+      );
       expect(middle, [true, false]);
       expect(inner, [true, false]);
 
