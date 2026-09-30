@@ -43,9 +43,16 @@ void main() {
     // The directory is no longer empty, so the hint must say to remove it:
     // a plain rerun with the Git flag would be refused.
     expect(result.stderr, contains('remove ${target.path}'));
+    // The command quotes a path its shell would split or expand, such as a
+    // Windows short name like RUNNER~1.
     expect(
       result.stderr,
-      contains('fleury create ${target.path} --dependency-source=git'),
+      matches(
+        RegExp(
+          'fleury create ["\']?${RegExp.escape(target.path)}["\']? '
+          '--dependency-source=git',
+        ),
+      ),
     );
   });
 
