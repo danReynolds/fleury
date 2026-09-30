@@ -1017,7 +1017,10 @@ class _SelectListState<T> extends State<_SelectList<T>> {
         SemanticAction.focus,
         SemanticAction.close,
       },
-      state: SemanticState({
+      // Read when semantics are collected: keys, hover, and typeahead move
+      // the highlight on the list controller without rebuilding the popup.
+      stateListenable: _list,
+      stateBuilder: () => SemanticState({
         'menuDepth': 0,
         'menuItemCount': widget.options.length,
         'selectedKey': _list.currentIndex,

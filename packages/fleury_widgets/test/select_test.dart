@@ -395,6 +395,25 @@ void main() {
       expect(picked, 'blue');
     });
 
+    testWidgets('the open list reports the highlighted option as it moves', (
+      tester,
+    ) {
+      tester.pumpWidget(_Host(initial: 'red'));
+      tester.sendKey(const KeyEvent(KeyCode.enter)); // open at Red
+      int? highlighted() =>
+          tester.semantics().single(role: SemanticRole.menu).state['selectedKey']
+              as int?;
+      expect(highlighted(), 0);
+
+      tester.sendKey(const KeyEvent(KeyCode.arrowDown));
+      tester.render(size: const CellSize(16, 8));
+      expect(highlighted(), 1, reason: 'the key moved the highlight to Green');
+
+      tester.sendKey(const KeyEvent(KeyCode.end));
+      tester.render(size: const CellSize(16, 8));
+      expect(highlighted(), 2);
+    });
+
     testWidgets('a press on a disabled option leaves the keys working', (
       tester,
     ) {
