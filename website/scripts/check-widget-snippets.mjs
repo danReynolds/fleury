@@ -67,7 +67,8 @@ const STUBS = {
   _quantity: `num _quantity = 0;`, count: `num? count;`, cursor: `int cursor = 0;`,
   start: `num start = 0;`, end: `num end = 0;`, progress: `double progress = 0;`,
   selectedTab: `int selectedTab = 0;`, editorActive: `bool editorActive = false;`,
-  _showDetails: `bool _showDetails = false;`,
+  _showDetails: `bool _showDetails = false;`, selected: `String selected = '';`,
+  hasUnsavedChanges: `bool hasUnsavedChanges = false;`, status: `String status = '';`,
   _color: `late Color _color;`, accent: `late Color accent;`,
   _date: `late DateTime _date;`, today: `late DateTime today;`,
   options: `List<SelectOption<String>> options = [];`,
@@ -77,6 +78,7 @@ const STUBS = {
   form: `late FormController form;`, theme: `late ThemeData theme;`, cs: `late ColorScheme cs;`,
   preferences: `late Preferences preferences;`, project: `late Project project;`,
   cart: `late Cart cart;`, ticks: `late Stream<int> ticks;`,
+  scroll: `late ScrollController scroll;`,
   load: `Future<List<Item>> load() async => [];`,
   // Data.
   points: `List<(num, num)> points = [];`, cpuSamples: `List<(num, num)> cpuSamples = [];`,
