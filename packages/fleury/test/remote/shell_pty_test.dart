@@ -80,6 +80,26 @@ void main() {
   );
 
   test(
+    'a Ctrl+Z the app leaves unhandled is an ordinary key: nothing stops',
+    () async {
+      // Unlike an app in a terminal of its own, an app behind the shell is
+      // not a job of the shell's terminal: it runs in the IDE, so there is
+      // nothing to suspend. As in the browser, the chord stays a key.
+      final run = await _runHarness('unhandled-ctrl-z');
+      run.expectCompleted();
+      expect(run.appRecords(0), <Object>[
+        {'key': 'z', 'ctrl': true},
+        {'key': 'c', 'ctrl': true},
+        {'exit': 'interrupt'},
+      ], reason: run.describe());
+      expect(run.appExit(0), 130, reason: run.describe());
+    },
+    skip: skip,
+    tags: const ['integration', 'pty'],
+    timeout: const Timeout(Duration(minutes: 3)),
+  );
+
+  test(
     'SIGTERM while an app is attached restores the terminal before exiting',
     () async {
       final run = await _runHarness('sigterm');

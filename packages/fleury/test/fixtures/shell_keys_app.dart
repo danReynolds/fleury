@@ -6,7 +6,8 @@
 //
 // Ctrl+Z in the focused field undoes the last edit; Ctrl+C is left unhandled,
 // so it ends the app with an interrupt. The app runs in a session of its own,
-// with no terminal, so an interrupt can only have arrived as the key.
+// with no terminal, so an interrupt can only have arrived as the key. With
+// `--no-field` there is no field, so Ctrl+Z is left unhandled too.
 //
 // The first edit also repaints a status line from SHELL-KEYS-EDIT-WAITING to
 // SHELL-KEYS-EDIT-TYPED-<text>; the shared prefix means the renderer's diff
@@ -31,7 +32,10 @@ Future<void> main(List<String> args) async {
     flush: true,
   );
 
-  final appExit = await runApp(_KeysApp(record), enableHotReload: false);
+  final appExit = await runApp(
+    _KeysApp(record, field: !args.contains('--no-field')),
+    enableHotReload: false,
+  );
   record({'exit': appExit.signal?.name ?? 'requested'});
   exit(switch (appExit.signal) {
     AppSignal.interrupt => 130,
@@ -42,9 +46,10 @@ Future<void> main(List<String> args) async {
 }
 
 class _KeysApp extends StatefulWidget {
-  const _KeysApp(this.record);
+  const _KeysApp(this.record, {required this.field});
 
   final void Function(Map<String, Object?> entry) record;
+  final bool field;
 
   @override
   State<_KeysApp> createState() => _KeysAppState();
@@ -63,14 +68,20 @@ class _KeysAppState extends State<_KeysApp> {
       children: [
         const Text('SHELL-KEYS-READY'),
         Text('SHELL-KEYS-EDIT-${_firstEdit ?? 'WAITING'}'),
-        TextInput(
-          autofocus: true,
-          enableBlink: false,
-          onChanged: (text) {
-            widget.record({'text': text});
-            if (_firstEdit == null) setState(() => _firstEdit = 'TYPED-$text');
-          },
-        ),
+        if (widget.field)
+          TextInput(
+            autofocus: true,
+            enableBlink: false,
+            onChanged: (text) {
+              widget.record({'text': text});
+              if (_firstEdit == null) {
+                setState(() => _firstEdit = 'TYPED-$text');
+              }
+            },
+          )
+        else
+          // Focus inside the detector without a field that handles keys.
+          const Focus(autofocus: true, child: Text('SHELL-KEYS-NO-FIELD')),
       ],
     ),
   );

@@ -180,7 +180,7 @@ class Harness:
 
     # -- apps ------------------------------------------------------------
 
-    def start_app(self):
+    def start_app(self, extra_args=()):
         index = len(self.apps)
         result = os.path.join(self.work_dir, f'app{index}.jsonl')
         log = open(os.path.join(self.work_dir, f'app{index}.log'), 'wb')
@@ -194,6 +194,7 @@ class Harness:
                 self.dart,
                 f'{self.package_root}/test/fixtures/shell_keys_app.dart',
                 f'--result={result}',
+                *extra_args,
             ],
             cwd=self.work_dir,
             stdin=subprocess.DEVNULL,
@@ -238,6 +239,15 @@ class Harness:
 
     def expect_app_exit(self, index, timeout, what):
         self.wait_until(lambda: self.app_exit(index) is not None, timeout, what)
+
+    def expect_running(self, index, when):
+        """Neither the shell nor app [index] has stopped or exited."""
+        self.pump(0.5)
+        for name, pid in (('shell', self.shell_pid), ('app', self.apps[index][0].pid)):
+            waited, status = os.waitpid(pid, os.WNOHANG | os.WUNTRACED)
+            if waited == pid:
+                state = 'stopped' if os.WIFSTOPPED(status) else 'exited'
+                raise StepFailed(f'the {name} {state} {when}')
 
     def kill_app(self, index):
         app = self.apps[index][0]
@@ -324,6 +334,20 @@ def scenario_keys(h):
     h.expect_restored(idle, 'afterShell')
 
 
+def scenario_unhandled_ctrl_z(h):
+    """A Ctrl+Z the app leaves unhandled stays an ordinary key: the app runs
+    in the IDE, not as a job of the shell's terminal, so nothing stops."""
+    h.start_shell()
+    h.expect_output(b'fleury shell ready', 60, 'shell ready')
+    h.start_app(['--no-field'])
+    h.expect_output(b'SHELL-KEYS-NO-FIELD', 60, 'app 0 first frame')
+    h.write(b'\x1a', 'Ctrl+Z')
+    h.expect_app_record(0, {'key': 'z', 'ctrl': True}, 15, 'the unhandled Ctrl+Z')
+    h.expect_running(0, 'after the unhandled Ctrl+Z')
+    h.write(b'\x03', 'Ctrl+C')
+    h.expect_app_exit(0, 15, 'app 0 to end on its unhandled Ctrl+C')
+
+
 def scenario_sigterm(h):
     """SIGTERM while an app is attached restores the terminal, then exits."""
     h.start_shell()
@@ -365,6 +389,7 @@ def scenario_hangup(h):
 
 SCENARIOS = {
     'keys': scenario_keys,
+    'unhandled-ctrl-z': scenario_unhandled_ctrl_z,
     'sigterm': scenario_sigterm,
     'app-killed': scenario_app_killed,
     'hangup': scenario_hangup,
