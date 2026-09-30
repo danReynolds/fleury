@@ -77,8 +77,9 @@ The render layer has two invalidation paths:
 - `markNeedsPaintOnly` is for audited visual-only changes such as color, cursor
   blink, and style.
 
-Fleury keeps invalidation conservative by default. A layout-affecting change
-must recompute size and placement; a paint-only change can reuse valid layout.
+Both paths request a frame and dirty every enclosing repaint boundary. Fleury
+keeps invalidation conservative by default. A layout-affecting change must
+recompute size and placement; a paint-only change can reuse valid layout.
 For a visual frame, painting starts at the root and fills a cleared back buffer.
 Culling and repaint caches can skip work inside that traversal. The presenter
 gets changes derived by comparing the finished buffers, including cells that
@@ -113,7 +114,9 @@ of leaving an impossible grid.
 For each visual frame, the frame loop clears the back buffer, paints the next
 image, and calls `diffAgainst(previous)` to derive changed rows, bounds, and cell
 counts. A layout change that removes content is therefore visible in the diff
-even when no render object paints over the old location.
+even when no render object paints over the old location. The comparison also
+covers inline image placements, which live beside the grid rather than in its
+cells.
 
 The frame buffers do not record per-write paint damage. Repaint boundaries still
 use that tracking inside their own caches to identify the cells they painted.
@@ -156,16 +159,23 @@ Here is the visual path for a normal state change:
 3. The host `FrameScheduler` coalesces pending frame requests. With the default
    `Duration.zero` interval it flushes as soon as possible; hosts may opt into a
    minimum frame interval to merge high-rate streams.
-4. `TuiFrameLoop` clears the back buffer for the next image.
+4. `TuiFrameLoop` clears the back buffer for the next image. On a full repaint
+   it also blanks the shown buffer it will compare against, because the
+   presenter is about to wipe the screen.
 5. Through the frame loop's paint callback, `BuildOwner.renderFrame` rebuilds
    dirty elements shallow-first, finds the root render object, runs layout with
    loose root constraints, and paints into that buffer.
 6. The frame loop compares the previous and next buffers, optionally detects a
-   beneficial scroll, and returns both buffers with a `TuiFrameDamage` describing
-   an unchanged frame, changed cells, a scroll, or a forced full repaint.
+   beneficial scroll, and returns both buffers with a `TuiFrameDamage`:
+   `FrameUnchanged`, `FrameChanged` (the exact changed rows and bounds),
+   `FrameScrolled`, or `FrameFullRepaint`. A full repaint happens on the first
+   frame, after a resize, and when the host forces one, such as after a
+   suspended terminal resumes or when an error screen replaces a frame that
+   failed to render.
 7. A presenter turns that into output:
    - The terminal target calls `AnsiRenderer.renderDiff(previous, next, ...)`
-     with the derived changed rows and bounds, or a full-repaint plan.
+     with the frame's damage: the changed rectangle bounds the comparison, and
+     a scroll can become a terminal scroll.
    - The embedded browser target builds a `FramePresentationPlan` and replaces
      only dirty retained DOM rows.
    - The served browser target encodes a binary plan, the browser client applies
@@ -220,15 +230,19 @@ the shared frame loop to get previous/next buffers, then diffs them through
 `AnsiRenderer`.
 
 When a frame requires a full repaint, the presenter clears its owned terminal
-area and redraws it. Otherwise it passes the derived changed rows and bounds to
-the renderer. Layout changes use the same buffer comparison as paint-only
-changes; they do not require a separate fallback diff.
+area and redraws it by diffing against the blanked previous buffer. Otherwise it
+passes the changed rectangle to the renderer, which compares only the cells
+inside it; an unchanged frame writes no cells. Layout changes use the same
+buffer comparison as paint-only changes; they do not require a separate
+fallback diff.
 
 Scroll is handled as an optimization over buffers, not as a special list API.
 Shared scroll-up detection looks for a row shift that reduces residual dirty
-cells. The ANSI renderer can emit a terminal scroll; the DOM presenter can move
-retained row elements. Keeping that detection shared prevents the targets from
-learning different ideas of what a scroll frame is.
+cells; the frame loop runs it once per frame, only when at least a row's worth
+of cells changed, and reports a hit as `FrameScrolled`. The ANSI renderer can
+emit a terminal scroll and then rewrite what the shift did not fix; the DOM
+presenter can move retained row elements. Keeping that detection shared
+prevents the targets from learning different ideas of what a scroll frame is.
 
 ## Embedded browser target
 
@@ -289,9 +303,9 @@ oracles around the places drift would be subtle:
 - **Public boundary tests:** web-safe libraries stay behind the host SPI instead
   of accidentally importing native runtime code.
 
-The important principle is that damage, retained DOM, and semantic deltas are
-optimization paths. The tests keep them equivalent to the simpler full-buffer or
-full-tree truth.
+The important principle is that bounded diffs, retained DOM, and semantic
+deltas are optimization paths. The tests keep them equivalent to the simpler
+full-buffer or full-tree truth.
 
 ## Tradeoffs and pressure points
 
@@ -299,6 +313,17 @@ The architecture is optimized for app-grade, semantic, cross-target TUIs. It is
 not a claim that Fleury has the smallest possible runtime for one-off CLIs, the
 fastest possible large-grid browser renderer, or a free incremental path for
 every tree mutation. These are the pressure points worth keeping visible.
+
+### Damage is derived, not reported
+
+Fleury does not ask widgets or render objects to declare which cells they
+changed. Reported damage is only as good as its least careful writer: a write
+nobody declares, or a cell that content stops covering, stays stale on screen.
+Comparing complete frames is ground truth, so nothing upstream can
+under-report. The comparison is exact in the other direction too: a subtree
+that repaints identical cells produces no damage, so presenters touch only rows
+whose cells differ. The price is one pass over every cell per rendered frame,
+linear in the grid size.
 
 ### Invalidation still matters
 
@@ -324,7 +349,7 @@ adding public damage metadata until a benchmark shows it unlocks real wins.
 ### Repaint boundaries are not magic
 
 A repaint boundary avoids re-walking expensive paint code, but it still has to
-copy cells into the next frame and the presenter may still inspect buffers. It
+copy cells into the next frame, and the frame loop still compares them. It
 is a tool for stable, expensive paint subtrees, not a default wrapper for every
 component.
 
@@ -391,7 +416,7 @@ change, not on winning every tiny native-memory or cold-start comparison.
 | Render objects and invalidation | `packages/fleury/lib/src/rendering/render_object.dart` |
 | Basic render objects | `packages/fleury/lib/src/rendering/render_objects.dart` |
 | Repaint-boundary cache | `packages/fleury/lib/src/rendering/render_repaint_boundary.dart` |
-| Cell frame and damage tracking | `packages/fleury/lib/src/rendering/cell_buffer.dart` |
+| Cell frame and buffer diff | `packages/fleury/lib/src/rendering/cell_buffer.dart` |
 | Shared scroll detection | `packages/fleury/lib/src/rendering/scroll_detection.dart` |
 | Runtime owner | `packages/fleury/lib/src/runtime/tui_runtime.dart` |
 | Frame buffer lifecycle | `packages/fleury/lib/src/runtime/tui_frame_loop.dart` |
