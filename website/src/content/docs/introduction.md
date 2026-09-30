@@ -25,7 +25,7 @@ Fleury paints to a grid of character **cells**, not pixels. A fourth
 **semantics** tree rides alongside, exposing roles and actions for tests and
 agents.
 
-The framework itself never mentions a terminal: it paints into an abstract cell
+The framework itself never writes to a terminal: it paints into an abstract cell
 grid, and a **target** turns that grid into something real — diffed ANSI, a
 browser DOM, or a streamed session. The
 [architecture overview](/fleury/architecture/overview/) walks the whole pipeline.
