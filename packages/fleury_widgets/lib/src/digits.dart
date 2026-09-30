@@ -2,16 +2,16 @@ import 'package:fleury/fleury_core.dart';
 
 import 'glyphs.dart';
 
-/// Large-numeral display for clocks, timers, counters — the "calculator
-/// face" look popularized by Textual's Digits widget. Each digit is drawn
-/// as a 5-row glyph from block characters; `:` and ` ` are supported for
-/// time-of-day strings.
+/// Large numerals for clocks, timers, and counters, each character drawn five
+/// rows tall. [text] can contain the digits 0 to 9, `:`, `.`, `-`, and
+/// spaces.
 ///
 /// ```dart
 /// Digits('12:34', color: theme.colorScheme.primary)
 /// ```
 ///
-/// Throws if [text] contains a character outside `[0-9:.\- ]`.
+/// Any other character in [text] throws an [ArgumentError] when the widget
+/// is laid out.
 class Digits extends StatelessWidget {
   const Digits(
     this.text, {
@@ -22,7 +22,7 @@ class Digits extends StatelessWidget {
     this.semanticLabel = 'Digits',
   });
 
-  /// Characters to render using the built-in large-glyph alphabet.
+  /// The characters to show: the digits 0 to 9, `:`, `.`, `-`, and spaces.
   final String text;
 
   /// Complete cell style override for lit digit segments.

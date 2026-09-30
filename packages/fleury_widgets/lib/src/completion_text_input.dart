@@ -148,7 +148,10 @@ class CompletionTextInput extends StatefulWidget {
   /// Whether the field can receive focus but not edit text.
   final bool readOnly;
 
-  /// Optional validation error displayed by the underlying input.
+  /// Marks the current value invalid: the field draws in the theme's error
+  /// style and reports this message through semantics, but doesn't show the
+  /// text. Use it outside a `FormField`; inside one, the field supplies its
+  /// own error and shows the message below the input.
   final String? validationError;
 
   /// Label exposed through the underlying text-field semantic node.
