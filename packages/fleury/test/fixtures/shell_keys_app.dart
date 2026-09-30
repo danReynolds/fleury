@@ -7,6 +7,11 @@
 // Ctrl+Z in the focused field undoes the last edit; Ctrl+C is left unhandled,
 // so it ends the app with an interrupt. The app runs in a session of its own,
 // with no terminal, so an interrupt can only have arrived as the key.
+//
+// The first edit also repaints a status line from SHELL-KEYS-EDIT-WAITING to
+// SHELL-KEYS-EDIT-TYPED-<text>; the shared prefix means the renderer's diff
+// writes just the changed tail, so the tail in the terminal's output proves a
+// diff frame, not only the first frame, reached the screen.
 
 import 'dart:convert';
 import 'dart:io';
@@ -36,24 +41,35 @@ Future<void> main(List<String> args) async {
   });
 }
 
-class _KeysApp extends StatelessWidget {
+class _KeysApp extends StatefulWidget {
   const _KeysApp(this.record);
 
   final void Function(Map<String, Object?> entry) record;
 
   @override
+  State<_KeysApp> createState() => _KeysAppState();
+}
+
+class _KeysAppState extends State<_KeysApp> {
+  String? _firstEdit;
+
+  @override
   Widget build(BuildContext context) => KeyDetector(
-    onKey: (event) => record({
+    onKey: (event) => widget.record({
       'key': event.code.character ?? event.code.special?.name,
       'ctrl': event.hasCtrl,
     }),
     child: Column(
       children: [
         const Text('SHELL-KEYS-READY'),
+        Text('SHELL-KEYS-EDIT-${_firstEdit ?? 'WAITING'}'),
         TextInput(
           autofocus: true,
           enableBlink: false,
-          onChanged: (text) => record({'text': text}),
+          onChanged: (text) {
+            widget.record({'text': text});
+            if (_firstEdit == null) setState(() => _firstEdit = 'TYPED-$text');
+          },
         ),
       ],
     ),

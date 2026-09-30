@@ -21,11 +21,13 @@
 // Usage:
 //
 //   $ fleury shell                 # in terminal A
-//   # → "fleury shell ready, waiting for an app to attach..."
+//   # → "fleury shell ready (handle at .fleury/handle)"
 //
 //   # In VSCode / IntelliJ, F5 your app as you normally would.
 //   # The app auto-detects `.fleury/handle` and connects.
-//   # Terminal A shows the TUI; the IDE keeps the debugger console.
+//   # Terminal A shows the TUI and sends it every key; the IDE keeps the
+//   # debugger console. Each run attaches in turn; Ctrl+C in terminal A
+//   # quits the shell while no app is attached.
 
 import 'dart:async';
 import 'dart:convert';
@@ -333,6 +335,10 @@ Future<int> _runShell(List<String> args) async {
     await shutdown(code);
   });
 
+  // Each run of the app attaches in turn, so an IDE's stop, restart and
+  // rerun all land in the same shell. Between runs the terminal is back in
+  // its own modes: there Ctrl+C is the terminal's interrupt again, and quits
+  // the shell through the signal watcher above.
   server.listen((client) async {
     // One app at a time: the terminal can only show one app's frames.
     if (activeSession != null || shutdownFuture != null) {
@@ -356,17 +362,19 @@ Future<int> _runShell(List<String> args) async {
         'Run `reset` if it misbehaves.',
       );
     }
-    if (end.reason == ShellSessionEndReason.failed) {
-      say('fleury shell: session failed: ${end.error}');
-    }
     if (turnedAway > 0) {
       say(
         'fleury shell: turned away $turnedAway app'
-        '${turnedAway == 1 ? '' : 's'} that tried to attach during the '
-        'session.',
+        '${turnedAway == 1 ? '' : 's'} that tried to attach during that run.',
       );
+      turnedAway = 0;
     }
-    await shutdown(end.reason == ShellSessionEndReason.failed ? 1 : 0);
+    final ended = switch (end.reason) {
+      ShellSessionEndReason.failed => 'the session failed (${end.error})',
+      ShellSessionEndReason.appDisconnected => 'the app disconnected',
+      _ => 'the app exited',
+    };
+    say('fleury shell: $ended. Waiting for the next run; Ctrl+C quits.');
   });
 
   // Readiness is a lifecycle contract: only announce it after the listener and
@@ -382,6 +390,9 @@ Future<int> _runShell(List<String> args) async {
   );
   say('  • or launch it from your IDE — the discovery file');
   say('    handles the rest automatically.');
+  say('');
+  say('Leave it running: every run attaches here and gets every key typed.');
+  say('Ctrl+C quits the shell while no app is attached.');
 
   return exitCode.future;
 }

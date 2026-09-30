@@ -11,6 +11,7 @@
 
 import 'dart:async';
 import 'dart:convert';
+import 'dart:ffi';
 import 'dart:io';
 import 'dart:typed_data';
 
@@ -49,6 +50,8 @@ abstract interface class ShellTerminal {
 
   /// Takes the terminal over for an app: raw input, [shellTerminalMode]'s
   /// screen modes, and a reader that passes every byte typed to [onInput].
+  /// Input typed before the first acquisition, while no app was attached,
+  /// is discarded: it was addressed to no app.
   ///
   /// [onGone] runs at most once, if the terminal itself goes away: its input
   /// ends or fails, which in raw mode means the terminal hung up. A failed
@@ -87,6 +90,7 @@ final class NativeShellTerminal implements ShellTerminal {
   final NativePosixTerminalModeController _modes;
   PosixInputLease? _input;
   void Function()? _onGone;
+  bool _acquired = false;
   bool _rawModeOwned = false;
   bool _screenOwned = false;
   Future<void> _releaseTail = Future<void>.value();
@@ -105,6 +109,12 @@ final class NativeShellTerminal implements ShellTerminal {
     required void Function(Uint8List bytes) onInput,
     required void Function() onGone,
   }) async {
+    if (!_acquired) {
+      _acquired = true;
+      // Keys typed while the shell waited went to no app. Replayed into this
+      // one, a stale Enter would press whatever it focuses first.
+      _discardPendingInput();
+    }
     // Own the obligation before the change: raw mode can fail part-way, and
     // release must still roll back whatever did change.
     _rawModeOwned = true;
@@ -183,6 +193,22 @@ final class NativeShellTerminal implements ShellTerminal {
     if (failure != null) Error.throwWithStackTrace(failure.$1, failure.$2);
   }
 }
+
+/// Discards input the terminal received but no one has read yet
+/// (`tcflush(0, TCIFLUSH)`). Best-effort: a terminal that cannot flush keeps
+/// its typeahead.
+void _discardPendingInput() {
+  try {
+    _tcflush(0, Platform.isMacOS ? 1 : 0); // TCIFLUSH: 1 on Darwin, 0 on Linux
+  } on Object {
+    // No flush on this platform's libc; typeahead reaches the app instead.
+  }
+}
+
+final int Function(int fd, int queue) _tcflush = DynamicLibrary.process()
+    .lookupFunction<Int32 Function(Int32, Int32), int Function(int, int)>(
+      'tcflush',
+    );
 
 /// Why a [ShellSession] ended.
 enum ShellSessionEndReason {

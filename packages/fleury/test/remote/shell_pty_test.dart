@@ -15,7 +15,8 @@ void main() {
       : null;
 
   test(
-    'every key reaches the attached app, and the terminal returns exactly',
+    'every key reaches the attached app, the terminal returns exactly, and '
+    'the shell serves the next run',
     () async {
       final run = await _runHarness('keys');
       run.expectCompleted();
@@ -37,25 +38,41 @@ void main() {
       // Ctrl+Z undid the edit in the focused field and Ctrl+C, which nothing
       // handled, ended the app with an interrupt. The app has no terminal of
       // its own, so both could only have arrived as keys through the shell.
-      final records = run.appRecords(0);
+      // What was typed before it attached, while the shell was idle, never
+      // reached it: the first thing the app saw was the x.
+      expect(run.appRecords(0), <Object>[
+        {'text': 'x'},
+        {'text': ''},
+        {'key': 'c', 'ctrl': true},
+        {'exit': 'interrupt'},
+      ], reason: run.describe());
+      expect(run.appExit(0), 130, reason: run.describe());
+      // The edit's repaint reached the screen too: a diff frame, writing just
+      // the changed tail of the app's status line.
       expect(
-        records,
-        containsAllInOrder(<Object>[
-          {'text': 'x'},
-          {'text': ''},
-          {'key': 'c', 'ctrl': true},
-          {'exit': 'interrupt'},
-        ]),
+        run.output,
+        matches(RegExp(r'\x1B\[\d+;\d+H(\x1B\[[0-9;]*m)*TYPED-x')),
         reason: run.describe(),
       );
-      expect(run.appExit(0), 130, reason: run.describe());
-      expect(run.shellExit, 0, reason: run.describe());
       expect(
         run.restoredExactly('afterSession'),
         isTrue,
         reason: 'the full termios snapshot must come back\n${run.describe()}',
       );
+
+      // The next run attached to the same shell and got its keys too.
+      expect(run.appRecords(1), <Object>[
+        {'text': 'y'},
+        {'key': 'c', 'ctrl': true},
+        {'exit': 'interrupt'},
+      ], reason: run.describe());
+      expect(run.appExit(1), 130, reason: run.describe());
+
+      // Idle again, Ctrl+C was the terminal's interrupt: it quit the shell.
+      expect(run.shellExit, 130, reason: run.describe());
+      expect(run.restoredExactly('afterShell'), isTrue, reason: run.describe());
       _expectScreenHandedBack(run);
+      _expectDiscoveryRemoved(run);
     },
     skip: skip,
     tags: const ['integration', 'pty'],
@@ -89,6 +106,7 @@ void main() {
         reason: run.describe(),
       );
       _expectScreenHandedBack(run);
+      expect(run.shellExit, 130, reason: 'it waited until SIGINT quit it');
     },
     skip: skip,
     tags: const ['integration', 'pty'],

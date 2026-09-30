@@ -279,18 +279,26 @@ class Harness:
             self.master = None
 
 
-def attach(h, index):
-    """Starts app [index] and waits for its first frame; returns the offset."""
+WAITING = b'Waiting for the next run'
+
+
+def attach(h, index, start=0):
+    """Starts app [index] and waits for its first frame past [start]."""
     h.start_app()
-    return h.expect_output(b'SHELL-KEYS-READY', 60, f'app {index} first frame')
+    return h.expect_output(
+        b'SHELL-KEYS-READY', 60, f'app {index} first frame', start
+    )
 
 
 def scenario_keys(h):
-    """Every key reaches the app, and the terminal comes back exactly."""
+    """Every key reaches the app, the terminal comes back exactly after each
+    run, and the shell serves the next run until Ctrl+C quits it idle."""
     h.start_shell()
-    h.expect_output(b'fleury shell ready', 60, 'shell ready')
+    ready = h.expect_output(b'fleury shell ready', 60, 'shell ready')
     idle = h.termios('idle')
-    attach(h, 0)
+    # Typed while no app is attached: addressed to no app, so none gets it.
+    h.write(b'stale\r', 'stale + Enter while idle')
+    offset = attach(h, 0, ready)
     h.termios('attached')
     h.write(b'x', 'x')
     h.expect_app_record(0, {'text': 'x'}, 15, 'the typed x')
@@ -299,8 +307,21 @@ def scenario_keys(h):
     h.expect_shell_alive('after Ctrl+Z')
     h.write(b'\x03', 'Ctrl+C')
     h.expect_app_exit(0, 15, 'app 0 to end on its unhandled Ctrl+C')
-    h.expect_shell_exit(15, 'the shell to end with its only app')
+    offset = h.expect_output(WAITING, 15, 'the shell to wait for the next run', offset)
     h.expect_restored(idle, 'afterSession')
+
+    # The next run attaches to the same shell.
+    offset = attach(h, 1, offset)
+    h.write(b'y', 'y')
+    h.expect_app_record(1, {'text': 'y'}, 15, 'the typed y')
+    h.write(b'\x03', 'Ctrl+C')
+    h.expect_app_exit(1, 15, 'app 1 to end on its unhandled Ctrl+C')
+    h.expect_output(WAITING, 15, 'the shell to wait again', offset)
+
+    # With no app attached, Ctrl+C is the terminal's interrupt again.
+    h.write(b'\x03', 'Ctrl+C while idle')
+    h.expect_shell_exit(15, 'the idle shell to quit on Ctrl+C')
+    h.expect_restored(idle, 'afterShell')
 
 
 def scenario_sigterm(h):
@@ -317,14 +338,19 @@ def scenario_sigterm(h):
 
 
 def scenario_app_killed(h):
-    """An app that dies without a goodbye still hands the terminal back."""
+    """An app that dies without a goodbye still hands the terminal back,
+    and the shell waits for the next run."""
     h.start_shell()
     h.expect_output(b'fleury shell ready', 60, 'shell ready')
     idle = h.termios('idle')
-    attach(h, 0)
+    offset = attach(h, 0)
     h.kill_app(0)
-    h.expect_shell_exit(15, 'the shell to end with its only app')
+    h.expect_output(b'the app disconnected', 15, 'the disconnect status', offset)
+    h.expect_shell_alive('after its app was killed')
     h.expect_restored(idle, 'afterSession')
+    os.kill(h.shell_pid, signal.SIGINT)
+    h.note('sent SIGINT')
+    h.expect_shell_exit(15, 'the shell to quit on SIGINT')
 
 
 def scenario_hangup(h):
