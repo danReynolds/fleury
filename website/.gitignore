@@ -26,3 +26,6 @@ src/widget-sidebar.json
 public/fleury-preferences-test.js*
 
 public/fleury-debugger.js*
+
+# Runnable guide projects generated from canonical Dart source
+src/guide_projects.json

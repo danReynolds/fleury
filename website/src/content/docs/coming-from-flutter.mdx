@@ -3,7 +3,7 @@ title: Coming from Flutter
 description: A practical map from Flutter's widget model to Fleury's cell-grid UI model.
 ---
 
-import CodeDemoSplit from '../../components/CodeDemoSplit.astro';
+import GuidePad from '../../components/GuidePad.astro';
 import FleuryExample from '../../components/FleuryExample.astro';
 import FlutterComparison from '../../components/FlutterComparison.astro';
 import SourceExcerpt from '../../components/SourceExcerpt.astro';
@@ -78,9 +78,12 @@ class _CounterState extends State<Counter> {
 <SourceExcerpt slot="fleury" code={[counterMain, demos]} region="counter" mark={[1, 3, 17, { range: '22-25' }]} />
 </FlutterComparison>
 
-The Fleury version, running in your browser. Press Enter, or click **Increment**:
+The Fleury version runs in your browser. Press Enter, or click **Increment**.
+Then change the code, say the label or the step, and press **Run**:
 
-<FleuryExample id="flutter.counter" cols={34} rows={7} interactive />
+<GuidePad id="flutter.counter" layout="demo-wide">
+<FleuryExample slot="demo" id="flutter.counter" cols={34} rows={7} interactive />
+</GuidePad>
 
 What changed:
 
@@ -191,10 +194,9 @@ Fleury layout is integer cell layout. Width is columns; height is rows. A
 terminal cell is usually taller than it is wide, so a visually square box often
 uses an `AspectRatio` around `2.0`, not `1.0`:
 
-<CodeDemoSplit file="cell_boxes.dart">
-<SourceExcerpt slot="code" code={demos} region="cells" />
+<GuidePad id="flutter.cells">
 <FleuryExample slot="demo" id="flutter.cells" cols={28} rows={14} />
-</CodeDemoSplit>
+</GuidePad>
 
 That sounds small, but it changes what "polish" means. You tune information
 density, alignment, wrapping, keyboard flow, and semantic structure before you
@@ -231,10 +233,9 @@ key sequence maps straight to a callback. Type in the field, then press Ctrl+S
 or Esc. The bindings sit above the focused field, so its keys reach them, and
 their labels feed the hint bar:
 
-<CodeDemoSplit file="editor_shortcuts.dart" codeMaxHeight="26rem">
-<SourceExcerpt slot="code" code={demos} region="keys" />
+<GuidePad id="flutter.keys" codeMaxHeight="26rem">
 <FleuryExample slot="demo" id="flutter.keys" cols={44} rows={8} interactive />
-</CodeDemoSplit>
+</GuidePad>
 
 Pointer and hover still exist through `GestureDetector` and `MouseRegion`, but
 terminal users expect every important workflow to work from the keyboard.
@@ -255,10 +256,9 @@ For the common "animate when this state value changes" case, use
 `AnimationBuilder`, the counterpart of `TweenAnimationBuilder`. Press Enter to
 flip `selected` and watch the value ease toward its new target:
 
-<CodeDemoSplit file="selection_meter.dart" codeMaxHeight="26rem">
-<SourceExcerpt slot="code" code={demos} region="animation" />
+<GuidePad id="flutter.animation" codeMaxHeight="26rem">
 <FleuryExample slot="demo" id="flutter.animation" cols={36} rows={7} interactive />
-</CodeDemoSplit>
+</GuidePad>
 
 For entrance/exit effects, use `Animate` or `AnimatedVisibility`:
 
@@ -277,10 +277,9 @@ With `FleuryApp(home: ...)` there is no `MaterialPageRoute` and no named-route
 table. Push the widget you want to show, pop with an optional result, or pop
 back to a screen by its type:
 
-<CodeDemoSplit file="projects.dart" codeMaxHeight="26rem">
-<SourceExcerpt slot="code" code={demos} region="routes" />
+<GuidePad id="flutter.routes" codeMaxHeight="26rem">
 <FleuryExample slot="demo" id="flutter.routes" cols={38} rows={8} interactive />
-</CodeDemoSplit>
+</GuidePad>
 
 Use `PopScope` for the same kind of "can this route close?" guard you would use
 in Flutter.

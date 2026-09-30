@@ -4,7 +4,7 @@ description: Let users move through your interface, direct focus, and keep it wh
 ---
 
 import FleuryExample from '../../../components/FleuryExample.astro';
-import CodeDemoSplit from '../../../components/CodeDemoSplit.astro';
+import GuidePad from '../../../components/GuidePad.astro';
 
 Focus decides which part of your interface receives keyboard input. Fleury's
 built-in controls can already take focus, show it, and handle the keys they
@@ -151,41 +151,11 @@ demo, press Enter on **Focus search**, then type a query: the action moves focus
 straight to the search field, without stepping through the controls between
 them.
 
-<CodeDemoSplit file="focus_tour.dart">
-<Fragment slot="code">
-```dart
-class _WorkspaceState extends State<Workspace> {
-  final _searchFocus = FocusNode(debugLabel: 'search');
-
-  void focusSearch() => _searchFocus.requestFocus();
-
-  @override
-  Widget build(BuildContext context) => Row(
-    children: [
-      Button(text: 'Focus search', onPressed: focusSearch),
-      SizedBox(
-        width: 24,
-        child: TextInput(
-          focusNode: _searchFocus,
-          placeholder: 'Search files',
-          onChanged: search,
-        ),
-      ),
-    ],
-  );
-
-  @override
-  void dispose() {
-    _searchFocus.dispose();
-    super.dispose();
-  }
-}
-```
-</Fragment>
+<GuidePad id="focusnode.programmatic">
 <Fragment slot="demo">
 <FleuryExample id="focusnode.programmatic" cols={60} rows={10} interactive />
 </Fragment>
-</CodeDemoSplit>
+</GuidePad>
 
 A node is an owned resource: create it once, keep it across rebuilds, and
 dispose it with the state that owns it. Use `hasFocus` when behavior depends on
@@ -198,35 +168,11 @@ Use `FocusDetector` to react when focus crosses the boundary of a whole
 subtree. It is useful for active-pane styling, cursor visibility, and pausing
 an inactive preview:
 
-<CodeDemoSplit file="focus_tour.dart" layout="demo-wide">
-<Fragment slot="code">
-```dart
-FocusDetector(
-  onFocusChange: (hasFocus) {
-    setState(
-      () => editorActive = hasFocus,
-    );
-  },
-  child: Column(
-    children: [
-      Button(
-        text: 'Title',
-        autofocus: true,
-        onPressed: editTitle,
-      ),
-      Button(
-        text: 'Body',
-        onPressed: editBody,
-      ),
-    ],
-  ),
-)
-```
-</Fragment>
+<GuidePad id="focusdetector.basic" layout="demo-wide">
 <Fragment slot="demo">
 <FleuryExample id="focusdetector.basic" cols={62} rows={14} interactive />
 </Fragment>
-</CodeDemoSplit>
+</GuidePad>
 
 Tab from Title to Body: both controls remain inside the editor, so the boundary
 counter does not change. Tab to Preview and the detector reports one leave.

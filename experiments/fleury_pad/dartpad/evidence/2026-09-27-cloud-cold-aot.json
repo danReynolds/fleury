@@ -1,0 +1,81 @@
+{
+  "startedAt": "2026-09-27T23:04:42.099354+00:00",
+  "finishedAt": "2026-09-27T23:04:54.337221+00:00",
+  "url": "https://fleury-pad-staging-vbalblwk3q-uc.a.run.app",
+  "label": "optimized-after-natural-idle",
+  "build": {
+    "sdkVersion": "3.12.2",
+    "buildId": "8ba98d0bfec4daad",
+    "backend": "dartpad",
+    "upstreamRevision": "70a62b1ebcf9d2b906ec564254bde02a543be895",
+    "protocolVersion": 2,
+    "sourceRevision": "227e387b-dirty-20260927-aot"
+  },
+  "httpOnly": true,
+  "coldStartConfirmed": true,
+  "samples": [
+    {
+      "operation": "initialConnection",
+      "roundTripMs": 8328.8,
+      "serverElapsedMs": null,
+      "responseBytes": 212
+    },
+    {
+      "operation": "firstCompile",
+      "roundTripMs": 1839.2,
+      "serverElapsedMs": 1688,
+      "responseBytes": 38313
+    },
+    {
+      "operation": "reload1",
+      "roundTripMs": 770.1,
+      "serverElapsedMs": 632,
+      "responseBytes": 23905
+    },
+    {
+      "operation": "reload2",
+      "roundTripMs": 636.4,
+      "serverElapsedMs": 492,
+      "responseBytes": 23905
+    },
+    {
+      "operation": "reload3",
+      "roundTripMs": 660.5,
+      "serverElapsedMs": 527,
+      "responseBytes": 23905
+    }
+  ],
+  "firstConnectionThroughCompileMs": 10168.0,
+  "deployment": {
+    "project": "fleury-pad-20260927",
+    "region": "us-central1",
+    "service": "fleury-pad-staging",
+    "revision": "fleury-pad-staging-00006-guy",
+    "serviceAnnotations": {
+      "run.googleapis.com/maxScale": "1",
+      "run.googleapis.com/scalingMode": "automatic"
+    },
+    "revisionAnnotations": {
+      "autoscaling.knative.dev/maxScale": "1",
+      "run.googleapis.com/cpu-throttling": "false",
+      "run.googleapis.com/execution-environment": "gen2",
+      "run.googleapis.com/startup-cpu-boost": "false"
+    },
+    "resources": {
+      "limits": {
+        "cpu": "1",
+        "memory": "2Gi"
+      }
+    }
+  },
+  "confirmation": {
+    "method": "First request, AUTOSCALING start, and application-ready logs share one instance ID on the unchanged revision.",
+    "requestStartedAt": "2026-09-27T23:04:42.285931Z",
+    "instanceStartedAt": "2026-09-27T23:04:42.323494Z",
+    "applicationReadyAt": "2026-09-27T23:04:49.250470Z",
+    "startupProbeSuccessAt": "2026-09-27T23:04:50.419563Z",
+    "instanceIdsMatch": true,
+    "scalingConfigurationChanged": false,
+    "note": "Single natural-idle cold sample, not a percentile or browser time-to-interactive measurement."
+  }
+}

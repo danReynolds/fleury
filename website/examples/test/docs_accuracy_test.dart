@@ -260,7 +260,7 @@ void main() {
         RegExp(r'''Semantics\s*\(\s*id:\s*(?:const\s+)?['"]''').hasMatch(guide),
         isFalse,
       );
-      expect(guide, contains('<AgentGuideCode slot="code"'));
+      expect(guide, contains('<GuidePad id="agents.release-checklist"'));
       expect(compiledSnippet, contains("id: SemanticNodeId('save')"));
     });
 
@@ -384,7 +384,7 @@ void main() {
     // the dev loop off and restart by hand.
     test('hot-reload guide teaches runApp(args:) for argv-driven apps', () {
       final guide = File(
-        p.join(repo.path, 'website/src/content/docs/guides/hot-reload.md'),
+        p.join(repo.path, 'website/src/content/docs/guides/hot-reload.mdx'),
       ).readAsStringSync();
 
       expect(guide, contains('runApp(const MyApp(), args: args)'));
@@ -402,7 +402,7 @@ void main() {
         p.join(repo.path, 'packages/fleury/lib/src/runtime/dev_bootstrap.dart'),
       ).readAsStringSync();
       final guide = File(
-        p.join(repo.path, 'website/src/content/docs/guides/hot-reload.md'),
+        p.join(repo.path, 'website/src/content/docs/guides/hot-reload.mdx'),
       ).readAsStringSync();
       final section = RegExp(
         r'hot-reload guide → "([^"]+)"',
@@ -421,7 +421,7 @@ void main() {
       const recipe = 'dart --enable-vm-service=0 run';
       for (final path in const <String>[
         'docs/serving-and-embedding.md',
-        'website/src/content/docs/guides/hot-reload.md',
+        'website/src/content/docs/guides/hot-reload.mdx',
         'packages/fleury/lib/src/cli/create_command.dart',
       ]) {
         expect(

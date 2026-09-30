@@ -3,11 +3,8 @@ title: Widgets & state
 description: The programming model — stateless and stateful widgets, the State lifecycle, setState, keys, and context.
 ---
 
-import CodeDemoSplit from '../../../components/CodeDemoSplit.astro';
+import GuidePad from '../../../components/GuidePad.astro';
 import FleuryExample from '../../../components/FleuryExample.astro';
-import SourceExcerpt from '../../../components/SourceExcerpt.astro';
-import concepts from '../../../../examples/lib/concepts.dart?raw';
-import stateGuide from '../../../../examples/lib/state_management_guide.dart?raw';
 
 A Fleury UI is a tree of **widgets**: immutable descriptions of what should be on
 screen. You never mutate a widget — you describe a new one and let the framework
@@ -36,10 +33,9 @@ counter, a scroll position, a text buffer. The widget itself is still immutable;
 the mutable part lives in a companion **`State`** object that the framework keeps
 alive across rebuilds:
 
-<CodeDemoSplit file="local_counter.dart">
-<SourceExcerpt slot="code" code={stateGuide} region="local" />
+<GuidePad id="state.local-counter">
 <FleuryExample slot="demo" id="state.local-counter" cols={34} rows={9} interactive />
-</CodeDemoSplit>
+</GuidePad>
 
 ## Rebuild after changing state
 
@@ -83,10 +79,9 @@ most, in the order they fire:
 
 A clock starts its timer in `initState` and cancels it in `dispose`:
 
-<CodeDemoSplit file="clock.dart">
-<SourceExcerpt slot="code" code={concepts} region="clock" />
+<GuidePad id="concepts.clock">
 <FleuryExample slot="demo" id="concepts.clock" cols={25} rows={3} />
-</CodeDemoSplit>
+</GuidePad>
 
 Three more hooks cover rarer cases. `deactivate()` runs when the state leaves
 the tree, and `activate()` runs if it's reinserted in the same frame, which

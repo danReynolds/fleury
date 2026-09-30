@@ -127,10 +127,15 @@ final class TuiRuntime {
     }
   }
 
-  /// Reassembles the mounted application after a hot reload.
+  /// Reassembles the mounted application after the host has reloaded its code.
+  ///
+  /// Rebuild the tree before resetting surviving animations and frame tickers:
+  /// the rebuild may dispose controllers that must not receive reload hooks.
+  /// The host remains responsible for presenting the resulting frame.
   void reassembleApplication() {
     _ensureNotDisposed();
     owner.reassembleApplication();
+    binding.tickerScheduler.reassemble();
   }
 
   /// Renders the mounted root into [buffer].

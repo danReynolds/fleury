@@ -252,9 +252,10 @@ supervised-child environment either way.
 ## How it works under the hood
 
 1. `runApp(enableHotReload: true)` calls
-   `HotReloadController.attach(onReassemble: ...)`. By default, that
-   callback runs `BuildOwner.reassembleApplication()` followed by
-   `TickerScheduler.reassemble()`.
+   `HotReloadController.attach(onReassemble: ...)`. That callback runs
+   `TuiRuntime.reassembleApplication()`, which calls
+   `BuildOwner.reassembleApplication()` followed by
+   `TickerScheduler.reassemble()`, then schedules a frame.
 2. The controller registers a `dart:developer` service extension at
    `ext.fleury.reassemble`. Any tool that can speak the VM service
    protocol can trigger a reassemble explicitly.
@@ -275,6 +276,18 @@ supervised-child environment either way.
   per-frame tick callbacks).
 - `Animation` settles at its current target so no old completion remains
   pending. `FrameTicker` resets its phase and re-anchors its clock.
+
+## Browser development hosts
+
+Terminal and browser reloads share `TuiRuntime.reassembleApplication()`:
+rebuild the element tree, then reset surviving animations and frame tickers.
+A browser tool such as [Fleury Pad](https://danreynolds.github.io/fleury/pad/)
+applies the compiler's code update itself, then calls
+`await MountedApp.reassemble()` from `package:fleury_web`. That future
+completes after the rebuilt frame and its accessibility update are presented,
+and rejects if the mount is disposed or presentation fails. Compilation and
+code transport stay outside the framework; there is no separate tree walk for
+the browser.
 
 ## Disabling hot reload
 
@@ -315,6 +328,8 @@ it.
 ## Implementation references
 
 - `lib/src/runtime/hot_reload.dart` — `HotReloadController`
+- `lib/src/runtime/tui_runtime.dart` — `TuiRuntime.reassembleApplication`,
+  shared by the terminal and browser hosts
 - `lib/src/widgets/framework.dart` — `BuildOwner.reassembleApplication`,
   `State.reassemble`
 - `lib/src/animation/ticker_scheduler.dart` — reassemble registry

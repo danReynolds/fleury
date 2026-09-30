@@ -28,6 +28,12 @@ external set _fleuryMountExamples(JSFunction value);
 @JS('fleuryMountInto')
 external set _fleuryMountInto(JSFunction value);
 
+// `window.fleuryUnmountExample(hostElement)` — dispose an example the page
+// scan mounted, when an editable demo replaces it with the reader's own run.
+@JS('fleuryUnmountExample')
+external set _fleuryUnmountExample(JSFunction value);
+final _mountedExamples = <web.Element, JSObject>{};
+
 // `window.fleuryMountKnobs(hostElement, id, paramsJson)` — mount a knob-enabled
 // widget built from a JSON params string, and return a
 // `{ update(paramsJson), dispose }` handle so the docs UI can push new prop
@@ -36,6 +42,9 @@ external set _fleuryMountInto(JSFunction value);
 external set _fleuryMountKnobs(JSFunction value);
 
 void main() {
+  _fleuryUnmountExample = ((web.Element host) {
+    _mountedExamples.remove(host)?.callMethod<JSAny?>('dispose'.toJS);
+  }).toJS;
   _fleuryMountExamples = (() => _mountAll()).toJS;
   _fleuryMountInto = ((web.Element host, String id) => _mountInto(
     host,
@@ -90,7 +99,7 @@ Map<String, Object?> _decodeParams(String json) {
   }
 }
 
-JSObject _mountInto(web.Element host, String id) {
+JSObject _mountInto(web.Element host, String id, {void Function()? onMounted}) {
   final builder = examples[id];
   MountedApp? surface;
   DocsExampleThemeController? followed;
@@ -110,6 +119,7 @@ JSObject _mountInto(web.Element host, String id) {
           h.dispose();
         } else {
           surface = h;
+          onMounted?.call();
         }
       }),
     );
@@ -144,17 +154,11 @@ void mountExample(web.Element host) {
     host.textContent = 'Unknown Fleury example: $id';
     return;
   }
-  final themeController = DocsExampleThemeController(
-    _docsExampleStyleForHost(host),
-  );
-  _followSiteTheme(host, themeController);
   host.setAttribute('data-fleury-state', 'mounting');
-  unawaited(
-    mountApp(
-      () => themedExampleRoot(builder, themeController),
-      into: host,
-      flushScheduler: _docsFlush,
-    ).then((_) => host.setAttribute('data-fleury-state', 'ready')),
+  _mountedExamples[host] = _mountInto(
+    host,
+    id!,
+    onMounted: () => host.setAttribute('data-fleury-state', 'ready'),
   );
 }
 

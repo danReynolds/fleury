@@ -1,0 +1,21 @@
+<!doctype html>
+<html lang="en">
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Fleury Pad</title>
+<link rel="stylesheet" href="/editor/main.css">
+<style>
+:root{color-scheme:dark;font-family:system-ui,sans-serif;background:#0b1116;color:#e6edf3}*{box-sizing:border-box}body{margin:0}header{padding:20px 28px;border-bottom:1px solid #26343e;display:flex;align-items:center;gap:14px}h1{font-size:22px;margin:0;color:#37dba5;letter-spacing:-.6px}.tag{font-size:12px;color:#a2b4c1;border:1px solid #33434e;padding:4px 8px;border-radius:20px}header p{margin:0 0 0 auto;color:#9fafbc;font-size:13px}main{padding:24px 28px}.intro{margin:0 0 18px;color:#aebfcb;max-width:900px;line-height:1.6}.workspace{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);border:1px solid #2b3944;border-radius:10px;overflow:hidden;background:#101820}.pane{min-width:0}.pane+.pane{border-left:1px solid #2b3944}.bar{height:52px;display:flex;align-items:center;padding:0 16px;border-bottom:1px solid #2b3944;gap:10px}.bar strong{font-size:13px}.bar small{font-size:12px;color:#8fa5b3}.controls{margin-left:auto;display:flex;gap:8px}button{border:1px solid #3b4e5c;background:#192731;color:#eaf1f5;padding:7px 12px;border-radius:6px;font:600 12px system-ui;cursor:pointer}button.primary{background:#36d59f;color:#08251c;border-color:#36d59f}button:disabled{opacity:.4;cursor:default}button:focus-visible{outline:2px solid #37dba5;outline-offset:-2px}#editor{display:block;width:100%;height:62vh;min-height:420px;border:0;background:#101820;tab-size:2;font:13px/1.7 ui-monospace,Menlo,monospace;white-space:pre}#preview{height:62vh;min-height:420px;background:#0e0f13;position:relative}#preview p{padding:24px;color:#8396a4}iframe{border:0;display:block;width:100%;height:100%}.status{display:flex;gap:15px;justify-content:space-between;align-items:center;padding:14px 0;font-size:13px;color:#b4c9d5}#metrics{font:12px ui-monospace,monospace;color:#8aa3b3}#diagnostics{margin:0;padding:16px;background:#25171c;border:1px solid #6f3445;border-radius:8px;white-space:pre-wrap;overflow-wrap:anywhere;font:12px/1.6 ui-monospace,monospace;color:#ffbccb}footer{color:#778c9b;font-size:12px;margin-top:20px;line-height:1.6}@media(max-width:760px){header,main{padding:16px}header p{display:none}.workspace{grid-template-columns:1fr}.pane+.pane{border-left:0;border-top:1px solid #2b3944}#editor{height:400px}#preview{height:320px;min-height:0}.status{align-items:start;flex-direction:column;gap:6px}}
+</style>
+<header><h1>Fleury Pad</h1><p>Dart 3.12.2</p></header>
+<main>
+<p class="intro">Write a Fleury app and run it here. Change the code, then <strong>Hot reload</strong> to keep your current count and draft. <strong>Restart</strong> runs the code from the beginning.</p>
+<div class="workspace">
+  <section class="pane" aria-label="Dart editor"><div class="bar"><strong>main.dart</strong><small id="dirty">Ready</small><div class="controls"><button id="format">Format</button><button id="run" class="primary">Run</button><button id="reload" disabled>Hot reload</button></div></div><div id="editor" aria-label="Dart source editor"></div></section>
+  <section class="pane" aria-label="App preview"><div class="bar"><strong>App</strong><small>Runs in your browser</small><div class="controls"><button id="restart" disabled>Restart</button></div></div><div id="preview"><p>Your app will appear here.</p></div></section>
+</div>
+<div class="status"><span id="status" role="status">Loading example…</span><span id="metrics"></span></div>
+<pre id="diagnostics" hidden aria-live="polite"></pre>
+<footer>Ctrl+Space shows completions; hover a symbol for documentation. Ctrl/Cmd+Enter runs or reloads. Drafts stay in this browser.</footer>
+</main>
+<script type="module" src="/editor/main.js"></script>
+</html>

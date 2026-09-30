@@ -1,0 +1,126 @@
+{
+  "environment": "Private Cloud Run native amd64",
+  "revision": "fleury-pad-staging-00006-guy",
+  "url": "https://fleury-pad-staging-vbalblwk3q-uc.a.run.app",
+  "httpOnly": true,
+  "coldStartConfirmed": false,
+  "samples": [
+    {
+      "operation": "baselineConnection",
+      "startedAt": "2026-09-27T18:11:04.757432+00:00",
+      "roundTripMs": 169.8,
+      "serverElapsedMs": null,
+      "responseBytes": 212
+    },
+    {
+      "operation": "baselineCompile",
+      "startedAt": "2026-09-27T18:11:04.927987+00:00",
+      "roundTripMs": 848.5,
+      "serverElapsedMs": 662,
+      "responseBytes": 38313
+    },
+    {
+      "operation": "reloadAfterIdle",
+      "startedAt": "2026-09-27T18:14:07.557106+00:00",
+      "roundTripMs": 1495.6,
+      "serverElapsedMs": 1283,
+      "responseBytes": 23925
+    },
+    {
+      "operation": "warmReload1",
+      "startedAt": "2026-09-27T18:14:09.057179+00:00",
+      "roundTripMs": 879.0,
+      "serverElapsedMs": 705,
+      "responseBytes": 23902
+    },
+    {
+      "operation": "warmReload2",
+      "startedAt": "2026-09-27T18:14:09.943475+00:00",
+      "roundTripMs": 784.5,
+      "serverElapsedMs": 571,
+      "responseBytes": 23902
+    },
+    {
+      "operation": "warmReload3",
+      "startedAt": "2026-09-27T18:14:10.729606+00:00",
+      "roundTripMs": 706.0,
+      "serverElapsedMs": 565,
+      "responseBytes": 23902
+    }
+  ],
+  "build": {
+    "sdkVersion": "3.12.2",
+    "buildId": "8ba98d0bfec4daad",
+    "backend": "dartpad",
+    "upstreamRevision": "70a62b1ebcf9d2b906ec564254bde02a543be895",
+    "protocolVersion": 2,
+    "sourceRevision": "227e387b-dirty-20260927-aot"
+  },
+  "idleStartedAt": "2026-09-27T18:11:05.777043+00:00",
+  "checkpointContinuedAfterIdle": true,
+  "finishedAt": "2026-09-27T18:14:11.435813+00:00",
+  "zeroInstanceEvidence": {
+    "observedAt": "2026-09-27T18:13:33.149622+00:00",
+    "points": [
+      {
+        "state": "active",
+        "interval": {
+          "startTime": "2026-09-27T18:13:00Z",
+          "endTime": "2026-09-27T18:13:00Z"
+        },
+        "value": {
+          "int64Value": "0"
+        }
+      },
+      {
+        "state": "idle",
+        "interval": {
+          "startTime": "2026-09-27T18:13:00Z",
+          "endTime": "2026-09-27T18:13:00Z"
+        },
+        "value": {
+          "int64Value": "0"
+        }
+      }
+    ]
+  },
+  "startupLogs": [
+    {
+      "timestamp": "2026-09-27T18:13:58.994284Z",
+      "message": "STARTUP HTTP probe succeeded after 5 attempts for container \"fleury-pad-1\" on port 8080 path \"/healthz\"."
+    },
+    {
+      "timestamp": "2026-09-27T18:13:58.906762Z",
+      "message": {
+        "buildId": "8ba98d0bfec4daad",
+        "event": "ready",
+        "origin": "http://127.0.0.1:8080"
+      }
+    },
+    {
+      "timestamp": "2026-09-27T18:13:50.560027Z",
+      "message": "Starting new instance. Reason: AUTOSCALING - Instance started due to configured scaling factors (e.g. CPU utilization, request throughput, etc.) or no existing capacity for current traffic."
+    },
+    {
+      "timestamp": "2026-09-27T18:09:33.289410Z",
+      "message": "STARTUP HTTP probe succeeded after 6 attempts for container \"fleury-pad-1\" on port 8080 path \"/healthz\"."
+    },
+    {
+      "timestamp": "2026-09-27T18:09:32.003555Z",
+      "message": {
+        "buildId": "8ba98d0bfec4daad",
+        "event": "ready",
+        "origin": "http://127.0.0.1:8080"
+      }
+    },
+    {
+      "timestamp": "2026-09-27T18:09:23.197507Z",
+      "message": "Starting new instance. Reason: DEPLOYMENT_ROLLOUT - Instance started due to traffic shifting between revisions due to deployment, traffic split adjustment, or deployment health check."
+    }
+  ],
+  "kind": "Controlled suspension to zero followed by automatic-mode restoration",
+  "interpretation": "Restoring automatic mode started the instance before the measured request. The 1495.6 ms reload is after readiness, not an end-to-end cold request.",
+  "serverStartupAfterResumeSeconds": 8.347,
+  "serverStartupAfterDeploySeconds": 8.806,
+  "imageManifestDigest": "sha256:ae637c74863e6874f605582c0898472fc5a0135fca23ade74a1135c990395194"
+}

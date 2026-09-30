@@ -4,7 +4,7 @@ description: Collect input, guide users through corrections, and save their chan
 ---
 
 import FleuryExample from '../../../components/FleuryExample.astro';
-import CodeDemoSplit from '../../../components/CodeDemoSplit.astro';
+import GuidePad from '../../../components/GuidePad.astro';
 import FormsGuideCode from '../../../components/FormsGuideCode.astro';
 
 In Fleury, a form groups ordinary input controls into one validation and
@@ -22,11 +22,12 @@ Each input sits inside a `FormField` with its validation rule. A `Form` groups
 the fields and calls `onSubmit` once they are valid. The Create button and
 Enter in the Slug input both reach it through `form.submit()`:
 
-<CodeDemoSplit files={['project_form.dart', 'project_form_test.dart']} codeLabel="Source and test" demoLabel="Create a project" codeMaxHeight="30rem" layout="code-wide">
-<FormsGuideCode slot="code-0" file="project_form.dart" focus="child: Form(" />
-<FormsGuideCode slot="code-1" file="project_form_test.dart" test />
+<GuidePad id="forms.project" layout="code-wide" codeMaxHeight="30rem" codeLabel="Source" demoLabel="Create a project">
 <FleuryExample slot="demo" id="forms.project" cols={40} rows={18} interactive />
-</CodeDemoSplit>
+<Fragment slot="references">
+<FormsGuideCode file="project_form_test.dart" test />
+</Fragment>
+</GuidePad>
 
 Choose **Create** with both fields empty. Each field explains what it needs,
 and focus moves to **Name** so you can begin correcting it. Enter a name and
@@ -54,11 +55,12 @@ recover while keeping the entered name.
 The dropdown simulates three server responses locally. Nothing is sent over
 the network:
 
-<CodeDemoSplit files={['save_project.dart', 'save_project_test.dart']} codeLabel="Source and test" demoLabel="Save a project" codeMaxHeight="32rem" layout="code-wide">
-<FormsGuideCode slot="code-0" file="save_project.dart" focus="Future<void> save() async" />
-<FormsGuideCode slot="code-1" file="save_project_test.dart" test />
+<GuidePad id="forms.save" layout="code-wide" codeMaxHeight="32rem" codeLabel="Source" demoLabel="Save a project">
 <FleuryExample slot="demo" id="forms.save" cols={40} rows={16} interactive />
-</CodeDemoSplit>
+<Fragment slot="references">
+<FormsGuideCode file="save_project_test.dart" test />
+</Fragment>
+</GuidePad>
 
 Choose **Name taken**, then **Save**. The error belongs to Name because changing
 that value can resolve it. Edit the name, switch to **Success**, and save again.
@@ -101,11 +103,12 @@ You can also check a form without submitting it. Here, **Check** displays
 feedback while leaving focus on the button, so the user can decide what to
 edit next. **Confirm** submits the form and focuses the first invalid field:
 
-<CodeDemoSplit files={['related_fields.dart', 'related_fields_test.dart']} codeLabel="Source and test" demoLabel="Check a password confirmation" codeMaxHeight="30rem" layout="code-wide">
-<FormsGuideCode slot="code-0" file="related_fields.dart" focus="Future<void> check() async" />
-<FormsGuideCode slot="code-1" file="related_fields_test.dart" test />
+<GuidePad id="forms.related" layout="code-wide" codeMaxHeight="30rem" codeLabel="Source" demoLabel="Check a password confirmation">
 <FleuryExample slot="demo" id="forms.related" cols={40} rows={18} interactive />
-</CodeDemoSplit>
+<Fragment slot="references">
+<FormsGuideCode file="related_fields_test.dart" test />
+</Fragment>
+</GuidePad>
 
 Enter two different made-up passwords and choose **Check**, then **Confirm**.
 Both show the mismatch; only Confirm moves focus to the correction. Make the
@@ -131,11 +134,12 @@ and submission flow as an ordinary input.
 The example uses two steppers and one shared error. It chooses Start as the
 place to focus when the range needs correcting:
 
-<CodeDemoSplit files={['custom_field.dart', 'custom_field_test.dart']} codeLabel="Source and test" demoLabel="Edit a range" codeMaxHeight="30rem" layout="code-wide">
-<FormsGuideCode slot="code-0" file="custom_field.dart" focus="FormField.builder(" />
-<FormsGuideCode slot="code-1" file="custom_field_test.dart" test />
+<GuidePad id="forms.custom" layout="code-wide" codeMaxHeight="30rem" codeLabel="Source" demoLabel="Edit a range">
 <FleuryExample slot="demo" id="forms.custom" cols={40} rows={12} interactive />
-</CodeDemoSplit>
+<Fragment slot="references">
+<FormsGuideCode file="custom_field_test.dart" test />
+</Fragment>
+</GuidePad>
 
 Choose **Save range** to reveal the error, then increase End above Start using
 the stepper's arrows or **+** button. The message clears as the range becomes

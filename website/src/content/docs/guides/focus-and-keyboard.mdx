@@ -4,7 +4,7 @@ description: Add keyboard commands, make them discoverable, and build advanced r
 ---
 
 import FleuryExample from '../../../components/FleuryExample.astro';
-import CodeDemoSplit from '../../../components/CodeDemoSplit.astro';
+import GuidePad from '../../../components/GuidePad.astro';
 
 Keyboard support is built into Fleury's widgets. A `ListView` already responds
 to the arrow keys, a `TextInput` already edits text, and buttons already react
@@ -93,30 +93,11 @@ overlay; routed dialogs already get this behavior.
 A command can accept aliases, use more than one key, or opt into auto-repeat.
 This example combines the common forms:
 
-<CodeDemoSplit file="key_bindings.dart">
-<Fragment slot="code">
-```dart
-KeyBindings(
-  bindings: [
-    KeyBinding(.ctrl.s, label: 'Bookmark', onTrigger: (_) => bookmark()),
-    KeyBinding(
-      .j,
-      aliases: [.down],
-      label: 'Down',
-      includeRepeats: true,
-      onTrigger: (_) => move(1),
-    ),
-    KeyBinding(.g.g, label: 'Top', onTrigger: (_) => goToTop()),
-    KeyBinding(.space.c, label: 'Clear ★', onTrigger: (_) => clearBookmarks()),
-  ],
-  child: app,
-);
-```
-</Fragment>
+<GuidePad id="keybindings.basic">
 <Fragment slot="demo">
 <FleuryExample id="keybindings.basic" cols={64} rows={14} interactive />
 </Fragment>
-</CodeDemoSplit>
+</GuidePad>
 
 Click the running example, then try these commands:
 
@@ -187,25 +168,11 @@ A detector passes events onward by default. Call `consume()` only when the
 widget actually handled the key. This lets a scrollable control own `↓` while it
 can move and hand the same key to an ancestor when it reaches the bottom:
 
-<CodeDemoSplit file="key_detector.dart">
-<Fragment slot="code">
-```dart
-KeyDetector(
-  onKey: (event) {
-    if (event.code == KeyCode.arrowDown && cursor < last) {
-      moveDown();
-      event.consume();
-    }
-    // At the edge, leave the event unconsumed so an ancestor can handle it.
-  },
-  child: paneContents,
-);
-```
-</Fragment>
+<GuidePad id="keydetector.basic">
 <Fragment slot="demo">
 <FleuryExample id="keydetector.basic" cols={64} rows={12} interactive />
 </Fragment>
-</CodeDemoSplit>
+</GuidePad>
 
 Click the example and press `↓` three times. Its event trace makes the routing
 visible: the pane handles the first two presses and moves its cursor, so the app

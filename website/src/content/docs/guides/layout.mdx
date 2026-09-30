@@ -4,7 +4,7 @@ description: Compose responsive terminal interfaces from rows, columns, flexible
 ---
 
 import FleuryExample from '../../../components/FleuryExample.astro';
-import CodeDemoSplit from '../../../components/CodeDemoSplit.astro';
+import GuidePad from '../../../components/GuidePad.astro';
 
 Fleury lays out whole terminal cells. Parents describe the space available,
 children choose a size within it, and the parent positions them. In practice,
@@ -23,34 +23,7 @@ most interfaces come from a small set of composable widgets:
 This workspace uses fixed gaps, weighted panes, and one local breakpoint. The
 same child becomes two panes when wide and a vertical stack when narrow:
 
-<CodeDemoSplit file="layout_demo.dart" layout="demo-wide">
-<Fragment slot="code">
-```dart
-LayoutBuilder(
-  builder: (context, constraints) {
-    final wide = (constraints.maxCols ?? 0) >= 60;
-
-    if (wide) {
-      return Row(
-        children: [
-          Expanded(flex: 2, child: FilesPanel()),
-          const SizedBox(width: 1),
-          Expanded(flex: 3, child: PreviewPanel()),
-        ],
-      );
-    }
-
-    return Column(
-      children: [
-        Expanded(child: FilesPanel()),
-        const SizedBox(height: 1),
-        Expanded(child: PreviewPanel()),
-      ],
-    );
-  },
-)
-```
-</Fragment>
+<GuidePad id="layout.responsive" layout="demo-wide">
 <FleuryExample
   slot="demo"
   id="layout.responsive"
@@ -58,7 +31,7 @@ LayoutBuilder(
   rows={18}
   interactive
 />
-</CodeDemoSplit>
+</GuidePad>
 
 Activate **Narrow** and **Wide** to change only the workspace's parent width.
 The heading confirms which branch `LayoutBuilder` selected. This is the same

@@ -4,6 +4,7 @@ import { defineConfig } from 'astro/config';
 import starlight from '@astrojs/starlight';
 import { unified } from '@astrojs/markdown-remark';
 
+import { padProxy } from './scripts/pad-proxy.mjs';
 import { GUIDE_GROUPS } from './src/guides.mjs';
 import remarkWidgetLinks from './src/plugins/remark-widget-links.mjs';
 
@@ -26,6 +27,7 @@ export default defineConfig({
   markdown: {
     processor: unified({ remarkPlugins: [[remarkWidgetLinks, { base }]] }),
   },
+  vite: padProxy(process.env.FLEURY_PAD_PROXY_TARGET),
   integrations: [
     starlight({
       title: 'Fleury',
@@ -79,6 +81,10 @@ if (document.readyState !== 'complete') addEventListener('load', reveal, { once:
       // Drop the per-page table-of-contents site-wide; content goes full-width
       // (see the .sl-container override in fleury.css).
       tableOfContents: false,
+      components: {
+        TwoColumnContent: './src/components/DocsContent.astro',
+        SiteTitle: './src/components/DocsSiteTitle.astro',
+      },
       // Shared styling for embedded Fleury examples — must be site-wide so the
       // JS-created fullscreen overlay (appended to <body>, outside component
       // scope) and the knob pages get the same host font metrics + chrome.
@@ -91,6 +97,7 @@ if (document.readyState !== 'complete') addEventListener('load', reveal, { once:
           label: 'Start here',
           items: [
             { label: 'Introduction', slug: 'introduction' },
+            { label: 'Fleury Pad', slug: 'pad' },
             { label: 'Getting started', slug: 'getting-started' },
             { label: 'Tutorial: a filterable list', slug: 'tutorial' },
             { label: 'Coming from Flutter', slug: 'coming-from-flutter' },

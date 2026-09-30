@@ -80,6 +80,45 @@ final class MountedApp {
   final void Function() _markDisposed;
   var _disposed = false;
   Future<void>? _disposeFuture;
+  final _pendingReassemblies = <Completer<void>>{};
+
+  /// Rebuilds this app after a development tool has applied a code update.
+  ///
+  /// Preserves the mounted tree and its state, invokes State.reassemble, and
+  /// resets surviving animation/ticker controllers through the same runtime
+  /// lifecycle as terminal hot reload. Completes after the resulting visual
+  /// frame and its deferred semantics have been presented.
+  ///
+  /// The caller owns compilation and code replacement. Wire-driven mounts
+  /// have no local application to reload and reject this operation. Disposing
+  /// the mount or an unrecoverable presentation failure rejects pending calls.
+  Future<void> reassemble() async {
+    if (_disposed) throw StateError('MountedApp is disposed.');
+    final runtime = _runtime;
+    if (runtime == null) {
+      throw UnsupportedError('Reload the app on the remote host.');
+    }
+    runtime.reassembleApplication();
+    final presented = Completer<void>();
+    _pendingReassemblies.add(presented);
+    try {
+      runtime.binding.addPostFrameCallback((_) {
+        if (!presented.isCompleted) presented.complete();
+      });
+      _frameDriver!.requestFrame('hot-reload');
+      await presented.future;
+      await awaitSemanticIdle();
+      if (_disposed) throw StateError('MountedApp was disposed during reload.');
+    } finally {
+      _pendingReassemblies.remove(presented);
+    }
+  }
+
+  void _rejectPendingReassemblies(Object error, [StackTrace? stack]) {
+    for (final pending in _pendingReassemblies) {
+      if (!pending.isCompleted) pending.completeError(error, stack);
+    }
+  }
 
   /// Requests a frame from host-owned browser code.
   void requestFrame([String reason = 'host']) {
@@ -106,13 +145,17 @@ final class MountedApp {
     if (existing != null) return existing;
     _disposed = true;
     _markDisposed();
+    _rejectPendingReassemblies(
+      StateError('MountedApp was disposed during reload.'),
+    );
     return _disposeFuture = _dispose();
   }
 
-  void _startFrameFailureCleanup() {
+  void _startFrameFailureCleanup(Object error, StackTrace stack) {
     if (_disposeFuture != null) return;
     _disposed = true;
     _markDisposed();
+    _rejectPendingReassemblies(error, stack);
     _disposeFuture = _dispose().catchError((_) {
       // Preserve the frame failure as the visible error. Cleanup remains
       // awaitable by a later dispose() call, but cleanup failures are still
@@ -432,7 +475,7 @@ Future<MountedApp> _runTuiSurface(
         if (host == null) {
           unawaited(cleanupSetupFailure().catchError((_) {}));
         } else {
-          host._startFrameFailureCleanup();
+          host._startFrameFailureCleanup(error, stack);
         }
       },
     );
@@ -645,7 +688,7 @@ Future<MountedApp> _runTuiSurface(
         if (host == null) {
           unawaited(cleanupSetupFailure().catchError((_) {}));
         } else {
-          host._startFrameFailureCleanup();
+          host._startFrameFailureCleanup(error, stack);
         }
       },
       frameInterval: frameInterval,

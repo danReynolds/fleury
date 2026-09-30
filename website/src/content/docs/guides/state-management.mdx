@@ -4,7 +4,7 @@ description: Keep state with the code that owns it, share it with the widgets th
 ---
 
 import FleuryExample from '../../../components/FleuryExample.astro';
-import CodeDemoSplit from '../../../components/CodeDemoSplit.astro';
+import GuidePad from '../../../components/GuidePad.astro';
 import SourceExcerpt from '../../../components/SourceExcerpt.astro';
 import source from '../../../../examples/lib/state_management_guide.dart?raw';
 import program from '../../../../examples/doc_snippets/shared_state.dart?raw';
@@ -24,10 +24,9 @@ cleans it up. Choose the owner by asking who needs the state:
 Use a `StatefulWidget` when a value belongs to one part of the UI. Keep it in
 `State` and update it with `setState`:
 
-<CodeDemoSplit file="local_counter.dart">
-<SourceExcerpt slot="code" code={source} region="local" />
+<GuidePad id="state.local-counter">
 <FleuryExample slot="demo" id="state.local-counter" cols={34} rows={9} interactive />
-</CodeDemoSplit>
+</GuidePad>
 
 Press **Increment**. `setState` schedules a rebuild, so the widget displays the
 new value.
@@ -42,16 +41,9 @@ widgets further down.
 `Project` and shares it; `ProjectTitle` and `ProjectPath` read it without any
 constructor parameters:
 
-<CodeDemoSplit
-  files={['project_screen.dart', 'project_title.dart', 'project_path.dart', 'project.dart']}
-  codeMaxHeight="30rem"
->
-<SourceExcerpt slot="code-0" code={source} region="project-owner" />
-<SourceExcerpt slot="code-1" code={source} region="project-builder" />
-<SourceExcerpt slot="code-2" code={source} region="project-context" />
-<SourceExcerpt slot="code-3" code={source} region="project" />
+<GuidePad id="state.project-scope" codeMaxHeight="30rem">
 <FleuryExample slot="demo" id="state.project-scope" cols={38} rows={9} interactive />
-</CodeDemoSplit>
+</GuidePad>
 
 Press **Switch project**. The screen replaces its value inside `setState`, and
 both readers update. They are `const`, so rebuilding the screen does not
@@ -80,11 +72,9 @@ Let the part of the app that uses the cart own it. `Scope.create` creates the
 model when the scope mounts, shares it with the subtree, and disposes it when
 the scope leaves the tree:
 
-<CodeDemoSplit files={['shop.dart', 'cart_readers.dart']} codeMaxHeight="30rem">
-<SourceExcerpt slot="code-0" code={source} region="shop-owner" />
-<SourceExcerpt slot="code-1" code={source} region="shop-readers" />
+<GuidePad id="state.shop" codeMaxHeight="30rem">
 <FleuryExample slot="demo" id="state.shop" cols={38} rows={9} interactive />
-</CodeDemoSplit>
+</GuidePad>
 
 Add coffee and tea. The badge and the buttons are separate widgets, and none of
 them receives the cart through its constructor. Reading a scope whose value is
@@ -112,11 +102,9 @@ A widget that already holds a model, for example from its constructor, can
 listen to it without a scope. `NotifierBuilder` rebuilds its builder;
 `context.listen(model)` rebuilds the calling widget and returns the same model:
 
-<CodeDemoSplit files={['NotifierBuilder', 'context.listen']} codeMaxHeight="30rem">
-<SourceExcerpt slot="code-0" code={source} region="cart-builder" />
-<SourceExcerpt slot="code-1" code={source} region="cart-listen" />
+<GuidePad id="state.cart-notifier" codeMaxHeight="30rem">
 <FleuryExample slot="demo" id="state.cart-notifier" cols={38} rows={9} interactive />
-</CodeDemoSplit>
+</GuidePad>
 
 `NotifierBuilder` listens while it is in the tree. `context.listen` listens
 while the widget's builds keep calling it, and stops when a build no longer

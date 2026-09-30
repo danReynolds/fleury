@@ -1770,20 +1770,19 @@ Future<AppExit> _runAppImpl(
                   LogSource.stderr,
                 );
               } else {
-                // Teach the recovery at the moment of need: a rejected edit
-                // is exactly when hot restart applies. Only when the taught
-                // keys can actually work: a supervisor session AND the debug
-                // shell enabled (Ctrl+G is dead when the shell is off).
-                final restartHint =
+                // Compile errors need a corrected source edit first. Offer
+                // restart for valid edits the live program cannot accept.
+                // The keys require a supervisor session and enabled debugger.
+                final recoveryHint =
                     DevBootstrap.isSupervisedChild &&
                         debugController.config.enabled
-                    ? ' — hot restart applies it: Ctrl+G, then F5 (drops '
-                          'state)'
-                    : '';
+                    ? ' — fix compile errors and save again; for a valid edit, '
+                          'restart with Ctrl+G, then F5 (drops state)'
+                    : ' — fix compile errors and save again';
                 errorReporter.report(
                   StateError(
                     'hot reload failed: '
-                    '${report.message ?? 'rejected by the VM'}$restartHint',
+                    '${report.message ?? 'rejected by the VM'}$recoveryHint',
                   ),
                   StackTrace.current,
                 );
@@ -1809,13 +1808,6 @@ Future<AppExit> _runAppImpl(
                   onReassemble: () {
                     if (disposed) return;
                     runtime.reassembleApplication();
-                    // Fire scheduler-level reassemble after the element-tree
-                    // walk so Animations + FrameTickers reset to a
-                    // known state under the freshly-reloaded code. Order
-                    // matters: tree reassembly may dispose old controllers
-                    // (which unregister themselves), so reset only the
-                    // controllers that survive.
-                    binding.tickerScheduler.reassemble();
                     scheduleFrame('hot-reload');
                   },
                   onReloadReport: reportReload,

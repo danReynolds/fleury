@@ -1,0 +1,97 @@
+{
+  "project": "fleury-pad-20260927",
+  "region": "us-central1",
+  "service": "fleury-pad-staging",
+  "baselineRevision": "fleury-pad-staging-00003-gax",
+  "baselineImageManifestDigest": "sha256:fed94dbc124d35187e4aad27a8e840ad30b996539063e0ba43c065991ec7c4bc",
+  "configuration": {
+    "cpu": 1,
+    "memoryGiB": 2,
+    "minimumInstances": 0,
+    "serviceMaximumInstances": 1,
+    "revisionMaximumInstances": 1,
+    "concurrency": 8,
+    "requestTimeoutSeconds": 60,
+    "instanceBasedBilling": true,
+    "startupCpuBoost": false,
+    "iamInvokerCheck": true,
+    "anonymousAccess": false,
+    "temporaryTags": []
+  },
+  "unauthenticatedBuildResponse": 403,
+  "hostedApiTests": {
+    "passed": 9,
+    "failed": 0,
+    "seconds": 10.627,
+    "cloudRunProxy": true,
+    "healthEndpointNote": "Google frontend reserves /healthz (404); Cloud Run internal probes passed."
+  },
+  "browser": {
+    "headingUpdated": true,
+    "countPreserved": 3,
+    "draftPreserved": "Keep this draft",
+    "restartCount": 0,
+    "restartClearedDraft": true,
+    "warningOrErrorLogs": [],
+    "serverReportedCompileMs": 632,
+    "serverReportedReloadMs": 701,
+    "serverReportedRestartMs": 661
+  },
+  "baselineStartup": {
+    "instanceStart": "2026-09-27T17:41:32.266709Z",
+    "applicationReady": "2026-09-27T17:42:16.797772Z",
+    "startupProbeSuccess": "2026-09-27T17:42:17.753240Z",
+    "applicationReadyElapsedSeconds": 44.531,
+    "kind": "deployment; not an idle cold request"
+  },
+  "memory": {
+    "observedAt": "2026-09-27T17:53:47.182832+00:00",
+    "largestSampledMeanBytes": 1167515648,
+    "peakBound": false,
+    "oomOrRuntimeErrorsObserved": false
+  },
+  "naturalScaleToZeroConfirmed": true,
+  "limitations": [
+    "Private development trial, not public readiness",
+    "Instance caps are not a total dollar cap",
+    "No budget/spend cutoff configured",
+    "GitHub deployment identity not configured",
+    "No native forced worker failure test",
+    "Minute memory samples are not peak memory"
+  ],
+  "naturalZeroSampleTime": "2026-09-27T18:07:00Z",
+  "baselineColdReloadMs": 48314.8,
+  "baselineCheckpointContinuedAfterIdle": true,
+  "finalRevision": "fleury-pad-staging-00006-guy",
+  "finalBuildId": "8ba98d0bfec4daad",
+  "finalImageManifestDigest": "sha256:ae637c74863e6874f605582c0898472fc5a0135fca23ade74a1135c990395194",
+  "finalSourceRevision": "227e387b-dirty-20260927-aot",
+  "optimizedHost": {
+    "serverStartupAfterDeploySeconds": 8.806,
+    "serverStartupAfterControlledResumeSeconds": 8.347,
+    "hostedApiTestsPassed": 9,
+    "hostedApiTestsSeconds": 15.231,
+    "checkpointContinuedAfterReplacement": true,
+    "fullColdRequestMeasured": true,
+    "largestSampledMemoryMeanBytes": 580132864,
+    "memorySampleObservedAt": "2026-09-27T18:19:13.800579+00:00",
+    "memoryPeakBound": false,
+    "oomOrRuntimeErrorsObserved": false,
+    "naturalColdConnectionMs": 8328.8,
+    "naturalColdFirstCompileMs": 1839.2,
+    "naturalColdConnectionThroughCompileMs": 10168.0,
+    "naturalColdMeasuredAt": "2026-09-27T23:04:42.099354+00:00",
+    "naturalColdEvidence": "2026-09-27-cloud-cold-aot.json"
+  },
+  "scalingResumeFinding": "Restoring automatic mode without --max resets service max to 20. Revision max stayed 1. Service min 0 / max 1 was explicitly restored and verified.",
+  "configurationVerifiedAt": "2026-09-27T18:20:40.287923+00:00",
+  "finalBrowser": {
+    "headingUpdated": true,
+    "countPreserved": 1,
+    "draftPreserved": "State survives reload",
+    "serverReportedCompileMs": 591,
+    "serverReportedReloadMs": 561,
+    "warningOrErrorLogs": [],
+    "access": "Authenticated loopback proxy to private Cloud Run"
+  }
+}

@@ -32,6 +32,8 @@ browser DOM, or a streamed session. The
 
 ## Where to start
 
+- **Want to experiment in your browser?** [Fleury Pad](/fleury/pad/) pairs a Dart
+  editor with a running app and stateful hot reload.
 - **New here?** [Getting started](/fleury/getting-started/) builds your first app in a
   few minutes, and the [tutorial](/fleury/tutorial/) walks through a complete small
   app.

@@ -1,10 +1,77 @@
 import 'package:fleury/fleury_host.dart';
+import 'package:fleury/src/animation/clock.dart' show FakeClock;
+import 'package:fleury/src/animation/ticker_scheduler.dart'
+    show FakeTickerScheduler;
 import 'package:test/test.dart';
 
 import '../support/render_fixtures.dart';
 
 void main() {
   group('TuiRuntime', () {
+    test('reload preserves state and resets animation and ticker clocks', () {
+      final scheduler = FakeTickerScheduler(clock: FakeClock());
+      final runtime = TuiRuntime(
+        binding: TuiBinding(tickerScheduler: scheduler),
+      );
+      addTearDown(runtime.dispose);
+      final key = GlobalKey<_CounterState>();
+      runtime.mountRoot(_Counter(key: key));
+      final state = key.currentState!;
+      state.increment();
+      final animation = Animation(0.0)..attach(runtime.binding);
+      final ticker = FrameTicker(
+        interval: const Duration(milliseconds: 10),
+        scheduler: scheduler,
+      )..start();
+      addTearDown(animation.dispose);
+      addTearDown(ticker.dispose);
+      animation.to(
+        1.0,
+        curve: Curves.linear,
+        duration: const Duration(seconds: 1),
+      );
+      scheduler.advance(const Duration(milliseconds: 100));
+      expect(animation.isMoving, isTrue);
+      expect(ticker.frame, greaterThan(0));
+
+      runtime.reassembleApplication();
+
+      expect(key.currentState, same(state));
+      expect(state.count, 1);
+      expect(animation.value, 1.0);
+      expect(animation.isMoving, isFalse);
+      expect(ticker.frame, 0);
+      expect(ticker.elapsed, Duration.zero);
+    });
+
+    test(
+      'reload finishes tree rebuild before invoking surviving scheduler hooks',
+      () {
+        final runtime = TuiRuntime();
+        addTearDown(runtime.dispose);
+        final events = <String>[];
+        void removedHook() => events.add('removed');
+        runtime.binding.tickerScheduler.registerReassembleCallback(removedHook);
+        runtime.binding.tickerScheduler.registerReassembleCallback(
+          () => events.add('scheduler'),
+        );
+        runtime.mountRoot(
+          _ReloadOrderProbe(
+            events: events,
+            onReload: () => runtime.binding.tickerScheduler
+                .unregisterReassembleCallback(removedHook),
+          ),
+        );
+        events.clear();
+
+        runtime.reassembleApplication();
+
+        expect(events, ['state', 'build', 'dispose', 'scheduler']);
+        runtime.dispose();
+        expect(runtime.reassembleApplication, throwsStateError);
+      },
+    );
+
     test('mounts, renders, and updates the root element', () {
       final runtime = TuiRuntime();
       addTearDown(runtime.dispose);
@@ -1017,4 +1084,35 @@ String _flatten(CellBuffer buffer) {
     }
   }
   return out.toString();
+}
+
+class _ReloadOrderProbe extends StatefulWidget {
+  const _ReloadOrderProbe({required this.events, required this.onReload});
+  final List<String> events;
+  final void Function() onReload;
+  @override
+  State<_ReloadOrderProbe> createState() => _ReloadOrderProbeState();
+}
+
+class _ReloadOrderProbeState extends State<_ReloadOrderProbe> {
+  bool _showChild = true;
+
+  @override
+  void reassemble() {
+    widget.events.add('state');
+    _showChild = false;
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    widget.events.add('build');
+    return _showChild
+        ? _DisposeCallbackProbe(
+            onDispose: () {
+              widget.events.add('dispose');
+              widget.onReload();
+            },
+          )
+        : const Text('reload');
+  }
 }

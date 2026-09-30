@@ -4,7 +4,7 @@ description: Render a request's result or a stream of updates, refresh it, and r
 ---
 
 import FleuryExample from '../../../components/FleuryExample.astro';
-import CodeDemoSplit from '../../../components/CodeDemoSplit.astro';
+import GuidePad from '../../../components/GuidePad.astro';
 import SourceExcerpt from '../../../components/SourceExcerpt.astro';
 import source from '../../../../examples/lib/loading_data_guide.dart?raw';
 import program from '../../../../examples/doc_snippets/loading_data.dart?raw';
@@ -32,13 +32,7 @@ renders the loading, error, and success states. It uses two packages:
 dart pub add http image
 ```
 
-<CodeDemoSplit
-  files={['photo_viewer.dart', 'fetch_photo.dart']}
-  layout="demo-wide"
-  codeMaxHeight="32rem"
->
-<SourceExcerpt slot="code-0" code={source} region="photo-viewer" />
-<SourceExcerpt slot="code-1" code={source} region="fetch-photo" />
+<GuidePad id="loading.image" layout="demo-wide" codeMaxHeight="32rem">
 <FleuryExample
   slot="demo"
   id="loading.image"
@@ -47,7 +41,7 @@ dart pub add http image
   rows={16}
   interactive
 />
-</CodeDemoSplit>
+</GuidePad>
 
 Create the future once and keep it in state, as `_photo` does. A future created
 in `build` would start a new request on every rebuild. `widget.loadPhoto` is
@@ -80,9 +74,7 @@ one, `waiting`, `active` (streams only), then `done`. `data` and `error` carry
 the latest outcome. Most views need five states: nothing requested, loading,
 failed, empty, and ready. Choose a state to connect a matching `Future`:
 
-<CodeDemoSplit files={['describe.dart', 'snapshot_explorer.dart']} layout="demo-wide" codeMaxHeight="32rem">
-<SourceExcerpt slot="code-0" code={source} region="describe" />
-<SourceExcerpt slot="code-1" code={source} region="explorer" />
+<GuidePad id="loading.snapshot" layout="demo-wide" codeMaxHeight="32rem">
 <FleuryExample
   slot="demo"
   id="loading.snapshot"
@@ -91,7 +83,7 @@ failed, empty, and ready. Choose a state to connect a matching `Future`:
   rows={12}
   interactive
 />
-</CodeDemoSplit>
+</GuidePad>
 
 `describe` reads the connection state before the error, for the same reason as
 the photo viewer, and `AsyncStateCard` draws its label and detail in a bordered
@@ -133,13 +125,7 @@ Use `StreamBuilder` when values keep arriving. This demo treats a tiny star-map
 transmission as five packets; each click emits a larger snapshot until the stream
 closes:
 
-<CodeDemoSplit
-  files={['transmission_view.dart', 'transmission.dart']}
-  layout="demo-wide"
-  codeMaxHeight="32rem"
->
-<SourceExcerpt slot="code-0" code={source} region="transmission-view" />
-<SourceExcerpt slot="code-1" code={source} region="transmission" />
+<GuidePad id="loading.stream" layout="demo-wide" codeMaxHeight="32rem">
 <FleuryExample
   slot="demo"
   id="loading.stream"
@@ -148,7 +134,7 @@ closes:
   rows={14}
   interactive
 />
-</CodeDemoSplit>
+</GuidePad>
 
 Keep the stream in state so rebuilds do not subscribe again. `initialData`
 supplies the data for the first frame, while the snapshot is still `waiting`;

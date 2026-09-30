@@ -1,0 +1,59 @@
+{
+  "startedAt": "2026-09-27T17:24:11.061575+00:00",
+  "finishedAt": "2026-09-27T17:24:12.843952+00:00",
+  "url": "http://127.0.0.1:55519",
+  "label": "local-after-readiness",
+  "build": {
+    "sdkVersion": "3.12.2",
+    "buildId": "d39c4219f1583aad",
+    "backend": "dartpad",
+    "upstreamRevision": "70a62b1ebcf9d2b906ec564254bde02a543be895",
+    "protocolVersion": 2,
+    "sourceRevision": "227e387b-dirty-20260927"
+  },
+  "httpOnly": true,
+  "coldStartConfirmed": false,
+  "samples": [
+    {
+      "operation": "initialConnection",
+      "roundTripMs": 2.8,
+      "serverElapsedMs": null,
+      "responseBytes": 208
+    },
+    {
+      "operation": "firstCompile",
+      "roundTripMs": 886.4,
+      "serverElapsedMs": 878,
+      "responseBytes": 38315
+    },
+    {
+      "operation": "reload1",
+      "roundTripMs": 331.9,
+      "serverElapsedMs": 328,
+      "responseBytes": 23907
+    },
+    {
+      "operation": "reload2",
+      "roundTripMs": 292.4,
+      "serverElapsedMs": 289,
+      "responseBytes": 23907
+    },
+    {
+      "operation": "reload3",
+      "roundTripMs": 263.9,
+      "serverElapsedMs": 260,
+      "responseBytes": 23907
+    }
+  ],
+  "firstConnectionThroughCompileMs": 889.2,
+  "environment": "Local Docker linux/arm64; not Cloud Run",
+  "qualificationPassed": true,
+  "imageId": "sha256:910735c5d95545a3f6c3bb086bbf2696a454e4bfb9dbfb9de7a5b81a548d4e84",
+  "startupReadinessMs": 19083.5,
+  "allocation": {
+    "cpus": 1,
+    "memoryGiB": 2,
+    "swapEnabled": false
+  },
+  "peakMemoryBytesDuringApiTests": 1810771968
+}

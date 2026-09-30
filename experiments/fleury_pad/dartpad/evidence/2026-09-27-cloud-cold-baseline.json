@@ -1,0 +1,106 @@
+{
+  "environment": "Private Cloud Run native amd64",
+  "revision": "fleury-pad-staging-00003-gax",
+  "url": "https://fleury-pad-staging-vbalblwk3q-uc.a.run.app",
+  "httpOnly": true,
+  "coldStartConfirmed": true,
+  "samples": [
+    {
+      "operation": "baselineConnection",
+      "startedAt": "2026-09-27T17:50:12.970336+00:00",
+      "roundTripMs": 531.1,
+      "serverElapsedMs": null,
+      "responseBytes": 208
+    },
+    {
+      "operation": "baselineCompile",
+      "startedAt": "2026-09-27T17:50:13.502013+00:00",
+      "roundTripMs": 834.2,
+      "serverElapsedMs": 645,
+      "responseBytes": 38313
+    },
+    {
+      "operation": "reloadAfterIdle",
+      "startedAt": "2026-09-27T18:07:49.702438+00:00",
+      "roundTripMs": 48314.8,
+      "serverElapsedMs": 1508,
+      "responseBytes": 23925
+    },
+    {
+      "operation": "warmReload1",
+      "startedAt": "2026-09-27T18:08:38.020709+00:00",
+      "roundTripMs": 979.8,
+      "serverElapsedMs": 749,
+      "responseBytes": 23902
+    },
+    {
+      "operation": "warmReload2",
+      "startedAt": "2026-09-27T18:08:39.004113+00:00",
+      "roundTripMs": 788.8,
+      "serverElapsedMs": 624,
+      "responseBytes": 23902
+    },
+    {
+      "operation": "warmReload3",
+      "startedAt": "2026-09-27T18:08:39.793530+00:00",
+      "roundTripMs": 718.8,
+      "serverElapsedMs": 548,
+      "responseBytes": 23902
+    }
+  ],
+  "build": {
+    "sdkVersion": "3.12.2",
+    "buildId": "395ef1cabf3c468b",
+    "backend": "dartpad",
+    "upstreamRevision": "70a62b1ebcf9d2b906ec564254bde02a543be895",
+    "protocolVersion": 2,
+    "sourceRevision": "227e387b-dirty-20260927"
+  },
+  "idleStartedAt": "2026-09-27T17:50:14.336863+00:00",
+  "checkpointContinuedAfterIdle": true,
+  "finishedAt": "2026-09-27T18:08:40.513271+00:00",
+  "zeroInstanceEvidence": {
+    "observedAt": "2026-09-27T18:07:30.787550+00:00",
+    "points": [
+      {
+        "state": "active",
+        "interval": {
+          "startTime": "2026-09-27T18:07:00Z",
+          "endTime": "2026-09-27T18:07:00Z"
+        },
+        "value": {
+          "int64Value": "0"
+        }
+      },
+      {
+        "state": "idle",
+        "interval": {
+          "startTime": "2026-09-27T18:07:00Z",
+          "endTime": "2026-09-27T18:07:00Z"
+        },
+        "value": {
+          "int64Value": "0"
+        }
+      }
+    ]
+  },
+  "startupLogs": [
+    {
+      "timestamp": "2026-09-27T18:08:36.442927Z",
+      "message": "STARTUP HTTP probe succeeded after 24 attempts for container \"fleury-pad-1\" on port 8080 path \"/healthz\"."
+    },
+    {
+      "timestamp": "2026-09-27T18:08:35.437117Z",
+      "message": {
+        "buildId": "395ef1cabf3c468b",
+        "event": "ready",
+        "origin": "http://127.0.0.1:8080"
+      }
+    },
+    {
+      "timestamp": "2026-09-27T18:07:49.879844Z",
+      "message": "Starting new instance. Reason: AUTOSCALING - Instance started due to configured scaling factors (e.g. CPU utilization, request throughput, etc.) or no existing capacity for current traffic."
+    }
+  ],
+  "coldStartKind": "Natural idle scale-to-zero, confirmed by zero metrics and autoscaling startup log"
+}

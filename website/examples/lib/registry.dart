@@ -25,6 +25,8 @@ import 'forms/custom_field.dart';
 import 'concepts.dart' as concepts;
 import 'flutter_map.dart' as flutter_map;
 import 'live_previews.dart' as live;
+import 'home_pad.dart' as home_pad;
+import 'hot_reload_guide.dart';
 
 /// Builds the root widget for one live example.
 typedef ExampleBuilder = Widget Function();
@@ -117,7 +119,28 @@ class ExampleInfo {
 }
 
 final List<ExampleInfo> exampleList = <ExampleInfo>[
+  ExampleInfo(
+    id: 'guide.hot-reload',
+    widget: 'Hot reload',
+    category: 'Guide examples',
+    blurb: 'Edit a running notes app and preserve its drafts.',
+    cols: 64,
+    rows: 15,
+    interactive: true,
+    builder: () => const HotReloadNotes(heading: 'Notes'),
+  ),
+
   // ── Landing hero (not catalogued — mounted directly on the home page) ─────
+  ExampleInfo(
+    id: 'home.pad',
+    widget: 'Fleury Pad',
+    category: 'Home',
+    blurb: 'A small app to edit and run on the home page.',
+    cols: 34,
+    rows: 11,
+    interactive: true,
+    builder: () => _framed(const home_pad.HelloFleury()),
+  ),
   ExampleInfo(
     id: 'home.monitor',
     widget: 'System monitor',
@@ -2341,7 +2364,7 @@ Text('\${summary.health.name}: \${summary.activeTaskCount} of \${summary.taskCou
     cols: 48,
     rows: 11,
     interactive: true,
-    builder: () => const _ManualAnimationTour(),
+    builder: () => _framed(const _ManualAnimationTour()),
   ),
   ExampleInfo(
     id: 'animation.progress',
@@ -2353,7 +2376,7 @@ Text('\${summary.health.name}: \${summary.activeTaskCount} of \${summary.taskCou
     cols: 48,
     rows: 12,
     interactive: true,
-    builder: () => const _AnimationProgressTour(),
+    builder: () => _framed(const _AnimationProgressTour()),
   ),
   ExampleInfo(
     id: 'animation.timing',
@@ -2375,7 +2398,7 @@ Text('\${summary.health.name}: \${summary.activeTaskCount} of \${summary.taskCou
     cols: 48,
     rows: 10,
     interactive: true,
-    builder: () => const _EntranceEffectTour(),
+    builder: () => _framed(const _EntranceEffectTour()),
   ),
   ExampleInfo(
     id: 'animation.trigger',
@@ -2385,7 +2408,7 @@ Text('\${summary.health.name}: \${summary.activeTaskCount} of \${summary.taskCou
     cols: 48,
     rows: 14,
     interactive: true,
-    builder: () => const _ValidationFeedbackTour(),
+    builder: () => _framed(const _ValidationFeedbackTour()),
   ),
   ExampleInfo(
     id: 'animation.presence',
@@ -2395,7 +2418,7 @@ Text('\${summary.health.name}: \${summary.activeTaskCount} of \${summary.taskCou
     cols: 58,
     rows: 19,
     interactive: true,
-    builder: () => const _EffectPickerTour(),
+    builder: () => _framed(const _EffectPickerTour()),
   ),
   ExampleInfo(
     id: 'animation.frames',
@@ -2405,7 +2428,7 @@ Text('\${summary.health.name}: \${summary.activeTaskCount} of \${summary.taskCou
     cols: 48,
     rows: 12,
     interactive: true,
-    builder: () => const _FrameCadenceTour(),
+    builder: () => _framed(const _FrameCadenceTour()),
   ),
   ExampleInfo(
     id: 'animation.ticker',
@@ -2415,7 +2438,7 @@ Text('\${summary.health.name}: \${summary.activeTaskCount} of \${summary.taskCou
     cols: 48,
     rows: 11,
     interactive: true,
-    builder: () => const _TickerSimulationTour(),
+    builder: () => _framed(const _TickerSimulationTour()),
   ),
   ExampleInfo(
     id: 'flutter.counter',
@@ -2789,9 +2812,11 @@ Navigator(home: const SetupStep())
 final result = await context.push<String>(const DetailsScreen());
 final confirmed = await context.present<bool>(const ConfirmDialog());
 context.pop('done'); // completes the push that opened this screen''',
-    builder: () => Navigator(
-      transition: RouteTransition.none,
-      home: const _NavigationBasicsTour(),
+    builder: () => _framed(
+      Navigator(
+        transition: RouteTransition.none,
+        home: const _NavigationBasicsTour(),
+      ),
     ),
   ),
   ExampleInfo(
@@ -2804,9 +2829,11 @@ context.pop('done'); // completes the push that opened this screen''',
     cols: 66,
     rows: 16,
     interactive: true,
-    builder: () => Navigator(
-      transition: RouteTransition.none,
-      home: const _DialogPlacementTour(),
+    builder: () => _framed(
+      Navigator(
+        transition: RouteTransition.none,
+        home: const _DialogPlacementTour(),
+      ),
     ),
   ),
   ExampleInfo(
@@ -2819,9 +2846,11 @@ context.pop('done'); // completes the push that opened this screen''',
     cols: 54,
     rows: 14,
     interactive: true,
-    builder: () => Navigator(
-      transition: RouteTransition.none,
-      home: const _BackGuardHomeTour(),
+    builder: () => _framed(
+      Navigator(
+        transition: RouteTransition.none,
+        home: const _BackGuardHomeTour(),
+      ),
     ),
   ),
   ExampleInfo(
@@ -2849,9 +2878,11 @@ context.pop('done'); // completes the push that opened this screen''',
     cols: 64,
     rows: 17,
     interactive: true,
-    builder: () => Navigator(
-      transition: RouteTransition.none,
-      home: const _NestedProjectsTour(),
+    builder: () => _framed(
+      Navigator(
+        transition: RouteTransition.none,
+        home: const _NestedProjectsTour(),
+      ),
     ),
   ),
   ExampleInfo(
@@ -2911,7 +2942,7 @@ return Text(focused ? '▸ Track 1' : '  Track 1');''',
     super.dispose();
   }
 }''',
-    builder: () => const _ProgrammaticFocusTour(),
+    builder: () => _framed(const _ProgrammaticFocusTour()),
   ),
   ExampleInfo(
     id: 'focusdetector.basic',
@@ -2931,7 +2962,7 @@ return Text(focused ? '▸ Track 1' : '  Track 1');''',
     child: editor,
   ),
 )''',
-    builder: () => const _FocusDetectorTour(),
+    builder: () => _framed(const _FocusDetectorTour()),
   ),
   ExampleInfo(
     id: 'keybindings.basic',
@@ -4342,7 +4373,7 @@ class _InvalidNoneTourState extends State<_InvalidNoneTour> {
 ///
 /// Kept in sync with [_customThemeSource] by a test so the code beside the
 /// preview remains the code that produced it.
-final ThemeData _customTheme = _buildCustomTheme();
+ThemeData get _customTheme => _buildCustomTheme();
 
 ThemeData _buildCustomTheme() {
   final base = ThemeData.dark();
@@ -4464,7 +4495,7 @@ class _InteractiveStyleTour extends StatelessWidget {
     final outer = Theme.of(context);
     return Theme(
       data: outer.copyWith(interactiveStyle: _interactiveStyle),
-      child: const Padding(
+      child: Padding(
         padding: const EdgeInsets.all(1),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
@@ -4474,18 +4505,39 @@ class _InteractiveStyleTour extends StatelessWidget {
             Text('base      ordinary control paint'),
             Text(
               'focused   inverse + bold',
-              style: CellStyle(inverse: true, bold: true),
+              style: CellStyle.resolve(
+                cascade: [_interactiveStyle],
+                focused: true,
+              ),
             ),
-            Text('hovered   underline', style: CellStyle(underline: true)),
+            Text(
+              'hovered   underline',
+              style: CellStyle.resolve(
+                cascade: [_interactiveStyle],
+                hovered: true,
+              ),
+            ),
             Text(
               'selected  green + bold',
-              style: CellStyle(foreground: Colors.green, bold: true),
+              style: CellStyle.resolve(
+                cascade: [_interactiveStyle],
+                selected: true,
+              ),
             ),
             Text(
               'invalid   red + underline',
-              style: CellStyle(foreground: Colors.red, underline: true),
+              style: CellStyle.resolve(
+                cascade: [_interactiveStyle],
+                invalid: true,
+              ),
             ),
-            Text('disabled  dim', style: CellStyle(dim: true)),
+            Text(
+              'disabled  dim',
+              style: CellStyle.resolve(
+                cascade: [_interactiveStyle],
+                disabled: true,
+              ),
+            ),
           ],
         ),
       ),
@@ -4720,22 +4772,20 @@ class _ManualAnimationTourState extends State<_ManualAnimationTour> {
         '${List<String>.filled(position, '─').join()}◆'
         '${List<String>.filled(24 - position, '·').join()}';
 
-    return _framed(
-      Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: <Widget>[
-          const Text('RAW ANIMATION', style: CellStyle(bold: true)),
-          const Text('Own it to chain, await, and interrupt motion.'),
-          const SizedBox(height: 1),
-          Button(
-            text: _running ? 'Return now' : 'Run route',
-            onPressed: _running ? _returnNow : _runRoute,
-          ),
-          const SizedBox(height: 1),
-          Text('DEPOT $route STATION'),
-          Text('progress.value: ${progress.toStringAsFixed(2)}'),
-        ],
-      ),
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: <Widget>[
+        const Text('RAW ANIMATION', style: CellStyle(bold: true)),
+        const Text('Own it to chain, await, and interrupt motion.'),
+        const SizedBox(height: 1),
+        Button(
+          text: _running ? 'Return now' : 'Run route',
+          onPressed: _running ? _returnNow : _runRoute,
+        ),
+        const SizedBox(height: 1),
+        Text('DEPOT $route STATION'),
+        Text('progress.value: ${progress.toStringAsFixed(2)}'),
+      ],
     );
   }
 }
@@ -4751,55 +4801,51 @@ class _AnimationProgressTourState extends State<_AnimationProgressTour> {
   var _delivered = false;
 
   @override
-  Widget build(BuildContext context) => _framed(
-    Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: <Widget>[
-        const Text('PACKAGE ROUTE', style: CellStyle(bold: true)),
-        const Text('Change the target; the builder interpolates the value.'),
-        const SizedBox(height: 1),
-        Button(
-          text: _delivered ? 'Return to depot' : 'Send to station',
-          onPressed: () => setState(() => _delivered = !_delivered),
-        ),
-        const SizedBox(height: 1),
-        AnimationBuilder<double>(
-          _delivered ? 1.0 : 0.0,
-          curve: Curves.easeInOut,
-          duration: const Duration(milliseconds: 1100),
-          builder: (context, double progress, _) {
-            final position = (progress * 24).round();
-            final route =
-                '${List<String>.filled(position, '─').join()}◆'
-                '${List<String>.filled(24 - position, '·').join()}';
-            return Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: <Widget>[
-                Text('DEPOT $route STATION'),
-                Text('progress: ${progress.toStringAsFixed(2)} · double'),
-                Container(
-                  height: 1,
-                  child: progress > 0.995
-                      ? const Text(
-                              '✦ PACKAGE DELIVERED ✦',
-                              style: CellStyle(
-                                foreground: RgbColor(70, 220, 145),
-                                bold: true,
-                              ),
-                            )
-                            .animate(
-                              duration: const Duration(milliseconds: 650),
-                            )
-                            .flash(color: const RgbColor(120, 255, 190))
-                            .slideIn(from: Edge.bottom)
-                      : const Text(''),
-                ),
-              ],
-            );
-          },
-        ),
-      ],
-    ),
+  Widget build(BuildContext context) => Column(
+    crossAxisAlignment: CrossAxisAlignment.start,
+    children: <Widget>[
+      const Text('PACKAGE ROUTE', style: CellStyle(bold: true)),
+      const Text('Change the target; the builder interpolates the value.'),
+      const SizedBox(height: 1),
+      Button(
+        text: _delivered ? 'Return to depot' : 'Send to station',
+        onPressed: () => setState(() => _delivered = !_delivered),
+      ),
+      const SizedBox(height: 1),
+      AnimationBuilder<double>(
+        _delivered ? 1.0 : 0.0,
+        curve: Curves.easeInOut,
+        duration: const Duration(milliseconds: 1100),
+        builder: (context, double progress, _) {
+          final position = (progress * 24).round();
+          final route =
+              '${List<String>.filled(position, '─').join()}◆'
+              '${List<String>.filled(24 - position, '·').join()}';
+          return Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: <Widget>[
+              Text('DEPOT $route STATION'),
+              Text('progress: ${progress.toStringAsFixed(2)} · double'),
+              Container(
+                height: 1,
+                child: progress > 0.995
+                    ? const Text(
+                            '✦ PACKAGE DELIVERED ✦',
+                            style: CellStyle(
+                              foreground: RgbColor(70, 220, 145),
+                              bold: true,
+                            ),
+                          )
+                          .animate(duration: const Duration(milliseconds: 650))
+                          .flash(color: const RgbColor(120, 255, 190))
+                          .slideIn(from: Edge.bottom)
+                    : const Text(''),
+              ),
+            ],
+          );
+        },
+      ),
+    ],
   );
 }
 
@@ -4898,40 +4944,38 @@ class _EntranceEffectTourState extends State<_EntranceEffectTour> {
   var _connected = false;
 
   @override
-  Widget build(BuildContext context) => _framed(
-    Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: <Widget>[
-        const Text('RELAY CONNECTION', style: CellStyle(bold: true)),
-        const Text('The effect runs when the status enters the tree.'),
-        const SizedBox(height: 1),
-        Button(
-          text: _connected ? 'Disconnect' : 'Connect',
-          onPressed: () => setState(() => _connected = !_connected),
+  Widget build(BuildContext context) => Column(
+    crossAxisAlignment: CrossAxisAlignment.start,
+    children: <Widget>[
+      const Text('RELAY CONNECTION', style: CellStyle(bold: true)),
+      const Text('The effect runs when the status enters the tree.'),
+      const SizedBox(height: 1),
+      Button(
+        text: _connected ? 'Disconnect' : 'Connect',
+        onPressed: () => setState(() => _connected = !_connected),
+      ),
+      const SizedBox(height: 1),
+      if (_connected)
+        Padding(
+          padding: const EdgeInsets.only(left: 4),
+          child:
+              const Text(
+                    '● Connected to relay',
+                    style: CellStyle(foreground: RgbColor(70, 220, 145)),
+                  )
+                  .animate(
+                    duration: const Duration(milliseconds: 600),
+                    curve: Curves.linear,
+                  )
+                  .fadeIn()
+                  .slideIn(from: Edge.left),
+        )
+      else
+        const Text(
+          '○ Offline',
+          style: CellStyle(foreground: RgbColor(115, 125, 140)),
         ),
-        const SizedBox(height: 1),
-        if (_connected)
-          Padding(
-            padding: const EdgeInsets.only(left: 4),
-            child:
-                const Text(
-                      '● Connected to relay',
-                      style: CellStyle(foreground: RgbColor(70, 220, 145)),
-                    )
-                    .animate(
-                      duration: const Duration(milliseconds: 600),
-                      curve: Curves.linear,
-                    )
-                    .fadeIn()
-                    .slideIn(from: Edge.left),
-          )
-        else
-          const Text(
-            '○ Offline',
-            style: CellStyle(foreground: RgbColor(115, 125, 140)),
-          ),
-      ],
-    ),
+    ],
   );
 }
 
@@ -4983,114 +5027,112 @@ class _EffectPickerTourState extends State<_EffectPickerTour> {
   }
 
   @override
-  Widget build(BuildContext context) => _framed(
-    Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: <Widget>[
-        const Text('ENTRANCE + EXIT LAB', style: CellStyle(bold: true)),
-        const Text('Choose a pair, then toggle the sample.'),
-        const SizedBox(height: 1),
-        Row(
-          children: <Widget>[
-            SizedBox(
-              width: 25,
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: <Widget>[
-                  const Text('ENTER'),
-                  Select<_EntryEffectChoice>(
-                    semanticLabel: 'Entrance effect',
-                    autofocus: true,
-                    value: _entry,
-                    options: const <SelectOption<_EntryEffectChoice>>[
-                      SelectOption(
-                        value: _EntryEffectChoice.fade,
-                        label: 'Fade in',
-                      ),
-                      SelectOption(
-                        value: _EntryEffectChoice.slide,
-                        label: 'Slide in',
-                      ),
-                      SelectOption(
-                        value: _EntryEffectChoice.wipe,
-                        label: 'Wipe in',
-                      ),
-                      SelectOption(
-                        value: _EntryEffectChoice.expand,
-                        label: 'Expand',
-                      ),
-                    ],
-                    onChanged: (value) => setState(() => _entry = value),
-                  ),
-                ],
-              ),
-            ),
-            SizedBox(
-              width: 25,
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: <Widget>[
-                  const Text('EXIT'),
-                  Select<_ExitEffectChoice>(
-                    semanticLabel: 'Exit effect',
-                    value: _exit,
-                    options: const <SelectOption<_ExitEffectChoice>>[
-                      SelectOption(
-                        value: _ExitEffectChoice.fade,
-                        label: 'Fade out',
-                      ),
-                      SelectOption(
-                        value: _ExitEffectChoice.slide,
-                        label: 'Slide out',
-                      ),
-                      SelectOption(
-                        value: _ExitEffectChoice.wipe,
-                        label: 'Wipe out',
-                      ),
-                      SelectOption(
-                        value: _ExitEffectChoice.shrink,
-                        label: 'Shrink',
-                      ),
-                    ],
-                    onChanged: (value) => setState(() => _exit = value),
-                  ),
-                ],
-              ),
-            ),
-          ],
-        ),
-        const SizedBox(height: 1),
-        Button(
-          text: _visible ? 'Hide sample' : 'Show sample',
-          onPressed: () => setState(() => _visible = !_visible),
-        ),
-        const SizedBox(height: 1),
-        AnimatedVisibility(
-          visible: _visible,
-          enter: _entryEffect,
-          exit: _exitEffect,
-          duration: _transitionDuration,
-          curve: Curves.linear,
-          child: Container(
-            width: 24,
-            border: BoxBorder(style: Theme.of(context).borderStyle),
-            padding: const EdgeInsets.symmetric(horizontal: 1),
-            child: const Column(
+  Widget build(BuildContext context) => Column(
+    crossAxisAlignment: CrossAxisAlignment.start,
+    children: <Widget>[
+      const Text('ENTRANCE + EXIT LAB', style: CellStyle(bold: true)),
+      const Text('Choose a pair, then toggle the sample.'),
+      const SizedBox(height: 1),
+      Row(
+        children: <Widget>[
+          SizedBox(
+            width: 25,
+            child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: <Widget>[
-                Text('DEPLOY PREVIEW', style: CellStyle(bold: true)),
-                Text('✓ Resolve'),
-                Text('✓ Analyze'),
-                Text('✓ Test'),
-                Text('✓ Package'),
-                Text('✓ Sign'),
-                Text('✓ Publish'),
+                const Text('ENTER'),
+                Select<_EntryEffectChoice>(
+                  semanticLabel: 'Entrance effect',
+                  autofocus: true,
+                  value: _entry,
+                  options: const <SelectOption<_EntryEffectChoice>>[
+                    SelectOption(
+                      value: _EntryEffectChoice.fade,
+                      label: 'Fade in',
+                    ),
+                    SelectOption(
+                      value: _EntryEffectChoice.slide,
+                      label: 'Slide in',
+                    ),
+                    SelectOption(
+                      value: _EntryEffectChoice.wipe,
+                      label: 'Wipe in',
+                    ),
+                    SelectOption(
+                      value: _EntryEffectChoice.expand,
+                      label: 'Expand',
+                    ),
+                  ],
+                  onChanged: (value) => setState(() => _entry = value),
+                ),
               ],
             ),
           ),
+          SizedBox(
+            width: 25,
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: <Widget>[
+                const Text('EXIT'),
+                Select<_ExitEffectChoice>(
+                  semanticLabel: 'Exit effect',
+                  value: _exit,
+                  options: const <SelectOption<_ExitEffectChoice>>[
+                    SelectOption(
+                      value: _ExitEffectChoice.fade,
+                      label: 'Fade out',
+                    ),
+                    SelectOption(
+                      value: _ExitEffectChoice.slide,
+                      label: 'Slide out',
+                    ),
+                    SelectOption(
+                      value: _ExitEffectChoice.wipe,
+                      label: 'Wipe out',
+                    ),
+                    SelectOption(
+                      value: _ExitEffectChoice.shrink,
+                      label: 'Shrink',
+                    ),
+                  ],
+                  onChanged: (value) => setState(() => _exit = value),
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+      const SizedBox(height: 1),
+      Button(
+        text: _visible ? 'Hide sample' : 'Show sample',
+        onPressed: () => setState(() => _visible = !_visible),
+      ),
+      const SizedBox(height: 1),
+      AnimatedVisibility(
+        visible: _visible,
+        enter: _entryEffect,
+        exit: _exitEffect,
+        duration: _transitionDuration,
+        curve: Curves.linear,
+        child: Container(
+          width: 24,
+          border: BoxBorder(style: Theme.of(context).borderStyle),
+          padding: const EdgeInsets.symmetric(horizontal: 1),
+          child: const Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: <Widget>[
+              Text('DEPLOY PREVIEW', style: CellStyle(bold: true)),
+              Text('✓ Resolve'),
+              Text('✓ Analyze'),
+              Text('✓ Test'),
+              Text('✓ Package'),
+              Text('✓ Sign'),
+              Text('✓ Publish'),
+            ],
+          ),
         ),
-      ],
-    ),
+      ),
+    ],
   );
 }
 
@@ -5145,35 +5187,33 @@ class _ValidationFeedbackTourState extends State<_ValidationFeedbackTour> {
   }
 
   @override
-  Widget build(BuildContext context) => _framed(
-    Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: <Widget>[
-        const Text('FORM VALIDATION', style: CellStyle(bold: true)),
-        const SizedBox(height: 1),
-        const Text('Pilot name'),
-        Container(
-          width: 32,
-          border: BoxBorder(style: Theme.of(context).borderStyle),
-          padding: const EdgeInsets.symmetric(horizontal: 1),
-          child: SizedBox(
-            width: 28,
-            child: TextInput(
-              controller: _name,
-              focusNode: _nameFocus,
-              autofocus: true,
-              semanticLabel: 'Pilot name',
-              placeholder: 'Type any name',
-              onSubmit: (_) => _submit(),
-            ),
+  Widget build(BuildContext context) => Column(
+    crossAxisAlignment: CrossAxisAlignment.start,
+    children: <Widget>[
+      const Text('FORM VALIDATION', style: CellStyle(bold: true)),
+      const SizedBox(height: 1),
+      const Text('Pilot name'),
+      Container(
+        width: 32,
+        border: BoxBorder(style: Theme.of(context).borderStyle),
+        padding: const EdgeInsets.symmetric(horizontal: 1),
+        child: SizedBox(
+          width: 28,
+          child: TextInput(
+            controller: _name,
+            focusNode: _nameFocus,
+            autofocus: true,
+            semanticLabel: 'Pilot name',
+            placeholder: 'Type any name',
+            onSubmit: (_) => _submit(),
           ),
         ),
-        const SizedBox(height: 1),
-        _feedback(),
-        const SizedBox(height: 1),
-        Button(text: 'Validate pilot', onPressed: _submit),
-      ],
-    ),
+      ),
+      const SizedBox(height: 1),
+      _feedback(),
+      const SizedBox(height: 1),
+      Button(text: 'Validate pilot', onPressed: _submit),
+    ],
   );
 }
 
@@ -5200,48 +5240,44 @@ class _FrameCadenceTourState extends State<_FrameCadenceTour> {
   Duration get _interval => Duration(milliseconds: _fast ? 180 : 650);
 
   @override
-  Widget build(BuildContext context) => _framed(
-    Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: <Widget>[
-        const Text('PACKET TRANSFER', style: CellStyle(bold: true)),
-        const Text(
-          'Each step is an authored frame, not an interpolated value.',
-        ),
-        const SizedBox(height: 1),
-        Row(
-          children: <Widget>[
-            Button(
-              text: _fast ? 'Slow down' : 'Speed up',
-              onPressed: () => setState(() => _fast = !_fast),
-            ),
-            const SizedBox(width: 1),
-            Button(
-              text: _running ? 'Pause' : 'Resume',
-              onPressed: () => setState(() => _running = !_running),
-            ),
-          ],
-        ),
-        const SizedBox(height: 1),
-        FrameBuilder(
-          interval: _interval,
-          enabled: _running,
-          builder: (context, frame, _, delta) {
-            final index = frame % _frames.length;
-            return Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: <Widget>[
-                Text('UPLINK ${_frames[index]} ARCHIVE'),
-                Text(
-                  'authored frame ${index + 1}/${_frames.length} · '
-                  '${delta.inMilliseconds} ms',
-                ),
-              ],
-            );
-          },
-        ),
-      ],
-    ),
+  Widget build(BuildContext context) => Column(
+    crossAxisAlignment: CrossAxisAlignment.start,
+    children: <Widget>[
+      const Text('PACKET TRANSFER', style: CellStyle(bold: true)),
+      const Text('Each step is an authored frame, not an interpolated value.'),
+      const SizedBox(height: 1),
+      Row(
+        children: <Widget>[
+          Button(
+            text: _fast ? 'Slow down' : 'Speed up',
+            onPressed: () => setState(() => _fast = !_fast),
+          ),
+          const SizedBox(width: 1),
+          Button(
+            text: _running ? 'Pause' : 'Resume',
+            onPressed: () => setState(() => _running = !_running),
+          ),
+        ],
+      ),
+      const SizedBox(height: 1),
+      FrameBuilder(
+        interval: _interval,
+        enabled: _running,
+        builder: (context, frame, _, delta) {
+          final index = frame % _frames.length;
+          return Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: <Widget>[
+              Text('UPLINK ${_frames[index]} ARCHIVE'),
+              Text(
+                'authored frame ${index + 1}/${_frames.length} · '
+                '${delta.inMilliseconds} ms',
+              ),
+            ],
+          );
+        },
+      ),
+    ],
   );
 }
 
@@ -5296,24 +5332,22 @@ class _TickerSimulationTourState extends State<_TickerSimulationTour>
     final track =
         '${List<String>.filled(position, '─').join()}●'
         '${List<String>.filled(_trackWidth.round() - position, '·').join()}';
-    return _framed(
-      Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: <Widget>[
-          const Text('SIMULATION CLOCK', style: CellStyle(bold: true)),
-          const Text('Position advances from elapsed time on every tick.'),
-          const SizedBox(height: 1),
-          Text('|$track|'),
-          Text('position ${_position.toStringAsFixed(1)} cells'),
-          const SizedBox(height: 1),
-          Button(
-            text: _ticker?.isActive == true
-                ? 'Pause simulation'
-                : 'Resume simulation',
-            onPressed: _toggle,
-          ),
-        ],
-      ),
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: <Widget>[
+        const Text('SIMULATION CLOCK', style: CellStyle(bold: true)),
+        const Text('Position advances from elapsed time on every tick.'),
+        const SizedBox(height: 1),
+        Text('|$track|'),
+        Text('position ${_position.toStringAsFixed(1)} cells'),
+        const SizedBox(height: 1),
+        Button(
+          text: _ticker?.isActive == true
+              ? 'Pause simulation'
+              : 'Resume simulation',
+          onPressed: _toggle,
+        ),
+      ],
     );
   }
 }
@@ -5433,17 +5467,15 @@ class _NavigationBasicsTourState extends State<_NavigationBasicsTour> {
   }
 
   @override
-  Widget build(BuildContext context) => _framed(
-    Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        const Text('HOME · STACK DEPTH 1', style: CellStyle(bold: true)),
-        const SizedBox(height: 1),
-        Button(text: 'Push details', autofocus: true, onPressed: _openDetails),
-        const Spacer(),
-        Text('result: $_result'),
-      ],
-    ),
+  Widget build(BuildContext context) => Column(
+    crossAxisAlignment: CrossAxisAlignment.start,
+    children: [
+      const Text('HOME · STACK DEPTH 1', style: CellStyle(bold: true)),
+      const SizedBox(height: 1),
+      Button(text: 'Push details', autofocus: true, onPressed: _openDetails),
+      const Spacer(),
+      Text('result: $_result'),
+    ],
   );
 }
 
@@ -5529,27 +5561,25 @@ class _DialogPlacementTourState extends State<_DialogPlacementTour> {
   }
 
   @override
-  Widget build(BuildContext context) => _framed(
-    Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        const Text('CHOOSE WHERE TO PRESENT', style: CellStyle(bold: true)),
-        const SizedBox(height: 1),
-        Select<Alignment>(
-          semanticLabel: 'Dialog placement',
-          autofocus: true,
-          value: _alignment,
-          options: const [
-            SelectOption(value: Alignment.topLeft, label: 'Top left'),
-            SelectOption(value: Alignment.center, label: 'Center'),
-            SelectOption(value: Alignment.bottomRight, label: 'Bottom right'),
-          ],
-          onChanged: _show,
-        ),
-        const Spacer(),
-        const Text('Choosing an option presents the dialog.'),
-      ],
-    ),
+  Widget build(BuildContext context) => Column(
+    crossAxisAlignment: CrossAxisAlignment.start,
+    children: [
+      const Text('CHOOSE WHERE TO PRESENT', style: CellStyle(bold: true)),
+      const SizedBox(height: 1),
+      Select<Alignment>(
+        semanticLabel: 'Dialog placement',
+        autofocus: true,
+        value: _alignment,
+        options: const [
+          SelectOption(value: Alignment.topLeft, label: 'Top left'),
+          SelectOption(value: Alignment.center, label: 'Center'),
+          SelectOption(value: Alignment.bottomRight, label: 'Bottom right'),
+        ],
+        onChanged: _show,
+      ),
+      const Spacer(),
+      const Text('Choosing an option presents the dialog.'),
+    ],
   );
 }
 
@@ -5583,22 +5613,20 @@ class _BackGuardHomeTourState extends State<_BackGuardHomeTour> {
   void _saveDraft(String value) => setState(() => _savedText = value);
 
   @override
-  Widget build(BuildContext context) => _framed(
-    Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        const Text('DRAFTS', style: CellStyle(bold: true)),
-        Text('saved: $_savedText'),
-        const SizedBox(height: 1),
-        Button(
-          text: 'Edit draft',
-          autofocus: true,
-          onPressed: () => context.push<void>(
-            _GuardedEditorTour(initialText: _savedText, onSave: _saveDraft),
-          ),
+  Widget build(BuildContext context) => Column(
+    crossAxisAlignment: CrossAxisAlignment.start,
+    children: [
+      const Text('DRAFTS', style: CellStyle(bold: true)),
+      Text('saved: $_savedText'),
+      const SizedBox(height: 1),
+      Button(
+        text: 'Edit draft',
+        autofocus: true,
+        onPressed: () => context.push<void>(
+          _GuardedEditorTour(initialText: _savedText, onSave: _saveDraft),
         ),
-      ],
-    ),
+      ),
+    ],
   );
 }
 
@@ -5653,28 +5681,23 @@ class _GuardedEditorTourState extends State<_GuardedEditorTour> {
   Widget build(BuildContext context) => PopScope(
     canPop: !_dirty,
     onBlocked: () => setState(() => _status = 'Back blocked — save first'),
-    child: _framed(
-      Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          const Text('EDITOR', style: CellStyle(bold: true)),
-          Text('status: $_status'),
-          const SizedBox(height: 1),
-          TextInput(
-            autofocus: true,
-            semanticLabel: 'Draft text',
-            controller: _controller,
-            onChanged: _handleChanged,
-          ),
-          const SizedBox(height: 1),
-          Button(
-            text: 'Back',
-            onPressed: () => Navigator.of(context).maybePop(),
-          ),
-          Button(text: 'Save', onPressed: _save),
-          Button(text: 'Discard', onPressed: context.pop),
-        ],
-      ),
+    child: Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        const Text('EDITOR', style: CellStyle(bold: true)),
+        Text('status: $_status'),
+        const SizedBox(height: 1),
+        TextInput(
+          autofocus: true,
+          semanticLabel: 'Draft text',
+          controller: _controller,
+          onChanged: _handleChanged,
+        ),
+        const SizedBox(height: 1),
+        Button(text: 'Back', onPressed: () => Navigator.of(context).maybePop()),
+        Button(text: 'Save', onPressed: _save),
+        Button(text: 'Discard', onPressed: context.pop),
+      ],
     ),
   );
 }
@@ -5751,19 +5774,17 @@ class _NestedProjectsTour extends StatelessWidget {
   const _NestedProjectsTour();
 
   @override
-  Widget build(BuildContext context) => _framed(
-    Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        const Text('PROJECTS · OUTER STACK 1', style: CellStyle(bold: true)),
-        const SizedBox(height: 1),
-        Button(
-          text: 'Start setup',
-          autofocus: true,
-          onPressed: () => context.push<void>(const _NestedSetupTour()),
-        ),
-      ],
-    ),
+  Widget build(BuildContext context) => Column(
+    crossAxisAlignment: CrossAxisAlignment.start,
+    children: [
+      const Text('PROJECTS · OUTER STACK 1', style: CellStyle(bold: true)),
+      const SizedBox(height: 1),
+      Button(
+        text: 'Start setup',
+        autofocus: true,
+        onPressed: () => context.push<void>(const _NestedSetupTour()),
+      ),
+    ],
   );
 }
 
@@ -5771,25 +5792,23 @@ class _NestedSetupTour extends StatelessWidget {
   const _NestedSetupTour();
 
   @override
-  Widget build(BuildContext context) => _framed(
-    Column(
-      crossAxisAlignment: CrossAxisAlignment.stretch,
-      children: [
-        const Text('SETUP · OUTER STACK 2', style: CellStyle(bold: true)),
-        const SizedBox(height: 1),
-        Expanded(
-          child: Panel(
-            title: 'INNER FLOW',
-            child: Navigator(
-              transition: RouteTransition.none,
-              home: const _NestedFlowStepTour(step: 1),
-            ),
+  Widget build(BuildContext context) => Column(
+    crossAxisAlignment: CrossAxisAlignment.stretch,
+    children: [
+      const Text('SETUP · OUTER STACK 2', style: CellStyle(bold: true)),
+      const SizedBox(height: 1),
+      Expanded(
+        child: Panel(
+          title: 'INNER FLOW',
+          child: Navigator(
+            transition: RouteTransition.none,
+            home: const _NestedFlowStepTour(step: 1),
           ),
         ),
-        const SizedBox(height: 1),
-        const Text('The inner stack advances inside one outer route.'),
-      ],
-    ),
+      ),
+      const SizedBox(height: 1),
+      const Text('The inner stack advances inside one outer route.'),
+    ],
   );
 }
 
@@ -5837,20 +5856,14 @@ class _NestedProjectReadyTour extends StatelessWidget {
   const _NestedProjectReadyTour();
 
   @override
-  Widget build(BuildContext context) => _framed(
-    Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        const Text('PROJECT READY · OUTER STACK 2'),
-        const Text('The entire inner history was removed together.'),
-        const Spacer(),
-        Button(
-          text: 'Back to projects',
-          autofocus: true,
-          onPressed: context.pop,
-        ),
-      ],
-    ),
+  Widget build(BuildContext context) => Column(
+    crossAxisAlignment: CrossAxisAlignment.start,
+    children: [
+      const Text('PROJECT READY · OUTER STACK 2'),
+      const Text('The entire inner history was removed together.'),
+      const Spacer(),
+      Button(text: 'Back to projects', autofocus: true, onPressed: context.pop),
+    ],
   );
 }
 
@@ -6035,41 +6048,39 @@ class _ProgrammaticFocusTourState extends State<_ProgrammaticFocusTour> {
   }
 
   @override
-  Widget build(BuildContext context) => _framed(
-    Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        const Text('PROGRAMMATIC FOCUS', style: CellStyle(bold: true)),
-        const Text(
-          'Press Enter on Focus search, then type.',
-          style: CellStyle(dim: true),
-        ),
-        const SizedBox(height: 1),
-        Row(
-          children: [
-            Button(
-              text: 'Focus search',
-              autofocus: true,
-              onPressed: _focusSearch,
+  Widget build(BuildContext context) => Column(
+    crossAxisAlignment: CrossAxisAlignment.start,
+    children: [
+      const Text('PROGRAMMATIC FOCUS', style: CellStyle(bold: true)),
+      const Text(
+        'Press Enter on Focus search, then type.',
+        style: CellStyle(dim: true),
+      ),
+      const SizedBox(height: 1),
+      Row(
+        children: [
+          Button(
+            text: 'Focus search',
+            autofocus: true,
+            onPressed: _focusSearch,
+          ),
+          const SizedBox(width: 2),
+          SizedBox(
+            width: 24,
+            child: TextInput(
+              focusNode: _searchFocus,
+              semanticLabel: 'Search files',
+              placeholder: 'Search files',
+              onChanged: (query) => setState(() {
+                _lastAction = 'Searching for "$query"';
+              }),
             ),
-            const SizedBox(width: 2),
-            SizedBox(
-              width: 24,
-              child: TextInput(
-                focusNode: _searchFocus,
-                semanticLabel: 'Search files',
-                placeholder: 'Search files',
-                onChanged: (query) => setState(() {
-                  _lastAction = 'Searching for "$query"';
-                }),
-              ),
-            ),
-          ],
-        ),
-        const SizedBox(height: 1),
-        Text('last: $_lastAction'),
-      ],
-    ),
+          ),
+        ],
+      ),
+      const SizedBox(height: 1),
+      Text('last: $_lastAction'),
+    ],
   );
 
   @override
@@ -6098,45 +6109,43 @@ class _FocusDetectorTourState extends State<_FocusDetectorTour> {
   });
 
   @override
-  Widget build(BuildContext context) => _framed(
-    Column(
-      crossAxisAlignment: CrossAxisAlignment.stretch,
-      children: [
-        const Text(
-          'FOCUSDETECTOR · ONE SUBTREE BOUNDARY',
-          style: CellStyle(bold: true),
-        ),
-        Text(
-          'editor: ${_inside ? 'ACTIVE' : 'inactive'} · '
-          'boundary changes: $_changes',
-        ),
-        const SizedBox(height: 1),
-        Panel(
-          title: 'Editor region',
-          focused: _inside,
-          expandChild: false,
-          child: FocusDetector(
-            onFocusChange: _onFocusChange,
-            child: Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 1),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Button(text: 'Title', autofocus: true, onPressed: () {}),
-                  Button(text: 'Body', onPressed: () {}),
-                ],
-              ),
+  Widget build(BuildContext context) => Column(
+    crossAxisAlignment: CrossAxisAlignment.stretch,
+    children: [
+      const Text(
+        'FOCUSDETECTOR · ONE SUBTREE BOUNDARY',
+        style: CellStyle(bold: true),
+      ),
+      Text(
+        'editor: ${_inside ? 'ACTIVE' : 'inactive'} · '
+        'boundary changes: $_changes',
+      ),
+      const SizedBox(height: 1),
+      Panel(
+        title: 'Editor region',
+        focused: _inside,
+        expandChild: false,
+        child: FocusDetector(
+          onFocusChange: _onFocusChange,
+          child: Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 1),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Button(text: 'Title', autofocus: true, onPressed: () {}),
+                Button(text: 'Body', onPressed: () {}),
+              ],
             ),
           ),
         ),
-        const SizedBox(height: 1),
-        Button(text: 'Preview (outside)', onPressed: () {}),
-        const Text(
-          'Tab Title → Body: same region · Preview: leaves once',
-          style: CellStyle(dim: true),
-        ),
-      ],
-    ),
+      ),
+      const SizedBox(height: 1),
+      Button(text: 'Preview (outside)', onPressed: () {}),
+      const Text(
+        'Tab Title → Body: same region · Preview: leaves once',
+        style: CellStyle(dim: true),
+      ),
+    ],
   );
 }
 

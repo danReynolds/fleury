@@ -4,9 +4,7 @@ description: Add state-driven motion, effects, chained animation, and authored f
 ---
 
 import FleuryExample from '../../../components/FleuryExample.astro';
-import CodeDemoSplit from '../../../components/CodeDemoSplit.astro';
-import SourceExcerpt from '../../../components/SourceExcerpt.astro';
-import source from '../../../../examples/doc_snippets/animation.dart?raw';
+import GuidePad from '../../../components/GuidePad.astro';
 
 Animation helps people follow changes in your app. It can show where an item
 went, draw attention to a result, or keep a multi-step action understandable.
@@ -52,8 +50,7 @@ This demo sends a package between two destinations. The explicit
 `AnimationBuilder<double>` type means the builder receives a `double` named
 `progress`, ranging from `0.0` at the depot to `1.0` at the station:
 
-<CodeDemoSplit file="package_route.dart" layout="demo-wide">
-<SourceExcerpt slot="code" code={source} region="progress" />
+<GuidePad id="animation.progress" layout="demo-wide">
 <FleuryExample
   slot="demo"
   id="animation.progress"
@@ -62,7 +59,7 @@ This demo sends a package between two destinations. The explicit
   rows={12}
   interactive
 />
-</CodeDemoSplit>
+</GuidePad>
 
 Press the button before the package arrives: the builder retargets from where
 the package is, rather than jumping to either end. When the package reaches the
@@ -79,12 +76,7 @@ The two status rails below end in the same state. The first uses one
 `double progress` for width and color. In the second, width finishes in 180 ms
 while the color continues for 800 ms:
 
-<CodeDemoSplit
-  files={['shared_progress.dart', 'independent_timing.dart']}
-  layout="demo-wide"
->
-<SourceExcerpt slot="code-0" code={source} region="shared-timing" />
-<SourceExcerpt slot="code-1" code={source} region="independent-timing" />
+<GuidePad id="animation.timing" layout="demo-wide">
 <FleuryExample
   slot="demo"
   id="animation.timing"
@@ -93,7 +85,7 @@ while the color continues for 800 ms:
   rows={15}
   interactive
 />
-</CodeDemoSplit>
+</GuidePad>
 
 Press **Animate** and compare the two rails. Shared progress keeps related
 properties synchronized. Separate builders let each property finish on its own
@@ -109,8 +101,7 @@ This widget owns a `double` that runs from `0.0` at the depot to `1.0` at the
 station. Reading `progress.value` during `build` subscribes the widget to the
 animation, so it rebuilds as the value changes:
 
-<CodeDemoSplit file="manual_route.dart" layout="demo-wide">
-<SourceExcerpt slot="code" code={source} region="manual-route" />
+<GuidePad id="animation.manual" layout="demo-wide">
 <FleuryExample
   slot="demo"
   id="animation.manual"
@@ -119,7 +110,7 @@ animation, so it rebuilds as the value changes:
   rows={11}
   interactive
 />
-</CodeDemoSplit>
+</GuidePad>
 
 Press **Run route**. The package moves to the station, waits there for 600 ms,
 then returns. Press **Return now** while it is moving or waiting. The orbital
@@ -138,8 +129,8 @@ progress.to(0.0);             // replaces and cancels the run
 ```
 
 That is why **Return now** retargets smoothly. The replaced chain's future
-completes with `TickerCanceled` when you await `.orCancel`, so `runRoute`
-returns early instead of resetting `running`. Dispose an animation you own with
+completes with `TickerCanceled` when you await `.orCancel`, so `_runRoute`
+returns early instead of resetting `_running`. Dispose an animation you own with
 its owner, as `dispose` does above.
 
 ## Apply visual effects
@@ -173,8 +164,7 @@ Both forms run the same `Effect` values with `Animation<double>`; they are not
 separate animation systems. This example mounts a connection status and runs
 the fade and slide together:
 
-<CodeDemoSplit file="connection_status.dart" layout="demo-wide">
-<SourceExcerpt slot="code" code={source} region="connection" />
+<GuidePad id="animation.effects" layout="demo-wide">
 <FleuryExample
   slot="demo"
   id="animation.effects"
@@ -183,7 +173,7 @@ the fade and slide together:
   rows={10}
   interactive
 />
-</CodeDemoSplit>
+</GuidePad>
 
 Press **Connect** to mount the status and run the effects. `Animate` handles
 the visual change; the surrounding `if` still decides whether the child is in
@@ -204,11 +194,10 @@ An effect normally runs once when `Animate` mounts. To replay it without
 remounting the widget, set `trigger` to a value that changes for each action. A
 counter works well for repeated submissions.
 
-This form increments `submitCount` on every submission. Empty input shows red
+This form increments `_submitCount` on every submission. Empty input shows red
 feedback; a valid pilot name shows green feedback:
 
-<CodeDemoSplit file="pilot_validation.dart" layout="demo-wide">
-<SourceExcerpt slot="code" code={source} region="feedback" />
+<GuidePad id="animation.trigger" layout="demo-wide">
 <FleuryExample
   slot="demo"
   id="animation.trigger"
@@ -217,11 +206,11 @@ feedback; a valid pilot name shows green feedback:
   rows={14}
   interactive
 />
-</CodeDemoSplit>
+</GuidePad>
 
 Submit the empty field more than once to see the error replay. Then enter a
 non-empty name and submit again to see the success state. Both outcomes replay
-when `submitCount` changes.
+when `_submitCount` changes.
 
 ### Animate visibility changes
 
@@ -233,12 +222,7 @@ lifecycle: `visible` controls whether the child belongs in the tree, while
 The picker below maps each selection to an `Effect`, then passes the selected
 pair to `AnimatedVisibility`:
 
-<CodeDemoSplit
-  files={['effect_picker.dart', 'effect_mapping.dart']}
-  layout="demo-wide"
->
-<SourceExcerpt slot="code-0" code={source} region="effect-picker" />
-<SourceExcerpt slot="code-1" code={source} region="effect-mapping" />
+<GuidePad id="animation.presence" layout="demo-wide">
 <FleuryExample
   slot="demo"
   id="animation.presence"
@@ -247,7 +231,7 @@ pair to `AnimatedVisibility`:
   rows={19}
   interactive
 />
-</CodeDemoSplit>
+</GuidePad>
 
 Choose an entrance and exit, then hide and show the sample. Show it again before
 its exit finishes: the effect reverses from its current value and the child
@@ -269,8 +253,7 @@ waits until its interval has elapsed before advancing.
 
 This packet transfer has six authored frames:
 
-<CodeDemoSplit file="packet_transfer.dart" layout="demo-wide">
-<SourceExcerpt slot="code" code={source} region="frames" />
+<GuidePad id="animation.frames" layout="demo-wide">
 <FleuryExample
   slot="demo"
   id="animation.frames"
@@ -279,7 +262,7 @@ This packet transfer has six authored frames:
   rows={12}
   interactive
 />
-</CodeDemoSplit>
+</GuidePad>
 
 Change the speed, then pause and resume it. `frame` starts at zero and counts
 up at the selected interval; modulo maps it onto the six pictures. Use Fleury's
@@ -300,8 +283,7 @@ fixed 33 ms steps. The event loop can delay a callback or frame, so update
 simulations from elapsed time. This fits game loops, physics, particles, and
 other motion that advances continuously rather than toward a target.
 
-<CodeDemoSplit file="ticker_simulation.dart" layout="demo-wide" codeMaxHeight="32rem">
-<SourceExcerpt slot="code" code={source} region="ticker" />
+<GuidePad id="animation.ticker" layout="demo-wide" codeMaxHeight="32rem">
 <FleuryExample
   slot="demo"
   id="animation.ticker"
@@ -310,7 +292,7 @@ other motion that advances continuously rather than toward a target.
   rows={11}
   interactive
 />
-</CodeDemoSplit>
+</GuidePad>
 
 `SingleTickerProviderStateMixin` creates the ticker from the scheduler already
 owned by the current Fleury app, mutes it with `TickerMode`, and disposes it

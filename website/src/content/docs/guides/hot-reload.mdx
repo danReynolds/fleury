@@ -3,11 +3,26 @@ title: Hot reload
 description: Save a file and the running terminal app updates in place — state, focus, and scroll intact. Works in any editor, with hot restart for the edits reload can't apply.
 ---
 
+import GuidePad from '../../../components/GuidePad.astro';
+import FleuryExample from '../../../components/FleuryExample.astro';
+
 Fleury supports **stateful hot reload**: save a changed source file and the
 running terminal app updates in place — widget state, focus, and scroll
 positions survive. It uses the Dart VM's own code reloading (the mechanism
 Flutter developers rely on), driven by a dev supervisor rather than a file
 watcher that restarts your process. It works in any editor, with no plugin.
+
+Try it in the browser first. Press **Run**, write a draft in the notes app, then
+change the heading in the editor and press **Hot reload** (or **⌘/Ctrl+S**).
+The draft stays in place; **Restart** runs the code again with fresh state.
+
+<GuidePad id="guide.hot-reload" layout="demo-wide" codeMaxHeight="14rem">
+<FleuryExample slot="demo" id="guide.hot-reload" cols={64} rows={15} interactive />
+</GuidePad>
+
+This runs on [Fleury Pad](/fleury/pad/): the Dart development compiler builds
+your edit, and the app reassembles through the same framework hook a terminal
+reload uses. In your own project, the loop below does the same on save.
 
 ## Start a reloadable session
 

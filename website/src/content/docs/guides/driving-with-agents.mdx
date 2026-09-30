@@ -4,8 +4,7 @@ description: Connect an MCP host to a normal Fleury app, complete a real workflo
 ---
 
 import FleuryExample from '../../../components/FleuryExample.astro';
-import CodeDemoSplit from '../../../components/CodeDemoSplit.astro';
-import AgentGuideCode from '../../../components/AgentGuideCode.astro';
+import GuidePad from '../../../components/GuidePad.astro';
 
 A Fleury app already describes its controls as roles, labels, values, and
 actions. `fleury_mcp` gives an AI agent that semantic view of the app and lets
@@ -21,10 +20,9 @@ This release checklist contains a text field, a checkbox, and a button. Try it
 by hand: change the version, mark **Tests passed**, then choose
 **Prepare release**.
 
-<CodeDemoSplit file="agent_guide.dart" codeLabel="Application code" demoLabel="Release workflow" codeMaxHeight="32rem" layout="code-wide">
-<AgentGuideCode slot="code" focus="class AgentGuideApp" />
+<GuidePad id="agents.release-checklist" layout="code-wide" codeMaxHeight="32rem" codeLabel="Application code" demoLabel="Release workflow">
 <FleuryExample slot="demo" id="agents.release-checklist" cols={46} rows={15} interactive />
-</CodeDemoSplit>
+</GuidePad>
 
 There is no `fleury_mcp` import and no manually assembled agent protocol. The
 controls already publish the useful contract:

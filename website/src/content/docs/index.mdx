@@ -11,6 +11,10 @@ hero:
     - text: Get started
       link: /fleury/getting-started/
       icon: right-arrow
+    - text: Try Fleury Pad
+      link: /fleury/pad/
+      icon: laptop
+      variant: secondary
     - text: View on GitHub
       link: https://github.com/danReynolds/fleury
       icon: external
@@ -21,7 +25,7 @@ import { CardGrid, LinkCard } from '@astrojs/starlight/components';
 import FleuryExample from '../../components/FleuryExample.astro';
 import FeatureCard from '../../components/FeatureCard.astro';
 import HomeSplit from '../../components/HomeSplit.astro';
-import InlineShowcase from '../../components/InlineShowcase.astro';
+import GuidePad from '../../components/GuidePad.astro';
 
 <HomeSplit files={[{ name: 'clock.dart' }, { name: 'table.dart' }, { name: 'bars.dart' }]}>
 <Fragment slot="code-0">
@@ -131,14 +135,15 @@ terminal. [How that works →](/fleury/architecture/serving-and-embedding/)
   />
 </CardGrid>
 
-## Full-screen apps. Interactive CLI commands.
+## Write Dart. See it run.
 
-A small setup command can have a real UI, too. Choose a template, review the
-configuration, and finish back at the prompt.
+This one is yours to change. Edit the greeting, make the button count by two,
+or add a widget, then press **Run**. Edit again and **Hot reload** keeps your
+count. For a full-page editor, open [Fleury Pad](/fleury/pad/).
 
-<InlineShowcase />
-
-[Explore inline mode and run it in your terminal →](/fleury/showcases/inline/)
+<GuidePad id="home.pad" layout="demo-wide" demoLabel="Your app">
+<FleuryExample slot="demo" id="home.pad" cols={34} rows={11} interactive surfaceTheme="site" />
+</GuidePad>
 
 ## See it in action
 
