@@ -327,28 +327,7 @@ String _formatArguments(Map<String, Object?> arguments) {
   return parts.join(' ');
 }
 
-String _sanitizeToolText(String original) {
-  if (!_needsToolSanitization(original)) return original;
-  return sanitizeSingleLine(original);
-}
-
-bool _needsToolSanitization(String text) {
-  for (final codeUnit in text.codeUnits) {
-    if (codeUnit == 0x1b ||
-        codeUnit == 0x9b ||
-        codeUnit == 0x9d ||
-        codeUnit == 0x90 ||
-        codeUnit == 0x98 ||
-        codeUnit == 0x9e ||
-        codeUnit == 0x9f ||
-        codeUnit == 0x0a ||
-        codeUnit == 0x0d ||
-        codeUnit == 0x09) {
-      return true;
-    }
-  }
-  return false;
-}
+String _sanitizeToolText(String text) => sanitizeSingleLine(text);
 
 String _truncateGraphemes(String text, int? maxLineLength) {
   if (maxLineLength == null) return text;

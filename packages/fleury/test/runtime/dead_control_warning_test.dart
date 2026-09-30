@@ -206,4 +206,27 @@ void main() {
     expect(named, contains('KeyPosition.s'), reason: 'brake was dead');
     expect(named, isNot(contains('KeyPosition.w')), reason: 'thrust WAS bound');
   });
+
+  test('a binding behind an open dialog still covers its key', () {
+    // A pause dialog over a running game: its modal scope keeps keys from
+    // the game's bindings until it closes, but the fallback exists. "Can
+    // never be true" would be false, and the warning is reported only once.
+    owner.mountRoot(
+      FocusManagerScope(
+        manager: focusManager,
+        child: KeyBindings(
+          bindings: [
+            KeyBinding(KeyPosition.a, label: 'Turn left', onTrigger: (_) {}),
+          ],
+          child: const KeyBindings(
+            modal: true,
+            bindings: [],
+            child: Focus(autofocus: true, child: EmptyBox()),
+          ),
+        ),
+      ),
+    );
+    settleAndTrip(KeyPosition.a);
+    expect(warnings, isEmpty);
+  });
 }

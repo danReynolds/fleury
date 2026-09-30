@@ -21,9 +21,11 @@ import 'file_source_default_stub.dart'
 /// ```
 ///
 /// It lists directories from [source]: the local disk by default on native
-/// platforms. A browser embed passes one, such as a [MemoryFileSource].
-/// Directory reads are synchronous — fine for a picker UI on local disks, but
-/// don't point this at a slow network mount.
+/// platforms. A browser embed passes one, such as a [MemoryFileSource]. It
+/// reads a directory when it opens one or is given a different [source];
+/// [filter] and [showHidden] narrow what was read. Directory reads are
+/// synchronous — fine for a picker UI on local disks, but don't point this at
+/// a slow network mount.
 class FilePicker extends StatefulWidget {
   const FilePicker({
     super.key,
@@ -49,22 +51,27 @@ class FilePicker extends StatefulWidget {
 
   /// Where directories are read from. Defaults to the local disk on native
   /// platforms; in the browser, pass one, such as a [MemoryFileSource].
-  /// Like [filter], passing a different source object re-lists the current
-  /// directory and moves the cursor to the first row.
+  ///
+  /// A different source object reads the current directory again, and the
+  /// cursor stays on its entry if the new source lists it. Keep one source
+  /// across rebuilds (create it outside `build`) so that a rebuild doesn't
+  /// read.
   final FileSource? source;
 
   /// Optional predicate that hides entries: return `false` to skip one. It
-  /// runs when a directory is listed, on the entries that pass the
-  /// [showHidden] rule. Use it to filter by extension, hide build artifacts,
-  /// and so on.
+  /// runs on the entries of the directory that pass the [showHidden] rule.
+  /// Use it to filter by extension, hide build artifacts, and so on.
   ///
-  /// Passing a different function re-lists the current directory and moves
-  /// the cursor to the first row, and a closure written inline in a `build`
-  /// method is a different function on every rebuild. When the parent
-  /// rebuilds often, pass a stable function, such as a top-level one.
+  /// A different function applies at once to the entries already read,
+  /// without reading the directory again, and the cursor stays on its entry
+  /// while that is still shown. So a closure written inline in `build` is
+  /// fine, and one that captures state, such as a "Dart files only" toggle,
+  /// takes effect on the rebuild that changes it.
   final FileEntryFilter? filter;
 
   /// Whether to list hidden entries, such as dot-files. Defaults to `false`.
+  /// Like a new [filter], a change applies to the entries already read and
+  /// keeps the cursor on its entry.
   final bool showHidden;
 
   /// Maximum rows shown at once; longer directories scroll within this height,
@@ -88,6 +95,12 @@ class _FilePickerState extends State<FilePicker> {
   late FocusNode _node;
   bool _owns = false;
   late String _cwd;
+
+  /// [_cwd]'s entries as last read from the source, sorted, before the
+  /// [FilePicker.showHidden] rule and [FilePicker.filter] narrow them.
+  List<FileEntry> _listing = const [];
+
+  /// The rows shown: [_listing] narrowed by [_visible].
   List<FileEntry> _entries = const [];
   String? _error;
   FileSource? _defaultSource;
@@ -96,7 +109,9 @@ class _FilePickerState extends State<FilePicker> {
   // scrolling ListView that keeps the cursor in view (a plain Column clipped
   // long directories and let the cursor move off-screen).
   final ListController _list = ListController(initialIndex: 0);
-  int get _cursor => _list.currentIndex ?? 0;
+  // Read for the current rows: a cursor [_replaceEntries] placed among new
+  // rows counts until the list shows them.
+  int get _cursor => _list.cursorFor(itemCount: _entries.length) ?? 0;
   set _cursor(int value) => _list.currentIndex = value;
 
   @override
@@ -105,7 +120,7 @@ class _FilePickerState extends State<FilePicker> {
     _node = widget.focusNode ?? FocusNode(debugLabel: 'file-picker');
     _owns = widget.focusNode == null;
     _cwd = _source.absolute(widget.initialDirectory);
-    _listEntries(_cwd);
+    _openDirectory(_cwd);
   }
 
   FileSource get _source =>
@@ -119,10 +134,17 @@ class _FilePickerState extends State<FilePicker> {
       _node = widget.focusNode ?? FocusNode(debugLabel: 'file-picker');
       _owns = widget.focusNode == null;
     }
-    if (widget.showHidden != oldWidget.showHidden ||
-        !identical(widget.filter, oldWidget.filter) ||
-        !identical(widget.source, oldWidget.source)) {
-      _listEntries(_cwd);
+    if (!identical(widget.source, oldWidget.source)) {
+      // A different source has its own entries for this directory.
+      final listing = _read(_cwd);
+      if (listing != null) _listing = listing;
+      _replaceEntries(_visible(_listing));
+    } else if (widget.showHidden != oldWidget.showHidden ||
+        !identical(widget.filter, oldWidget.filter)) {
+      // Both narrow what was already read, so nothing is read again. That
+      // matters because a filter closure written inline in the parent's
+      // build is a new function on every rebuild.
+      _replaceEntries(_visible(_listing));
     }
   }
 
@@ -133,34 +155,63 @@ class _FilePickerState extends State<FilePicker> {
     super.dispose();
   }
 
-  /// Lists [dir] and, on success, commits it as the current directory:
-  /// entries filtered (hidden-file rule, [FilePicker.filter]) and sorted
-  /// directories first, files after, both alphabetically; cursor reset to
-  /// the top. When the listing fails — unreadable or just-deleted directory
-  /// — `_cwd`/`_entries` are left untouched and the failure is surfaced as
-  /// a dim error row instead of an uncaught [FileSourceException].
-  void _listEntries(String dir) {
-    final List<FileEntry> all;
+  /// Reads [dir] and, on success, commits it as the current directory with
+  /// the cursor on the first row. When the read fails — unreadable or
+  /// just-deleted directory — `_cwd`/`_entries` are left untouched and the
+  /// failure is surfaced as a dim error row instead of an uncaught
+  /// [FileSourceException].
+  void _openDirectory(String dir) {
+    final listing = _read(dir);
+    if (listing == null) return;
+    _cwd = dir;
+    _listing = listing;
+    _entries = _visible(listing);
+    _list.currentIndex = _entries.isEmpty ? null : 0;
+  }
+
+  /// [dir]'s entries from the source, directories first and files after,
+  /// both alphabetically; null when [dir] can't be listed, with the failure
+  /// recorded in [_error].
+  List<FileEntry>? _read(String dir) {
+    final List<FileEntry> listing;
     try {
-      all = _source.list(dir);
+      listing = [..._source.list(dir)];
     } on FileSourceException catch (error) {
       _error = error.message;
-      return;
+      return null;
     }
-    final filter = widget.filter;
-    final filtered = <FileEntry>[
-      for (final e in all)
-        if ((widget.showHidden || !e.hidden) && (filter == null || filter(e)))
-          e,
-    ];
-    filtered.sort((a, b) {
+    _error = null;
+    return listing..sort((a, b) {
       if (a.isDirectory != b.isDirectory) return a.isDirectory ? -1 : 1;
       return a.name.toLowerCase().compareTo(b.name.toLowerCase());
     });
-    _error = null;
-    _cwd = dir;
-    _entries = filtered;
-    _list.currentIndex = filtered.isEmpty ? null : 0;
+  }
+
+  /// The rows [listing] shows under the hidden-file rule and
+  /// [FilePicker.filter], in listing order.
+  List<FileEntry> _visible(List<FileEntry> listing) {
+    final filter = widget.filter;
+    return <FileEntry>[
+      for (final e in listing)
+        if ((widget.showHidden || !e.hidden) && (filter == null || filter(e)))
+          e,
+    ];
+  }
+
+  /// Shows [entries] in place of the current rows, keeping the cursor on the
+  /// entry it was on while that is still shown, else on the first row.
+  void _replaceEntries(List<FileEntry> entries) {
+    final before = _entries.isEmpty ? null : _entries[_cursor].path;
+    _entries = entries;
+    final index = before == null
+        ? -1
+        : entries.indexWhere((e) => e.path == before);
+    if (entries.isEmpty) {
+      _list.currentIndex = null;
+    } else {
+      // The list still counts the old rows; place the cursor among the new.
+      _list.moveCursor(index < 0 ? 0 : index, itemCount: entries.length);
+    }
   }
 
   String _safeText(String text) {
@@ -201,7 +252,7 @@ class _FilePickerState extends State<FilePicker> {
     if (_entries.isEmpty) return;
     final e = _entries[_cursor];
     if (e.isDirectory) {
-      setState(() => _listEntries(e.path));
+      setState(() => _openDirectory(e.path));
     } else if (e.isFile) {
       widget.onSelect(e);
     }
@@ -210,7 +261,7 @@ class _FilePickerState extends State<FilePicker> {
   void _goUp() {
     final parent = _source.parent(_cwd);
     if (parent == _cwd) return; // already at the root
-    setState(() => _listEntries(parent));
+    setState(() => _openDirectory(parent));
   }
 
   KeyEventResult _onKey(KeyEvent event) {

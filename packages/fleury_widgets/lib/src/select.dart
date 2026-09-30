@@ -5,8 +5,8 @@ import 'package:fleury/fleury_internal.dart';
 
 import 'option_label.dart';
 
-/// One choice in a [Select]. A disabled option is shown dimmed and skipped
-/// by arrow navigation and Enter.
+/// One choice in a [Select]. A disabled option is shown dimmed, skipped by
+/// arrow navigation and Enter, and ignores clicks.
 final class SelectOption<T> {
   const SelectOption({
     required this.value,
@@ -886,6 +886,8 @@ class _SelectListState<T> extends State<_SelectList<T>> {
 
   bool _enabled(int i) => widget.options[i].enabled;
 
+  static void _ignorePress() {}
+
   int? _step(int from, int dir) {
     var i = from + dir;
     while (i >= 0 && i < widget.options.length) {
@@ -1015,7 +1017,10 @@ class _SelectListState<T> extends State<_SelectList<T>> {
         SemanticAction.focus,
         SemanticAction.close,
       },
-      state: SemanticState({
+      // Read when semantics are collected: keys, hover, and typeahead move
+      // the highlight on the list controller without rebuilding the popup.
+      stateListenable: _list,
+      stateBuilder: () => SemanticState({
         'menuDepth': 0,
         'menuItemCount': widget.options.length,
         'selectedKey': _list.currentIndex,
@@ -1056,72 +1061,87 @@ class _SelectListState<T> extends State<_SelectList<T>> {
                   child: SizedBox(
                     width: width,
                     height: widget.options.length,
-                    child: ListView.builder(
-                      controller: _list,
+                    // The popup's own node keeps focus and owns the keys:
+                    // it skips disabled options and types ahead. The list
+                    // only lays out, scrolls, and reveals the highlight; a
+                    // press that focused it would hand the arrows and Enter
+                    // to its plain cursor instead.
+                    child: ExcludeFocus(
+                      child: ListView.builder(
+                        controller: _list,
 
-                      itemCount: widget.options.length,
-                      itemBuilder: (_, i, selected) {
-                        final option = widget.options[i];
-                        // A width-1 marker keeps every row aligned and within the
-                        // computed panel width (a width-2 glyph would wrap).
-                        final marker = i == widget.appliedIndex ? '• ' : '  ';
-                        final safeLabel = sanitizeOptionLabel(option.label);
-                        final text = '$marker$safeLabel';
-                        final row = option.enabled
-                            ? MouseRegion(
-                                onEnter: () {
-                                  if (_list.currentIndex != i) {
-                                    _list.currentIndex = i;
-                                  }
-                                },
-                                child: GestureDetector(
-                                  onTap: () => _pick(i),
-                                  child: Text(
-                                    text,
-                                    style: selected
-                                        ? widget.selectionStyle
-                                        : CellStyle.none,
+                        itemCount: widget.options.length,
+                        itemBuilder: (_, i, selected) {
+                          final option = widget.options[i];
+                          // A width-1 marker keeps every row aligned and
+                          // within the computed panel width (a width-2 glyph
+                          // would wrap).
+                          final marker = i == widget.appliedIndex ? '• ' : '  ';
+                          final safeLabel = sanitizeOptionLabel(option.label);
+                          final text = '$marker$safeLabel';
+                          final row = option.enabled
+                              ? MouseRegion(
+                                  onEnter: () {
+                                    if (_list.currentIndex != i) {
+                                      _list.currentIndex = i;
+                                    }
+                                  },
+                                  child: GestureDetector(
+                                    onTap: () => _pick(i),
+                                    child: Text(
+                                      text,
+                                      style: selected
+                                          ? widget.selectionStyle
+                                          : CellStyle.none,
+                                    ),
                                   ),
-                                ),
-                              )
-                            : Text(text, style: widget.mutedStyle);
-                        return Semantics(
-                          role: SemanticRole.menuItem,
-                          label: safeLabel,
-                          value: option.value,
-                          enabled: option.enabled,
-                          focused: _focus.hasFocus && selected,
-                          selected: selected,
-                          checked: i == widget.appliedIndex,
-                          actions: option.enabled
-                              ? const <SemanticAction>{
-                                  SemanticAction.select,
-                                  SemanticAction.activate,
-                                }
-                              : const <SemanticAction>{},
-                          state: SemanticState({
-                            'menuDepth': 0,
-                            'menuItemIndex': i,
-                            'menuItemPosition': i + 1,
-                            'menuItemCount': widget.options.length,
-                            'entryKind': 'option',
-                            'applied': i == widget.appliedIndex,
-                          }),
-                          onAction: (action) {
-                            if (!option.enabled) return;
-                            switch (action) {
-                              case SemanticAction.select:
-                              case SemanticAction.activate:
-                                _list.currentIndex = i;
-                                _pick(i);
-                                return;
-                              case _:
-                                return;
-                            }
-                          },
-                          child: row,
-                        );
-                      },
+                                )
+                              // A disabled row still owns its press, as an
+                              // enabled row's picker does, and ignores it.
+                              // Otherwise the list's own row gesture takes
+                              // the press and moves the highlight onto it.
+                              : GestureDetector(
+                                  onTap: _ignorePress,
+                                  child: Text(text, style: widget.mutedStyle),
+                                );
+                          return Semantics(
+                            role: SemanticRole.menuItem,
+                            label: safeLabel,
+                            value: option.value,
+                            enabled: option.enabled,
+                            focused: _focus.hasFocus && selected,
+                            selected: selected,
+                            checked: i == widget.appliedIndex,
+                            actions: option.enabled
+                                ? const <SemanticAction>{
+                                    SemanticAction.select,
+                                    SemanticAction.activate,
+                                  }
+                                : const <SemanticAction>{},
+                            state: SemanticState({
+                              'menuDepth': 0,
+                              'menuItemIndex': i,
+                              'menuItemPosition': i + 1,
+                              'menuItemCount': widget.options.length,
+                              'entryKind': 'option',
+                              'applied': i == widget.appliedIndex,
+                            }),
+                            onAction: (action) {
+                              if (!option.enabled) return;
+                              switch (action) {
+                                case SemanticAction.select:
+                                case SemanticAction.activate:
+                                  _list.currentIndex = i;
+                                  _pick(i);
+                                  return;
+                                case _:
+                                  return;
+                              }
+                            },
+                            child: row,
+                          );
+                        },
+                      ),
                     ),
                   ),
                 ),

@@ -127,6 +127,39 @@ void main() {
       expect(out[1], '█');
     });
 
+    testWidgets('a stacked bar with no segments is an empty column', (
+      tester,
+    ) {
+      tester.pumpWidget(
+        const SizedBox(
+          width: 3,
+          height: 3,
+          child: BarChart(
+            bars: [
+              Bar.stacked('a', []),
+              Bar('b', 2),
+            ],
+            max: 2,
+            barWidth: 1,
+            gap: 1,
+            showValues: true,
+            showLabels: true,
+            semanticLabel: 'Load',
+          ),
+        ),
+      );
+      // 3 rows = value labels + 1 chart row + category labels. The empty
+      // stack totals 0 and paints nothing; its neighbor is unaffected.
+      final out = _rows(tester, 3, 3);
+      expect(out[0], '0 2');
+      expect(out[1], '  █');
+      expect(out[2], 'a b');
+
+      final chart = tester.semantics().single(role: SemanticRole.chart);
+      expect(chart.state.chartSegmentCount, 1, reason: 'the stack has none');
+      expect(chart.state.chartMinValue, 0);
+    });
+
     testWidgets('uses block-eighths for partial fill', (tester) {
       // value = 0.25 of max → 0.25 chart-row → 2/8 of a single row → ▂.
       tester.pumpWidget(

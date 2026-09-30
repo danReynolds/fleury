@@ -399,7 +399,6 @@ class _PatchReviewState extends State<PatchReview> {
   bool _ownsController = false;
   bool _ownsDiffController = false;
   bool _ownsFocusNode = false;
-  bool _focusedWithin = false;
   Object? _pendingSelectedPatchFileIdentity;
   int _selectionSyncGeneration = 0;
 
@@ -502,13 +501,6 @@ class _PatchReviewState extends State<PatchReview> {
     }
     _pendingSelectedPatchFileIdentity = null;
     _controller.currentIndex = nextIndex;
-  }
-
-  void _onFocusDetectorChange(bool focused) {
-    if (_focusedWithin == focused) return;
-    setState(() {
-      _focusedWithin = focused;
-    });
   }
 
   Future<void> _copySelection() async {
@@ -680,54 +672,53 @@ class _PatchReviewState extends State<PatchReview> {
       ]);
     }
 
-    return FocusDetector(
-      onFocusChange: _onFocusDetectorChange,
-      child: Semantics(
-        role: WidgetRoles.patchReview,
-        label: _sanitizePatchText(widget.label),
-        value: widget.status.name,
-        focused: _focusedWithin || _focusNode.hasFocus,
-        actions: {
-          SemanticAction.focus,
-          SemanticAction.navigate,
-          if (canSelect) SemanticAction.submit,
-          if (copyEnabled) SemanticAction.copy,
-        },
-        onAction: _handleReviewAction,
-        stateListenable: _controller,
-        stateBuilder: () {
-          final currentIndex = _controller.currentIndex;
-          final selectedFile =
-              currentIndex == null ||
-                  currentIndex < 0 ||
-                  currentIndex >= widget.files.length
-              ? null
-              : widget.files[currentIndex];
-          final visibleRange = _controller.visibleRange;
-          return SemanticState({
-            if (widget.patchId != null)
-              'patchId': _sanitizePatchText(widget.patchId!.toString()),
-            'patchStatus': widget.status.name,
-            'patchFileCount': widget.files.length,
-            'patchAdditionCount': additionCount,
-            'patchDeletionCount': deletionCount,
-            'patchHunkCount': hunkCount,
-            'approvedPatchFileCount': approvedCount,
-            'changesRequestedPatchFileCount': changesRequestedCount,
-            'copyEnabled': copyEnabled,
-            'clipboardPolicy': widget.copyOptions.clipboardPolicy.name,
-            if (visibleRange != null && widget.files.isNotEmpty) ...{
-              'visibleRangeStart': visibleRange.first,
-              'visibleRangeEnd': visibleRange.last,
-            },
-            'currentIndex': ?currentIndex,
-            if (selectedFile != null) ..._selectedFileState(selectedFile),
-          });
-        },
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: children,
-        ),
+    return Semantics(
+      role: WidgetRoles.patchReview,
+      label: _sanitizePatchText(widget.label),
+      value: widget.status.name,
+      // The file list's focus, which the focus action requests. The diff
+      // is a separate focus stop and reports its own.
+      focused: context.listen(_focusNode).hasFocus,
+      actions: {
+        SemanticAction.focus,
+        SemanticAction.navigate,
+        if (canSelect) SemanticAction.submit,
+        if (copyEnabled) SemanticAction.copy,
+      },
+      onAction: _handleReviewAction,
+      stateListenable: _controller,
+      stateBuilder: () {
+        final currentIndex = _controller.currentIndex;
+        final selectedFile =
+            currentIndex == null ||
+                currentIndex < 0 ||
+                currentIndex >= widget.files.length
+            ? null
+            : widget.files[currentIndex];
+        final visibleRange = _controller.visibleRange;
+        return SemanticState({
+          if (widget.patchId != null)
+            'patchId': _sanitizePatchText(widget.patchId!.toString()),
+          'patchStatus': widget.status.name,
+          'patchFileCount': widget.files.length,
+          'patchAdditionCount': additionCount,
+          'patchDeletionCount': deletionCount,
+          'patchHunkCount': hunkCount,
+          'approvedPatchFileCount': approvedCount,
+          'changesRequestedPatchFileCount': changesRequestedCount,
+          'copyEnabled': copyEnabled,
+          'clipboardPolicy': widget.copyOptions.clipboardPolicy.name,
+          if (visibleRange != null && widget.files.isNotEmpty) ...{
+            'visibleRangeStart': visibleRange.first,
+            'visibleRangeEnd': visibleRange.last,
+          },
+          'currentIndex': ?currentIndex,
+          if (selectedFile != null) ..._selectedFileState(selectedFile),
+        });
+      },
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: children,
       ),
     );
   }

@@ -460,8 +460,10 @@ class InputDispatcher {
       KeyPosition() => sequence.usTwin,
       _ => null,
     };
+    // Past modal scopes: a dialog holds keys from the bindings behind it
+    // only until it closes, so they still carry their keys.
     final covered = <KeyCode>{
-      for (final active in resolveActiveKeyBindings(focusManager))
+      for (final active in resolveKeyBindingsPastModalScopes(focusManager))
         for (final sequence in active.sequences) ?lower(sequence),
     };
     for (final selector in sampled) {

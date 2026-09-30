@@ -574,28 +574,7 @@ String _progressText(TaskGraphNode node) {
   return 'Progress: pending';
 }
 
-String _sanitizeTaskText(String original) {
-  if (!_needsTaskSanitization(original)) return original;
-  return sanitizeSingleLine(original);
-}
-
-bool _needsTaskSanitization(String text) {
-  for (final codeUnit in text.codeUnits) {
-    if (codeUnit == 0x1b ||
-        codeUnit == 0x9b ||
-        codeUnit == 0x9d ||
-        codeUnit == 0x90 ||
-        codeUnit == 0x98 ||
-        codeUnit == 0x9e ||
-        codeUnit == 0x9f ||
-        codeUnit == 0x0a ||
-        codeUnit == 0x0d ||
-        codeUnit == 0x09) {
-      return true;
-    }
-  }
-  return false;
-}
+String _sanitizeTaskText(String text) => sanitizeSingleLine(text);
 
 CellStyle _styleForStatus(TaskGraphStatus status) {
   return switch (status) {

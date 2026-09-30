@@ -692,7 +692,7 @@ bool _entryMatchesFilter(LogEntry entry, _CompiledLogRegionFilter filter) {
   if (entry.id != null && matcher.matches(entry.id.toString())) return true;
   if (entry.source != null && matcher.matches(entry.source!)) return true;
   if (matcher.matches(_severityLabel(entry.severity))) return true;
-  return matcher.matches(_sanitizeLogMessage(entry.message));
+  return matcher.matches(_sanitizeLogText(entry.message));
 }
 
 final class _CompiledLogRegionFilter {
@@ -842,7 +842,7 @@ String _searchTextFor(LogEntry entry) {
     if (entry.id != null) entry.id.toString(),
     if (entry.source != null) entry.source!,
     _severityLabel(entry.severity),
-    _sanitizeLogMessage(entry.message),
+    _sanitizeLogText(entry.message),
   ].join('\u{0}');
 }
 
@@ -1067,7 +1067,7 @@ _FormattedLogLine _formatLogLine(
   required int? maxLineLength,
 }) {
   final original = entry.message;
-  final sanitized = _sanitizeLogMessage(original);
+  final sanitized = _sanitizeLogText(original);
   final truncatedMessage = _truncateGraphemes(sanitized, maxLineLength);
   final prefix = includePrefix ? _prefixFor(entry) : '';
   return _FormattedLogLine(
@@ -1079,28 +1079,7 @@ _FormattedLogLine _formatLogLine(
   );
 }
 
-String _sanitizeLogMessage(String original) {
-  if (!_needsLogSanitization(original)) return original;
-  return sanitizeSingleLine(original);
-}
-
-bool _needsLogSanitization(String text) {
-  for (final codeUnit in text.codeUnits) {
-    if (codeUnit == 0x1b ||
-        codeUnit == 0x9b ||
-        codeUnit == 0x9d ||
-        codeUnit == 0x90 ||
-        codeUnit == 0x98 ||
-        codeUnit == 0x9e ||
-        codeUnit == 0x9f ||
-        codeUnit == 0x0a ||
-        codeUnit == 0x0d ||
-        codeUnit == 0x09) {
-      return true;
-    }
-  }
-  return false;
-}
+String _sanitizeLogText(String text) => sanitizeSingleLine(text);
 
 String _truncateGraphemes(String text, int? maxLineLength) {
   if (maxLineLength == null) return text;
@@ -1114,7 +1093,8 @@ String _prefixFor(LogEntry entry) {
   final parts = <String>[
     if (entry.timestamp != null) entry.timestamp!.toIso8601String(),
     _severityLabel(entry.severity),
-    if (entry.source != null && entry.source!.isNotEmpty) entry.source!,
+    if (entry.source != null && entry.source!.isNotEmpty)
+      _sanitizeLogText(entry.source!),
   ];
   return parts.isEmpty ? '' : '[${parts.join(' ')}] ';
 }

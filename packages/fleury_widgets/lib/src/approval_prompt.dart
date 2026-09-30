@@ -57,6 +57,17 @@ final class ApprovalRequest {
 /// optional subject and detail lines, and Approve/Deny buttons with `y`/`n`
 /// key shortcuts. Destructive requests focus Deny by default, so a stray
 /// Enter can't trigger an irreversible action.
+///
+/// Esc denies, as the semantic cancel action does. In a dialog shown with
+/// `present`, that answers the request instead of closing the dialog around
+/// it, so every way out goes through [onDecision]. Close the prompt from
+/// there; popping with the decision makes it `present`'s result:
+///
+/// ```dart
+/// final decision = await context.present<ApprovalDecision>(
+///   ApprovalPrompt(request: request, onDecision: context.pop),
+/// );
+/// ```
 class ApprovalPrompt extends StatelessWidget {
   const ApprovalPrompt({
     super.key,
@@ -69,7 +80,9 @@ class ApprovalPrompt extends StatelessWidget {
   /// Request content and severity to present.
   final ApprovalRequest request;
 
-  /// Called whenever the user approves or denies [request].
+  /// Called whenever the user approves or denies [request]: with a button,
+  /// `y` or `n`, Esc (which denies), or a semantic action. The prompt doesn't
+  /// close itself; dismiss it from here.
   final void Function(ApprovalDecision decision) onDecision;
 
   /// Total dialog width, including its border; null sizes to the content.
@@ -127,6 +140,14 @@ class ApprovalPrompt extends StatelessWidget {
           ),
           KeyBinding(
             KeyCode.char('n'),
+            onTrigger: (_) => _deny(),
+            hideFromHintBar: true,
+          ),
+          // Esc cancels, and cancelling a request is denying it. Bound here,
+          // it answers before a dialog route's Esc would close the prompt
+          // around a request nobody answered.
+          KeyBinding(
+            KeySequence.escape,
             onTrigger: (_) => _deny(),
             hideFromHintBar: true,
           ),

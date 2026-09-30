@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:fleury/fleury.dart';
 import 'package:fleury_test/fleury_test.dart';
 import 'package:fleury_widgets/fleury_widgets.dart';
@@ -144,5 +146,49 @@ void main() {
       tester.sendKey(const KeyEvent(KeyCode.char('y')));
       expect(decision, ApprovalDecision.approved);
     });
+
+    testWidgets(
+      'Esc in a presented prompt denies, and the decision closes it',
+      (tester) async {
+        // The documented idiom: the decision pops the prompt and becomes the
+        // result of present. Esc must answer the request, not close the
+        // dialog around a request that is then never answered.
+        late BuildContext home;
+        tester.pumpWidget(Navigator(home: _Home((context) => home = context)));
+        ApprovalDecision? result;
+        var closed = false;
+        unawaited(
+          home
+              .present<ApprovalDecision>(
+                ApprovalPrompt(request: _request(), onDecision: home.pop),
+                transition: RouteTransition.none,
+              )
+              .then((decision) {
+                result = decision;
+                closed = true;
+              }),
+        );
+        tester.pump();
+        expect(tester.renderToString(), contains('Approve deploy?'));
+
+        tester.sendKey(const KeyEvent(KeyCode.escape));
+        await Future<void>.delayed(Duration.zero);
+        tester.pump();
+
+        expect(closed, isTrue);
+        expect(result, ApprovalDecision.denied);
+        expect(home.navigator.depth, 1);
+      },
+    );
   });
+}
+
+class _Home extends StatelessWidget {
+  const _Home(this.sink);
+  final void Function(BuildContext) sink;
+  @override
+  Widget build(BuildContext context) {
+    sink(context);
+    return const Text('home');
+  }
 }
