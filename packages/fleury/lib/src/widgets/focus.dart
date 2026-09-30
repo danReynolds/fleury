@@ -78,16 +78,16 @@ abstract interface class CaretHost implements ScreenGeometrySource {
 /// Marker interface for objects that contribute key bindings to the
 /// active focus chain.
 ///
-/// `KeyBindings` widgets implement this and attach themselves to a
-/// `FocusNode.bindingSource` on an [InputScope] mailbox. The `InputDispatcher`
-/// walks the input chain and reads `activeBindings` from each non-null source. User-facing key discovery
+/// `KeyBindings` widgets implement this and install themselves as the
+/// [FocusNode.bindingSource] of a node on the focus chain that never takes
+/// focus itself. The `InputDispatcher` walks the chain and reads
+/// [activeBindings] from each source it meets. User-facing key discovery
 /// surfaces use `resolveActiveKeyBindings`, which applies the same precedence
 /// plus hint visibility and text-input shadowing rules.
-///
-/// The interface lives here (rather than in `key_bindings.dart`) so
-/// that `FocusNode` can typed-reference it without creating a
-/// circular import between the focus and bindings libraries.
 abstract interface class KeyBindingSource {
+  // Declared here rather than in key_bindings.dart so FocusNode can reference
+  // it without a circular import between the focus and bindings libraries.
+
   /// The bindings this source currently contributes. May change over
   /// time as the source rebuilds.
   List<KeyBinding> get activeBindings;
