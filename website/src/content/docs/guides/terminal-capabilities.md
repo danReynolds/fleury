@@ -142,7 +142,7 @@ keyboard protocol by default, because a multiplexer may not pass the full one
 through reliably: chords, arrows, and function keys are enhanced, but letters
 arrive as plain text, so there is no held-key state. Held controls then use
 their press-driven fallback.
-[Key handling](/fleury/guides/focus-and-keyboard/) covers capability-aware
+[Key handling](/fleury/guides/key-handling/) covers capability-aware
 input.
 
 To diagnose keyboard input, choose the protocol level explicitly:

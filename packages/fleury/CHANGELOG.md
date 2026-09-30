@@ -20,7 +20,23 @@
   undoes, and application bindings fire. Only a press nothing handles suspends
   the process (restore, stop, resume after `fg`) — the rule Ctrl+C already
   follows for exit. `PosixTerminalDriver(suspendOnCtrlZ: false)` keeps an
-  unhandled Ctrl+Z an ordinary key. Browser and served sessions never suspend.
+  unhandled Ctrl+Z an ordinary key. Browser, served, and `fleury shell`
+  sessions never suspend.
+
+- **`fleury shell` relays every key.** The shell now puts its terminal in the
+  same raw mode a native app uses, so Ctrl+C, Ctrl+Z, Ctrl+\\ and Ctrl+S reach
+  the attached app instead of signalling the shell. It restores the terminal
+  exactly on every exit path (the app exits or is killed, SIGINT, SIGTERM,
+  SIGHUP, or a hangup, which now exits 129), keeps serving later runs until
+  you press Ctrl+C with no app attached, and discards keys typed while no app
+  was attached.
+
+- **Key sequences work in dialogs, and Esc aborts them cleanly.** A
+  multi-key sequence bound inside a `KeyBindings(modal: true)` scope, such as
+  every dialog `Navigator.present` shows, now starts and completes there;
+  bindings outside the modal scope stay out of reach. An unmodified Esc that
+  can't continue a pending sequence aborts it: the held keys are dropped and
+  the Esc does nothing else. `KeyBindings.cancelPending` aborts the same way.
 
 - The CLI reports its package version through `--version` and `diagnose`.
   `serve` reports invalid or occupied ports cleanly, releases startup resources,

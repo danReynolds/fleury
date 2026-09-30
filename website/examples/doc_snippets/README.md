@@ -25,7 +25,7 @@ changes underneath a doc, the build goes red instead of the docs going stale.
 | `web_app_shell.dart` | Browser entry snippets in [Coming from Flutter](../../src/content/docs/coming-from-flutter.mdx) and the `fleury_web` README |
 | `coming_from_flutter.dart`, `flutter_counter_main.dart`, `../lib/flutter_map.dart` | [Coming from Flutter](../../src/content/docs/coming-from-flutter.mdx); the page shows `#docregion` excerpts of `flutter_map.dart`, whose widgets the live demos run, and `coming_from_flutter.dart` checks its remaining hand-written fences |
 | `filterable_list.dart` | [Tutorial: a filterable list](../../src/content/docs/tutorial.mdx); its `app` region renders as the tutorial's finished file |
-| `keyboard_tour.dart` | [Key handling](../../src/content/docs/guides/focus-and-keyboard.mdx) |
+| `keyboard_tour.dart` | [Key handling](../../src/content/docs/guides/key-handling.mdx) |
 | `focus_tour.dart` | [Focus management](../../src/content/docs/guides/focus.mdx) |
 | `core_widgets.dart` | Loading data, Input & gestures, Theming (RichText) |
 | `navigation_demo.dart`, `navigation_advanced_demos.dart` | [Navigation](../../src/content/docs/guides/navigation.mdx)'s hand-written fences; its live demos and editable code come from `../lib/registry.dart` |

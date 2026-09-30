@@ -872,10 +872,10 @@ const WIDGET_GUIDES = {
   gesturedetector: ['input-and-gestures'],
   mouseregion: ['input-and-gestures'],
   selectionarea: ['input-and-gestures'],
-  keybindings: ['focus-and-keyboard'],
-  keydetector: ['focus-and-keyboard'],
-  keyhintbar: ['focus-and-keyboard'],
-  whichkey: ['focus-and-keyboard'],
+  keybindings: ['key-handling'],
+  keydetector: ['key-handling'],
+  keyhintbar: ['key-handling'],
+  whichkey: ['key-handling'],
   focus: ['focus'],
   focusnode: ['focus'],
   focusscope: ['focus'],
@@ -1321,7 +1321,7 @@ const SHOWCASE_GOALS = {
     'The modal behaviour underneath is ordinary app state. In vim NORMAL the ' +
     'editor declines typed text, so printables route to `KeyBindings` as ' +
     'commands; in INSERT it claims them. See ' +
-    '[Key handling](/fleury/guides/focus-and-keyboard/).',
+    '[Key handling](/fleury/guides/key-handling/).',
   finance:
     'A personal-finance workspace that feels immediately familiar: balances, ' +
     'cash flow, category spending, filters, and a transaction ledger filled ' +
@@ -1411,7 +1411,7 @@ const SHOWCASE_TRY = {
     'suspends it only when nothing handles the key. The undo binding is off ' +
     'while there is nothing to undo, so an extra Ctrl+Z suspends the studio; ' +
     '`fg` resumes it. See ' +
-    '[keys handled by the host](/fleury/guides/focus-and-keyboard/#keys-handled-by-the-host).',
+    '[keys handled by the host](/fleury/guides/key-handling/#keys-handled-by-the-host).',
 };
 
 // Layout and text primitives nearly every app is built from. Listing them

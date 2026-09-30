@@ -25,7 +25,7 @@ export const GUIDE_GROUPS = [
     label: 'Input, focus & commands',
     items: [
       { label: 'Input & gestures', slug: 'guides/input-and-gestures' },
-      { label: 'Key handling', slug: 'guides/focus-and-keyboard' },
+      { label: 'Key handling', slug: 'guides/key-handling' },
       { label: 'Focus management', slug: 'guides/focus' },
       { label: 'Commands & shortcuts', slug: 'guides/commands' },
     ],
