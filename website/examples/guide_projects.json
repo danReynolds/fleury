@@ -48,7 +48,7 @@
     {
       "label": "package_route.dart",
       "source": "website/examples/lib/registry.dart",
-      "declaration": "_AnimationProgressTourState"
+      "declaration": "_PackageRouteState"
     }
   ],
   "animation.timing": [
@@ -67,42 +67,42 @@
     {
       "label": "manual_route.dart",
       "source": "website/examples/lib/registry.dart",
-      "declaration": "_ManualAnimationTourState"
+      "declaration": "_ManualRouteState"
     }
   ],
   "animation.effects": [
     {
       "label": "connection_status.dart",
       "source": "website/examples/lib/registry.dart",
-      "declaration": "_EntranceEffectTourState"
+      "declaration": "_ConnectionStatusState"
     }
   ],
   "animation.trigger": [
     {
       "label": "pilot_validation.dart",
       "source": "website/examples/lib/registry.dart",
-      "declaration": "_ValidationFeedbackTourState"
+      "declaration": "_PilotValidationState"
     }
   ],
   "animation.presence": [
     {
       "label": "effect_picker.dart",
       "source": "website/examples/lib/registry.dart",
-      "declaration": "_EffectPickerTourState"
+      "declaration": "_EffectPickerState"
     }
   ],
   "animation.frames": [
     {
       "label": "packet_transfer.dart",
       "source": "website/examples/lib/registry.dart",
-      "declaration": "_FrameCadenceTourState"
+      "declaration": "_PacketTransferState"
     }
   ],
   "animation.ticker": [
     {
       "label": "ticker_simulation.dart",
       "source": "website/examples/lib/registry.dart",
-      "declaration": "_TickerSimulationTourState"
+      "declaration": "_TickerSimulationState"
     }
   ],
   "lists.files": [

@@ -1352,6 +1352,58 @@ void main() {
     },
   );
 
+  // The animation guide's trigger demo validates through Form and FormField,
+  // as the forms guide teaches, so its error must reach the field's
+  // semantics, not only the animated status line.
+  test('animation.trigger reports its error on the form field', () async {
+    final fixture = await _mountExample(
+      'animation.trigger',
+      useManifestSize: true,
+    );
+    final keyboardCapture =
+        fixture.host.querySelector('textarea[aria-hidden="true"]')!
+            as web.HTMLTextAreaElement;
+
+    Future<void> settle() async {
+      await Future<void>.delayed(Duration.zero);
+      for (var i = 0; i < 6 && fixture.flush.pending; i++) {
+        fixture.flush.fire();
+        await Future<void>.delayed(Duration.zero);
+      }
+      await fixture.app.awaitSemanticIdle();
+    }
+
+    web.Element pilotName() => fixture.host.querySelector(
+      '.fleury-semantics [role="textbox"][aria-label="Pilot name"]',
+    )!;
+
+    expect(pilotName().getAttribute('aria-invalid'), isNull);
+    _tapPaintedText(fixture.host, 'Validate pilot');
+    await settle();
+    expect(fixture.host.textContent, contains('✕ Enter any non-empty name'));
+    expect(
+      pilotName().getAttribute('data-fleury-validation-error'),
+      'Enter any non-empty name',
+    );
+
+    keyboardCapture.dispatchEvent(
+      web.InputEvent(
+        'input',
+        web.InputEventInit(
+          data: 'Ada',
+          inputType: 'insertText',
+          bubbles: true,
+          cancelable: true,
+        ),
+      ),
+    );
+    await settle();
+    _tapPaintedText(fixture.host, 'Validate pilot');
+    await settle();
+    expect(fixture.host.textContent, contains('✓ Ada is cleared for launch'));
+    expect(pilotName().getAttribute('aria-invalid'), isNull);
+  });
+
   test(
     'forms.project exposes validation and a successful submission',
     () async {

@@ -66,6 +66,16 @@ the package is, rather than jumping to either end. When the package reaches the
 station, the demo mounts a short completion effect. Fleury interpolates
 `double`, `int`, `RgbColor`, and `CellOffset` directly.
 
+Without a `curve`, `AnimationBuilder` animates with a spring (`Spring.smooth`,
+or the one you pass as `spring:`), which keeps its velocity when the target
+changes mid-flight. For fixed timing, pass a `curve`, optionally with a
+`duration`, as this demo does. A `duration` without a `curve` throws an
+`ArgumentError`, because a spring sets its own timing.
+
+When part of the builder's output does not depend on the value, pass it as
+`child:`. The builder receives the same widget on every frame instead of
+building it again.
+
 ### Share one value or time properties separately
 
 One animated value can drive several visual properties. Use that when size,
@@ -116,11 +126,14 @@ Press **Run route**. The package moves to the station, waits there for 600 ms,
 then returns. Press **Return now** while it is moving or waiting. The orbital
 courier at the top of this page uses the same primitive for a longer route.
 
+`Animation.to` follows the same timing rule as `AnimationBuilder`: a spring by
+default, or a `curve` with an optional `duration`.
+
 The first `.to()` starts immediately. Calling `.to()` or `.delay()` on the
-future it returns appends another stage, and the last future represents the
-whole chain. `.delay()` holds the current value for a clock-driven duration. A
-new call on the animation itself replaces the active chain and starts from the
-current value:
+future it returns appends another stage and returns that same future, so
+awaiting it waits for the whole chain. `.delay()` holds the current value for a
+clock-driven duration. A new call on the animation itself replaces the active
+chain and starts from the current value:
 
 ```dart
 final run = progress.to(1.0); // starts now
@@ -181,7 +194,12 @@ the tree.
 
 The built-in effects cover entrance and exit motion (`fadeIn`, `fadeOut`,
 `slideIn`, `slideOut`, `wipeIn`, `wipeOut`, `expand`, `shrink`), feedback
-(`flash`, `shake`), and looping motion (`pulse`, `shimmer`).
+(`flash`, `shake`), and looping motion (`pulse`, `shimmer`). A looping effect
+keeps the animation clock running, and the app drawing frames, for as long as
+it is mounted.
+
+Unlike `AnimationBuilder`, `Animate` and `AnimatedVisibility` accept a
+`duration` on its own; their curve defaults to `Curves.easeOut`.
 
 A slide travels one child width or height by default. Terminal motion lands on
 whole cells, so a linear curve and a duration that exposes several cell
@@ -192,10 +210,15 @@ fixed-cell nudge instead of a full entrance or exit.
 
 An effect normally runs once when `Animate` mounts. To replay it without
 remounting the widget, set `trigger` to a value that changes for each action. A
-counter works well for repeated submissions.
+counter works well for repeated submissions. With a `trigger`, the first build
+shows the finished state; the effect plays only when the value changes.
 
-This form increments `_submitCount` on every submission. Empty input shows red
-feedback; a valid pilot name shows green feedback:
+This form validates the pilot name with `Form` and `FormField`, as
+[Forms & validation](/fleury/guides/forms/) teaches, so the input shows its
+invalid state and carries the error in its semantics. It increments
+`_submitCount` after every submission and shows the outcome in one animated
+line, which is why the field sets `showErrorMessage: false`. Empty input shows
+red feedback; a valid pilot name shows green feedback:
 
 <GuidePad id="animation.trigger" layout="demo-wide">
 <FleuryExample
@@ -234,8 +257,11 @@ pair to `AnimatedVisibility`:
 </GuidePad>
 
 Choose an entrance and exit, then hide and show the sample. Show it again before
-its exit finishes: the effect reverses from its current value and the child
-stays mounted.
+its exit finishes: the child stays mounted, and the entrance resumes from the
+exit's current progress. With a matching pair, such as fade in and fade out or
+expand and shrink, that looks like a reversal. With the demo's slide or wipe
+pair, which enters from the left and leaves to the right, the sample jumps back
+to the left side.
 
 The picker offers only lifecycle effects; `flash` and `shake` are feedback,
 while `pulse` and `shimmer` loop. Its durations follow distance. The demo's
@@ -265,23 +291,21 @@ This packet transfer has six authored frames:
 </GuidePad>
 
 Change the speed, then pause and resume it. `frame` starts at zero and counts
-up at the selected interval; modulo maps it onto the six pictures. Use Fleury's
+up at the selected interval; modulo maps it onto the six pictures. Resuming or
+changing the interval starts `frame` at zero again. Use Fleury's
 `Spinner` when its built-in frames are enough, and `FrameBuilder` when the
 frames belong to your app.
 
 ## Advance a simulation with a ticker
 
-A `Ticker` runs a callback on Fleury’s animation clock. By default, that clock
-wakes every 33 ms—an update cadence of about 30 Hz—while at least one ticker is
-active, and stops when the last ticker stops. If every tick changes the UI and
-every requested frame is presented, that corresponds to roughly 30 frames per
-second (FPS). Each callback receives the total elapsed time since its ticker
-started.
+A `Ticker` runs a callback on Fleury’s animation clock and passes it the total
+time elapsed since the ticker started. By default, the clock wakes every 33 ms,
+about 30 times a second, while at least one ticker is active, and stops when
+the last one stops. This fits game loops, physics, particles, and other motion
+that advances continuously rather than toward a target.
 
-FPS is presentation throughput, not a promise that simulation time advances in
-fixed 33 ms steps. The event loop can delay a callback or frame, so update
-simulations from elapsed time. This fits game loops, physics, particles, and
-other motion that advances continuously rather than toward a target.
+The event loop can delay a callback, so compute the simulation from elapsed
+time rather than counting ticks:
 
 <GuidePad id="animation.ticker" layout="demo-wide" codeMaxHeight="32rem">
 <FleuryExample
@@ -294,16 +318,16 @@ other motion that advances continuously rather than toward a target.
 />
 </GuidePad>
 
-`SingleTickerProviderStateMixin` creates the ticker from the scheduler already
-owned by the current Fleury app, mutes it with `TickerMode`, and disposes it
-with the state. Application code creates and controls its ticker; it does not
-create another scheduler.
+Create the ticker in `initState`, as this demo does.
+`SingleTickerProviderStateMixin` creates it from the scheduler the current
+Fleury app already owns, mutes it with `TickerMode`, and disposes it with the
+state. Application code creates and controls its ticker; it does not create
+another scheduler.
 
-The cadence is shared across an app, not configured per ticker. Ordinary
-`runApp` applications use the 33 ms default. A custom host can provide a
-`TickerScheduler(frameInterval: …)` through its `TuiBinding`. The separate
-`runApp(frameInterval: …)` option limits how often frames are presented; it
-does not change how often ticker callbacks run.
+The clock's interval is shared across an app, not set per ticker. A custom host
+can provide a `TickerScheduler(frameInterval: …)` through its `TuiBinding`. The
+separate `runApp(frameInterval: …)` option limits how often frames are
+presented; it does not change how often tickers run.
 
 ## Next steps
 

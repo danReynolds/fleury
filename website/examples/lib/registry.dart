@@ -2361,7 +2361,7 @@ Text('\${summary.health.name}: \${summary.activeTaskCount} of \${summary.taskCou
     cols: 60,
     rows: 15,
     interactive: true,
-    builder: () => const _AnimationStateTour(),
+    builder: () => const _OrbitalCourier(),
   ),
   ExampleInfo(
     id: 'animation.manual',
@@ -2373,7 +2373,7 @@ Text('\${summary.health.name}: \${summary.activeTaskCount} of \${summary.taskCou
     cols: 48,
     rows: 11,
     interactive: true,
-    builder: () => _framed(const _ManualAnimationTour()),
+    builder: () => _framed(const _ManualRoute()),
   ),
   ExampleInfo(
     id: 'animation.progress',
@@ -2385,7 +2385,7 @@ Text('\${summary.health.name}: \${summary.activeTaskCount} of \${summary.taskCou
     cols: 48,
     rows: 12,
     interactive: true,
-    builder: () => _framed(const _AnimationProgressTour()),
+    builder: () => _framed(const _PackageRoute()),
   ),
   ExampleInfo(
     id: 'animation.timing',
@@ -2397,7 +2397,7 @@ Text('\${summary.health.name}: \${summary.activeTaskCount} of \${summary.taskCou
     cols: 54,
     rows: 15,
     interactive: true,
-    builder: () => const _AnimationTimingTour(),
+    builder: () => _framed(const _TimingComparison()),
   ),
   ExampleInfo(
     id: 'animation.effects',
@@ -2407,7 +2407,7 @@ Text('\${summary.health.name}: \${summary.activeTaskCount} of \${summary.taskCou
     cols: 48,
     rows: 10,
     interactive: true,
-    builder: () => _framed(const _EntranceEffectTour()),
+    builder: () => _framed(const _ConnectionStatus()),
   ),
   ExampleInfo(
     id: 'animation.trigger',
@@ -2417,7 +2417,7 @@ Text('\${summary.health.name}: \${summary.activeTaskCount} of \${summary.taskCou
     cols: 48,
     rows: 14,
     interactive: true,
-    builder: () => _framed(const _ValidationFeedbackTour()),
+    builder: () => _framed(const _PilotValidation()),
   ),
   ExampleInfo(
     id: 'animation.presence',
@@ -2427,7 +2427,7 @@ Text('\${summary.health.name}: \${summary.activeTaskCount} of \${summary.taskCou
     cols: 58,
     rows: 19,
     interactive: true,
-    builder: () => _framed(const _EffectPickerTour()),
+    builder: () => _framed(const _EffectPicker()),
   ),
   ExampleInfo(
     id: 'animation.frames',
@@ -2437,7 +2437,7 @@ Text('\${summary.health.name}: \${summary.activeTaskCount} of \${summary.taskCou
     cols: 48,
     rows: 12,
     interactive: true,
-    builder: () => _framed(const _FrameCadenceTour()),
+    builder: () => _framed(const _PacketTransfer()),
   ),
   ExampleInfo(
     id: 'animation.ticker',
@@ -2447,7 +2447,7 @@ Text('\${summary.health.name}: \${summary.activeTaskCount} of \${summary.taskCou
     cols: 48,
     rows: 11,
     interactive: true,
-    builder: () => _framed(const _TickerSimulationTour()),
+    builder: () => _framed(const _TickerSimulation()),
   ),
   ExampleInfo(
     id: 'flutter.counter',
@@ -4573,14 +4573,14 @@ class _StreamLoadingTour extends StatelessWidget {
   );
 }
 
-class _AnimationStateTour extends StatefulWidget {
-  const _AnimationStateTour();
+class _OrbitalCourier extends StatefulWidget {
+  const _OrbitalCourier();
 
   @override
-  State<_AnimationStateTour> createState() => _AnimationStateTourState();
+  State<_OrbitalCourier> createState() => _OrbitalCourierState();
 }
 
-class _AnimationStateTourState extends State<_AnimationStateTour> {
+class _OrbitalCourierState extends State<_OrbitalCourier> {
   static const _idle = RgbColor(115, 125, 140);
   static const _arrived = RgbColor(70, 220, 145);
 
@@ -4697,14 +4697,14 @@ class _AnimationStateTourState extends State<_AnimationStateTour> {
   }
 }
 
-class _ManualAnimationTour extends StatefulWidget {
-  const _ManualAnimationTour();
+class _ManualRoute extends StatefulWidget {
+  const _ManualRoute();
 
   @override
-  State<_ManualAnimationTour> createState() => _ManualAnimationTourState();
+  State<_ManualRoute> createState() => _ManualRouteState();
 }
 
-class _ManualAnimationTourState extends State<_ManualAnimationTour> {
+class _ManualRouteState extends State<_ManualRoute> {
   final _progress = Animation<double>(0.0, debugLabel: 'manual package route');
   var _running = false;
 
@@ -4771,14 +4771,14 @@ class _ManualAnimationTourState extends State<_ManualAnimationTour> {
   }
 }
 
-class _AnimationProgressTour extends StatefulWidget {
-  const _AnimationProgressTour();
+class _PackageRoute extends StatefulWidget {
+  const _PackageRoute();
 
   @override
-  State<_AnimationProgressTour> createState() => _AnimationProgressTourState();
+  State<_PackageRoute> createState() => _PackageRouteState();
 }
 
-class _AnimationProgressTourState extends State<_AnimationProgressTour> {
+class _PackageRouteState extends State<_PackageRoute> {
   var _delivered = false;
 
   @override
@@ -4830,11 +4830,11 @@ class _AnimationProgressTourState extends State<_AnimationProgressTour> {
   );
 }
 
-class _AnimationTimingTour extends StatefulWidget {
-  const _AnimationTimingTour();
+class _TimingComparison extends StatefulWidget {
+  const _TimingComparison();
 
   @override
-  State<_AnimationTimingTour> createState() => _AnimationTimingTourState();
+  State<_TimingComparison> createState() => _TimingComparisonState();
 }
 
 Widget _sharedTimingStatus(bool active) {
@@ -4890,38 +4890,36 @@ Widget _independentTimingStatus(bool active) {
   );
 }
 
-class _AnimationTimingTourState extends State<_AnimationTimingTour> {
+class _TimingComparisonState extends State<_TimingComparison> {
   var _enabled = false;
 
   @override
-  Widget build(BuildContext context) => _framed(
-    Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: <Widget>[
-        const Text('TIMING COMPARISON', style: CellStyle(bold: true)),
-        const SizedBox(height: 1),
-        Button(
-          text: _enabled ? 'Reset' : 'Animate',
-          onPressed: () => setState(() => _enabled = !_enabled),
-        ),
-        const Text('Shared timing: width + color together'),
-        _sharedTimingStatus(_enabled),
-        const SizedBox(height: 1),
-        const Text('Independent timing: width 180 ms · accent 800 ms'),
-        _independentTimingStatus(_enabled),
-      ],
-    ),
+  Widget build(BuildContext context) => Column(
+    crossAxisAlignment: CrossAxisAlignment.start,
+    children: <Widget>[
+      const Text('TIMING COMPARISON', style: CellStyle(bold: true)),
+      const SizedBox(height: 1),
+      Button(
+        text: _enabled ? 'Reset' : 'Animate',
+        onPressed: () => setState(() => _enabled = !_enabled),
+      ),
+      const Text('Shared timing: width + color together'),
+      _sharedTimingStatus(_enabled),
+      const SizedBox(height: 1),
+      const Text('Independent timing: width 180 ms · accent 800 ms'),
+      _independentTimingStatus(_enabled),
+    ],
   );
 }
 
-class _EntranceEffectTour extends StatefulWidget {
-  const _EntranceEffectTour();
+class _ConnectionStatus extends StatefulWidget {
+  const _ConnectionStatus();
 
   @override
-  State<_EntranceEffectTour> createState() => _EntranceEffectTourState();
+  State<_ConnectionStatus> createState() => _ConnectionStatusState();
 }
 
-class _EntranceEffectTourState extends State<_EntranceEffectTour> {
+class _ConnectionStatusState extends State<_ConnectionStatus> {
   var _connected = false;
 
   @override
@@ -4964,14 +4962,14 @@ enum _EntryEffectChoice { fade, slide, wipe, expand }
 
 enum _ExitEffectChoice { fade, slide, wipe, shrink }
 
-class _EffectPickerTour extends StatefulWidget {
-  const _EffectPickerTour();
+class _EffectPicker extends StatefulWidget {
+  const _EffectPicker();
 
   @override
-  State<_EffectPickerTour> createState() => _EffectPickerTourState();
+  State<_EffectPicker> createState() => _EffectPickerState();
 }
 
-class _EffectPickerTourState extends State<_EffectPickerTour> {
+class _EffectPickerState extends State<_EffectPicker> {
   var _entry = _EntryEffectChoice.fade;
   var _exit = _ExitEffectChoice.fade;
   var _visible = true;
@@ -5117,40 +5115,41 @@ class _EffectPickerTourState extends State<_EffectPickerTour> {
   );
 }
 
-class _ValidationFeedbackTour extends StatefulWidget {
-  const _ValidationFeedbackTour();
+class _PilotValidation extends StatefulWidget {
+  const _PilotValidation();
 
   @override
-  State<_ValidationFeedbackTour> createState() =>
-      _ValidationFeedbackTourState();
+  State<_PilotValidation> createState() => _PilotValidationState();
 }
 
-class _ValidationFeedbackTourState extends State<_ValidationFeedbackTour> {
+class _PilotValidationState extends State<_PilotValidation> {
+  final _form = FormController();
   final _name = TextEditingController();
-  final _nameFocus = FocusNode(debugLabel: 'pilot name');
   var _submitCount = 0;
-  var _message = 'Enter a pilot name, then validate it.';
-  var _success = false;
+  String? _clearedName;
 
-  void _submit() {
-    final name = _name.text.trim();
+  Future<void> _submit() async {
+    final valid = await _form.submit();
+    if (!mounted) return;
     setState(() {
       _submitCount++;
-      _success = name.isNotEmpty;
-      _message = _success
-          ? '✓ $name is cleared for launch'
-          : '✕ Enter any non-empty name';
+      _clearedName = valid ? _name.text.trim() : null;
     });
-    _nameFocus.requestFocus();
   }
 
   Widget _feedback() {
-    final color = _success
-        ? const RgbColor(70, 220, 145)
-        : const RgbColor(255, 90, 90);
+    final cleared = _clearedName;
+    final message = _submitCount == 0
+        ? 'Enter a pilot name, then validate it.'
+        : cleared == null
+        ? '✕ Enter any non-empty name'
+        : '✓ $cleared is cleared for launch';
+    final color = cleared == null
+        ? const RgbColor(255, 90, 90)
+        : const RgbColor(70, 220, 145);
     final feedback =
         Text(
-          _message,
+          message,
           style: CellStyle(foreground: _submitCount == 0 ? null : color),
         ).animate(
           trigger: _submitCount,
@@ -5162,50 +5161,59 @@ class _ValidationFeedbackTourState extends State<_ValidationFeedbackTour> {
 
   @override
   void dispose() {
+    _form.dispose();
     _name.dispose();
-    _nameFocus.dispose();
     super.dispose();
   }
 
   @override
-  Widget build(BuildContext context) => Column(
-    crossAxisAlignment: CrossAxisAlignment.start,
-    children: <Widget>[
-      const Text('FORM VALIDATION', style: CellStyle(bold: true)),
-      const SizedBox(height: 1),
-      const Text('Pilot name'),
-      Container(
-        width: 32,
-        border: BoxBorder(style: Theme.of(context).borderStyle),
-        padding: const EdgeInsets.symmetric(horizontal: 1),
-        child: SizedBox(
-          width: 28,
-          child: TextInput(
-            controller: _name,
-            focusNode: _nameFocus,
-            autofocus: true,
-            semanticLabel: 'Pilot name',
-            placeholder: 'Type any name',
-            onSubmit: (_) => _submit(),
+  Widget build(BuildContext context) => Form(
+    controller: _form,
+    onSubmit: () {},
+    child: Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: <Widget>[
+        const Text('FORM VALIDATION', style: CellStyle(bold: true)),
+        const SizedBox(height: 1),
+        const Text('Pilot name'),
+        FormField(
+          validator: () =>
+              _name.text.trim().isEmpty ? 'Enter any non-empty name' : null,
+          // The animated line below shows the outcome instead.
+          showErrorMessage: false,
+          child: Container(
+            width: 32,
+            border: BoxBorder(style: Theme.of(context).borderStyle),
+            padding: const EdgeInsets.symmetric(horizontal: 1),
+            child: SizedBox(
+              width: 28,
+              child: TextInput(
+                controller: _name,
+                autofocus: true,
+                semanticLabel: 'Pilot name',
+                placeholder: 'Type any name',
+                onSubmit: (_) => _submit(),
+              ),
+            ),
           ),
         ),
-      ),
-      const SizedBox(height: 1),
-      _feedback(),
-      const SizedBox(height: 1),
-      Button(text: 'Validate pilot', onPressed: _submit),
-    ],
+        const SizedBox(height: 1),
+        _feedback(),
+        const SizedBox(height: 1),
+        Button(text: 'Validate pilot', onPressed: _submit),
+      ],
+    ),
   );
 }
 
-class _FrameCadenceTour extends StatefulWidget {
-  const _FrameCadenceTour();
+class _PacketTransfer extends StatefulWidget {
+  const _PacketTransfer();
 
   @override
-  State<_FrameCadenceTour> createState() => _FrameCadenceTourState();
+  State<_PacketTransfer> createState() => _PacketTransferState();
 }
 
-class _FrameCadenceTourState extends State<_FrameCadenceTour> {
+class _PacketTransferState extends State<_PacketTransfer> {
   static const _frames = <String>[
     '●··········◇',
     '──●········◇',
@@ -5262,25 +5270,25 @@ class _FrameCadenceTourState extends State<_FrameCadenceTour> {
   );
 }
 
-class _TickerSimulationTour extends StatefulWidget {
-  const _TickerSimulationTour();
+class _TickerSimulation extends StatefulWidget {
+  const _TickerSimulation();
 
   @override
-  State<_TickerSimulationTour> createState() => _TickerSimulationTourState();
+  State<_TickerSimulation> createState() => _TickerSimulationState();
 }
 
-class _TickerSimulationTourState extends State<_TickerSimulationTour>
+class _TickerSimulationState extends State<_TickerSimulation>
     with SingleTickerProviderStateMixin {
   static const _trackWidth = 28.0;
-  Ticker? _ticker;
+  late final Ticker _ticker;
   Duration _lastElapsed = Duration.zero;
   var _position = 0.0;
   var _velocity = 12.0;
 
   @override
-  void didChangeDependencies() {
-    super.didChangeDependencies();
-    _ticker ??= createTicker(_onTick)..start();
+  void initState() {
+    super.initState();
+    _ticker = createTicker(_onTick)..start();
   }
 
   void _onTick(Duration elapsed) {
@@ -5298,12 +5306,11 @@ class _TickerSimulationTourState extends State<_TickerSimulationTour>
   }
 
   void _toggle() => setState(() {
-    final ticker = _ticker!;
-    if (ticker.isActive) {
-      ticker.stop();
+    if (_ticker.isActive) {
+      _ticker.stop();
     } else {
       _lastElapsed = Duration.zero;
-      ticker.start();
+      _ticker.start();
     }
   });
 
@@ -5323,9 +5330,7 @@ class _TickerSimulationTourState extends State<_TickerSimulationTour>
         Text('position ${_position.toStringAsFixed(1)} cells'),
         const SizedBox(height: 1),
         Button(
-          text: _ticker?.isActive == true
-              ? 'Pause simulation'
-              : 'Resume simulation',
+          text: _ticker.isActive ? 'Pause simulation' : 'Resume simulation',
           onPressed: _toggle,
         ),
       ],
