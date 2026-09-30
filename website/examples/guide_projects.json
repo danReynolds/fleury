@@ -308,40 +308,65 @@
   ],
   "navigation.basics": [
     {
-      "label": "navigation_demo.dart",
+      "label": "home_screen.dart",
       "source": "website/examples/lib/registry.dart",
-      "declaration": "_NavigationBasicsTourState"
+      "declaration": "_HomeScreenState"
+    },
+    {
+      "label": "details_screen.dart",
+      "source": "website/examples/lib/registry.dart",
+      "declaration": "_DetailsScreenState"
+    },
+    {
+      "label": "confirm_dialog.dart",
+      "source": "website/examples/lib/registry.dart",
+      "declaration": "_ConfirmDialog"
     }
   ],
   "navigation.placement": [
     {
       "label": "dialog_placement.dart",
       "source": "website/examples/lib/registry.dart",
-      "declaration": "_DialogPlacementTourState"
+      "declaration": "_DialogPlacementState"
+    },
+    {
+      "label": "placed_dialog.dart",
+      "source": "website/examples/lib/registry.dart",
+      "declaration": "_PlacedDialog"
     }
   ],
   "navigation.guard": [
     {
       "label": "guarded_editor.dart",
       "source": "website/examples/lib/registry.dart",
-      "declaration": "_GuardedEditorTourState"
+      "declaration": "_GuardedEditorState"
+    },
+    {
+      "label": "drafts_screen.dart",
+      "source": "website/examples/lib/registry.dart",
+      "declaration": "_DraftsScreenState"
     }
   ],
   "navigation.nested-flow": [
     {
       "label": "projects_screen.dart",
       "source": "website/examples/lib/registry.dart",
-      "declaration": "_NestedProjectsTour"
+      "declaration": "_ProjectsScreen"
     },
     {
       "label": "setup_flow.dart",
       "source": "website/examples/lib/registry.dart",
-      "declaration": "_NestedSetupTour"
+      "declaration": "_SetupFlow"
     },
     {
       "label": "setup_step.dart",
       "source": "website/examples/lib/registry.dart",
-      "declaration": "_NestedFlowStepTour"
+      "declaration": "_SetupStep"
+    },
+    {
+      "label": "project_ready.dart",
+      "source": "website/examples/lib/registry.dart",
+      "declaration": "_ProjectReady"
     }
   ],
   "testing.counter": [

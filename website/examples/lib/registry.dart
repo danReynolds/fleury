@@ -2822,10 +2822,7 @@ final result = await context.push<String>(const DetailsScreen());
 final confirmed = await context.present<bool>(const ConfirmDialog());
 context.pop('done'); // completes the push that opened this screen''',
     builder: () => _framed(
-      Navigator(
-        transition: RouteTransition.none,
-        home: const _NavigationBasicsTour(),
-      ),
+      Navigator(transition: RouteTransition.none, home: const _HomeScreen()),
     ),
   ),
   ExampleInfo(
@@ -2841,7 +2838,7 @@ context.pop('done'); // completes the push that opened this screen''',
     builder: () => _framed(
       Navigator(
         transition: RouteTransition.none,
-        home: const _DialogPlacementTour(),
+        home: const _DialogPlacement(),
       ),
     ),
   ),
@@ -2856,10 +2853,7 @@ context.pop('done'); // completes the push that opened this screen''',
     rows: 14,
     interactive: true,
     builder: () => _framed(
-      Navigator(
-        transition: RouteTransition.none,
-        home: const _BackGuardHomeTour(),
-      ),
+      Navigator(transition: RouteTransition.none, home: const _DraftsScreen()),
     ),
   ),
   ExampleInfo(
@@ -2890,7 +2884,7 @@ context.pop('done'); // completes the push that opened this screen''',
     builder: () => _framed(
       Navigator(
         transition: RouteTransition.none,
-        home: const _NestedProjectsTour(),
+        home: const _ProjectsScreen(),
       ),
     ),
   ),
@@ -5430,27 +5424,23 @@ class _ResponsiveWorkspaceTourState extends State<_ResponsiveWorkspaceTour> {
   );
 }
 
-enum _NavigationResult { done }
-
 /// The first navigation example intentionally teaches only the three stack
 /// operations. Each screen labels its depth so the behavior is readable
 /// without reverse-engineering project-specific state.
-class _NavigationBasicsTour extends StatefulWidget {
-  const _NavigationBasicsTour();
+class _HomeScreen extends StatefulWidget {
+  const _HomeScreen();
 
   @override
-  State<_NavigationBasicsTour> createState() => _NavigationBasicsTourState();
+  State<_HomeScreen> createState() => _HomeScreenState();
 }
 
-class _NavigationBasicsTourState extends State<_NavigationBasicsTour> {
+class _HomeScreenState extends State<_HomeScreen> {
   String _result = 'none';
 
   Future<void> _openDetails() async {
-    final result = await context.push<_NavigationResult>(
-      const _NavigationDetailsTour(),
-    );
+    final result = await context.push<String>(const _DetailsScreen());
     if (!mounted || result == null) return;
-    setState(() => _result = result.name);
+    setState(() => _result = result);
   }
 
   @override
@@ -5466,49 +5456,42 @@ class _NavigationBasicsTourState extends State<_NavigationBasicsTour> {
   );
 }
 
-class _NavigationDetailsTour extends StatefulWidget {
-  const _NavigationDetailsTour();
+class _DetailsScreen extends StatefulWidget {
+  const _DetailsScreen();
 
   @override
-  State<_NavigationDetailsTour> createState() => _NavigationDetailsTourState();
+  State<_DetailsScreen> createState() => _DetailsScreenState();
 }
 
-class _NavigationDetailsTourState extends State<_NavigationDetailsTour> {
+class _DetailsScreenState extends State<_DetailsScreen> {
   String _dialogResult = 'not shown';
 
   Future<void> _presentDialog() async {
-    final confirmed = await context.present<bool>(
-      const _NavigationConfirmationDialog(),
-    );
+    final confirmed = await context.present<bool>(const _ConfirmDialog());
     if (!mounted) return;
     setState(() => _dialogResult = confirmed == true ? 'confirmed' : 'closed');
   }
 
   @override
-  Widget build(BuildContext context) => _framed(
-    Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        const Text('DETAILS · STACK DEPTH 2', style: CellStyle(bold: true)),
-        Text('dialog: $_dialogResult'),
-        const SizedBox(height: 1),
-        Button(
-          text: 'Present dialog',
-          autofocus: true,
-          onPressed: _presentDialog,
-        ),
-        Button(
-          text: 'Pop with result',
-          onPressed: () => context.pop(_NavigationResult.done),
-        ),
-        Button(text: 'Pop without result', onPressed: context.pop),
-      ],
-    ),
+  Widget build(BuildContext context) => Column(
+    crossAxisAlignment: CrossAxisAlignment.start,
+    children: [
+      const Text('DETAILS · STACK DEPTH 2', style: CellStyle(bold: true)),
+      Text('dialog: $_dialogResult'),
+      const SizedBox(height: 1),
+      Button(
+        text: 'Present dialog',
+        autofocus: true,
+        onPressed: _presentDialog,
+      ),
+      Button(text: 'Pop with result', onPressed: () => context.pop('done')),
+      Button(text: 'Pop without result', onPressed: context.pop),
+    ],
   );
 }
 
-class _NavigationConfirmationDialog extends StatelessWidget {
-  const _NavigationConfirmationDialog();
+class _ConfirmDialog extends StatelessWidget {
+  const _ConfirmDialog();
 
   @override
   Widget build(BuildContext context) => SizedBox(
@@ -5528,20 +5511,20 @@ class _NavigationConfirmationDialog extends StatelessWidget {
   );
 }
 
-class _DialogPlacementTour extends StatefulWidget {
-  const _DialogPlacementTour();
+class _DialogPlacement extends StatefulWidget {
+  const _DialogPlacement();
 
   @override
-  State<_DialogPlacementTour> createState() => _DialogPlacementTourState();
+  State<_DialogPlacement> createState() => _DialogPlacementState();
 }
 
-class _DialogPlacementTourState extends State<_DialogPlacementTour> {
+class _DialogPlacementState extends State<_DialogPlacement> {
   Alignment _alignment = Alignment.center;
 
   Future<void> _show(Alignment alignment) async {
     setState(() => _alignment = alignment);
     await context.present<void>(
-      const _PlacedDialogTour(),
+      const _PlacedDialog(),
       alignment: alignment,
       transition: RouteTransition.none,
     );
@@ -5570,8 +5553,8 @@ class _DialogPlacementTourState extends State<_DialogPlacementTour> {
   );
 }
 
-class _PlacedDialogTour extends StatelessWidget {
-  const _PlacedDialogTour();
+class _PlacedDialog extends StatelessWidget {
+  const _PlacedDialog();
 
   @override
   Widget build(BuildContext context) => SizedBox(
@@ -5587,14 +5570,14 @@ class _PlacedDialogTour extends StatelessWidget {
   );
 }
 
-class _BackGuardHomeTour extends StatefulWidget {
-  const _BackGuardHomeTour();
+class _DraftsScreen extends StatefulWidget {
+  const _DraftsScreen();
 
   @override
-  State<_BackGuardHomeTour> createState() => _BackGuardHomeTourState();
+  State<_DraftsScreen> createState() => _DraftsScreenState();
 }
 
-class _BackGuardHomeTourState extends State<_BackGuardHomeTour> {
+class _DraftsScreenState extends State<_DraftsScreen> {
   String _savedText = 'Release notes';
 
   void _saveDraft(String value) => setState(() => _savedText = value);
@@ -5610,24 +5593,24 @@ class _BackGuardHomeTourState extends State<_BackGuardHomeTour> {
         text: 'Edit draft',
         autofocus: true,
         onPressed: () => context.push<void>(
-          _GuardedEditorTour(initialText: _savedText, onSave: _saveDraft),
+          _GuardedEditor(initialText: _savedText, onSave: _saveDraft),
         ),
       ),
     ],
   );
 }
 
-class _GuardedEditorTour extends StatefulWidget {
-  const _GuardedEditorTour({required this.initialText, required this.onSave});
+class _GuardedEditor extends StatefulWidget {
+  const _GuardedEditor({required this.initialText, required this.onSave});
 
   final String initialText;
   final void Function(String) onSave;
 
   @override
-  State<_GuardedEditorTour> createState() => _GuardedEditorTourState();
+  State<_GuardedEditor> createState() => _GuardedEditorState();
 }
 
-class _GuardedEditorTourState extends State<_GuardedEditorTour> {
+class _GuardedEditorState extends State<_GuardedEditor> {
   late final TextEditingController _controller;
   late String _savedText;
   bool _dirty = false;
@@ -5757,8 +5740,8 @@ class _TransitionScreenTour extends StatelessWidget {
   );
 }
 
-class _NestedProjectsTour extends StatelessWidget {
-  const _NestedProjectsTour();
+class _ProjectsScreen extends StatelessWidget {
+  const _ProjectsScreen();
 
   @override
   Widget build(BuildContext context) => Column(
@@ -5769,14 +5752,14 @@ class _NestedProjectsTour extends StatelessWidget {
       Button(
         text: 'Start setup',
         autofocus: true,
-        onPressed: () => context.push<void>(const _NestedSetupTour()),
+        onPressed: () => context.push<void>(const _SetupFlow()),
       ),
     ],
   );
 }
 
-class _NestedSetupTour extends StatelessWidget {
-  const _NestedSetupTour();
+class _SetupFlow extends StatelessWidget {
+  const _SetupFlow();
 
   @override
   Widget build(BuildContext context) => Column(
@@ -5789,7 +5772,7 @@ class _NestedSetupTour extends StatelessWidget {
           title: 'INNER FLOW',
           child: Navigator(
             transition: RouteTransition.none,
-            home: const _NestedFlowStepTour(step: 1),
+            home: const _SetupStep(step: 1),
           ),
         ),
       ),
@@ -5799,8 +5782,8 @@ class _NestedSetupTour extends StatelessWidget {
   );
 }
 
-class _NestedFlowStepTour extends StatelessWidget {
-  const _NestedFlowStepTour({required this.step});
+class _SetupStep extends StatelessWidget {
+  const _SetupStep({required this.step});
 
   final int step;
 
@@ -5821,15 +5804,14 @@ class _NestedFlowStepTour extends StatelessWidget {
           Button(
             text: 'Next step',
             autofocus: true,
-            onPressed: () =>
-                context.push<void>(_NestedFlowStepTour(step: step + 1)),
+            onPressed: () => context.push<void>(_SetupStep(step: step + 1)),
           )
         else
           Button(
             text: 'Finish setup',
             autofocus: true,
             onPressed: () => context.rootNavigator.pushReplacement<void>(
-              const _NestedProjectReadyTour(),
+              const _ProjectReady(),
             ),
           ),
         if (step > 1) Button(text: 'Previous', onPressed: context.pop),
@@ -5839,8 +5821,8 @@ class _NestedFlowStepTour extends StatelessWidget {
   );
 }
 
-class _NestedProjectReadyTour extends StatelessWidget {
-  const _NestedProjectReadyTour();
+class _ProjectReady extends StatelessWidget {
+  const _ProjectReady();
 
   @override
   Widget build(BuildContext context) => Column(
