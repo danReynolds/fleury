@@ -11,6 +11,7 @@ import '../widgets/tui_binding.dart';
 import 'commands.dart';
 import 'status.dart';
 
+/// Builds an app's status items from its controller; see [FleuryApp.status].
 typedef AppStatusBuilder = List<StatusItem> Function(FleuryAppController app);
 
 /// Optional convention for app-level extension objects.
@@ -213,7 +214,11 @@ extension FleuryCommandContext on CommandContext {
   }
 }
 
-/// App-scale shell for navigation, theme, commands, status, and extensions.
+/// The app-scale shell: it installs the app's [theme], its [commands] with
+/// their keyboard shortcuts, a [StatusController] for [status] items, typed
+/// [extensions], focus traversal, and the app's semantic node, labeled
+/// [title]; then it shows [home] in a root [Navigator], or your own [child]
+/// shell.
 ///
 /// Pass [home] for the standard app shell. Fleury installs a root [Navigator]
 /// below every app-owned scope, so all pushed routes retain the same theme,
@@ -221,6 +226,9 @@ extension FleuryCommandContext on CommandContext {
 ///
 /// Pass [child] instead when the app owns a custom shell, including its own
 /// navigation. Exactly one of [home] and [child] must be provided.
+///
+/// Descendants reach the app through [FleuryApp.of], which returns its
+/// [FleuryAppController].
 class FleuryApp extends StatefulWidget {
   const FleuryApp({
     super.key,
@@ -236,9 +244,58 @@ class FleuryApp extends StatefulWidget {
          'Exactly one of home or child must be provided.',
        );
 
+  /// The app's name, used as the label of the app's semantic node
+  /// ([SemanticRole.app]), which is how agents and tests identify the app. It
+  /// isn't shown in the app's UI, and it doesn't set the terminal's window or
+  /// tab title.
+  ///
+  /// `setTerminalTitle` sets the window title. Code can read the name as
+  /// [FleuryAppController.title]; rebuilding with a new title updates both.
   final String title;
+
+  /// App-wide commands: named actions that shortcuts, command palettes,
+  /// agents, and tests can run from anywhere in the app.
+  ///
+  /// Each command's [AppCommand.shortcuts] are bound at the app root and run
+  /// it only while it is visible and enabled; otherwise the key passes on.
+  /// Each visible command also appears as a `command` node under the app's
+  /// semantic node, which an agent or test can activate. A shortcut or
+  /// semantic activation runs the command with [CommandContext.buildContext]
+  /// set to the focused widget's context when focus is inside the app, else
+  /// to the active route's when there is one.
+  ///
+  /// Ids must be unique within the list; a duplicate throws an
+  /// [ArgumentError]. Commands contributed by [FleuryAppExtension]s follow
+  /// these, and one with the same id as a command here is dropped. A
+  /// [CommandScope] adds screen-level commands; inside it, a command with the
+  /// same id takes precedence over the app's. Rebuilding with a new list
+  /// replaces the commands.
   final List<AppCommand> commands;
+
+  /// App-owned objects that descendants and commands look up by type, such
+  /// as a workspace or a service client: [FleuryApp.extension] in a widget,
+  /// [FleuryCommandContext.appExtension] in a command. The first entry
+  /// assignable to the requested type wins.
+  ///
+  /// An entry that extends [FleuryAppExtension] also contributes to the app:
+  /// commands (after [commands], which win on a matching id), status items
+  /// (after those [status] builds), theme extensions (after the theme's own,
+  /// which win on a matching type), and data sources for
+  /// [FleuryApp.dataSource]. Fleury only looks these objects up; it never
+  /// creates, disposes, or refreshes them. Rebuilding with a new list updates
+  /// the running app in place.
   final List<Object> extensions;
+
+  /// Builds the status items the app derives from its own state, such as the
+  /// current branch or a connection's health. An [AppStatusBar] placed in the
+  /// app displays them; FleuryApp draws none itself.
+  ///
+  /// Items from [FleuryAppExtension]s follow these. Fleury calls the builder
+  /// when the app starts, whenever its parent rebuilds it, and after each
+  /// command run through the app's [CommandRegistry], not when the state it
+  /// reads changes. Report state that changes on its own, such as a task's
+  /// progress, with [StatusController.put] on `FleuryApp.of(context).status`;
+  /// an item put there replaces the built item with the same id.
   final AppStatusBuilder? status;
 
   /// App-wide theme installed above the standard or custom shell.
@@ -260,15 +317,26 @@ class FleuryApp extends StatefulWidget {
   /// navigators have no unambiguous app-wide target.
   final Widget? child;
 
+  /// The controller of the nearest [FleuryApp] above [context].
+  ///
+  /// [context] rebuilds whenever the controller notifies, which includes each
+  /// change to the title, extensions, commands, or status, and each command
+  /// run through the app's registry. Throws a [StateError] when there is no
+  /// [FleuryApp] above.
   static FleuryAppController of(BuildContext context) =>
       FleuryAppScope.of(context);
 
+  /// Like [of], but null when there is no [FleuryApp] above [context].
   static FleuryAppController? maybeOf(BuildContext context) =>
       FleuryAppScope.maybeOf(context);
 
+  /// The first of the nearest app's [extensions] assignable to [T], or null
+  /// when none is or there is no [FleuryApp] above [context].
   static T? maybeExtension<T extends Object>(BuildContext context) =>
       maybeOf(context)?.maybeExtension<T>();
 
+  /// Like [maybeExtension], but throws a [StateError] when no extension
+  /// matches.
   static T extension<T extends Object>(BuildContext context) {
     final extension = maybeExtension<T>(context);
     if (extension == null) {
@@ -277,9 +345,14 @@ class FleuryApp extends StatefulWidget {
     return extension;
   }
 
+  /// The first data source assignable to [T] among those the nearest app's
+  /// [FleuryAppExtension]s contribute, or null when none is or there is no
+  /// [FleuryApp] above [context].
   static T? maybeDataSource<T extends Object>(BuildContext context) =>
       maybeOf(context)?.maybeDataSource<T>();
 
+  /// Like [maybeDataSource], but throws a [StateError] when no data source
+  /// matches.
   static T dataSource<T extends Object>(BuildContext context) {
     final dataSource = maybeDataSource<T>(context);
     if (dataSource == null) {
