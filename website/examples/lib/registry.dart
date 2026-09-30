@@ -3084,6 +3084,32 @@ return Text(focused ? '▸ Track 1' : '  Track 1');''',
     builder: () => _framed(const _ProgrammaticFocusTour()),
   ),
   ExampleInfo(
+    id: 'fleuryapp.basic',
+    widget: 'FleuryApp',
+    category: 'App & theming',
+    blurb:
+        'The app shell: app-wide commands with shortcuts, status items, and '
+        'a root navigator for its screens.',
+    cols: 44,
+    rows: 8,
+    interactive: true,
+    code: '''FleuryApp(
+  title: 'Inbox',
+  commands: [
+    AppCommand(
+      id: const CommandId('inbox.archive'),
+      title: 'Archive message',
+      shortcuts: [KeySequence.a],
+      enabled: (_) => unread > 0,
+      run: (_) => setState(() => unread -= 1),
+    ),
+  ],
+  status: (app) => [StatusItem.text('Unread', value: '\$unread')],
+  home: const InboxScreen(),
+)''',
+    builder: () => _framed(const _FleuryAppExample()),
+  ),
+  ExampleInfo(
     id: 'focusscope.basic',
     widget: 'FocusScope',
     category: 'Input handling & focus',
@@ -3904,6 +3930,43 @@ class _DatePickerExampleState extends State<_DatePickerExample> {
     value: _d,
     label: 'Date',
     onChanged: (d) => setState(() => _d = d),
+  );
+}
+
+class _FleuryAppExample extends StatefulWidget {
+  const _FleuryAppExample();
+
+  @override
+  State<_FleuryAppExample> createState() => _FleuryAppExampleState();
+}
+
+class _FleuryAppExampleState extends State<_FleuryAppExample> {
+  static const _archive = CommandId('inbox.archive');
+  var _unread = 3;
+
+  @override
+  Widget build(BuildContext context) => FleuryApp(
+    title: 'Inbox',
+    commands: [
+      AppCommand(
+        id: _archive,
+        title: 'Archive message',
+        shortcuts: [KeySequence.a],
+        enabled: (_) => _unread > 0,
+        run: (_) => setState(() => _unread -= 1),
+      ),
+    ],
+    status: (app) => [StatusItem.text('Unread', value: '$_unread')],
+    home: const Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text('Press A, or the button, to archive.'),
+        SizedBox(height: 1),
+        CommandButton(command: _archive, autofocus: true),
+        SizedBox(height: 1),
+        AppStatusBar(),
+      ],
+    ),
   );
 }
 

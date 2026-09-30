@@ -59,7 +59,7 @@ const TOP_STUBS = {
     [
       'SettingsPanel', 'ProjectPath', 'ShopScreen', 'Wide', 'Narrow', 'Editor',
       'Sidebar', 'InboxView', 'SettingsView', 'ConfirmDialog', 'DeleteDialog',
-      'DetailsScreen', 'SetupStep', 'TrackRow',
+      'DetailsScreen', 'SetupStep', 'TrackRow', 'InboxScreen',
     ].map((name) => [name, widgetStub(name)])
   ),
 };
@@ -70,6 +70,7 @@ const STUBS = {
   _mode: `String? _mode;`, mode: `String? mode;`, _selected: `Set<String> _selected = {};`,
   _range: `(num, num) _range = (0, 1);`, range: `(num, num) range = (0, 1);`,
   _quantity: `num _quantity = 0;`, count: `num? count;`, cursor: `int cursor = 0;`,
+  unread: `int unread = 0;`,
   start: `num start = 0;`, end: `num end = 0;`, progress: `double progress = 0;`,
   selectedTab: `int selectedTab = 0;`, editorActive: `bool editorActive = false;`,
   _showDetails: `bool _showDetails = false;`, selected: `String selected = '';`,
