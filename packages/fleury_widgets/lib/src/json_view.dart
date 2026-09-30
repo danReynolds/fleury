@@ -386,9 +386,15 @@ String exportJsonViewRow(
 }
 
 /// A collapsible tree view of a JSON value: `▸`/`▾` rows expand and collapse
-/// in place, values are colored by type, and Ctrl+C copies the selected
-/// node's subtree as JSON (or just its visible line). Invalid source is
-/// rendered as a parse-error state instead of throwing.
+/// in place, and values are colored by type. Invalid source is rendered as a
+/// parse-error state instead of throwing.
+///
+/// Up and Down move the selected row; PageUp, PageDown, Home, and End jump.
+/// Right expands a collapsed object or array or, on an expanded one, steps
+/// into its first child. Left collapses an expanded one or steps out to the
+/// parent. Enter or a click expands or collapses an object or array. Ctrl+C
+/// copies the selected node as JSON, or only its visible row when
+/// [copyOptions] sets [JsonViewCopyMode.line].
 ///
 /// The viewer bounds its own height: it renders at most [maxVisible] rows
 /// (fewer for a shorter document) and scrolls the rest, so it composes
@@ -494,10 +500,13 @@ class JsonView extends StatefulWidget {
   /// child, say); the internal list cannot window its rows without one.
   final int maxVisible;
 
-  /// Maximum displayed row length.
+  /// Cuts each displayed row, indentation included, to this many characters,
+  /// ending it with `…`; null never cuts. Copying a node still copies all of
+  /// its JSON.
   final int? maxLineLength;
 
-  /// Whether Ctrl+C and semantic copy export the selected row/node.
+  /// Whether Ctrl+C (and the semantic copy action) copies the selected node,
+  /// or its row if [copyOptions] says so.
   final bool copySelection;
 
   /// Clipboard/export options for copied JSON text.

@@ -28,10 +28,12 @@ class CommandPaletteItem {
   /// Text shown (and matched against the query).
   final String label;
 
-  /// Optional secondary text shown after the label.
+  /// Optional secondary text. The row doesn't show it: the palette's footer
+  /// shows it for the highlighted command, and search matches it.
   final String? description;
 
-  /// Optional grouping label.
+  /// Optional category. It isn't displayed; search matches it and semantics
+  /// expose it.
   final String? category;
 
   /// Optional shortcut label.
@@ -40,10 +42,11 @@ class CommandPaletteItem {
   /// Whether this command can currently run.
   final bool enabled;
 
-  /// Run when the command is chosen. Nothing waits on work it starts: an
-  /// error from that work reaches the zone (runApp's error overlay). Throwing
-  /// [SemanticActionDeclined] declines: Enter or a click then does nothing,
-  /// and a semantic activation reports it `unsupported`.
+  /// Run when the command is chosen; a presented palette closes first.
+  /// Nothing waits on work it starts: an error from that work reaches the
+  /// zone (runApp's error overlay). Throwing [SemanticActionDeclined] makes a
+  /// semantic activation report `unsupported`, but the palette has already
+  /// closed; to keep a command from running at all, set [enabled] to false.
   final void Function() onInvoke;
 }
 
@@ -137,12 +140,14 @@ final class _CommandEntry {
 /// ```
 ///
 /// Apps that want a keyboard shortcut for the palette should register a normal
-/// [AppCommand] that calls [CommandPalette.open] with its command context and
-/// sets [AppCommand.showInPalette] to false so the opener does not list itself.
+/// [AppCommand] whose `run` passes the command context's `buildContext` to
+/// [CommandPalette.open], and set [AppCommand.showInPalette] to false so the
+/// opener does not list itself.
 ///
-/// Type to narrow (case-insensitive subsequence match), Up/Down to move, and
-/// Enter to run the highlighted command. Esc dismissal comes from the modal
-/// route; the palette adds nothing there.
+/// Type to narrow the list (exact matches first, then prefixes, substrings,
+/// and letters in order, ignoring case), Up and Down to move (wrapping at the
+/// ends), and Enter or a click to run the highlighted command. Esc dismissal
+/// comes from the modal route; the palette adds nothing there.
 class CommandPalette extends StatelessWidget {
   const CommandPalette({
     super.key,
@@ -179,7 +184,8 @@ class CommandPalette extends StatelessWidget {
   /// Hint shown in the palette's search field while it is empty.
   final String placeholder;
 
-  /// Total palette width in terminal cells.
+  /// Width of the palette's contents in terminal cells; the border adds one
+  /// cell on each side.
   final int width;
 
   /// Maximum number of matching command rows shown before scrolling.

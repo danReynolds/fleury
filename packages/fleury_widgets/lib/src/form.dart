@@ -20,18 +20,24 @@ final class FormController extends Notifier {
   /// Whether this controller currently belongs to a mounted form.
   bool get isAttached => _host != null;
 
-  /// Whether [submit] is currently awaiting the form's submit callback.
+  /// Whether [submit] is waiting for the form's `onSubmit` callback. It turns
+  /// true only after validation passes, so it is false while fields are
+  /// being validated.
   ///
-  /// Use this to lock field editing after validation. Use [isBusy] to disable
-  /// submit/back actions throughout the entire attempt, including validation.
+  /// Use this to lock field editing while the callback runs. To disable
+  /// submit and back actions for the whole attempt, validation included, use
+  /// [isBusy].
   bool get isSubmitting => _submitting;
 
-  /// Whether an accepted [submit] attempt is validating or submitting.
+  /// Whether a [submit] attempt is in progress: true from the moment [submit]
+  /// is called, through validation and the `onSubmit` callback, until the
+  /// attempt finishes or its form detaches. A standalone [validate] call
+  /// doesn't set it.
   ///
-  /// Becomes true synchronously when [submit] is called and false when the
-  /// attempt finishes or its form detaches. Standalone [validate] calls do not
-  /// count as submission attempts. Keep fields enabled during validation;
-  /// use [isSubmitting] when temporarily disabling their editing controls.
+  /// Disable submit and back actions while it is true, but keep fields
+  /// enabled: validation skips a disabled field, so it can't show an error or
+  /// block the submit. Use [isSubmitting] to lock editing only while the
+  /// callback runs.
   bool get isBusy => _submission != null;
 
   /// Validates every mounted, enabled field and displays its errors.
@@ -413,10 +419,9 @@ final class _FormWidgetState extends State<Form> implements _FormHost {
             : const <SemanticAction>{SemanticAction.submit},
         onAction: (action) {
           if (action == SemanticAction.submit) {
-            // Fire-and-forget: nobody is awaiting this, and runApp's
-            // runZonedGuarded treats an uncaught async error as fatal — it
-            // restores the terminal and ends the app. So an onSubmit throw
-            // reached by a semantic submit would take the whole app down.
+            // Fire-and-forget: nobody awaits this, so an onSubmit error is
+            // caught here instead of reaching the zone as an uncaught async
+            // error (which runApp would report on its error banner).
             //
             // Contain it HERE, at the one call site that cannot observe the
             // result, rather than inside _runSubmission: an awaiting caller
@@ -483,7 +488,9 @@ class FormField extends StatefulWidget {
   /// Controlled external error, typically returned by a server.
   final String? error;
 
-  /// Disabled fields are skipped by validation and first-invalid focus.
+  /// Whether the field takes part in validation. A disabled field is
+  /// skipped when the form validates, shows no error, and is never focused as
+  /// the first invalid field.
   final bool enabled;
 
   /// Optional external focus destination for [FormField.builder].

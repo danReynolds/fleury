@@ -16,9 +16,8 @@ import 'glyphs.dart';
 /// SizedBox(width: 32, child: Gauge(value: 0.78, label: 'CPU'));
 /// ```
 ///
-/// Semantics: contributes one summary node (chart role, label, and data
-/// state) by design. Terminal charts are announced and asserted as
-/// summaries; per-element semantic children are intentionally omitted.
+/// Screen readers and agents get one chart node: [semanticLabel] (or
+/// [label]) with the percentage as its value.
 class Gauge extends StatelessWidget {
   const Gauge({
     super.key,
@@ -49,7 +48,8 @@ class Gauge extends StatelessWidget {
   /// the bar amber then red) so "high" reads without parsing the number.
   final List<(double, Color)> thresholds;
 
-  /// Empty-track color. Defaults to the theme's muted style.
+  /// Empty-track color, always drawn dim. Defaults to the foreground of the
+  /// theme's muted style.
   final Color? trackColor;
 
   /// Label exposed through the semantic app graph.

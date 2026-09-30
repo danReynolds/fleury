@@ -7,7 +7,7 @@ import 'internal/collection_notifications.dart';
 import 'model_status_bar.dart';
 import 'semantic_roles.dart';
 
-/// Protocol-neutral kind for one context-pack item.
+/// What a [ContextItem] refers to: a file, a symbol, a message, and so on.
 enum ContextItemKind {
   file,
   symbol,
@@ -22,7 +22,8 @@ enum ContextItemKind {
   other,
 }
 
-/// Priority hint for context-pack display and future pruning policies.
+/// How important a [ContextItem] is. [ContextPanel] shows it on each row and
+/// styles the row by it: low is muted, high and critical are highlighted.
 enum ContextItemPriority { low, normal, high, critical }
 
 /// One app-owned context item displayed by [ContextPanel].
@@ -52,7 +53,7 @@ final class ContextItem {
   /// Kind of context represented by this item.
   final ContextItemKind kind;
 
-  /// Priority hint for display and pruning.
+  /// How important the item is; the row shows it and is styled by it.
   final ContextItemPriority priority;
 
   /// Token count attributed to this item.
@@ -64,7 +65,8 @@ final class ContextItem {
   /// Whether this item is pinned in the context set.
   final bool pinned;
 
-  /// Whether this item can be selected and activated.
+  /// Whether activating this item calls [ContextPanel.onSelect]. A disabled
+  /// item is dimmed and can still be browsed and copied.
   final bool enabled;
 
   /// App-specific semantic state carried by the item.
@@ -218,7 +220,9 @@ class ContextPanel extends StatefulWidget {
   /// Context items to display, select, activate, and copy.
   final List<ContextItem> items;
 
-  /// Optional overall token-usage totals used for share display.
+  /// Optional overall token usage, shown in the summary line (such as
+  /// `12k/200k 6%`) and exposed through semantics. Without it, the summary
+  /// shows the items' combined tokens.
   final TokenUsage? usage;
 
   /// External selection and visible-range controller.
@@ -236,10 +240,10 @@ class ContextPanel extends StatefulWidget {
   /// Maximum visible rows before the list scrolls.
   final int maxVisible;
 
-  /// Append each item's share of the panel's total token budget — e.g.
-  /// `1,024 tokens (12%)` — next to its count. Off by default. Makes it
-  /// obvious at a glance which items dominate the context window. Items
-  /// with no tokens, or when the total is zero, get no share suffix.
+  /// Append each item's share of the items' combined tokens to its count,
+  /// such as `1k (12%)`. Off by default. Makes it obvious at a glance which
+  /// items dominate the context window. Items with no tokens, or when the
+  /// total is zero, get no share suffix.
   final bool showTokenShare;
 
   /// Whether Ctrl+C and semantic copy export the selected item.

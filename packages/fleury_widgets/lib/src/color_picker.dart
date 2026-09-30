@@ -1,10 +1,15 @@
 import 'package:fleury/fleury_core.dart';
 import 'package:fleury/fleury_internal.dart';
 
-/// A grid of color swatches. The preview cursor is bracketed with the theme's
-/// focus style while the committed swatch remains marked; arrow chords preview
-/// other cells without changing [value], and Enter or Space commits the
-/// preview. Escape restores the value active when the picker gained focus.
+/// A grid of color swatches: the arrow keys preview a color, and Enter,
+/// Space, or a click commits one.
+///
+/// The preview cursor is bracketed with the theme's focus style while the
+/// committed swatch stays marked. The arrow keys, Home, and End move the
+/// preview without changing [value]; Enter or Space commits it, and clicking
+/// a swatch commits that swatch. Escape restores the value the picker had
+/// when it gained focus. Typing `#` opens a field for entering any color as
+/// a hex code.
 ///
 /// Defaults to the 16 base ANSI colors laid out in 2 rows × 8 cols.
 /// Pass [colors] for a custom palette (e.g. a 256-color picker, brand
@@ -38,10 +43,14 @@ class ColorPicker extends StatefulWidget {
        assert(rowSpacing >= 0, 'rowSpacing must be >= 0');
 
   /// Currently-selected color. The first matching entry in [colors] (or the
-  /// default palette) becomes the committed cell and initial preview cursor.
+  /// default palette) becomes the committed cell and initial preview cursor;
+  /// when no entry matches, such as a color entered as a hex code, the first
+  /// cell is marked instead.
   final Color value;
 
-  /// Called when a preview is committed or Escape restores the initial color.
+  /// Called with the new color when the user commits a swatch (Enter, Space,
+  /// or a click), enters a hex code after `#`, or presses Escape to restore
+  /// the color the picker had when it gained focus.
   final void Function(Color color)? onChanged;
 
   /// Palette to pick from. `null` uses the 16 base ANSI colors.
@@ -95,7 +104,7 @@ class _ColorPickerState extends State<ColorPicker>
   /// palette and Tab away without changing the value.
   int _cursor = 0;
 
-  /// The committed colour when focus was gained, so Esc can cancel back to it.
+  /// The committed color when focus was gained, so Esc can cancel back to it.
   Color? _initial;
 
   /// Tracks focus transitions in [build] (FocusNode has no listener API) so we
@@ -200,14 +209,14 @@ class _ColorPickerState extends State<ColorPicker>
     setState(() => _cursor = index);
   }
 
-  /// Commits the cursor's colour — the "lock in" Enter / Space / a click do.
+  /// Commits the cursor's color — the "lock in" Enter / Space / a click do.
   void _commit() {
     if (!_enabled || _cursor < 0 || _cursor >= _palette.length) return;
     final color = _palette[_cursor];
     if (color != widget.value) _emit(color);
   }
 
-  /// Esc: abandon the in-progress browse, restoring the colour (and cursor)
+  /// Esc: abandon the in-progress browse, restoring the color (and cursor)
   /// from when focus was gained.
   void _cancel() {
     final initial = _initial ?? widget.value;
@@ -578,7 +587,7 @@ Map<String, Object?> _colorComponents(Color color) {
   };
 }
 
-/// A small popover, anchored under the picker, for typing a hex colour code.
+/// A small popover, anchored under the picker, for typing a hex color code.
 /// Enter applies it as an [RgbColor]; Esc dismisses without changing anything.
 class _HexEntry extends StatefulWidget {
   const _HexEntry({

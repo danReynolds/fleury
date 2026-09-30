@@ -11,12 +11,16 @@ import 'package:fleury/fleury_core.dart';
 /// )
 /// ```
 ///
-/// The border and title resolve from the ambient [Theme]: muted at rest, the
-/// [ColorScheme.primary] accent when the pane is active, so the user can see
+/// The border and title resolve from the ambient [Theme]: at rest the border
+/// is muted and the title is bold in the normal text color; when the pane is
+/// active, both take the [ColorScheme.primary] accent, so the user can see
 /// where input goes. **Active-ness is detected, not declared** — the panel
-/// watches the focus tree ([FocusDetector]) and accents itself whenever focus is
-/// anywhere inside it. Nesting resolves innermost-first, so an inner pane
-/// lights up without also lighting its ancestors.
+/// watches the focus tree ([FocusDetector]) and accents itself while focus is
+/// inside it. Nesting resolves innermost-first: an inner pane lights up
+/// without also lighting its ancestors, and widgets that watch focus the same
+/// way claim it too, so the panel doesn't accent while focus is inside a
+/// `LogRegion`, `DataTable`, `Table`, `TreeTable`, or similar widget
+/// within it.
 ///
 /// Set [focused] only to override that: `true`/`false` pins the chrome
 /// regardless of where focus is, which is what a static showcase or a pane
@@ -50,8 +54,8 @@ class Panel extends StatefulWidget {
   /// Optional right-aligned widget on the title row (e.g. a status string).
   final Widget? trailing;
 
-  /// Overrides the detected active state. Null (default) means "follow focus":
-  /// the panel accents itself while focus is inside it.
+  /// Overrides the detected active state. Null (the default) follows focus,
+  /// as the class doc describes; `true` or `false` pins the chrome.
   final bool? focused;
 
   /// When true (default) the child is wrapped in [Expanded] so it fills the
@@ -67,12 +71,8 @@ class Panel extends StatefulWidget {
   /// paint chain.
   ///
   /// Panels are the shape this pays for: chrome that is expensive to paint and
-  /// usually static, sitting beside something that churns. Measured on a
-  /// three-panel screen where one panel updates and two do not, this cut the
-  /// frame from 80.1 to 68.9 us — 14%; on a synthetic screen with larger static
-  /// bodies, 38%. The cost is one reused cache buffer per panel, bounded by the
-  /// panel's own size, and panels are counted in single digits — unlike list
-  /// items, which is why [ListView] makes the same call per row.
+  /// usually static, sitting beside something that churns. The cost is one
+  /// reused cache buffer per panel, bounded by the panel's own size.
   ///
   /// Turn off for a panel whose body changes every frame anyway, where the
   /// cache would be filled and discarded without ever being blitted.

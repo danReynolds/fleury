@@ -30,7 +30,8 @@ class CanvasBounds {
 }
 
 /// Receives drawing calls from a [CanvasPainter]. Coordinates are in the
-/// canvas's logical space; the implementation maps them to braille pixels.
+/// canvas's logical space; the canvas maps them to the sub-cell pixels of
+/// its [Canvas.marker].
 abstract class CanvasContext {
   /// Lights a single pixel at logical `(x, y)`.
   void drawDot(double x, double y, {Color? color});
@@ -39,10 +40,10 @@ abstract class CanvasContext {
   ///
   /// [width] is a stroke thickness in SUB-CELL PIXELS (braille dots / block
   /// sub-pixels), not logical units, so a stroke keeps its visual weight
-  /// when the canvas bounds change. `1` is the hairline default — exactly
-  /// the pre-width rasterization; larger values stamp a round brush along
-  /// the line, so caps and polygon joints come out rounded. A cell still
-  /// holds one color: overlapping strokes resolve last-drawn-wins per cell,
+  /// when the canvas bounds change. `1`, the default, is a one-pixel
+  /// hairline; larger values stamp a round brush along the line, so caps and
+  /// polygon joints come out rounded. A cell still holds one color:
+  /// overlapping strokes resolve last-drawn-wins per cell,
   /// which is what makes a two-pass glow work — draw the wide dim halo
   /// first, the narrow bright core second.
   void drawLine(
@@ -128,8 +129,8 @@ class Canvas extends StatelessWidget {
 
   /// Drawing routine invoked with logical [bounds] during canvas painting.
   ///
-  /// Replace the painter instance when its drawing inputs change so the render
-  /// object schedules a repaint.
+  /// The canvas repaints whenever it is rebuilt, even with the same painter
+  /// instance, so a painter can read data that changes between builds.
   final CanvasPainter painter;
 
   /// Logical coordinate range. Defaults to [CanvasBounds.unit].

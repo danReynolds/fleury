@@ -30,8 +30,8 @@ final class FlexColumnWidth extends TableColumnWidth {
 }
 
 /// Browsing cursor for an interactive [Table]. Optional — the table
-/// creates its own when none is supplied. `rowCount` is set by the widget
-/// on each build, so the cursor stays clamped to the available rows.
+/// creates its own when none is supplied. The table keeps the cursor
+/// clamped to its rows.
 class TableController extends Notifier {
   TableController({int? initialIndex = 0})
     : _currentIndex = initialIndex,
@@ -176,8 +176,9 @@ String tableCellText(Widget cell) {
   return '';
 }
 
-/// Exports composition-[Table] rows as sanitized TSV/CSV without mounting
-/// cells. Cell text comes from [cellText] (defaults to [tableCellText]).
+/// Exports [Table] rows (lists of cell widgets) as sanitized TSV/CSV without
+/// mounting cells. Cell text comes from [cellText] (defaults to
+/// [tableCellText]).
 TableExportResult exportTableRows({
   required List<List<Widget>> rows,
   List<Widget>? header,
@@ -277,8 +278,8 @@ Map<String, Object?> _tableClipboardSemanticState(TableCopyOptions options) {
 ///
 /// Each column's width is negotiated once over all rows (and the header),
 /// per [columnWidths]; cells then lay out into those shared widths so
-/// columns line up. Supply [header] for a styled top row with a rule
-/// beneath it.
+/// columns line up. Supply [header] for a top row with a rule beneath it
+/// (style its cells yourself).
 ///
 /// Cells should be content-sized (e.g. [Text]). Intrinsic columns measure
 /// cells with unbounded width, so a greedy cell that fills its main axis
@@ -304,9 +305,10 @@ Map<String, Object?> _tableClipboardSemanticState(TableCopyOptions options) {
 /// pointer selection report [onFocusedItemChanged]. When interactive,
 /// Ctrl+C and semantic copy export the highlighted row as TSV or CSV through
 /// the framework clipboard service and report a [TableCopyResult] to [onCopy].
-/// When the table is given a bounded height (e.g. inside an `Expanded` or
-/// `SizedBox`) and the body is taller than the viewport, it scrolls — the
-/// header stays pinned. Keyboard navigation reveals the current row; the
+/// When an interactive table with a highlighted row is given a bounded
+/// height (e.g. inside an `Expanded` or `SizedBox`) and the body is taller
+/// than the viewport, it scrolls — the header stays pinned; a non-interactive
+/// table is clipped instead. Keyboard navigation reveals the current row; the
 /// wheel moves only the viewport and leaves the cursor alone (ListView /
 /// DataTable parity). Column widths are still negotiated over *all* rows, so
 /// columns never jitter as you scroll.
@@ -396,8 +398,9 @@ class Table extends StatefulWidget {
   /// Called after a copy attempt completes.
   final void Function(TableCopyResult result)? onCopy;
 
-  /// Style merged into the highlighted row. Defaults to the theme's
-  /// selection style (reverse video).
+  /// Style merged into the highlighted row while the table has focus.
+  /// Defaults to the theme's selection style. Without focus, the row uses
+  /// the theme's muted style instead.
   final CellStyle? selectedStyle;
 
   /// Label exposed through the semantic app graph.

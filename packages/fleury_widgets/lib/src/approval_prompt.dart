@@ -3,17 +3,19 @@ import 'package:fleury/fleury_core.dart';
 import 'dialog.dart' show Dialog;
 import 'semantic_roles.dart';
 
-/// Severity for a protocol-neutral approval request.
+/// How serious an [ApprovalRequest] is. It sets the confirm button's color;
+/// `destructive` also adds a "cannot be undone" warning and, by default,
+/// focuses the deny button.
 enum ApprovalSeverity { info, warning, destructive }
 
 /// User decision emitted by [ApprovalPrompt].
 enum ApprovalDecision { approved, denied }
 
-/// Protocol-neutral approval request data.
+/// What an [ApprovalPrompt] asks the user to approve: a title, a message, an
+/// optional subject and detail lines, a severity, and the button labels.
 ///
-/// This intentionally avoids ACP, JSON-RPC, or provider-specific terminology.
-/// Adapter packages can map their own permission or confirmation objects onto
-/// this shape while Fleury owns the reusable UI, semantics, and test surface.
+/// It isn't tied to any agent protocol, so map your own permission or
+/// confirmation objects onto it.
 final class ApprovalRequest {
   const ApprovalRequest({
     required this.id,
@@ -73,10 +75,9 @@ class ApprovalPrompt extends StatelessWidget {
   /// Total dialog width, including its border; null sizes to the content.
   final int? width;
 
-  /// Whether the confirm button is focused on open. When null (the default)
-  /// this is severity-aware: a [ApprovalSeverity.destructive] request focuses
-  /// *Deny* so a single Enter can't trigger an irreversible action — the
-  /// safe-default convention used by every agent CLI. Non-destructive requests
+  /// Whether the confirm button is focused on open. When null (the default),
+  /// an [ApprovalSeverity.destructive] request focuses the deny button, so a
+  /// single Enter can't trigger an irreversible action, and other requests
   /// focus confirm. Pass an explicit value to override.
   final bool? autofocusApprove;
 

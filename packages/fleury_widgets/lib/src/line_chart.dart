@@ -16,14 +16,14 @@ import 'sub_cell_buffer.dart';
 /// (primary/info/warning/success/error) — useful when each series has
 /// inherent meaning. For arbitrary categorical data where colors are
 /// just labels, prefer [categorical], a hue-distinct ANSI 16 sequence
-/// chosen for distinguishability without the warning/error connotation.
+/// ordered for telling categories apart. It still includes yellow, green,
+/// and red, the default theme's warning, success, and error colors.
 final class Palettes {
   Palettes._();
 
-  /// Six hue-distinct ANSI colors with no semantic baggage — the right
-  /// default for stacked bars and multi-series charts where segments
-  /// are just categories. Patterned after ColorBrewer's Set2 /
-  /// Tableau10 — qualitative, not sequential.
+  /// Six hue-distinct ANSI colors (cyan, yellow, green, magenta, blue, red)
+  /// for stacked bars and multi-series charts where segments are just
+  /// categories: qualitative, not sequential.
   static const List<Color> categorical = [
     AnsiColor(6), // cyan
     AnsiColor(3), // yellow
@@ -117,8 +117,9 @@ String _formatDate(DateTime dt, String pattern) {
 /// Visual style for a [ReferenceLine].
 enum ReferenceStyle { solid, dashed, dotted }
 
-/// A horizontal or vertical marker line — a target, limit, or threshold
-/// painted under the data so it doesn't obscure the series.
+/// A horizontal or vertical marker line — a target, limit, or threshold.
+/// It is painted under the series lines so it doesn't obscure them, but over
+/// gradient-filled areas.
 ///
 /// ```dart
 /// LineChart(
@@ -199,13 +200,13 @@ class LineSeries {
 
   /// Optional vertical color gradient for a [LineType.area] series, given as
   /// stops ordered **bottom → top** of the plot. When set, the area is
-  /// painted as a *solid, gradient-shaded* fill — the "premium" filled-graph
-  /// look (à la btop) — using block-element columns rather than a stippled
-  /// braille wash, so it reads as a continuous region on every surface.
+  /// painted as a solid fill shaded by the gradient, using block characters
+  /// rather than braille dots, so it reads as one continuous region.
   ///
-  /// A single-stop list is a flat solid fill. When a gradient is set, [color]
-  /// and [thresholdY] are ignored for that series (the gradient owns the
-  /// coloring). Ignored entirely for [LineType.line] and [LineType.scatter].
+  /// A single-stop list is a flat solid fill. On an area series the gradient
+  /// owns the coloring, so [color] and [thresholdY] are ignored. A
+  /// [LineType.line] or [LineType.scatter] series has no fill to shade; it
+  /// draws in the gradient's last (top) color instead of [color].
   final List<Color>? gradient;
 }
 
@@ -228,9 +229,9 @@ class LineSeries {
 /// move a vertical crosshair through the data points and a small tooltip
 /// box shows the y value of each series at the cursor's x.
 ///
-/// Semantics: contributes one summary node (chart role, label, and data
-/// state) by design. Terminal charts are announced and asserted as
-/// summaries; per-element semantic children are intentionally omitted.
+/// Screen readers and agents get one chart node: [semanticLabel] plus the
+/// series and point counts and the x and y ranges, not a node per point. An
+/// [interactive] chart also reports the cursor's x value.
 class LineChart extends StatefulWidget {
   const LineChart({
     super.key,
@@ -266,15 +267,15 @@ class LineChart extends StatefulWidget {
   /// Extra space around the data along each axis, as a fraction of the
   /// range — `0.05` adds 5% of breathing room on every side. Only applied
   /// to autoscaled axes; ignored when [xRange]/[yRange] is set
-  /// explicitly. Default `0.0` (literal extents — matches D3/Recharts
-  /// behavior). Try `0.05` for dashboards where you don't want data
-  /// touching the plot edges.
+  /// explicitly. Default `0.0` (the data's own extents). Try `0.05` for
+  /// dashboards where you don't want data touching the plot edges.
   final double padding;
 
   /// Draw min/mid/max labels for both axes.
   final bool showAxes;
 
-  /// Draw faint mid-axis crosshair lines through the plot area.
+  /// Draw faint dotted gridlines at the minimum, middle, and maximum of both
+  /// axes.
   final bool showGrid;
 
   /// Draw a one-row legend at the top-right with a colored bullet and the
@@ -316,8 +317,8 @@ class LineChart extends StatefulWidget {
   /// Defaults to [TickFormat.number].
   final TickFormatter? yTickFormat;
 
-  /// Reference lines drawn under the data — useful for target / SLA /
-  /// threshold markers.
+  /// Reference lines — useful for target / SLA / threshold markers. They
+  /// draw under the series lines but over gradient-filled areas.
   final List<ReferenceLine> references;
 
   /// When true, the chart is focusable. Arrow chords move a vertical

@@ -7,9 +7,10 @@ import 'glyphs.dart';
 /// represents the cell's intensity within the visible range.
 ///
 /// Common shapes: GitHub-style activity calendars, time-of-day usage
-/// matrices, attention heatmaps. The block ladder (`░▒▓█`) is theme-safe
-/// and reads crisply on any background; for a stronger accent, supply a
-/// [color] and the active cells will take it.
+/// matrices, attention heatmaps. Each value maps to one of four blocks
+/// (`░▒▓█`) by where it falls in the range from [min] to [max] (fitted to the
+/// data by default); a value at or below the low end leaves its cell blank.
+/// Cells draw in the theme's primary color unless you pass [color].
 ///
 /// ```dart
 /// Heatmap(
@@ -20,9 +21,9 @@ import 'glyphs.dart';
 /// )
 /// ```
 ///
-/// Semantics: contributes one summary node (chart role, label, and data
-/// state) by design. Terminal charts are announced and asserted as
-/// summaries; per-element semantic children are intentionally omitted.
+/// Screen readers and agents get one chart node: [semanticLabel] plus the
+/// row and column counts and the value range the blocks are scaled to, not a
+/// node per cell.
 class Heatmap extends StatelessWidget {
   const Heatmap({
     super.key,

@@ -11,10 +11,11 @@ import 'glyphs.dart';
 enum CalendarWeekStart { sunday, monday }
 
 /// A GitHub-contribution-graph-style calendar heatmap: each cell is one
-/// day, columns are weeks, rows are days-of-week. Day intensity is
-/// mapped to a five-step ladder (`·░▒▓█`) so recorded zero-activity
-/// days stay visible as a dim dot, matching GitHub's "0 contributions"
-/// tile semantics.
+/// day, columns are weeks, rows are days of the week. A day with a value
+/// shows one of five glyphs (`·░▒▓█`) by where the value falls in the range
+/// from [min] to [max] (fitted to the data by default); a value at or below
+/// the low end shows as a dim dot, so recorded days stay visible, and days
+/// with no entry stay empty.
 ///
 /// ```dart
 /// CalendarHeatmap(
@@ -32,9 +33,9 @@ enum CalendarWeekStart { sunday, monday }
 /// each new month. Days are labeled in the left gutter (Mon/Wed/Fri by
 /// default — every other row, the typical compact form).
 ///
-/// Semantics: contributes one summary node (chart role, label, and data
-/// state) by design. Terminal charts are announced and asserted as
-/// summaries; per-element semantic children are intentionally omitted.
+/// Screen readers and agents get one chart node: [semanticLabel] plus the
+/// date range, the number of days with a value, and the value range the
+/// glyphs are scaled to, not a node per day.
 class CalendarHeatmap extends StatelessWidget {
   const CalendarHeatmap({
     super.key,
@@ -52,9 +53,10 @@ class CalendarHeatmap extends StatelessWidget {
     this.semanticLabel = 'Calendar heatmap',
   }) : assert(cellWidth >= 1, 'cellWidth must be >= 1');
 
-  /// Sparse map of date → intensity. Dates with no entry render empty
-  /// (truly "no data"); entries with value 0 render as the dim dot.
-  /// Time-of-day is ignored — entries are bucketed by calendar day.
+  /// Sparse map of date to value. Days with no entry stay empty; a value at
+  /// or below the low end of the range renders as the dim dot. Only the date
+  /// counts, not the time of day, and when several entries fall on the same
+  /// day, the last one in the map wins.
   final Map<DateTime, num> values;
 
   /// First date to include (inclusive).
@@ -86,9 +88,8 @@ class CalendarHeatmap extends StatelessWidget {
   /// Draw day-of-week labels along the left gutter (Mon/Wed/Fri).
   final bool showDayLabels;
 
-  /// When true, append a `· ░ ▒ ▓ █  less – more` scale strip below the grid.
-  /// GitHub substitutes hover counts for the scale; a TUI can't hover, so the
-  /// legend is the only way to map a glyph to its value.
+  /// When true, append a `·░▒▓█  less – more` strip below the grid that shows
+  /// the glyphs in order from low to high.
   final bool showLegend;
 
   /// Label exposed through the semantic app graph.

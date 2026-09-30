@@ -70,7 +70,8 @@ class RangeSlider extends StatefulWidget {
   /// Granularity of PageUp/PageDown moves.
   final num largeStep;
 
-  /// Optional label exposed through the semantic app graph.
+  /// Optional label exposed through the semantic app graph. When
+  /// [showValues] is true, it is also shown before the readout.
   final String? label;
 
   /// When true, renders a `low–high` readout above the track (the active
@@ -675,7 +676,7 @@ class _RenderRangeSlider extends RenderObject {
         : '●'; // solid: the handle the arrows move
     final inactiveHandle = _glyphTier == GlyphTier.ascii
         ? 'o'
-        : '○'; // hollow: the handle Up/Down switches to
+        : '○'; // hollow: the handle Left/Right switches to
 
     for (var c = 0; c < w; c++) {
       final tgt = offset.col + c;

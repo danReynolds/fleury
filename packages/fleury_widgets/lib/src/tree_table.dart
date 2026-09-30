@@ -86,7 +86,8 @@ final class TreeTableFilterDescriptor {
   /// Raw search query typed by the user or app.
   final String query;
 
-  /// Optional column subset to search; null searches key, metadata, and columns.
+  /// Ids of the columns to search; each node's key and metadata are always
+  /// searched. Null searches every column.
   final Set<String>? columnIds;
 
   /// Whether matching preserves case.
@@ -973,16 +974,27 @@ TreeTableExportResult exportTreeTableRows<T>({
   );
 }
 
-/// Hierarchical data table with expandable rows and semantic tree items.
+/// A table whose rows form a tree: branch rows expand to show their children,
+/// and each column shows a value for every visible row.
 ///
-/// The flattened row model is cached across rebuilds and recomputed only when
-/// a structural input changes: [roots], [columns], [cellBuilder], [filter],
-/// and [searchIndex] compare by identity, the resolved tree column by value,
-/// and the controller's expansion state by revision. Selection moves reuse the
-/// cached model, so navigation cost tracks the visible window instead of the
-/// dataset. Prefer stable instances for the identity-compared fields: a parent
-/// that recreates the list, filter, or cell-builder closure on every rebuild
-/// pays a full re-flatten each time.
+/// Up and Down move the cursor; PageUp, PageDown, Home, and End jump. Right
+/// expands a collapsed branch or, on an expanded one, steps into its first
+/// child. Left collapses an expanded branch or steps out to the parent row.
+/// Enter or a click expands or collapses a branch and passes any other row to
+/// [onSelect]. Ctrl+C copies the row under the cursor (see [copySelectedRow]
+/// and [copyOptions]).
+///
+/// The [TreeTableController] holds which nodes are expanded, by
+/// [TreeTableNode.key]. The cursor stays on its node when rows change, and
+/// moves to the nearest visible ancestor when its node is hidden. With a
+/// [filter], the table shows every matching row and its ancestors, expanded
+/// or not.
+///
+/// The table rebuilds its rows from [roots] whenever [roots], [columns],
+/// [cellBuilder], [filter], or [searchIndex] is a different object than on
+/// the last build, even an equal one; moving the cursor does not. For a large
+/// tree, keep those objects the same across rebuilds instead of creating new
+/// ones in `build`.
 class TreeTable<T> extends StatefulWidget {
   const TreeTable({
     super.key,
@@ -1014,7 +1026,8 @@ class TreeTable<T> extends StatefulWidget {
   /// Columns displayed for each visible row.
   final List<DataTableColumn> columns;
 
-  /// Column id that renders the tree label and expansion marker.
+  /// Id of the column that shows each node's label, indented by depth, with
+  /// ▸ or ▾ on branch rows. Defaults to the first column.
   final String? treeColumnId;
 
   /// Optional app-provided cell text builder for non-tree columns.
@@ -1035,16 +1048,21 @@ class TreeTable<T> extends StatefulWidget {
   /// Maximum visible body rows before the list scrolls.
   final int maxVisible;
 
-  /// Optional filter applied to the source tree.
+  /// Shows only the rows that match, plus their ancestors, whether or not
+  /// they are expanded.
   final TreeTableFilterDescriptor? filter;
 
-  /// Optional prebuilt search index for large trees.
+  /// Optional prebuilt search index for large trees. While [filter] has a
+  /// query, the table lists rows from the index instead of [roots], so build
+  /// a new index whenever the tree changes.
   final TreeTableSearchIndex<T>? searchIndex;
 
-  /// Called when the selected row is activated.
+  /// Called with a row that has no children when the user activates it with
+  /// Enter or a click. On a branch row, those expand or collapse it instead.
   final void Function(TreeTableRow<T> row)? onSelect;
 
-  /// Whether Ctrl+C and semantic copy export the selected row.
+  /// Whether Ctrl+C (and the semantic copy action) copies the row under the
+  /// cursor.
   final bool copySelectedRow;
 
   /// Export and clipboard options used when copying rows.

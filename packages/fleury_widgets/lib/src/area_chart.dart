@@ -23,9 +23,9 @@ class AreaSeries {
   final List<Color>? gradient;
 }
 
-/// A filled **area chart**: each series is drawn as a solid, gradient- (or
-/// flat-) shaded region using block-element columns — the "premium" filled
-/// look that reads as a continuous surface on every surface.
+/// A filled area chart: each series is shaded from the bottom of the plot up
+/// to its line, in a flat color or a vertical gradient, using block
+/// characters so the fill reads as one continuous surface.
 ///
 /// [AreaChart] shares [LineChart]'s cartesian engine — axes, legend, ranges,
 /// grid, references, and the interactive crosshair all behave identically.
@@ -73,7 +73,8 @@ class AreaChart extends StatelessWidget {
   /// Draw min/mid/max labels for both axes.
   final bool showAxes;
 
-  /// Draw faint mid-axis crosshair lines through the plot area.
+  /// Draw faint dotted gridlines at the minimum, middle, and maximum of both
+  /// axes.
   final bool showGrid;
 
   /// Draw a one-row legend with a colored bullet and label per series.
@@ -92,7 +93,8 @@ class AreaChart extends StatelessWidget {
   /// Formatter for y-axis tick labels and the crosshair tooltip y values.
   final TickFormatter? yTickFormat;
 
-  /// Reference lines drawn under the data.
+  /// Reference lines for targets or thresholds, drawn over the filled
+  /// areas.
   final List<ReferenceLine> references;
 
   /// When true, the chart is focusable with an arrow-key crosshair.
