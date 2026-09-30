@@ -9,7 +9,7 @@ sealed class MenuEntry {
 }
 
 /// A selectable menu row. A disabled item ([enabled] false) is shown
-/// dimmed and skipped by arrow navigation and Enter.
+/// dimmed, skipped by arrow navigation and Enter, and ignores clicks.
 final class MenuItem extends MenuEntry {
   const MenuItem({
     required this.label,
@@ -596,70 +596,85 @@ class _MenuBodyState extends State<_MenuBody> {
                   child: SizedBox(
                     width: width,
                     height: widget.entries.length,
-                    child: ListView.builder(
-                      controller: _list,
+                    // The panel's own node keeps focus and owns the keys: it
+                    // skips separators and disabled items and types ahead.
+                    // The list only lays out and reveals the highlight; a
+                    // press that focused it would hand the arrows and Enter
+                    // to its plain cursor instead.
+                    child: ExcludeFocus(
+                      child: ListView.builder(
+                        controller: _list,
 
-                      itemCount: widget.entries.length,
-                      itemBuilder: (_, i, selected) {
-                        final entry = widget.entries[i];
-                        switch (entry) {
-                          case MenuSeparator():
-                            return Text('─' * width, style: widget.mutedStyle);
-                          // Every row is wrapped in its own observer — see
-                          // [_rowBounds]. A submenu reads the notifier of the row
-                          // that opened it.
-                          case MenuItem(:final label, :final enabled):
-                            final sel = enabled && selected;
-                            final child = Text(
-                              _rowText(
-                                sanitizeOptionLabel(label),
-                                selected: sel,
-                                isSub: false,
-                                hasIndicator: hasSubmenu,
-                                width: width,
-                              ),
-                              style: !enabled
-                                  ? widget.mutedStyle
-                                  : sel
-                                  ? widget.selectionStyle
-                                  : CellStyle.none,
-                            );
-                            return BoundsObserver(
-                              notifier: _boundsForRow(i),
-                              child: _semanticMenuItem(
-                                entry: entry,
-                                index: i,
-                                selected: selected,
-                                child: child,
-                              ),
-                            );
-                          case SubMenu(:final label, :final enabled):
-                            final sel = enabled && selected;
-                            final child = Text(
-                              _rowText(
-                                sanitizeOptionLabel(label),
-                                selected: sel,
-                                isSub: true,
-                                hasIndicator: hasSubmenu,
-                                width: width,
-                              ),
-                              style: !enabled
-                                  ? widget.mutedStyle
-                                  : sel
-                                  ? widget.selectionStyle
-                                  : CellStyle.none,
-                            );
-                            return BoundsObserver(
-                              notifier: _boundsForRow(i),
-                              child: _semanticMenuItem(
-                                entry: entry,
-                                index: i,
-                                selected: selected,
-                                child: child,
-                              ),
-                            );
-                        }
-                      },
+                        itemCount: widget.entries.length,
+                        itemBuilder: (_, i, selected) {
+                          final entry = widget.entries[i];
+                          switch (entry) {
+                            // Inert to the pointer, like a disabled item (see
+                            // [_semanticMenuItem]).
+                            case MenuSeparator():
+                              return GestureDetector(
+                                onTap: _ignorePress,
+                                child: Text(
+                                  '─' * width,
+                                  style: widget.mutedStyle,
+                                ),
+                              );
+                            // Every row is wrapped in its own observer — see
+                            // [_rowBounds]. A submenu reads the notifier of the
+                            // row that opened it.
+                            case MenuItem(:final label, :final enabled):
+                              final sel = enabled && selected;
+                              final child = Text(
+                                _rowText(
+                                  sanitizeOptionLabel(label),
+                                  selected: sel,
+                                  isSub: false,
+                                  hasIndicator: hasSubmenu,
+                                  width: width,
+                                ),
+                                style: !enabled
+                                    ? widget.mutedStyle
+                                    : sel
+                                    ? widget.selectionStyle
+                                    : CellStyle.none,
+                              );
+                              return BoundsObserver(
+                                notifier: _boundsForRow(i),
+                                child: _semanticMenuItem(
+                                  entry: entry,
+                                  index: i,
+                                  selected: selected,
+                                  child: child,
+                                ),
+                              );
+                            case SubMenu(:final label, :final enabled):
+                              final sel = enabled && selected;
+                              final child = Text(
+                                _rowText(
+                                  sanitizeOptionLabel(label),
+                                  selected: sel,
+                                  isSub: true,
+                                  hasIndicator: hasSubmenu,
+                                  width: width,
+                                ),
+                                style: !enabled
+                                    ? widget.mutedStyle
+                                    : sel
+                                    ? widget.selectionStyle
+                                    : CellStyle.none,
+                              );
+                              return BoundsObserver(
+                                notifier: _boundsForRow(i),
+                                child: _semanticMenuItem(
+                                  entry: entry,
+                                  index: i,
+                                  selected: selected,
+                                  child: child,
+                                ),
+                              );
+                          }
+                        },
+                      ),
                     ),
                   ),
                 ),
@@ -728,18 +743,22 @@ class _MenuBodyState extends State<_MenuBody> {
         }
       },
       // Click an enabled item to activate it (open a submenu or invoke a
-      // leaf) — the same outcome as Enter / Right, which run [_activate].
-      child: enabled
-          ? GestureDetector(
-              onTap: () {
+      // leaf) — the same outcome as Enter / Right, which run [_activate]. A
+      // disabled row still owns its press and ignores it. Otherwise the list's
+      // own row gesture takes the press and moves the highlight onto it.
+      child: GestureDetector(
+        onTap: enabled
+            ? () {
                 _list.currentIndex = index;
                 _activate(index);
-              },
-              child: child,
-            )
-          : child,
+              }
+            : _ignorePress,
+        child: child,
+      ),
     );
   }
+
+  static void _ignorePress() {}
 }
 
 int _menuItemCount(List<MenuEntry> entries) {

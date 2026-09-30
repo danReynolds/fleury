@@ -119,6 +119,55 @@ void main() {
       expect(picked?.path, endsWith('a.txt'));
     });
 
+    testWidgets('a click on a link row does nothing and leaves the keys '
+        'working', (tester) {
+      FileEntry? picked;
+      tester.pumpWidget(
+        FilePicker(
+          initialDirectory: '/p',
+          source: const _FixedSource({
+            '/p': [
+              FileEntry(
+                path: '/p/a.txt',
+                name: 'a.txt',
+                type: FileEntryType.file,
+              ),
+              FileEntry(
+                path: '/p/b.lnk',
+                name: 'b.lnk',
+                type: FileEntryType.link,
+              ),
+              FileEntry(
+                path: '/p/c.txt',
+                name: 'c.txt',
+                type: FileEntryType.file,
+              ),
+            ],
+          }),
+          autofocus: true,
+          onSelect: (f) => picked = f,
+        ),
+      );
+      String? selectedPath() =>
+          tester
+                  .semantics()
+                  .single(role: SemanticRole.tree)
+                  .state['selectedPath']
+              as String?;
+      // row0=path, row1='▴ ..', row2=a.txt, row3=b.lnk, row4=c.txt.
+      final lines = tester
+          .renderToString(size: const CellSize(40, 8), emptyMark: ' ')
+          .split('\n');
+      expect(lines[3], contains('b.lnk'));
+      _clickAt(tester, col: 4, row: 3);
+      expect(picked, isNull, reason: 'a link cannot be chosen');
+      expect(selectedPath(), '/p/a.txt', reason: 'the click is inert');
+
+      tester.sendKey(const KeyEvent(KeyCode.arrowUp)); // wraps to c.txt
+      tester.sendKey(const KeyEvent(KeyCode.enter));
+      expect(picked?.path, '/p/c.txt');
+    });
+
     testWidgets('lists files and directories in the initial dir', (tester) {
       final dir = _scratchDir();
       tester.pumpWidget(FilePicker(initialDirectory: dir, onSelect: (_) {}));
@@ -567,4 +616,26 @@ final class _CountingSource implements FileSource {
     reads++;
     return _inner.list(directory);
   }
+}
+
+/// Lists fixed entries per directory, so a test can show entry types a
+/// [MemoryFileSource] cannot, such as a link.
+final class _FixedSource implements FileSource {
+  const _FixedSource(this._entries);
+
+  final Map<String, List<FileEntry>> _entries;
+
+  @override
+  String absolute(String path) => path;
+
+  @override
+  String parent(String path) {
+    final cut = path.lastIndexOf('/');
+    return cut <= 0 ? '/' : path.substring(0, cut);
+  }
+
+  @override
+  List<FileEntry> list(String directory) =>
+      _entries[directory] ??
+      (throw FileSourceException('No such directory: $directory'));
 }

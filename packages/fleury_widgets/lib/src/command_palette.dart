@@ -146,7 +146,8 @@ final class _CommandEntry {
 ///
 /// Type to narrow the list (exact matches first, then prefixes, substrings,
 /// and letters in order, ignoring case), Up and Down to move (wrapping at the
-/// ends), and Enter or a click to run the highlighted command. Esc dismissal
+/// ends), and Enter to run the highlighted command; a click runs the command
+/// clicked. A disabled command is dimmed and runs neither way. Esc dismissal
 /// comes from the modal route; the palette adds nothing there.
 class CommandPalette extends StatelessWidget {
   const CommandPalette({
@@ -627,17 +628,23 @@ class _CommandPaletteState extends State<_CommandPaletteView> {
                                 : 'No matching commands',
                             style: theme.mutedStyle,
                           )
-                        : ListView.builder(
-                            controller: _list,
+                        // The query field keeps focus and the palette owns the
+                        // keys. The list only lays out, scrolls, and reveals
+                        // the highlight; a press that focused it would hand
+                        // the arrows and Enter to its plain cursor instead.
+                        : ExcludeFocus(
+                            child: ListView.builder(
+                              controller: _list,
 
-                            itemCount: _filtered.length,
-                            itemBuilder: (context, index, _) => _CommandRow(
-                              command: _filtered[index].command,
-                              index: index,
-                              selected: index == selIndex,
-                              width: widget.width,
-                              onActivate: _invokeCommand,
-                              onRun: _run,
+                              itemCount: _filtered.length,
+                              itemBuilder: (context, index, _) => _CommandRow(
+                                command: _filtered[index].command,
+                                index: index,
+                                selected: index == selIndex,
+                                width: widget.width,
+                                onActivate: _invokeCommand,
+                                onRun: _run,
+                              ),
                             ),
                           ),
                   ),
@@ -711,6 +718,8 @@ class _CommandRow extends StatelessWidget {
   /// decline or a throw.
   final void Function(CommandPaletteItem command) onRun;
 
+  static void _ignorePress() {}
+
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
@@ -761,8 +770,10 @@ class _CommandRow extends StatelessWidget {
       },
       state: SemanticState(state),
       // Click an enabled command to run it (same as Enter on the selection).
+      // A disabled row still owns its press and ignores it. Otherwise the
+      // list's own row gesture takes the press and moves the highlight.
       child: GestureDetector(
-        onTap: command.enabled ? () => onActivate(command) : null,
+        onTap: command.enabled ? () => onActivate(command) : _ignorePress,
         child: Row(
           children: <Widget>[
             Text(labelText, style: labelStyle, maxLines: 1),
