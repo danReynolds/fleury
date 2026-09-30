@@ -1,9 +1,11 @@
 // Compile-checked source for the docs tutorial "A filterable list"
-// (website/src/content/docs/tutorial.md). The prose walks through this program
-// in steps; this file is the finished result and is guarded by `dart analyze`
-// (see ../test/doc_snippets_test.dart) so the tutorial can't drift from a real,
-// compiling Fleury app. Keep the two in sync when either changes.
+// (website/src/content/docs/tutorial.mdx). The prose walks through this
+// program in steps, then shows the `app` region below as the finished
+// lib/app.dart. It is guarded by `dart analyze` (see
+// ../test/doc_snippets_test.dart) so the tutorial can't drift from a real,
+// compiling Fleury app. Keep the step fences in sync when this file changes.
 
+// #docregion app
 import 'package:fleury/fleury.dart';
 
 const _languages = [
@@ -74,3 +76,5 @@ class _FilterAppState extends State<FilterApp> {
     );
   }
 }
+
+// #enddocregion app
