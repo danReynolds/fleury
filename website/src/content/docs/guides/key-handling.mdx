@@ -144,8 +144,9 @@ focused field.
 ### Shortcut discovery
 
 `KeyHintBar` shows the bindings that are active for the current focus: every
-`KeyBindings` scope from the focused widget up to the root. You do not
-maintain a second list of shortcut labels:
+`KeyBindings` scope from the focused widget up to the root, or up to the nearest
+modal scope, such as a dialog shown with `present`, whose keys never reach the
+app behind it. You do not maintain a second list of shortcut labels:
 
 ```dart
 KeyHintBar()

@@ -1,5 +1,30 @@
 ## 0.1.0
 
+- **Esc denies an `ApprovalPrompt`.** Shown with `present`, Esc used to pop the
+  dialog without calling `onDecision`; it now makes the deny decision, the same
+  as the prompt's semantic cancel. An inline prompt also denies on Esc instead
+  of passing the key on.
+- `KeyHintBar` inside a dialog shows only the bindings that can fire there: key
+  hint resolution stops at a modal `KeyBindings` scope, as dispatch does.
+- `FilePicker` keeps its cursor and listing when a parent rebuild passes a new
+  but equivalent `filter` or `source`: a new filter re-filters the listing it
+  already read, and a new source re-reads the directory, keeping the cursor on
+  the same entry when it's still listed.
+- Copies strip every control character. CR, LF and TAB become spaces, as on
+  screen; other controls become U+FFFD, and an escape sequence collapses to one.
+  `LogRegion` sources and `MessageList` authors are sanitized too.
+- `Form`'s semantic submit action reports an `onSubmit` error through the
+  runtime instead of dropping it.
+- `Bar.stacked` with no segments paints nothing instead of throwing.
+- `ColorPicker` marks no swatch as committed for an off-palette value, and its
+  semantics describe the actual value.
+- `Select`: pressing a disabled option no longer moves the highlight onto it or
+  stops the arrow keys and Enter from working; the open list reports its
+  highlight as it moves.
+- `Image` in half-block mode draws a transparent top pixel as empty instead of
+  in the terminal's default text color.
+- A pinned `Panel` keeps tracking focus, so unpinning it shows current chrome.
+
 - **Breaking:** `FileBrowser` and `FilePicker` read directories through a
   `FileSource` and report `FileEntry` values, so both run in the browser.
   Natively they default to `LocalFileSource`, the local disk; in a browser,

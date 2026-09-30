@@ -185,6 +185,9 @@ children of the same region.
 
 - `FocusDetector` reports whether *anything inside* a region has focus. Moving
   between its children is not a leave, which makes it the active-pane signal.
+  Detectors nest like CSS `:focus-within`: every detector around the focused
+  widget reports focus, so a `Panel` still highlights when its content uses a
+  detector of its own.
 - `Focus.of(context).hasFocus` is true only while the nearest `Focus` *is* the
   focused node. Inside a pane of buttons or inputs, it is false while a child
   holds the keyboard. Use it when the region is itself one focus stop, such as

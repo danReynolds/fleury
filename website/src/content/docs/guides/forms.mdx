@@ -85,7 +85,9 @@ unchecked.
 `submit()` returns `false` if validation fails or `onSubmit` leaves a field
 error. Setting `FormField.error` in the callback is enough; there is no second
 validation call to make. Exceptions from the save propagate to an awaiting
-caller. For Offline, the example shows the failure and catches that expected
+caller; when nothing awaits the submit, as with a button, Enter, or an agent's
+submit action, `runApp` reports the error and the app keeps running. For
+Offline, the example shows the failure and catches that expected
 exception in the handler shared by Save and Enter, leaving the form open.
 
 The save callback takes a snapshot of the submitted name and checks `mounted`
