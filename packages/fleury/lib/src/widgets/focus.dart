@@ -1441,27 +1441,28 @@ class Focus extends StatefulWidget {
     required this.child,
   });
 
-  /// Optional caller-provided node. Useful for preserving focus state
-  /// across rebuilds via a `State<T>` that holds the node.
+  /// The node this widget attaches to the tree. Pass your own, created and
+  /// disposed by your [State], to move focus from code or to read
+  /// [FocusNode.hasFocus]; when null, the widget creates and disposes one.
   final FocusNode? focusNode;
 
-  /// If true, this node requests focus on first mount when no node is
-  /// currently focused.
+  /// Whether this node takes focus when it first mounts. It does so only when
+  /// nothing in its enclosing [FocusScope] (or, outside any scope, nothing in
+  /// the app) has focus yet, and never for a node that can't take focus or
+  /// that traversal skips.
   final bool autofocus;
 
-  /// When non-null, applied to the node — including a caller-provided
-  /// [focusNode] — on mount and on every widget update. Null means the
-  /// widget doesn't manage the flag: the node keeps its own value
-  /// (internal nodes default to focusable / traversable). Silently
-  /// ignoring these for provided nodes was a footgun: the code compiled
-  /// and looked right while the flag never took effect.
+  /// Whether the node can take focus. A non-null value makes this widget the
+  /// owner of the node's [FocusNode.canRequestFocus] flag, including on a
+  /// caller-provided [focusNode]: the value is applied when this widget mounts
+  /// and each time it rebuilds. Null leaves the flag to the node, which is
+  /// focusable by default.
   ///
-  /// Ownership: a non-null flag means THIS WIDGET owns that flag — don't
-  /// also mutate it externally (each widget update re-imposes the widget's
-  /// value), and don't have two Focus widgets manage one node (last build
-  /// order wins). Applied values persist after the widget unmounts: pass
-  /// null and configure the node directly when the node should keep
-  /// caller-controlled flags across use sites.
+  /// While this widget owns the flag, don't also set it on the node directly
+  /// (the next rebuild overwrites it), and don't let two [Focus] widgets manage
+  /// one node. Setting it to false while the node has focus clears focus. An
+  /// applied value stays on the node after this widget unmounts; to keep your
+  /// own value across uses of a node, pass null and set the flag on the node.
   final bool? canRequestFocus;
 
   /// Whether traversal should skip this node while still allowing it to take
