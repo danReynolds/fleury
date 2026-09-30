@@ -41,6 +41,14 @@ Fleury disposes its widget tree and restores the terminal before `runApp`
 completes. Your `finally` closes resources you created outside that tree. Set
 Dart's `exitCode` and let `main` return so this cleanup can finish.
 
+The samples pass `enableHotReload: false` so that `main()` runs in one process.
+Under a plain `dart run` with hot reload on, `main()` runs twice: the first
+process becomes the hot-reload supervisor, and its call to `runApp` never
+returns. That process ends with `exit()`, so its `finally` never runs, and
+nothing it created before `runApp` is cleaned up. It also prints a PID that
+isn't the UI's. See
+[Keep startup work inside the app](/fleury/guides/hot-reload/#keep-startup-work-inside-the-app).
+
 | Cause | `AppExit.signal` | Conventional exit code |
 |---|---|---|
 | `exitApp()` | `null` | `0` for successful completion |
@@ -99,8 +107,8 @@ dart run doc_snippets/shutdown/finish_work.dart
 Each command prints its PID before opening the UI. Press **Ctrl+C**, or send
 `kill -TERM <PID>` from another terminal. The first example closes immediately;
 the second displays **Finishing current item…** before closing. Both preserve
-the interrupt's exit status. Use `echo $status` in fish or `echo $?` in a POSIX
-shell to inspect it.
+the signal's exit status: `130` after **Ctrl+C**, `143` after `kill -TERM`.
+Use `echo $status` in fish or `echo $?` in a POSIX shell to inspect it.
 
 ## Next steps
 
