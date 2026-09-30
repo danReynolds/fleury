@@ -27,11 +27,57 @@ your app needs:
 </GuidePad>
 
 Pass the result to `FleuryApp`. If no theme is supplied, Fleury uses its built-in
-defaults, so `Theme.of(context)` always returns a value.
+defaults, so `Theme.of(context)` always returns a value. Inside a widget,
+`context.theme` is shorthand for `Theme.of(context)`, and `context.colors` for
+its `colorScheme`.
+
+### What a theme contains
+
+Every `ThemeData` field has a default, so a theme changes only the fields you
+set:
+
+| Field | Default | Used for |
+|---|---|---|
+| `brightness` | `Brightness.dark` | Whether the theme targets a dark or a light terminal |
+| `textStyle` | No style | The base style of every `Text` below the theme |
+| `mutedStyle` | Dim | De-emphasized text such as hints, separators, and disabled rows |
+| `selectionStyle` | Inverse | The selected or current item, such as a list's highlighted row |
+| `focusedStyle` | Bold | Focused controls |
+| `errorStyle` | Red and underlined | Invalid controls and validation messages |
+| `interactiveStyle` | None | App-wide control state styles; see [Interactive styles](#interactive-styles) |
+| `borderStyle` | `BorderStyle.rounded` | Framed surfaces such as panels and `Container.framed` |
+| `colorScheme` | `ColorScheme()` | The color roles below |
+| `extensions` | Empty | Your own theme objects |
+
+`ColorScheme` holds the colors an app draws from, by role:
+
+| Role | Default in `ColorScheme()` | Used for |
+|---|---|---|
+| `foreground`, `background` | `null`: the terminal's own colors | Default text and background |
+| `surface` | `null`: near-black on a dark theme, near-white on a light one | Opaque fills such as `Container.filled` and presented dialogs |
+| `primary` | `Colors.mint` | Interactive and active accents |
+| `focus` | `Colors.azure` | Focused regions and text entry |
+| `success`, `warning`, `error`, `info` | ANSI green, yellow, red, and cyan | Status |
+
+`ThemeData.dark()` and `ThemeData.light()` each set their own `primary`.
+`extensions` can hold objects of any class you define; read one by type with
+`context.theme.extension<MyColors>()`, which returns `null` when the theme has
+none.
+
+To change the theme for part of the app, wrap that subtree in a `Theme` and
+build its data from the ambient theme:
+
+```dart
+Theme(
+  data: context.theme.copyWith(borderStyle: BorderStyle.double),
+  child: const SettingsPanel(),
+)
+```
 
 ## Styling widgets
 
-Every first-party control keeps the common case direct:
+Pass a `CellStyle` to a control's `style` to change its base appearance. This
+input draws its text in cyan:
 
 <GuidePad id="themes.local_style">
 <FleuryExample slot="demo" id="themes.local_style" cols={34} rows={4} interactive />
@@ -60,9 +106,11 @@ Use `CellStyle.interactive` when a widget should change as users interact with
 it. Assign it to `ThemeData.interactiveStyle` for the whole app, or pass it to
 one widget's ordinary `style` property for a local exception. Native hover
 feedback also needs `TerminalMode(mouseMotion: true)` in `runApp`;
-`mouse: true` alone does not report hover. Browser hosts already provide
-pointer motion. This reference renders each entry directly so the differences
-are easy to compare:
+`mouse: true` alone does not report hover, so `hovered` then changes only on
+clicks. An app created by `fleury create` starts with `mouse: true`;
+[Enable mouse input in a terminal](/fleury/guides/input-and-gestures/#enable-mouse-input-in-a-terminal)
+shows the change. Browser hosts already provide pointer motion. This reference
+renders each entry directly so the differences are easy to compare:
 
 <GuidePad id="themes.interactive_styles" layout="demo-wide">
 <FleuryExample
@@ -77,14 +125,15 @@ When assigned to `ThemeData.interactiveStyle`, controls apply the relevant
 entry automatically. If states overlap, Fleury layers selected, hovered,
 focused, pressed, and invalid paint in that order; disabled paint stands alone.
 `pressed: CellStyle(…)` styles a held primary pointer press on buttons and other
-activatable controls. Release or cancellation clears it; keyboard and semantic
-activation remain immediate actions. Pair
-color with an attribute such as bold, underline, inverse, or dim so feedback
-does not depend on hue alone.
+activatable controls; [Input & gestures](/fleury/guides/input-and-gestures/#customize-a-controls-feedback)
+explains when it applies. Pair color with an attribute such as bold, underline,
+inverse, or dim so feedback does not depend on hue alone.
 
 ### Local interactive styles
 
-The same `style` property accepts either kind of value:
+The same `style` property accepts either kind of value. Here a `Theme` stands
+in for the app theme and gives every control an inverse, bold focus cue;
+**Theme focus** inherits it, and **Local focus** overrides it:
 
 <GuidePad id="themes.local_interactive">
 <FleuryExample slot="demo" id="themes.local_interactive" cols={46} rows={8} interactive />
@@ -106,12 +155,12 @@ FleuryApp(title: 'Dashboard', theme: ThemeData.dark(), home: const Dashboard());
 ```
 
 Fleury does not guess the terminal's background. When another value needs a
-light and dark variant, read the choice through the ambient theme:
+light and dark variant, pick it with the ambient theme's `adaptive`:
 
 ```dart
 final shadow = context.theme.adaptive(
-  light: const AnsiColor(8),
-  dark: const AnsiColor(0),
+  light: Colors.gray,
+  dark: Colors.black,
 );
 ```
 
@@ -136,8 +185,23 @@ Ordinary application code should not need to call it.
 
 [`fleury_themes`](https://github.com/danReynolds/fleury/tree/main/packages/fleury_themes)
 is Fleury's community theme collection. It currently includes Nord, Dracula,
-Gruvbox Dark, Tokyo Night, Catppuccin Mocha, One Dark, and Solarized in dark
-and light variants, and contributions can add more:
+Gruvbox Dark, Tokyo Night, Catppuccin Mocha, One Dark, and Solarized (dark and
+light), and contributions can add more.
+
+A new project depends only on `fleury` and `fleury_widgets`, so add the package
+first. Until the packages are published, merge this entry into the existing
+`dependencies:` section of `pubspec.yaml`:
+
+```yaml
+dependencies:
+  fleury_themes:
+    git:
+      url: https://github.com/danReynolds/fleury.git
+      path: packages/fleury_themes
+```
+
+Then run `dart pub upgrade`, so every Fleury package resolves from the same
+commit. Import the package and pass a theme to `FleuryApp`:
 
 ```dart
 import 'package:fleury/fleury.dart';

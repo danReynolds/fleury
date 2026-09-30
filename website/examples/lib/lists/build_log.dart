@@ -30,7 +30,7 @@ class _BuildLogState extends State<BuildLog> {
         builder: (context, _) => Text(
           log.isFollowing
               ? 'Following latest output'
-              : 'Paused · ${log.unseenCount} new entries',
+              : 'Paused · ${log.unseenCount} new',
         ),
       ),
       const SizedBox(height: 1),

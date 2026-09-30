@@ -49,8 +49,13 @@ Press **Switch project**. The screen replaces its value inside `setState`, and
 both readers update. They are `const`, so rebuilding the screen does not
 rebuild them: reading the scope subscribed each one to it.
 
-The type argument is the lookup key. A reader finds the nearest `Scope<Project>`
-above it, and an inner scope of the same type overrides an outer one.
+The scope's type is the lookup key, and it must match exactly. A reader finds
+the nearest `Scope<Project>` above it, and an inner scope of the same type
+overrides an outer one. `Scope(value)` infers its type from the value you pass,
+so a subclass registers under its own type: if `SampleProject` extends
+`Project`, `Scope(SampleProject())` is a `Scope<SampleProject>`, and
+`context.scope<Project>()` does not find it. Name the type when you share a
+subtype, such as a test fake: `Scope<Project>(SampleProject(), child: …)`.
 
 The two readers differ only in what rebuilds. `context.scope<Project>()`
 rebuilds the widget that calls it; `ScopeBuilder<Project>` rebuilds just its
@@ -102,15 +107,19 @@ A widget that already holds a model, for example from its constructor, can
 listen to it without a scope. `NotifierBuilder` rebuilds its builder;
 `context.listen(model)` rebuilds the calling widget and returns the same model.
 Both readers below share one cart: add an item in either and both counts update.
-Edit either tab to change its matching reader:
+Edit the **NotifierBuilder** or **context.listen** tab to change its matching
+reader:
 
 <GuidePad id="state.cart-notifier" codeMaxHeight="30rem">
 <FleuryExample slot="demo" id="state.cart-notifier" cols={38} rows={9} interactive />
 </GuidePad>
 
+The **Shared cart** tab creates that cart in `State` and passes it to each
+reader's constructor.
+
 `NotifierBuilder` listens while it is in the tree. `context.listen` listens
 while the widget's builds keep calling it, and stops when a build no longer
-does. Neither disposes the model.
+does. Neither disposes the model; the `State` that created it does.
 
 ### Value notifiers
 

@@ -2462,7 +2462,7 @@ Text('\${summary.health.name}: \${summary.activeTaskCount} of \${summary.taskCou
     cols: 54,
     rows: 16,
     interactive: true,
-    builder: () => const _NetworkImageLoadingTour(),
+    builder: () => _framed(const _NetworkImageLoadingTour()),
   ),
   ExampleInfo(
     id: 'loading.stream',
@@ -2496,7 +2496,7 @@ Text('\${summary.health.name}: \${summary.activeTaskCount} of \${summary.taskCou
     cols: 60,
     rows: 15,
     interactive: true,
-    builder: () => const _AnimationStateTour(),
+    builder: () => const _OrbitalCourier(),
   ),
   ExampleInfo(
     id: 'animation.manual',
@@ -2508,7 +2508,7 @@ Text('\${summary.health.name}: \${summary.activeTaskCount} of \${summary.taskCou
     cols: 48,
     rows: 11,
     interactive: true,
-    builder: () => _framed(const _ManualAnimationTour()),
+    builder: () => _framed(const _ManualRoute()),
   ),
   ExampleInfo(
     id: 'animation.progress',
@@ -2520,7 +2520,7 @@ Text('\${summary.health.name}: \${summary.activeTaskCount} of \${summary.taskCou
     cols: 48,
     rows: 12,
     interactive: true,
-    builder: () => _framed(const _AnimationProgressTour()),
+    builder: () => _framed(const _PackageRoute()),
   ),
   ExampleInfo(
     id: 'animation.timing',
@@ -2532,7 +2532,7 @@ Text('\${summary.health.name}: \${summary.activeTaskCount} of \${summary.taskCou
     cols: 54,
     rows: 15,
     interactive: true,
-    builder: () => const _AnimationTimingTour(),
+    builder: () => _framed(const _TimingComparison()),
   ),
   ExampleInfo(
     id: 'animation.effects',
@@ -2542,7 +2542,7 @@ Text('\${summary.health.name}: \${summary.activeTaskCount} of \${summary.taskCou
     cols: 48,
     rows: 10,
     interactive: true,
-    builder: () => _framed(const _EntranceEffectTour()),
+    builder: () => _framed(const _ConnectionStatus()),
   ),
   ExampleInfo(
     id: 'animation.trigger',
@@ -2552,7 +2552,7 @@ Text('\${summary.health.name}: \${summary.activeTaskCount} of \${summary.taskCou
     cols: 48,
     rows: 14,
     interactive: true,
-    builder: () => _framed(const _ValidationFeedbackTour()),
+    builder: () => _framed(const _PilotValidation()),
   ),
   ExampleInfo(
     id: 'animation.presence',
@@ -2562,7 +2562,7 @@ Text('\${summary.health.name}: \${summary.activeTaskCount} of \${summary.taskCou
     cols: 58,
     rows: 19,
     interactive: true,
-    builder: () => _framed(const _EffectPickerTour()),
+    builder: () => _framed(const _EffectPicker()),
   ),
   ExampleInfo(
     id: 'animation.frames',
@@ -2572,7 +2572,7 @@ Text('\${summary.health.name}: \${summary.activeTaskCount} of \${summary.taskCou
     cols: 48,
     rows: 12,
     interactive: true,
-    builder: () => _framed(const _FrameCadenceTour()),
+    builder: () => _framed(const _PacketTransfer()),
   ),
   ExampleInfo(
     id: 'animation.ticker',
@@ -2582,7 +2582,7 @@ Text('\${summary.health.name}: \${summary.activeTaskCount} of \${summary.taskCou
     cols: 48,
     rows: 11,
     interactive: true,
-    builder: () => _framed(const _TickerSimulationTour()),
+    builder: () => _framed(const _TickerSimulation()),
   ),
   ExampleInfo(
     id: 'flutter.counter',
@@ -2957,10 +2957,7 @@ final result = await context.push<String>(const DetailsScreen());
 final confirmed = await context.present<bool>(const ConfirmDialog());
 context.pop('done'); // completes the push that opened this screen''',
     builder: () => _framed(
-      Navigator(
-        transition: RouteTransition.none,
-        home: const _NavigationBasicsTour(),
-      ),
+      Navigator(transition: RouteTransition.none, home: const _HomeScreen()),
     ),
   ),
   ExampleInfo(
@@ -2976,7 +2973,7 @@ context.pop('done'); // completes the push that opened this screen''',
     builder: () => _framed(
       Navigator(
         transition: RouteTransition.none,
-        home: const _DialogPlacementTour(),
+        home: const _DialogPlacement(),
       ),
     ),
   ),
@@ -2991,10 +2988,7 @@ context.pop('done'); // completes the push that opened this screen''',
     rows: 14,
     interactive: true,
     builder: () => _framed(
-      Navigator(
-        transition: RouteTransition.none,
-        home: const _BackGuardHomeTour(),
-      ),
+      Navigator(transition: RouteTransition.none, home: const _DraftsScreen()),
     ),
   ),
   ExampleInfo(
@@ -3025,7 +3019,7 @@ context.pop('done'); // completes the push that opened this screen''',
     builder: () => _framed(
       Navigator(
         transition: RouteTransition.none,
-        home: const _NestedProjectsTour(),
+        home: const _ProjectsScreen(),
       ),
     ),
   ),
@@ -4578,8 +4572,6 @@ class _CellStyleTour extends StatelessWidget {
   );
 }
 
-void _noop() {}
-
 const String _localInteractiveSource = '''
 Row(
   children: [
@@ -4603,28 +4595,30 @@ class _LocalStateTour extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) => Theme(
+    // Overrides the app theme below this point: every control's inherited
+    // focus cue becomes inverse and bold.
     data: Theme.of(context).copyWith(
       interactiveStyle: const CellStyle.interactive(
         focused: CellStyle(inverse: true, bold: true),
       ),
     ),
-    child: const Padding(
-      padding: EdgeInsets.all(1),
+    child: Padding(
+      padding: const EdgeInsets.all(1),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: <Widget>[
-          Text('LOCAL INTERACTION STYLE', style: CellStyle(bold: true)),
-          Text('Tab or click to compare focus cues'),
+          const Text('LOCAL INTERACTION STYLE', style: CellStyle(bold: true)),
+          const Text('Tab or click to compare focus cues'),
           Row(
             children: <Widget>[
-              Button(text: 'Theme focus', autofocus: true, onPressed: _noop),
-              SizedBox(width: 2),
+              Button(text: 'Theme focus', autofocus: true, onPressed: () {}),
+              const SizedBox(width: 2),
               Button(
                 text: 'Local focus',
-                style: CellStyle.interactive(
+                style: const CellStyle.interactive(
                   focused: CellStyle(foreground: Colors.cyan, underline: true),
                 ),
-                onPressed: _noop,
+                onPressed: () {},
               ),
             ],
           ),
@@ -4893,13 +4887,25 @@ class _NetworkImageLoadingTour extends StatefulWidget {
       _NetworkImageLoadingTourState();
 }
 
+/// Mounts the photo viewer only after the reader asks for it, so opening a
+/// page that embeds this demo sends no request to the photo service.
 class _NetworkImageLoadingTourState extends State<_NetworkImageLoadingTour> {
   var _seed = 0;
+  var _started = false;
 
   @override
-  Widget build(BuildContext context) => _framed(
-    loading.PhotoViewer(loadPhoto: () => loading.fetchPhoto(++_seed)),
-  );
+  Widget build(BuildContext context) => _started
+      ? loading.PhotoViewer(loadPhoto: () => loading.fetchPhoto(++_seed))
+      : Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const Text('Photos come from picsum.photos.'),
+            Button(
+              text: 'Load a photo',
+              onPressed: () => setState(() => _started = true),
+            ),
+          ],
+        );
 }
 
 class _StreamLoadingTour extends StatelessWidget {
@@ -4917,14 +4923,14 @@ class _StreamLoadingTour extends StatelessWidget {
   );
 }
 
-class _AnimationStateTour extends StatefulWidget {
-  const _AnimationStateTour();
+class _OrbitalCourier extends StatefulWidget {
+  const _OrbitalCourier();
 
   @override
-  State<_AnimationStateTour> createState() => _AnimationStateTourState();
+  State<_OrbitalCourier> createState() => _OrbitalCourierState();
 }
 
-class _AnimationStateTourState extends State<_AnimationStateTour> {
+class _OrbitalCourierState extends State<_OrbitalCourier> {
   static const _idle = RgbColor(115, 125, 140);
   static const _arrived = RgbColor(70, 220, 145);
 
@@ -5041,14 +5047,14 @@ class _AnimationStateTourState extends State<_AnimationStateTour> {
   }
 }
 
-class _ManualAnimationTour extends StatefulWidget {
-  const _ManualAnimationTour();
+class _ManualRoute extends StatefulWidget {
+  const _ManualRoute();
 
   @override
-  State<_ManualAnimationTour> createState() => _ManualAnimationTourState();
+  State<_ManualRoute> createState() => _ManualRouteState();
 }
 
-class _ManualAnimationTourState extends State<_ManualAnimationTour> {
+class _ManualRouteState extends State<_ManualRoute> {
   final _progress = Animation<double>(0.0, debugLabel: 'manual package route');
   var _running = false;
 
@@ -5115,14 +5121,14 @@ class _ManualAnimationTourState extends State<_ManualAnimationTour> {
   }
 }
 
-class _AnimationProgressTour extends StatefulWidget {
-  const _AnimationProgressTour();
+class _PackageRoute extends StatefulWidget {
+  const _PackageRoute();
 
   @override
-  State<_AnimationProgressTour> createState() => _AnimationProgressTourState();
+  State<_PackageRoute> createState() => _PackageRouteState();
 }
 
-class _AnimationProgressTourState extends State<_AnimationProgressTour> {
+class _PackageRouteState extends State<_PackageRoute> {
   var _delivered = false;
 
   @override
@@ -5174,11 +5180,11 @@ class _AnimationProgressTourState extends State<_AnimationProgressTour> {
   );
 }
 
-class _AnimationTimingTour extends StatefulWidget {
-  const _AnimationTimingTour();
+class _TimingComparison extends StatefulWidget {
+  const _TimingComparison();
 
   @override
-  State<_AnimationTimingTour> createState() => _AnimationTimingTourState();
+  State<_TimingComparison> createState() => _TimingComparisonState();
 }
 
 Widget _sharedTimingStatus(bool active) {
@@ -5234,38 +5240,36 @@ Widget _independentTimingStatus(bool active) {
   );
 }
 
-class _AnimationTimingTourState extends State<_AnimationTimingTour> {
+class _TimingComparisonState extends State<_TimingComparison> {
   var _enabled = false;
 
   @override
-  Widget build(BuildContext context) => _framed(
-    Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: <Widget>[
-        const Text('TIMING COMPARISON', style: CellStyle(bold: true)),
-        const SizedBox(height: 1),
-        Button(
-          text: _enabled ? 'Reset' : 'Animate',
-          onPressed: () => setState(() => _enabled = !_enabled),
-        ),
-        const Text('Shared timing: width + color together'),
-        _sharedTimingStatus(_enabled),
-        const SizedBox(height: 1),
-        const Text('Independent timing: width 180 ms · accent 800 ms'),
-        _independentTimingStatus(_enabled),
-      ],
-    ),
+  Widget build(BuildContext context) => Column(
+    crossAxisAlignment: CrossAxisAlignment.start,
+    children: <Widget>[
+      const Text('TIMING COMPARISON', style: CellStyle(bold: true)),
+      const SizedBox(height: 1),
+      Button(
+        text: _enabled ? 'Reset' : 'Animate',
+        onPressed: () => setState(() => _enabled = !_enabled),
+      ),
+      const Text('Shared timing: width + color together'),
+      _sharedTimingStatus(_enabled),
+      const SizedBox(height: 1),
+      const Text('Independent timing: width 180 ms · accent 800 ms'),
+      _independentTimingStatus(_enabled),
+    ],
   );
 }
 
-class _EntranceEffectTour extends StatefulWidget {
-  const _EntranceEffectTour();
+class _ConnectionStatus extends StatefulWidget {
+  const _ConnectionStatus();
 
   @override
-  State<_EntranceEffectTour> createState() => _EntranceEffectTourState();
+  State<_ConnectionStatus> createState() => _ConnectionStatusState();
 }
 
-class _EntranceEffectTourState extends State<_EntranceEffectTour> {
+class _ConnectionStatusState extends State<_ConnectionStatus> {
   var _connected = false;
 
   @override
@@ -5308,14 +5312,14 @@ enum _EntryEffectChoice { fade, slide, wipe, expand }
 
 enum _ExitEffectChoice { fade, slide, wipe, shrink }
 
-class _EffectPickerTour extends StatefulWidget {
-  const _EffectPickerTour();
+class _EffectPicker extends StatefulWidget {
+  const _EffectPicker();
 
   @override
-  State<_EffectPickerTour> createState() => _EffectPickerTourState();
+  State<_EffectPicker> createState() => _EffectPickerState();
 }
 
-class _EffectPickerTourState extends State<_EffectPickerTour> {
+class _EffectPickerState extends State<_EffectPicker> {
   var _entry = _EntryEffectChoice.fade;
   var _exit = _ExitEffectChoice.fade;
   var _visible = true;
@@ -5461,40 +5465,41 @@ class _EffectPickerTourState extends State<_EffectPickerTour> {
   );
 }
 
-class _ValidationFeedbackTour extends StatefulWidget {
-  const _ValidationFeedbackTour();
+class _PilotValidation extends StatefulWidget {
+  const _PilotValidation();
 
   @override
-  State<_ValidationFeedbackTour> createState() =>
-      _ValidationFeedbackTourState();
+  State<_PilotValidation> createState() => _PilotValidationState();
 }
 
-class _ValidationFeedbackTourState extends State<_ValidationFeedbackTour> {
+class _PilotValidationState extends State<_PilotValidation> {
+  final _form = FormController();
   final _name = TextEditingController();
-  final _nameFocus = FocusNode(debugLabel: 'pilot name');
   var _submitCount = 0;
-  var _message = 'Enter a pilot name, then validate it.';
-  var _success = false;
+  String? _clearedName;
 
-  void _submit() {
-    final name = _name.text.trim();
+  Future<void> _submit() async {
+    final valid = await _form.submit();
+    if (!mounted) return;
     setState(() {
       _submitCount++;
-      _success = name.isNotEmpty;
-      _message = _success
-          ? '✓ $name is cleared for launch'
-          : '✕ Enter any non-empty name';
+      _clearedName = valid ? _name.text.trim() : null;
     });
-    _nameFocus.requestFocus();
   }
 
   Widget _feedback() {
-    final color = _success
-        ? const RgbColor(70, 220, 145)
-        : const RgbColor(255, 90, 90);
+    final cleared = _clearedName;
+    final message = _submitCount == 0
+        ? 'Enter a pilot name, then validate it.'
+        : cleared == null
+        ? '✕ Enter any non-empty name'
+        : '✓ $cleared is cleared for launch';
+    final color = cleared == null
+        ? const RgbColor(255, 90, 90)
+        : const RgbColor(70, 220, 145);
     final feedback =
         Text(
-          _message,
+          message,
           style: CellStyle(foreground: _submitCount == 0 ? null : color),
         ).animate(
           trigger: _submitCount,
@@ -5506,50 +5511,59 @@ class _ValidationFeedbackTourState extends State<_ValidationFeedbackTour> {
 
   @override
   void dispose() {
+    _form.dispose();
     _name.dispose();
-    _nameFocus.dispose();
     super.dispose();
   }
 
   @override
-  Widget build(BuildContext context) => Column(
-    crossAxisAlignment: CrossAxisAlignment.start,
-    children: <Widget>[
-      const Text('FORM VALIDATION', style: CellStyle(bold: true)),
-      const SizedBox(height: 1),
-      const Text('Pilot name'),
-      Container(
-        width: 32,
-        border: BoxBorder(style: Theme.of(context).borderStyle),
-        padding: const EdgeInsets.symmetric(horizontal: 1),
-        child: SizedBox(
-          width: 28,
-          child: TextInput(
-            controller: _name,
-            focusNode: _nameFocus,
-            autofocus: true,
-            semanticLabel: 'Pilot name',
-            placeholder: 'Type any name',
-            onSubmit: (_) => _submit(),
+  Widget build(BuildContext context) => Form(
+    controller: _form,
+    onSubmit: () {},
+    child: Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: <Widget>[
+        const Text('FORM VALIDATION', style: CellStyle(bold: true)),
+        const SizedBox(height: 1),
+        const Text('Pilot name'),
+        FormField(
+          validator: () =>
+              _name.text.trim().isEmpty ? 'Enter any non-empty name' : null,
+          // The animated line below shows the outcome instead.
+          showErrorMessage: false,
+          child: Container(
+            width: 32,
+            border: BoxBorder(style: Theme.of(context).borderStyle),
+            padding: const EdgeInsets.symmetric(horizontal: 1),
+            child: SizedBox(
+              width: 28,
+              child: TextInput(
+                controller: _name,
+                autofocus: true,
+                semanticLabel: 'Pilot name',
+                placeholder: 'Type any name',
+                onSubmit: (_) => _submit(),
+              ),
+            ),
           ),
         ),
-      ),
-      const SizedBox(height: 1),
-      _feedback(),
-      const SizedBox(height: 1),
-      Button(text: 'Validate pilot', onPressed: _submit),
-    ],
+        const SizedBox(height: 1),
+        _feedback(),
+        const SizedBox(height: 1),
+        Button(text: 'Validate pilot', onPressed: _submit),
+      ],
+    ),
   );
 }
 
-class _FrameCadenceTour extends StatefulWidget {
-  const _FrameCadenceTour();
+class _PacketTransfer extends StatefulWidget {
+  const _PacketTransfer();
 
   @override
-  State<_FrameCadenceTour> createState() => _FrameCadenceTourState();
+  State<_PacketTransfer> createState() => _PacketTransferState();
 }
 
-class _FrameCadenceTourState extends State<_FrameCadenceTour> {
+class _PacketTransferState extends State<_PacketTransfer> {
   static const _frames = <String>[
     '●··········◇',
     '──●········◇',
@@ -5606,25 +5620,25 @@ class _FrameCadenceTourState extends State<_FrameCadenceTour> {
   );
 }
 
-class _TickerSimulationTour extends StatefulWidget {
-  const _TickerSimulationTour();
+class _TickerSimulation extends StatefulWidget {
+  const _TickerSimulation();
 
   @override
-  State<_TickerSimulationTour> createState() => _TickerSimulationTourState();
+  State<_TickerSimulation> createState() => _TickerSimulationState();
 }
 
-class _TickerSimulationTourState extends State<_TickerSimulationTour>
+class _TickerSimulationState extends State<_TickerSimulation>
     with SingleTickerProviderStateMixin {
   static const _trackWidth = 28.0;
-  Ticker? _ticker;
+  late final Ticker _ticker;
   Duration _lastElapsed = Duration.zero;
   var _position = 0.0;
   var _velocity = 12.0;
 
   @override
-  void didChangeDependencies() {
-    super.didChangeDependencies();
-    _ticker ??= createTicker(_onTick)..start();
+  void initState() {
+    super.initState();
+    _ticker = createTicker(_onTick)..start();
   }
 
   void _onTick(Duration elapsed) {
@@ -5642,12 +5656,11 @@ class _TickerSimulationTourState extends State<_TickerSimulationTour>
   }
 
   void _toggle() => setState(() {
-    final ticker = _ticker!;
-    if (ticker.isActive) {
-      ticker.stop();
+    if (_ticker.isActive) {
+      _ticker.stop();
     } else {
       _lastElapsed = Duration.zero;
-      ticker.start();
+      _ticker.start();
     }
   });
 
@@ -5667,9 +5680,7 @@ class _TickerSimulationTourState extends State<_TickerSimulationTour>
         Text('position ${_position.toStringAsFixed(1)} cells'),
         const SizedBox(height: 1),
         Button(
-          text: _ticker?.isActive == true
-              ? 'Pause simulation'
-              : 'Resume simulation',
+          text: _ticker.isActive ? 'Pause simulation' : 'Resume simulation',
           onPressed: _toggle,
         ),
       ],
@@ -5768,27 +5779,23 @@ class _ResponsiveWorkspaceTourState extends State<_ResponsiveWorkspaceTour> {
   );
 }
 
-enum _NavigationResult { done }
-
 /// The first navigation example intentionally teaches only the three stack
 /// operations. Each screen labels its depth so the behavior is readable
 /// without reverse-engineering project-specific state.
-class _NavigationBasicsTour extends StatefulWidget {
-  const _NavigationBasicsTour();
+class _HomeScreen extends StatefulWidget {
+  const _HomeScreen();
 
   @override
-  State<_NavigationBasicsTour> createState() => _NavigationBasicsTourState();
+  State<_HomeScreen> createState() => _HomeScreenState();
 }
 
-class _NavigationBasicsTourState extends State<_NavigationBasicsTour> {
+class _HomeScreenState extends State<_HomeScreen> {
   String _result = 'none';
 
   Future<void> _openDetails() async {
-    final result = await context.push<_NavigationResult>(
-      const _NavigationDetailsTour(),
-    );
+    final result = await context.push<String>(const _DetailsScreen());
     if (!mounted || result == null) return;
-    setState(() => _result = result.name);
+    setState(() => _result = result);
   }
 
   @override
@@ -5804,49 +5811,42 @@ class _NavigationBasicsTourState extends State<_NavigationBasicsTour> {
   );
 }
 
-class _NavigationDetailsTour extends StatefulWidget {
-  const _NavigationDetailsTour();
+class _DetailsScreen extends StatefulWidget {
+  const _DetailsScreen();
 
   @override
-  State<_NavigationDetailsTour> createState() => _NavigationDetailsTourState();
+  State<_DetailsScreen> createState() => _DetailsScreenState();
 }
 
-class _NavigationDetailsTourState extends State<_NavigationDetailsTour> {
+class _DetailsScreenState extends State<_DetailsScreen> {
   String _dialogResult = 'not shown';
 
   Future<void> _presentDialog() async {
-    final confirmed = await context.present<bool>(
-      const _NavigationConfirmationDialog(),
-    );
+    final confirmed = await context.present<bool>(const _ConfirmDialog());
     if (!mounted) return;
     setState(() => _dialogResult = confirmed == true ? 'confirmed' : 'closed');
   }
 
   @override
-  Widget build(BuildContext context) => _framed(
-    Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        const Text('DETAILS · STACK DEPTH 2', style: CellStyle(bold: true)),
-        Text('dialog: $_dialogResult'),
-        const SizedBox(height: 1),
-        Button(
-          text: 'Present dialog',
-          autofocus: true,
-          onPressed: _presentDialog,
-        ),
-        Button(
-          text: 'Pop with result',
-          onPressed: () => context.pop(_NavigationResult.done),
-        ),
-        Button(text: 'Pop without result', onPressed: context.pop),
-      ],
-    ),
+  Widget build(BuildContext context) => Column(
+    crossAxisAlignment: CrossAxisAlignment.start,
+    children: [
+      const Text('DETAILS · STACK DEPTH 2', style: CellStyle(bold: true)),
+      Text('dialog: $_dialogResult'),
+      const SizedBox(height: 1),
+      Button(
+        text: 'Present dialog',
+        autofocus: true,
+        onPressed: _presentDialog,
+      ),
+      Button(text: 'Pop with result', onPressed: () => context.pop('done')),
+      Button(text: 'Pop without result', onPressed: context.pop),
+    ],
   );
 }
 
-class _NavigationConfirmationDialog extends StatelessWidget {
-  const _NavigationConfirmationDialog();
+class _ConfirmDialog extends StatelessWidget {
+  const _ConfirmDialog();
 
   @override
   Widget build(BuildContext context) => SizedBox(
@@ -5866,20 +5866,20 @@ class _NavigationConfirmationDialog extends StatelessWidget {
   );
 }
 
-class _DialogPlacementTour extends StatefulWidget {
-  const _DialogPlacementTour();
+class _DialogPlacement extends StatefulWidget {
+  const _DialogPlacement();
 
   @override
-  State<_DialogPlacementTour> createState() => _DialogPlacementTourState();
+  State<_DialogPlacement> createState() => _DialogPlacementState();
 }
 
-class _DialogPlacementTourState extends State<_DialogPlacementTour> {
+class _DialogPlacementState extends State<_DialogPlacement> {
   Alignment _alignment = Alignment.center;
 
   Future<void> _show(Alignment alignment) async {
     setState(() => _alignment = alignment);
     await context.present<void>(
-      const _PlacedDialogTour(),
+      const _PlacedDialog(),
       alignment: alignment,
       transition: RouteTransition.none,
     );
@@ -5908,8 +5908,8 @@ class _DialogPlacementTourState extends State<_DialogPlacementTour> {
   );
 }
 
-class _PlacedDialogTour extends StatelessWidget {
-  const _PlacedDialogTour();
+class _PlacedDialog extends StatelessWidget {
+  const _PlacedDialog();
 
   @override
   Widget build(BuildContext context) => SizedBox(
@@ -5925,14 +5925,14 @@ class _PlacedDialogTour extends StatelessWidget {
   );
 }
 
-class _BackGuardHomeTour extends StatefulWidget {
-  const _BackGuardHomeTour();
+class _DraftsScreen extends StatefulWidget {
+  const _DraftsScreen();
 
   @override
-  State<_BackGuardHomeTour> createState() => _BackGuardHomeTourState();
+  State<_DraftsScreen> createState() => _DraftsScreenState();
 }
 
-class _BackGuardHomeTourState extends State<_BackGuardHomeTour> {
+class _DraftsScreenState extends State<_DraftsScreen> {
   String _savedText = 'Release notes';
 
   void _saveDraft(String value) => setState(() => _savedText = value);
@@ -5948,24 +5948,24 @@ class _BackGuardHomeTourState extends State<_BackGuardHomeTour> {
         text: 'Edit draft',
         autofocus: true,
         onPressed: () => context.push<void>(
-          _GuardedEditorTour(initialText: _savedText, onSave: _saveDraft),
+          _GuardedEditor(initialText: _savedText, onSave: _saveDraft),
         ),
       ),
     ],
   );
 }
 
-class _GuardedEditorTour extends StatefulWidget {
-  const _GuardedEditorTour({required this.initialText, required this.onSave});
+class _GuardedEditor extends StatefulWidget {
+  const _GuardedEditor({required this.initialText, required this.onSave});
 
   final String initialText;
   final void Function(String) onSave;
 
   @override
-  State<_GuardedEditorTour> createState() => _GuardedEditorTourState();
+  State<_GuardedEditor> createState() => _GuardedEditorState();
 }
 
-class _GuardedEditorTourState extends State<_GuardedEditorTour> {
+class _GuardedEditorState extends State<_GuardedEditor> {
   late final TextEditingController _controller;
   late String _savedText;
   bool _dirty = false;
@@ -6095,8 +6095,8 @@ class _TransitionScreenTour extends StatelessWidget {
   );
 }
 
-class _NestedProjectsTour extends StatelessWidget {
-  const _NestedProjectsTour();
+class _ProjectsScreen extends StatelessWidget {
+  const _ProjectsScreen();
 
   @override
   Widget build(BuildContext context) => Column(
@@ -6107,14 +6107,14 @@ class _NestedProjectsTour extends StatelessWidget {
       Button(
         text: 'Start setup',
         autofocus: true,
-        onPressed: () => context.push<void>(const _NestedSetupTour()),
+        onPressed: () => context.push<void>(const _SetupFlow()),
       ),
     ],
   );
 }
 
-class _NestedSetupTour extends StatelessWidget {
-  const _NestedSetupTour();
+class _SetupFlow extends StatelessWidget {
+  const _SetupFlow();
 
   @override
   Widget build(BuildContext context) => Column(
@@ -6127,7 +6127,7 @@ class _NestedSetupTour extends StatelessWidget {
           title: 'INNER FLOW',
           child: Navigator(
             transition: RouteTransition.none,
-            home: const _NestedFlowStepTour(step: 1),
+            home: const _SetupStep(step: 1),
           ),
         ),
       ),
@@ -6137,8 +6137,8 @@ class _NestedSetupTour extends StatelessWidget {
   );
 }
 
-class _NestedFlowStepTour extends StatelessWidget {
-  const _NestedFlowStepTour({required this.step});
+class _SetupStep extends StatelessWidget {
+  const _SetupStep({required this.step});
 
   final int step;
 
@@ -6159,15 +6159,14 @@ class _NestedFlowStepTour extends StatelessWidget {
           Button(
             text: 'Next step',
             autofocus: true,
-            onPressed: () =>
-                context.push<void>(_NestedFlowStepTour(step: step + 1)),
+            onPressed: () => context.push<void>(_SetupStep(step: step + 1)),
           )
         else
           Button(
             text: 'Finish setup',
             autofocus: true,
             onPressed: () => context.rootNavigator.pushReplacement<void>(
-              const _NestedProjectReadyTour(),
+              const _ProjectReady(),
             ),
           ),
         if (step > 1) Button(text: 'Previous', onPressed: context.pop),
@@ -6177,8 +6176,8 @@ class _NestedFlowStepTour extends StatelessWidget {
   );
 }
 
-class _NestedProjectReadyTour extends StatelessWidget {
-  const _NestedProjectReadyTour();
+class _ProjectReady extends StatelessWidget {
+  const _ProjectReady();
 
   @override
   Widget build(BuildContext context) => Column(
