@@ -3133,10 +3133,20 @@ class _ScopeLinkElement extends ComponentElement {
           final scope = element._findScopeElementByKey(key);
           if (scope != null) element._addScopeEdge(scope);
         }
-        ScopeElement._markDependencyChanged(element);
-        element.markNeedsBuild();
       }
+      // An optional lookup that found no provider has no dependency edge.
+      // It must still re-read after the logical owner moves under a provider.
+      ScopeElement._markDependencyChanged(element);
+      element.markNeedsBuild();
       element.visitChildren(rebind);
+      // Floating descendants are not physical children. Their owners can sit
+      // inside this entry, so carry the ancestry change across those links too.
+      final links = element._scopeLinks;
+      if (links != null) {
+        for (final callback in links.toList()) {
+          callback(true);
+        }
+      }
     }
 
     visitChildren(rebind);

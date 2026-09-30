@@ -1,5 +1,9 @@
 # Changelog
 
+- Keyed eager and lazy ListView rows retain semantic action targets across
+  reordering. Owned overlays re-read previously missing optional scopes and
+  propagate owner moves through nested floating content.
+
 - Programmatic/autofocus requests reveal through the shared scroll-ancestor
   plan after layout; pointer focus stays stable. Lazy rows use their own build
   contexts, and eager/lazy ListView reveal partially visible items correctly.
