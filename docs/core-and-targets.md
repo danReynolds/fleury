@@ -29,9 +29,9 @@ The platform-neutral libraries compile to JavaScript without native I/O:
   lockstep surface for matching Fleury builds, not part of the supported host
   SPI.
 
-Neither touches `dart:io` (nor, transitively, `dart:ffi`). That is what makes the
-browser targets possible at all — the same widget code that runs in a terminal
-can be compiled to JS and dropped into a page.
+None of these touches `dart:io` (nor, transitively, `dart:ffi`). That is what
+makes the browser targets possible at all — the same widget code that runs in a
+terminal can be compiled to JS and dropped into a page.
 
 ## Targets
 
@@ -53,17 +53,18 @@ browser client. Both paint into the same retained DOM; see
 [Serving and embedding](serving-and-embedding.md) for when to choose each.
 
 The targets share frame production and derive output from the changed cells.
-Parity tests compare their output for covered fixtures, including scrolling and
-overlays. Host-specific behavior such as terminal capabilities and browser focus
-still needs testing on the supported platforms.
+Parity tests check the browser DOM against the core cell buffer through scroll
+and overlay sequences, and an equivalence test checks that the terminal's ANSI
+output reproduces the buffer. Host-specific behavior such as terminal
+capabilities and browser focus still needs testing on the supported platforms.
 
 ## The web-safety boundary
 
 The native runtime — `runApp`, the terminal drivers, stdout/stderr **log
 capture**, the external editor, and **file I/O** — lives
-*above* the host SPI and pulls in `dart:io` (and, via the Windows driver,
-`dart:ffi`). It is exported from the `fleury.dart` umbrella, **not** from
-`fleury_host.dart`.
+*above* the host SPI and pulls in `dart:io` (and, through the POSIX and Windows
+drivers and the `stdio` package that captures output, `dart:ffi`). It is
+exported from the `fleury.dart` umbrella, **not** from `fleury_host.dart`.
 
 That gives a simple rule for any code that might run in the browser:
 
@@ -96,22 +97,27 @@ That gives a simple rule for any code that might run in the browser:
 
 ## Package map
 
-Keyed by the import you write. The first four are libraries of the one `fleury`
-package; `fleury_widgets` and `fleury_web` are separate packages.
+Keyed by the import you write. The first five are libraries of the one `fleury`
+package; the rest are separate packages.
 
 | Import | What it adds | Web-safe? |
 |--------|--------------|-----------|
 | `fleury/fleury_core.dart` | framework primitives and the cell model | ✅ |
 | `fleury/fleury_host.dart` | the above, plus the host SPI a target plugs into | ✅ |
+| `fleury/fleury_host_io.dart` | the host SPI plus the supported contracts a native process host uses to spawn and supervise a Fleury app (`spawnFleuryApp`) | ❌ — pulls in `dart:io` |
 | `fleury/fleury_wire.dart` | explicitly unstable remote frames/codecs/transports for matching first-party peers | ✅ |
 | `fleury/fleury.dart` | core + stable host SPI + the native runtime: `runApp`, terminal drivers, file/process/log | ❌ — pulls in `dart:io` |
 | `fleury_widgets` | the widget library | ✅ via `fleury_widgets_web.dart`; only `LocalFileSource` is native-only |
+| `fleury_themes` | ready-made themes (Nord, Dracula, Tokyo Night, …) as `const ThemeData` values | ✅ |
 | `fleury_web` | the web/DOM target and the served browser client | ✅ — compiled with dart2js |
+| `fleury_test` | `testWidgets`, the headless `FleuryTester`, semantic matchers, and golden files | ❌ — a dev dependency for VM tests; goldens use `dart:io` |
+| `fleury_mcp` | the `fleury_mcp` MCP server executable and its library (`FleuryAppBridge`, `McpServer`) | ❌ — a native process that spawns your app |
 
 ## Why this matters
 
 Because the core is target-agnostic and `dart:io`-free, one app definition gets
 you a real terminal app, a browser app compiled with dart2js, and a remotely
-served session, with a shared rendering pipeline and regression tests comparing
-their output. Next: [Serving and embedding](serving-and-embedding.md) covers the two
+served session, with a shared rendering pipeline and tests that check the
+terminal and browser output against the core cell buffer. Next:
+[Serving and embedding](serving-and-embedding.md) covers the two
 browser paths in detail.
