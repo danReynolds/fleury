@@ -3,6 +3,7 @@
 
 import '../foundation/change_notifier.dart';
 import '../foundation/geometry.dart';
+import '../foundation/key.dart';
 import '../rendering/cell_buffer.dart';
 import '../rendering/cell.dart';
 import '../rendering/layout.dart';
@@ -1135,8 +1136,17 @@ class _ListViewState extends State<ListView> {
     child: item,
   );
 
-  Widget _maybeBoundary(Widget item) =>
-      widget.addRepaintBoundaries ? RepaintBoundary(child: item) : item;
+  Widget _maybeBoundary(Widget item, {Key? key}) => widget.addRepaintBoundaries
+      ? RepaintBoundary(key: key, child: item)
+      : item;
+
+  // A local child key must identify the outer row too: framework wrappers
+  // must not turn keyed rows into positional siblings. GlobalKeys remain on
+  // their app-owned widget, where the framework registers them exactly once.
+  Key? _eagerItemKey(int index) {
+    final key = widget.children![index].key;
+    return key is LocalKey ? key : null;
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -1178,6 +1188,7 @@ class _ListViewState extends State<ListView> {
           for (var i = 0; i < widget.children!.length; i++)
             _maybeBoundary(
               GestureDetector(
+                key: _eagerItemKey(i),
                 onTapDown: (_) => _handleItemDown(i),
                 onTap: () => _handleItemTap(i),
                 onTapCancel: () => _pressedItem = null,
@@ -1186,6 +1197,7 @@ class _ListViewState extends State<ListView> {
                   i == _controller.currentIndex,
                 ),
               ),
+              key: _eagerItemKey(i),
             ),
         ],
       );
@@ -1867,7 +1879,9 @@ class _LazyListElement extends RenderObjectElement {
     for (final entry in _mountedChildren.entries.toList()) {
       final i = entry.key;
       final oldEl = entry.value;
+      final itemKey = _itemKeyByElement[oldEl];
       final newWidget = _LazyListItem(
+        key: itemKey == null ? null : ValueKey(itemKey),
         builder: widget.itemBuilder,
         index: i,
         highlighted: i == widget.currentIndex,
@@ -1896,6 +1910,7 @@ class _LazyListElement extends RenderObjectElement {
     }
     final itemKey = itemKeyAt(index);
     final newWidget = _LazyListItem(
+      key: itemKey == null ? null : ValueKey(itemKey),
       builder: widget.itemBuilder,
       index: index,
       highlighted: index == widget.currentIndex,
@@ -2163,6 +2178,7 @@ class _RenderLazyListView extends RenderObject
 /// dependent of every scope a row reads.
 class _LazyListItem extends StatelessWidget {
   const _LazyListItem({
+    super.key,
     required this.builder,
     required this.index,
     required this.highlighted,

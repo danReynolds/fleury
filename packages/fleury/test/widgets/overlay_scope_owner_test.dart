@@ -140,4 +140,87 @@ void main() {
     expect(model.released, isTrue);
     expect(entry.entry, isNotNull);
   });
+
+  testWidgets('overlay optional scope follows absent to present owner move', (
+    tester,
+  ) {
+    final key = GlobalKey<_HostState>();
+    final model = _Model('new-model');
+    final host = _Host(key: key);
+    var right = false;
+    Widget app() => Row(
+      children: [
+        SizedBox(child: right ? const Text('left') : host),
+        Scope(model, child: right ? host : const Text('right')),
+      ],
+    );
+    tester.pumpWidget(app());
+    final reads = <String>[];
+    key.currentState!.show(_OptionalRead(reads));
+    tester.pump();
+    expect(reads.last, 'missing');
+    right = true;
+    tester.pumpWidget(app());
+    tester.pump();
+    expect(reads.last, 'new-model');
+    right = false;
+    tester.pumpWidget(app());
+    tester.pump();
+    expect(reads.last, 'missing');
+    reads.clear();
+    model.refresh();
+    tester.pump();
+    expect(reads, isEmpty);
+    right = true;
+    tester.pumpWidget(app());
+    tester.pump();
+    expect(reads.last, 'new-model');
+  });
+  testWidgets('nested overlay follows owner move', (tester) {
+    final key = GlobalKey<_HostState>();
+    final innerKey = GlobalKey<_HostState>();
+    final a = _Model('a');
+    final b = _Model('b');
+    final host = _Host(key: key);
+    var right = false;
+    Widget app() => Row(
+      children: [
+        Scope(a, child: right ? const Text('left') : host),
+        Scope(b, child: right ? host : const Text('right')),
+      ],
+    );
+    tester.pumpWidget(app());
+    key.currentState!.show(_Host(key: innerKey));
+    tester.pump();
+    final reads = <String>[];
+    innerKey.currentState!.show(_OptionalRead(reads));
+    tester.pump();
+    expect(reads.last, 'a');
+    right = true;
+    tester.pumpWidget(app());
+    tester.pump();
+    expect(reads.last, 'b');
+    reads.clear();
+    a.refresh();
+    tester.pump();
+    expect(reads, isEmpty, reason: 'nested overlay detached the old scope');
+    b.value = 'updated';
+    b.refresh();
+    tester.pump();
+    expect(reads.last, 'updated');
+    tester.pumpWidget(const Text('gone'));
+    tester.pump();
+    expect(innerKey.currentState, isNull);
+  });
+}
+
+class _OptionalRead extends StatelessWidget {
+  const _OptionalRead(this.reads);
+  final List<String> reads;
+  @override
+  Widget build(BuildContext context) {
+    final value = context.scope<_Model?>()?.value ?? 'missing';
+    reads.add(value);
+    return Text(value);
+  }
 }

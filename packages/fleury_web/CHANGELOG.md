@@ -4,6 +4,9 @@
 
 Initial public release.
 
+- Runtime error banners mount above already-open panels only while an error
+  is visible; healthy and dismissed states leave root repaint caches idle.
+
 - Numeric sliders expose their current value and bounds to browser
   accessibility, including custom resize handles.
 
