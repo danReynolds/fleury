@@ -267,10 +267,12 @@ img.site-logo {
   max-width: 100%;
   overflow-x: auto;
 }
-/* Stack to a single column when there isn't room for two — demo first. */
+/* Stack to a single column when there isn't room for two — demo first. The
+   track's minimum is 0, not the content's: a wide parameter table scrolls
+   inside its own box instead of widening the page on a phone. */
 @media (max-width: 72rem) {
   .widget-ref {
-    grid-template-columns: 1fr;
+    grid-template-columns: minmax(0, 1fr);
   }
   .widget-ref-aside {
     position: static;
@@ -661,7 +663,10 @@ img.site-logo {
   gap: 0.3rem;
   font-size: 0.9rem;
 }
+/* A long source file name wraps inside the rail instead of running past it. */
 .showcase-meta-link code {
+  min-width: 0;
+  overflow-wrap: anywhere;
   font-size: 0.82rem;
 }
 .showcase-meta-hint {
