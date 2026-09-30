@@ -18,52 +18,45 @@ const _webLibraries = {
 };
 
 void main() {
-  test(
-    'fleury_widgets.dart is transitively free of dart:io and dart:ffi',
-    () {
-      final packages = _packageLibDirs();
-      final offenders = <String>[];
-      final visited = <String>{};
+  test('fleury_widgets.dart is transitively free of dart:io and dart:ffi', () {
+    final packages = _packageLibDirs();
+    final offenders = <String>[];
+    final visited = <String>{};
 
-      void visit(String path, String from) {
-        final normalized = File(path).absolute.uri.normalizePath().toFilePath();
-        if (!visited.add(normalized)) return;
-        final file = File(normalized);
-        expect(
-          file.existsSync(),
-          isTrue,
-          reason: 'missing $normalized ($from)',
-        );
-        for (final uri in _webResolvedDirectives(file.readAsStringSync())) {
-          if (uri == 'dart:io' || uri == 'dart:ffi') {
-            offenders.add('$normalized → $uri');
-          } else if (uri.startsWith('package:')) {
-            final name = uri.substring(8, uri.indexOf('/'));
-            // Only first-party sources can hide dart:io; the external
-            // dependencies (characters, image, meta) are pure Dart.
-            if (name != 'fleury' && name != 'fleury_widgets') continue;
-            visit(
-              '${packages[name]}/${uri.substring(uri.indexOf('/') + 1)}',
-              normalized,
-            );
-          } else if (!uri.startsWith('dart:')) {
-            visit('${File(normalized).parent.path}/$uri', normalized);
-          }
+    void visit(String path, String from) {
+      final normalized = File(path).absolute.uri.normalizePath().toFilePath();
+      if (!visited.add(normalized)) return;
+      final file = File(normalized);
+      expect(file.existsSync(), isTrue, reason: 'missing $normalized ($from)');
+      for (final uri in _webResolvedDirectives(file.readAsStringSync())) {
+        if (uri == 'dart:io' || uri == 'dart:ffi') {
+          offenders.add('$normalized → $uri');
+        } else if (uri.startsWith('package:')) {
+          final name = uri.substring(8, uri.indexOf('/'));
+          // Only first-party sources can hide dart:io; the external
+          // dependencies (characters, image, meta) are pure Dart.
+          if (name != 'fleury' && name != 'fleury_widgets') continue;
+          visit(
+            '${packages[name]}/${uri.substring(uri.indexOf('/') + 1)}',
+            normalized,
+          );
+        } else if (!uri.startsWith('dart:')) {
+          visit('${File(normalized).parent.path}/$uri', normalized);
         }
       }
+    }
 
-      visit('lib/fleury_widgets.dart', 'the web barrel');
-      expect(
-        offenders,
-        isEmpty,
-        reason:
-            'The web barrel must not reach dart:io or dart:ffi. Take the '
-            'platform service as a parameter (as FileBrowser takes a '
-            'FileSource) and keep the dart:io implementation behind a '
-            'conditional import or the native barrel.',
-      );
-    },
-  );
+    visit('lib/fleury_widgets.dart', 'the web barrel');
+    expect(
+      offenders,
+      isEmpty,
+      reason:
+          'The web barrel must not reach dart:io or dart:ffi. Take the '
+          'platform service as a parameter (as FileBrowser takes a '
+          'FileSource) and keep the dart:io implementation behind a '
+          'conditional import or the native barrel.',
+    );
+  });
 }
 
 /// The URI each import/export directive resolves to in a browser build.
