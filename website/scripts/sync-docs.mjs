@@ -1,7 +1,9 @@
 // Syncs canonical architecture docs from the repo's `docs/` folder into the
 // Starlight content collection. The docs stay plain Markdown in `docs/` (where
 // repo contributors find them); this step derives Starlight frontmatter from
-// the H1, strips that H1, and rewrites inter-doc links to site routes.
+// the H1, strips that H1, and rewrites inter-doc links to site routes. The
+// synced pages are gitignored, so each page's "Edit page" link opens its source
+// in `docs/`.
 //
 // A doc may embed a LIVE example with an HTML-comment placeholder (invisible on
 // GitHub):
@@ -17,6 +19,7 @@ const DOCS_SRC = join(here, '..', '..', 'docs');
 const OUT_DIR = join(here, '..', 'src', 'content', 'docs', 'architecture');
 const COMPONENT = '../../../components/FleuryExample.astro';
 const GITHUB = 'https://github.com/danReynolds/fleury/blob/main/docs';
+const EDIT = 'https://github.com/danReynolds/fleury/edit/main/docs';
 
 const ROUTES = {
   'architecture-overview.md': '/fleury/architecture/overview/',
@@ -111,6 +114,7 @@ for (const doc of DOCS) {
     `---\n` +
     `title: ${JSON.stringify(title)}\n` +
     `description: ${JSON.stringify(doc.description)}\n` +
+    `editUrl: ${JSON.stringify(`${EDIT}/${doc.src}`)}\n` +
     `---\n\n` +
     (hasExample ? `import FleuryExample from '${COMPONENT}';\n\n` : '');
 

@@ -16,6 +16,8 @@ const widgetGroups = existsSync(widgetSidebarFile)
   ? JSON.parse(readFileSync(widgetSidebarFile, 'utf8'))
   : null;
 
+const repo = 'https://github.com/danReynolds/fleury';
+
 const site = 'https://danreynolds.github.io';
 const base = '/fleury';
 const asset = (path) => `${base}/${path}`;
@@ -38,6 +40,11 @@ export default defineConfig({
         src: './src/assets/fleury-icon.png',
         alt: 'Fleury',
       },
+      social: [{ icon: 'github', label: 'GitHub', href: repo }],
+      // "Edit page" opens the page's file under website/. A generated,
+      // gitignored page must set `editUrl` itself, to its real source or to
+      // false (synced architecture docs point at docs/; see sync-docs.mjs).
+      editLink: { baseUrl: `${repo}/edit/main/website/` },
       // Primary favicon is the scalable SVG; the rest (ICO fallback, PNG sizes,
       // apple-touch, PWA manifest, social card) are added via head below.
       // Starlight adds Astro's configured base path to this public asset.
