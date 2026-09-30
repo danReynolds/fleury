@@ -57,12 +57,12 @@ export default defineConfig({
       // gitignored page must set `editUrl` itself, to its real source or to
       // false (synced architecture docs point at docs/; see sync-docs.mjs).
       editLink: { baseUrl: `${repo}/edit/main/website/` },
-      // Primary favicon is the scalable SVG; the rest (ICO fallback, PNG sizes,
-      // apple-touch, PWA manifest, social card) are added via head below.
-      // Starlight adds Astro's configured base path to this public asset.
-      favicon: '/favicon.svg',
+      // The mark exists only as a raster, so the ICO (16, 32 and 48 px) is the
+      // primary favicon. PNG sizes, the apple-touch icon, the PWA manifest and
+      // the social card are added via head below. Starlight adds Astro's
+      // configured base path to this public asset.
+      favicon: '/favicon.ico',
       head: [
-        { tag: 'link', attrs: { rel: 'icon', href: asset('favicon.ico'), sizes: '32x32' } },
         { tag: 'link', attrs: { rel: 'icon', type: 'image/png', sizes: '32x32', href: asset('favicon-32.png') } },
         { tag: 'link', attrs: { rel: 'icon', type: 'image/png', sizes: '16x16', href: asset('favicon-16.png') } },
         { tag: 'link', attrs: { rel: 'apple-touch-icon', sizes: '180x180', href: asset('apple-touch-icon.png') } },
