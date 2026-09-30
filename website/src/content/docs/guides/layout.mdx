@@ -96,14 +96,18 @@ Use `Container` when size, margin, padding, background, border, and alignment
 belong to one visual region:
 
 ```dart
-Container(
+Container.filled(
   width: 28,
   padding: const EdgeInsets.all(1),
-  color: Theme.of(context).colorScheme.surface,
   border: const BoxBorder(style: BorderStyle.rounded),
   child: const Text('Build complete'),
 )
 ```
+
+`Container.filled` paints the theme's surface color behind its content. The
+plain `Container` constructor paints no background unless you pass `color`, so
+it can sit on a region that is already styled. `Container.framed` fills like
+`Container.filled` and also draws the theme's border.
 
 Container width and height are outer dimensions, including the border. A
 28-cell bordered container has 26 interior columns before padding.
@@ -159,8 +163,10 @@ Wrap(
 ```
 
 `Stack` paints children at one origin, with later children above earlier ones.
-Use `Positioned` for a fixed offset, and `IndexedStack` when one child is visible
-but inactive children must remain mounted—for example, stateful tab bodies.
+Use `Positioned` to place a child at a fixed `left` and `top` offset from the
+stack's top-left corner, optionally with a fixed `width` or `height`. Use
+`IndexedStack` when one child is visible but inactive children must remain
+mounted—for example, stateful tab bodies.
 
 ### Aspect ratio and cell shape
 
@@ -194,7 +200,7 @@ layout, bound the child, or make the content scroll.
 
 - [Lists & scrolling](/fleury/guides/lists-and-scrolling/) shows how to give
   long content a bounded viewport.
-- [Widgets & state](/fleury/concepts/widgets-and-state/) explains how layout
-  widgets participate in the widget tree and rebuild lifecycle.
+- [Widgets & state](/fleury/concepts/widgets-and-state/) covers stateless and
+  stateful widgets, the `State` lifecycle, keys, and `BuildContext`.
 - Browse the [widget reference](/fleury/widgets/) for the details of
   individual widgets.
