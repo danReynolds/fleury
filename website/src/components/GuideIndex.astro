@@ -22,6 +22,10 @@ if (ungrouped.length) {
       {group.items.map((item) => {
         const entry = bySlug.get(item.slug);
         if (!entry) throw new Error(`Guide listed in src/guides.mjs is missing: ${item.slug}`);
+        // The sidebar shows the label; this card shows the page's title.
+        if (item.label !== entry.data.title) {
+          throw new Error(`src/guides.mjs labels ${item.slug} "${item.label}", but its title is "${entry.data.title}". Make them match.`);
+        }
         return (
           <LinkCard
             title={entry.data.title}

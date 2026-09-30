@@ -1,6 +1,23 @@
 import { Preview } from '../../preview.mjs';
 import { SourceProject } from './source-project.mjs';
 
+// The hosted compiler is small, shared, and has no per-reader limit, so a busy
+// or unreachable compiler is a passing state, not a problem with anyone's code.
+export const PAD_BUSY = 'The Pad is busy. Try again in a moment.';
+
+// The error for a failed compiler request. `status` is null when no response
+// arrived: the network failed, the request timed out, or an overloaded service
+// answered without CORS headers. Those, 429 and 503 mean the compiler is
+// `unavailable` for now. Other failures keep the compiler's message (plain text
+// for DDC's compile errors) and the issues it found.
+export function compilerFailure(status, result = {}, { online = true } = {}) {
+  if (status === null || status === 429 || status === 503) {
+    const message = status === null && !online ? 'You are offline. Your code is saved in this browser.' : PAD_BUSY;
+    return Object.assign(new Error(message), { code: 'unavailable' });
+  }
+  return Object.assign(new Error(result.error || `The compiler returned HTTP ${status}. Try Run again.`), { code: result.code, issues: result.issues });
+}
+
 // Shared by the docs workspace and the standalone compiler host.
 export function mountPad(root, { monaco, sample, createWorker, compilerUrl = '', frameUrl = '/frame.html', autoRunSample = false, onRun = () => {}, project = null, draftKey = 'fleury-pad-dartpad-source', onView = () => {}, onPreviewStart = () => {}, onReset = () => {}, deferLanguageServices = false, editorOptions = {} }) {
   compilerUrl = compilerUrl.replace(/\/$/, '');
@@ -12,14 +29,27 @@ export function mountPad(root, { monaco, sample, createWorker, compilerUrl = '',
   let languageServicesActive = !deferLanguageServices;
   // Loading the editor and restoring a draft never depend on a live compiler.
   let buildPromise;
+  // Allow Cloud Run's 60-second request window, including a cold start.
+  // Accepted compiler work still has a separate 25-second process deadline.
+  async function request(path, init = {}) {
+    try {
+      const response = await fetch(`${compilerUrl}${path}`, { ...init, signal: AbortSignal.any([lifetime.signal, AbortSignal.timeout(65000)]) });
+      return { response, body: await response.text() };
+    } catch (error) {
+      if (lifetime.signal.aborted) throw error;
+      throw compilerFailure(null, {}, { online: navigator.onLine !== false });
+    }
+  }
   function compilerBuild() {
     return buildPromise ??= (async () => {
       if (!compilerUrl) throw new Error('The compiler is not connected. Your code is saved in this browser.');
-      const response = await fetch(`${compilerUrl}/api/build`, { signal: AbortSignal.any([lifetime.signal, AbortSignal.timeout(65000)]) });
+      const { response, body } = await request('/api/build');
+      if (response.status === 429 || response.status === 503) throw compilerFailure(response.status);
       if (!response.ok) throw new Error('Could not connect to the compiler. Try Run again.');
-      const build = await response.json();
+      let build;
+      try { build = JSON.parse(body); } catch {}
+      if (typeof build?.buildId !== 'string') throw new Error('Invalid compiler response. Try Run again.');
       if (project && !(build.protocolVersion >= 3)) throw new Error('This compiler needs an update to run guide projects. Your edits are saved in this browser.');
-      if (typeof build.buildId !== 'string') throw new Error('Invalid compiler response. Try Run again.');
       return build;
     })().catch(error => { buildPromise = null; throw error; });
   }
@@ -94,17 +124,12 @@ export function mountPad(root, { monaco, sample, createWorker, compilerUrl = '',
   }
   async function api(method, payload) {
     const build = await compilerBuild();
-    // Allow Cloud Run's 60-second request window, including a cold start.
-    // Accepted compiler work still has a separate 25-second process deadline.
-    const response = await fetch(`${compilerUrl}/api/v3/${method}`, { method: 'POST', headers: {
+    const { response, body } = await request(`/api/v3/${method}`, { method: 'POST', headers: {
       'Content-Type': 'application/json', 'X-Fleury-Build': build.buildId,
-    }, body: JSON.stringify(payload), signal: AbortSignal.any([lifetime.signal, AbortSignal.timeout(65000)]) });
-    const body = await response.text();
+    }, body: JSON.stringify(payload) });
     let result;
     try { result = JSON.parse(body); } catch { result = { error: body }; }
-    if (!response.ok || result.error) {
-      throw Object.assign(new Error(result.error || `DartPad returned ${response.status}`), { code: result.code, issues: result.issues });
-    }
+    if (!response.ok || result.error) throw compilerFailure(response.status, result);
     return { ...result, elapsed: response.headers.get('x-compile-ms') };
   }
   function rangeAt(offset, length, target = model) {
@@ -170,9 +195,13 @@ export function mountPad(root, { monaco, sample, createWorker, compilerUrl = '',
       }
     } catch (error) {
       if (disposed) return;
-      diagnostic(error.message);
+      // Analysis runs again after the next edit, so an unavailable compiler
+      // only delays it; report other failures.
+      if (error.code !== 'unavailable') diagnostic(error.message);
       if ($('status').textContent === 'Editor ready. Starting Dart tools…') {
-        $('status').textContent = 'Editor ready. Could not connect to Dart tools. Try Run again.';
+        $('status').textContent = error.code === 'unavailable'
+          ? 'Editor ready. Dart tools will start after your next edit.'
+          : 'Editor ready. Could not connect to Dart tools. Try Run again.';
       }
     }
   }
@@ -239,8 +268,10 @@ export function mountPad(root, { monaco, sample, createWorker, compilerUrl = '',
       if (applying || error.code === 'checkpoint_rejected') {
         checkpoint = null;
         $('status').textContent = 'App update failed. Restart to run the current source.';
+      } else if (checkpoint) {
+        $('status').textContent = error.code === 'unavailable' ? 'Not compiled. Your running app is unchanged.' : 'Compilation failed. Your running app is unchanged.';
       } else {
-        $('status').textContent = checkpoint ? 'Compilation failed. Your running app is unchanged.' : 'Could not compile. Fix the error or try Run again.';
+        $('status').textContent = error.code === 'unavailable' ? 'Not compiled. Try Run again in a moment.' : 'Could not compile. Fix the error or try Run again.';
       }
     } finally {
       busy = false; controls();
@@ -268,10 +299,12 @@ export function mountPad(root, { monaco, sample, createWorker, compilerUrl = '',
     if (hadApp) onReset();
     controls();
   }
-  $('status').textContent = deferLanguageServices ? '' : 'Editor ready. Starting Dart tools…';
-  controls();
   // Only the known starter runs on arrival. Restored custom drafts still wait
   // for Run, and first compilation takes priority over background analysis.
+  const restored = !workspace && model.getValue() !== sample;
+  $('status').textContent = deferLanguageServices ? ''
+    : restored ? 'Your earlier edit is restored. Press Run to see it.' : 'Editor ready. Starting Dart tools…';
+  controls();
   if (autoRunSample && model.getValue() === sample) {
     void compile('run').finally(() => { if (!disposed) void analyze(); });
   } else if (languageServicesActive) {

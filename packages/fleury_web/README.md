@@ -102,9 +102,11 @@ APIs. Keep those imports in native entry points.
 
 - **Embed with `mountApp`** when the Fleury widget tree runs in the browser.
   The application and retained DOM host compile together to JavaScript.
-- **Serve a native process** when the application needs native Dart libraries
-  or server-side resources. A browser client receives frames and sends input
-  over the remote host protocol.
+- **Preview a native process with `fleury serve`** when the application needs
+  native Dart libraries or the local machine. A browser client receives frames
+  and sends input over the remote host protocol. `serve` is a development
+  preview, not a hardened public hosting layer; see
+  [the deployment guide](https://danreynolds.github.io/fleury/guides/deployment/#preview-a-native-app-with-serve).
 
 Both paths share Fleury's core widget, layout, painting, input, and semantics
 contracts. The

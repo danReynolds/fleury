@@ -12,6 +12,11 @@ and rejects detectable slot-identity changes. Semantically identical unkeyed
 replacements still require distinct keys or stable semantic ids. These are the
 same accessible semantics Fleury exposes to the browser and testing API.
 
+The [Driving with an agent](https://danreynolds.github.io/fleury/guides/driving-with-agents/)
+guide walks through setup with a live example. `fleury_mcp` runs on macOS and
+Linux: it reaches the app over a Unix-domain socket, which Dart supports only on
+those platforms (and Android).
+
 ```
 ┌─────────────┐   JSON-RPC / stdio   ┌────────────┐   semantic wire   ┌──────────┐
 │  MCP host   │ ◀─────────────────▶  │ fleury_mcp │ ◀──────────────▶  │ your app │
@@ -148,6 +153,9 @@ dart compile exe bin/run_app.dart -o my_app
 claude mcp add my-app -- fleury_mcp -- ./my_app
 ```
 
+An AOT executable has Fleury's debug tooling off, so the `read_*` tools below
+report `available:false` unless the app turns it on.
+
 ### Drive it by hand (for debugging)
 
 `fleury_mcp` speaks newline-delimited JSON-RPC on stdio. Current MCP requests
@@ -216,10 +224,13 @@ read. Results come back both as text JSON (the model-facing channel) and as MCP
 > The three `read_*` tools are the agent side of Fleury's debug shell (the same
 > frame stats, captured logs, and error history a developer sees under F12) —
 > so an agent driving the app can *read its devtools while it works*, not just
-> the UI. They need the app to have debug tooling enabled (the default in
-> development runs; release builds default off), and return `available:false`
-> otherwise. Debug results carry an `untrustedContent` marker: app logs, errors,
-> identifiers, and record fields are data, never model instructions.
+> the UI. They need the app's debug tooling, which is on when the app runs from
+> a `.dart` source file or with assertions enabled, and off in AOT executables,
+> snapshots (such as `dart pub global activate` installs), and dart2js bundles.
+> An app can force it on with `runApp(app, debug: const DebugConfig(enabled:
+> true))`. Without it, these tools return `available:false`. Debug results
+> carry an `untrustedContent` marker: app logs, errors, identifiers, and record
+> fields are data, never model instructions.
 
 ### Options
 
