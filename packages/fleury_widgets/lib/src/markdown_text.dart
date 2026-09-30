@@ -749,9 +749,13 @@ String exportMarkdownSelection(
 }
 
 /// A Markdown document viewer with a block cursor: content renders styled
-/// (headings tinted, inline bold/italic/code, blockquotes, fences) while
-/// arrow keys move a selection block by block. Ctrl+C copies the selected
-/// block's Markdown source — or the whole document.
+/// (headings tinted, inline bold/italic/code, blockquotes, fences), and one
+/// block (a line of the source) is selected at a time.
+///
+/// Up and Down move the selection a block at a time; PageUp, PageDown, Home,
+/// and End jump; clicking a block selects it. Ctrl+C copies the selected
+/// block's Markdown source, or the whole document when [copyOptions] sets
+/// [MarkdownViewCopyMode.document].
 class MarkdownView extends StatefulWidget {
   const MarkdownView({
     super.key,
@@ -815,13 +819,17 @@ class MarkdownView extends StatefulWidget {
   /// Base text style merged into rendered Markdown spans.
   final CellStyle? baseStyle;
 
-  /// Maximum displayed line length.
+  /// Cuts each block's text, inline Markdown markers included, to this many
+  /// characters before styling, ending it with `…`; null never cuts. Copying
+  /// still copies the full source. [MarkdownView.document] shows the document
+  /// as it was parsed and ignores this.
   final int? maxLineLength;
 
   /// Number of spaces used when expanding tabs.
   final int tabSize;
 
-  /// Whether Ctrl+C and semantic copy export the selected block/document.
+  /// Whether Ctrl+C (and the semantic copy action) copies the selected block,
+  /// or the document if [copyOptions] says so.
   final bool copySelection;
 
   /// Clipboard/export options for copied Markdown text.

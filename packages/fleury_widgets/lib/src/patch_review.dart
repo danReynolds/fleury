@@ -238,8 +238,13 @@ String exportPatchReviewFile(
 
 /// A file-by-file review of a patch: a file list with per-file review status
 /// and +added/-removed counts above an embedded [DiffView] of the change.
-/// Activating a file jumps the diff to it, and the default constructor
-/// builds everything — file rows included — from one unified-diff string.
+///
+/// In the file list, Up and Down move the selected file; PageUp, PageDown,
+/// Home, and End jump. Enter or a click activates an enabled file: the diff
+/// jumps to it and [onSelectFile] is called. Ctrl+C copies the selected
+/// file's summary. The diff below is a separate focus stop with [DiffView]'s
+/// keys. The default constructor builds everything, file rows included, from
+/// one unified-diff string.
 class PatchReview extends StatefulWidget {
   factory PatchReview({
     Key? key,
@@ -363,7 +368,8 @@ class PatchReview extends StatefulWidget {
   /// Whether to render the embedded diff below the file list.
   final bool showDiff;
 
-  /// Whether Ctrl+C and semantic copy export the selected file summary.
+  /// Whether Ctrl+C (and the semantic copy action) copies the selected
+  /// file's summary.
   final bool copySelection;
 
   /// Clipboard/export options for the file list.
@@ -372,7 +378,8 @@ class PatchReview extends StatefulWidget {
   /// Clipboard/export options for the embedded diff view.
   final DiffViewCopyOptions diffCopyOptions;
 
-  /// Called when a file row is selected or activated.
+  /// Called when the user activates an enabled file with Enter or a click,
+  /// after the diff jumps to it. Moving the selection doesn't call it.
   final void Function(PatchReviewFileSelectResult result)? onSelectFile;
 
   /// Called after copying a file summary.

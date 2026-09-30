@@ -214,8 +214,11 @@ String exportTraceTimelineEntry(
 
 /// A vertical timeline of workflow events — commands, processes, tool calls,
 /// and application events — drawn along a connecting rail (`╭ ├ ╰`) with a
-/// status marker, duration, and source on each row. Rows navigate with the
-/// keyboard and copy with Ctrl+C.
+/// status marker, duration, and source on each row.
+///
+/// Up and Down move the selected event; PageUp, PageDown, Home, and End jump.
+/// Enter or a click activates an enabled event and calls [onSelect]. Ctrl+C
+/// copies the selected event.
 class TraceTimeline extends StatefulWidget {
   const TraceTimeline({
     super.key,
@@ -252,13 +255,14 @@ class TraceTimeline extends StatefulWidget {
   /// time as well.
   final bool showTimestamp;
 
-  /// Whether Ctrl+C and semantic copy export the selected event.
+  /// Whether Ctrl+C (and the semantic copy action) copies the selected
+  /// event.
   final bool copySelection;
 
   /// Clipboard/export options for selected-event copy.
   final TraceTimelineCopyOptions copyOptions;
 
-  /// Called when an event is activated.
+  /// Called when the user activates an enabled event with Enter or a click.
   final void Function(TraceTimelineSelectResult result)? onSelect;
 
   /// Called after a copy attempt completes.

@@ -450,9 +450,11 @@ String exportDiffSelection(
 }
 
 /// A unified-diff viewer: additions, deletions, and hunk/file headers each
-/// styled, with the conventional old | new line-number gutter. The selection
-/// moves by row with the keyboard, and Ctrl+C copies the selected line — or
-/// its whole hunk, header included.
+/// styled, with an old | new line-number gutter.
+///
+/// Up and Down move the selected row; PageUp, PageDown, Home, and End jump;
+/// clicking a row selects it. Ctrl+C copies the selected row, or its whole
+/// hunk, header included, when [copyOptions] sets [DiffViewCopyMode.hunk].
 class DiffView extends StatefulWidget {
   DiffView({
     super.key,
@@ -504,14 +506,18 @@ class DiffView extends StatefulWidget {
   /// Semantic label (the accessibility name; not rendered) for the diff viewer.
   final String semanticLabel;
 
-  /// Maximum displayed line length.
+  /// Cuts each displayed row (not counting the line-number gutter) to this
+  /// many characters, ending it with `…`; null never cuts. Copying still
+  /// copies the whole row. [DiffView.document] shows the document as it was
+  /// parsed and ignores this.
   final int? maxLineLength;
 
-  /// Render an old | new line-number gutter (the universal unified-diff
-  /// convention — delta, GitHub, git pager). The data is tracked either way.
+  /// Whether to show the old | new line-number gutter. Each row's line
+  /// numbers are tracked either way ([DiffLine.oldLine], [DiffLine.newLine]).
   final bool showLineNumbers;
 
-  /// Whether Ctrl+C and semantic copy export the selected row/hunk.
+  /// Whether Ctrl+C (and the semantic copy action) copies the selected row,
+  /// or its hunk if [copyOptions] says so.
   final bool copySelection;
 
   /// Clipboard/export options for copied diff text.

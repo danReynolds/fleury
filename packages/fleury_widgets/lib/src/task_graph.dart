@@ -154,10 +154,13 @@ String exportTaskGraphNode(
 }
 
 /// A live view of a task plan: one row per task with a status marker (`[ ]`
-/// pending, `[>]` running, `[x]` done), its description, the tasks it waits
-/// on, and progress. Rows navigate with the keyboard, Ctrl+C copies the
-/// selected task, and selection stays on the same task id as nodes are
-/// rebuilt mid-run.
+/// pending, `[>]` running, `[x]` done, `[!]` failed), its description, the
+/// tasks it waits on, and progress.
+///
+/// Up and Down move the selected task; PageUp, PageDown, Home, and End jump;
+/// clicking a task selects it. Ctrl+C copies the selected task. When you pass
+/// a new [nodes] list mid-run, the selection stays on the task with the same
+/// id.
 class TaskGraph extends StatefulWidget {
   const TaskGraph({
     super.key,
@@ -186,7 +189,7 @@ class TaskGraph extends StatefulWidget {
   /// Semantic label (the accessibility name; not rendered) for the task graph.
   final String semanticLabel;
 
-  /// Whether Ctrl+C and semantic copy export the selected task.
+  /// Whether Ctrl+C (and the semantic copy action) copies the selected task.
   final bool copySelection;
 
   /// Clipboard/export options for selected-task copy.
