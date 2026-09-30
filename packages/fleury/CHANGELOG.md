@@ -2,6 +2,12 @@
 
 ## 0.1.0
 
+- **`FocusDetector` nests like CSS `:focus-within`.** Every detector around
+  the focused widget reports focus, not only the nearest one. A `Panel` now
+  accents while focus is inside a `LogRegion`, `DataTable`, or another widget
+  that watches focus itself; nested panels all accent; and a `Tooltip` around
+  such a widget shows.
+
 - **Debug tooling defaults on only for development runs.** A null
   `DebugConfig.enabled` (the default) enables the Ctrl+G debug shell, F12 logs,
   and the `read_frames`/`read_logs`/`read_errors` records when the Dart VM runs

@@ -2164,6 +2164,11 @@ class _ExcludeFocusMarkerElement extends ComponentElement {
 /// on mount if focus is already inside, so state that starts out `false` is
 /// always correct.
 ///
+/// Detectors nest like CSS `:focus-within`: focus inside an inner detector is
+/// inside every detector around it, so each of them reports it. Widgets that
+/// watch focus with their own detector, such as a list or a table, don't hide
+/// focus from a detector wrapped around them.
+///
 /// Use it for focus-reactive chrome: a tooltip that shows while its target is
 /// focused, an active-pane highlight, a section that styles itself when
 /// something inside has focus. To rebuild, call `setState` from the callback.
@@ -2214,13 +2219,18 @@ class _FocusDetectorState extends State<FocusDetector> {
     widget.onFocusChange(within);
   }
 
-  /// Walks up from the focused node's context; focus is within us when
-  /// our state is its nearest enclosing [FocusDetector] (so for nested
-  /// FocusDetectors the innermost one owns the focus).
+  /// Whether our element is an ancestor of the focused node's element.
+  ///
+  /// Every enclosing detector answers yes, not only the nearest, so nested
+  /// detectors all report focus inside them. The walk climbs only to our own
+  /// depth: no element at or above it can have us as an ancestor except us.
   bool _computeWithin() {
-    final ctx = _manager?.focusedNode?.context;
-    if (ctx == null) return false;
-    return identical(ctx.findAncestorStateOfType<_FocusDetectorState>(), this);
+    final self = context as Element;
+    var element = _manager?.focusedNode?._element;
+    while (element != null && element.depth > self.depth) {
+      element = element.elementParent;
+    }
+    return identical(element, self);
   }
 
   @override

@@ -16,11 +16,9 @@ import 'package:fleury/fleury_core.dart';
 /// active, both take the [ColorScheme.primary] accent, so the user can see
 /// where input goes. **Active-ness is detected, not declared** — the panel
 /// watches the focus tree ([FocusDetector]) and accents itself while focus is
-/// inside it. Nesting resolves innermost-first: an inner pane lights up
-/// without also lighting its ancestors, and widgets that watch focus the same
-/// way claim it too, so the panel doesn't accent while focus is inside a
-/// `LogRegion`, `DataTable`, `Table`, `TreeTable`, or similar widget
-/// within it.
+/// anywhere inside it, including inside a `LogRegion`, `DataTable`, or other
+/// focusable widget in its body. Nested panels all accent: focus in an inner
+/// pane lights that pane and every pane around it.
 ///
 /// Set [focused] only to override that: `true`/`false` pins the chrome
 /// regardless of where focus is, which is what a static showcase or a pane

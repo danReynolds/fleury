@@ -99,6 +99,104 @@ void main() {
     expect(buf.atColRow(2, 1).style.foreground, _accent, reason: 'title too');
   });
 
+  group('accents while focus is inside a widget that watches focus too', () {
+    // LogRegion and DataTable each wrap themselves in their own
+    // FocusDetector. Focus inside them is still inside the panel.
+    Object? cornerWith(FleuryTester tester, Widget child) {
+      tester.pumpWidget(
+        Theme(
+          data: _theme,
+          child: Panel(title: 'Pane', child: child),
+        ),
+      );
+      return tester
+          .render(size: const CellSize(24, 6))
+          .atColRow(0, 0)
+          .style
+          .foreground;
+    }
+
+    testWidgets('a LogRegion', (tester) {
+      expect(
+        cornerWith(
+          tester,
+          const LogRegion(
+            autofocus: true,
+            entries: [
+              LogEntry(
+                id: 'a',
+                severity: LogSeverity.info,
+                source: 'system',
+                message: 'booted',
+              ),
+            ],
+          ),
+        ),
+        _accent,
+      );
+    });
+
+    testWidgets('a DataTable', (tester) {
+      expect(
+        cornerWith(
+          tester,
+          DataTable(
+            autofocus: true,
+            rowCount: 2,
+            columns: const [
+              DataTableColumn(
+                id: 'run',
+                title: 'Run',
+                width: FixedColumnWidth(8),
+              ),
+            ],
+            cellBuilder: (row, column) => 'run-$row',
+          ),
+        ),
+        _accent,
+      );
+    });
+  });
+
+  testWidgets('nested panels both accent while focus is in the inner one', (
+    tester,
+  ) {
+    final body = FocusNode(debugLabel: 'body');
+    final elsewhere = FocusNode(debugLabel: 'elsewhere');
+    tester.pumpWidget(
+      Theme(
+        data: _theme,
+        child: Column(
+          children: [
+            Expanded(
+              child: Panel(
+                title: 'Outer',
+                child: Panel(
+                  title: 'Inner',
+                  child: Focus(focusNode: body, child: const Text('body')),
+                ),
+              ),
+            ),
+            Focus(focusNode: elsewhere, child: const Text('elsewhere')),
+          ],
+        ),
+      ),
+    );
+
+    body.requestFocus();
+    var buf = tester.render(size: const CellSize(20, 8));
+    expect(buf.atColRow(0, 0).style.foreground, _accent, reason: 'outer');
+    // The inner panel's corner: one border cell and one padding cell in, on
+    // the row under the outer title.
+    expect(buf.atColRow(2, 2).grapheme, '╭');
+    expect(buf.atColRow(2, 2).style.foreground, _accent, reason: 'inner');
+
+    elsewhere.requestFocus();
+    buf = tester.render(size: const CellSize(20, 8));
+    expect(buf.atColRow(0, 0).style.foreground, isNot(_accent));
+    expect(buf.atColRow(2, 2).style.foreground, isNot(_accent));
+  });
+
   testWidgets('an explicit focused pins the chrome against the focus tree', (
     tester,
   ) {
