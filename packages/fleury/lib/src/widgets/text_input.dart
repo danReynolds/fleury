@@ -10,10 +10,9 @@
 //   - RenderTextInput — paints the text plus a one-cell reverse
 //     cursor at the current selection position.
 //
-// What's intentionally not here yet:
-//   - Multi-line text (Enter inserts a newline + wraps); v0 is
-//     single-line and Enter calls onSubmit.
-//   - Command/submission history unless a TextHistoryController is supplied.
+// Deliberately single-line: Enter calls onSubmit. Multi-line editing lives in
+// TextArea (text_area.dart). Command/submission history is opt-in through a
+// TextHistoryController.
 
 import 'dart:async' show scheduleMicrotask, unawaited;
 
@@ -49,19 +48,21 @@ import 'pointer.dart';
 import 'theme.dart';
 import 'tui_binding.dart';
 
-/// How an editable text widget should treat copy/cut operations.
+/// How a [TextInput] or `TextArea` treats copy, cut, and the kill ring.
 ///
-/// Field-level copy/cut commands use this policy so keyboard behavior,
-/// semantics, inspectors, and future adapters agree on whether field content
-/// is safe to copy.
+/// Keyboard shortcuts and the semantic copy action follow the same policy.
 enum TextClipboardPolicy {
-  /// Plain text may be copied unchanged.
+  /// Copy and cut write the selected text unchanged, and kills (such as
+  /// Ctrl+K in the emacs keymaps) store it in the kill ring that all fields
+  /// share.
   allowed,
 
-  /// Copy/cut commands should be unavailable for this field.
+  /// Copy and cut do nothing, and kills don't store text in the kill ring.
   disabled,
 
-  /// Copy/cut commands should not expose the raw value.
+  /// Copy and cut write a masked copy of the selection (one masking character
+  /// per character, keeping line breaks) instead of the raw text, and kills
+  /// don't store text in the kill ring.
   redacted,
 }
 
@@ -573,11 +574,13 @@ class TextEditingController extends Notifier {
   /// Kill (cut to the shared kill ring) from the caret to the line end; if
   /// already at the line end, kill the newline. Recover with [yank].
   ///
-  /// [TextInput]/[TextArea] pass `captureToKillRing: false` for obscured or
-  /// redacted fields so the removed secret is deleted without entering the
-  /// process-wide, cross-field ring. A custom obscured editor driving this
-  /// controller directly captures by default — pass `false` yourself, keyed on
-  /// your own obscured/policy state, or the plaintext becomes Ctrl+Y-yankable.
+  /// [TextInput] and `TextArea` pass `captureToKillRing: false` unless the
+  /// field's clipboard policy is [TextClipboardPolicy.allowed] (an obscured
+  /// field defaults to redacted), so the removed secret is deleted without
+  /// entering the process-wide, cross-field ring. A custom obscured editor
+  /// driving this controller directly captures by default — pass `false`
+  /// yourself, keyed on your own obscured/policy state, or the plaintext
+  /// becomes Ctrl+Y-yankable.
   void killToLineEnd({bool captureToKillRing = true}) {
     _checkNotDisposed();
     // Cancelling composition is not a kill — do not cut the restored baseline
@@ -974,21 +977,43 @@ class TextEditingController extends Notifier {
   }
 }
 
-/// A single-line editable text widget.
+/// A single-line editable text field. Read or set its text through a
+/// [TextEditingController], or react to edits with [onChanged] and [onSubmit].
 ///
-/// The widget claims insertable input (printable ASCII / Unicode,
-/// arriving as [TextInputEvent]s from the parser) via
-/// [TextInputClaimant], so an ancestor `KeyBindings` doesn't see
-/// typed characters that should go into the text. Modifier chords
-/// like `Ctrl+S` arrive as [KeyEvent]s and still bubble normally.
+/// While focused, the field takes typed characters, so an enclosing
+/// `KeyBindings` never sees printable keys. Other keys the field doesn't use,
+/// such as `Ctrl+S`, pass on to enclosing widgets. With the default [keymap]
+/// ([TextEditingKeymap.defaultSingleLine]):
 ///
-/// Special chords handled directly:
-///   - Backspace, Delete, Arrow Left / Right, Home, End — edit the
-///     controller's selection / text.
-///   - Enter — fires [onSubmit] with the current text. Up to the
-///     caller to clear the controller or keep the typed value.
-///   - Escape — fires [onEscape], or bubbles if [onEscape] is null.
-///   - Tab and other unhandled special chords — bubble.
+/// - Left and Right move the caret. At either end of the text, an unmodified
+///   press passes on instead, so arrow-key focus traversal can move on.
+///   Ctrl+Left and Ctrl+Right (or Alt+Left and Alt+Right) move by word, and
+///   Home and End jump to the start and end. Add Shift to any of these to
+///   extend the selection.
+/// - Backspace and Delete delete a character; Ctrl+Backspace or Alt+Backspace
+///   deletes the word before the caret.
+/// - Ctrl+A selects all. Ctrl+C copies and Ctrl+X cuts the selection; with
+///   nothing selected they pass on, so an unhandled Ctrl+C still quits a
+///   terminal app.
+/// - Ctrl+Z undoes. The field consumes Ctrl+Z even with nothing to undo, so
+///   a terminal app doesn't suspend on it while the field has focus. Ctrl+Y
+///   redoes, as does Ctrl+Shift+Z where the terminal can report it.
+/// - Up and Down move through an open completion list (see
+///   [completionController]); without one, they step through
+///   [historyController]'s entries. Otherwise they pass on.
+/// - Tab accepts the selected completion; without an open completion list, it
+///   passes on.
+/// - Enter calls [onSubmit]. The field consumes Enter even when [onSubmit] is
+///   null.
+/// - Escape closes an open completion list; otherwise it calls [onEscape], or
+///   passes on when [onEscape] is null.
+///
+/// Where the terminal or browser reports the Super key (Cmd on macOS),
+/// Super+A, Super+C, Super+X, Super+Z, and Super+Shift+Z do the same as their
+/// Ctrl forms. [TextEditingKeymap.emacsSingleLine] adds readline keys and
+/// takes over Ctrl+A and Ctrl+Y: among others, Ctrl+A and Ctrl+E jump to the
+/// start and end; Ctrl+K, Ctrl+U, and Ctrl+W cut text into a kill ring shared
+/// by all fields; and Ctrl+Y pastes it back.
 ///
 /// Unless the controller opts into preserving text, input is canonicalized
 /// before it reaches the model: control bytes are replaced and escape sequences are
@@ -1043,11 +1068,13 @@ class TextInput extends StatefulWidget {
   /// Cursor-only moves and rejected edits do not call this callback.
   final void Function(String text)? onChanged;
 
-  /// Called with the current text when the user presses Enter.
+  /// Called with the current text when the user presses Enter. The field
+  /// consumes Enter even when this is null.
   final void Function(String text)? onSubmit;
 
-  /// Called when the user presses Escape. If null, Escape bubbles
-  /// up the focus chain normally.
+  /// Called when the user presses Escape while no completion list is open
+  /// (Escape closes an open one first). If null, Escape passes on to
+  /// enclosing widgets.
   final void Function()? onEscape;
 
   /// Hint text shown when the field is empty. Cleared as soon as the
@@ -1114,16 +1141,15 @@ class TextInput extends StatefulWidget {
   /// numeric bounds while keeping the core text editing role and actions.
   final SemanticState semanticState;
 
-  /// Policy copy/cut AND kill-ring capture use for this field.
+  /// How copy, cut, and the kill ring treat this field's text. Null (the
+  /// default) means [TextClipboardPolicy.redacted] when [obscureText] is true
+  /// and [TextClipboardPolicy.allowed] otherwise.
   ///
-  /// When null, obscured fields default to [TextClipboardPolicy.redacted] and
-  /// normal fields default to [TextClipboardPolicy.allowed]. An explicit value
-  /// overrides that default in both directions: setting
-  /// [TextClipboardPolicy.allowed] on an [obscureText] field deliberately opts
-  /// its plaintext into the system
-  /// clipboard (copy/cut) and the cross-field kill ring alike — kill is not
-  /// stricter than copy. Leave it null (or set
-  /// [TextClipboardPolicy.redacted]) to keep a password field's content out of
+  /// An explicit value applies whether or not the text is obscured: setting
+  /// [TextClipboardPolicy.allowed] on an [obscureText] field deliberately lets
+  /// its plain text reach both the clipboard (copy and cut) and the kill ring
+  /// that all fields share. Leave it null, or set
+  /// [TextClipboardPolicy.redacted], to keep a password field's content out of
   /// both.
   final TextClipboardPolicy? clipboardPolicy;
 
@@ -1133,21 +1159,23 @@ class TextInput extends StatefulWidget {
   /// other parent-owned navigation surfaces keep bubbling Up/Down by default.
   final TextHistoryController? historyController;
 
-  /// Whether pressing Enter should commit the submitted value to
-  /// [historyController] before [onSubmit] runs.
+  /// Whether Enter adds the submitted text to [historyController] before
+  /// calling [onSubmit]. Has no effect when [onSubmit] is null.
   final bool commitHistoryOnSubmit;
 
-  /// Optional completion state for this field.
+  /// Completion state for this field: while its list is open, Up and Down
+  /// move the selected option, Tab accepts it, and Escape closes the list.
   ///
-  /// Popup rendering and suggestion providers are layered separately. When a
-  /// controller is supplied, this field can navigate active completion options
-  /// with Up/Down and accept the selected option with Tab.
+  /// The field doesn't draw the list or produce suggestions; a widget such as
+  /// `CompletionTextInput` in `fleury_widgets` does that around it.
   final TextCompletionController? completionController;
 
   /// Called after a selected completion option is applied.
   final void Function(TextCompletionOption option)? onCompletionAccepted;
 
-  /// Keymap used to resolve non-text key events into editing actions.
+  /// Which keys trigger which editing actions. Defaults to
+  /// [TextEditingKeymap.defaultSingleLine]; [TextEditingKeymap.emacsSingleLine]
+  /// adds readline keys.
   final TextEditingKeymap keymap;
 
   /// Policy for chunking large bracketed paste payloads.
