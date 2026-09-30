@@ -1,5 +1,6 @@
 import 'package:fleury/fleury_core.dart';
 
+// Return your app from buildApp; Fleury Pad supplies main() and the browser host.
 Widget buildApp() => Theme(
   data: ThemeData.dark(),
   child: const FocusTraversalGroup(child: Counter()),

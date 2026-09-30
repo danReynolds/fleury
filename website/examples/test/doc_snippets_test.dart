@@ -282,13 +282,6 @@ void main() {
           'Add coffee',
           'In cart: 1',
         ),
-        (
-          'cart notifier builder',
-          state_management.cartNotifierDemoApp,
-          'Items: 0',
-          'Add item',
-          'Items: 1',
-        ),
       ]) {
     testWidgets('state management guide $name updates', (tester) async {
       tester.pumpWidget(build());
@@ -297,6 +290,22 @@ void main() {
       expect(tester.renderToString(emptyMark: ' '), contains(updated));
     });
   }
+
+  testWidgets('state management cart entrypoint shares both readers', (
+    tester,
+  ) async {
+    tester.pumpWidget(state_management.cartNotifierDemoApp());
+    expect('Items: 0'.allMatches(tester.renderToString()).length, 2);
+    await tester
+        .target(type: state_management.CartView)
+        .button('Add item')
+        .press();
+    await tester
+        .target(type: state_management.CartContextView)
+        .button('Add item')
+        .press();
+    expect('Items: 2'.allMatches(tester.renderToString()).length, 2);
+  });
 
   testWidgets('loading data guide snapshot explorer starts in waiting', (
     tester,

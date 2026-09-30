@@ -9,14 +9,14 @@ browser-safe.
 
 The short version: Fleury has a platform-neutral core that turns your widget
 tree into a `CellBuffer` — an abstract grid of styled cells — and a set of
-**targets** that paint that buffer somewhere real. Everything above the seam (the
-**host SPI**) is identical no matter where the app ends up; the target is the only
-part that knows about ANSI bytes, DOM nodes, or sockets.
+**targets** that paint that buffer somewhere real. The shared framework sits
+behind the **host SPI**; hosts supply platform input and presentation services.
+Core includes pure ANSI encoding, while targets own writing bytes, updating DOM
+nodes, and opening sockets.
 
 ## The core is `dart:io`-free
 
-The core never mentions a terminal. The platform-neutral libraries compile to
-JavaScript:
+The platform-neutral libraries compile to JavaScript without native I/O:
 
 - **`package:fleury/fleury_core.dart`** — the framework primitives: widgets,
   elements, render objects, the cell model, theme, borders, edge insets.
@@ -52,9 +52,10 @@ processes, anything `dart:io`) and streams only the changed cells to a thin
 browser client. Both paint into the same retained DOM; see
 [Serving and embedding](serving-and-embedding.md) for when to choose each.
 
-Whichever target you use, it applies the same *damage* — the set of changed cells
-— that the terminal would, and a parity oracle asserts both surfaces render the
-same tree, so they can't silently diverge.
+The targets share frame production and derive output from the changed cells.
+Parity tests compare their output for covered fixtures, including scrolling and
+overlays. Host-specific behavior such as terminal capabilities and browser focus
+still needs testing on the supported platforms.
 
 ## The web-safety boundary
 
@@ -111,6 +112,6 @@ package; `fleury_widgets` and `fleury_web` are separate packages.
 
 Because the core is target-agnostic and `dart:io`-free, one app definition gets
 you a real terminal app, a browser app compiled with dart2js, and a remotely
-served session — with no second implementation, and a parity oracle keeping them
-honest. Next: [Serving and embedding](serving-and-embedding.md) covers the two
+served session, with a shared rendering pipeline and regression tests comparing
+their output. Next: [Serving and embedding](serving-and-embedding.md) covers the two
 browser paths in detail.

@@ -7,5 +7,9 @@ import 'package:fleury/fleury.dart';
 import 'package:fleury_doc_examples/flutter_map.dart';
 
 // #docregion counter
-void main() => runApp(const FleuryApp(title: 'Counter', home: Counter()));
+void main(List<String> args) => runApp(
+  const FleuryApp(title: 'Counter', home: Counter()),
+  args: args,
+  mode: const TerminalMode(mouse: true),
+);
 // #enddocregion counter

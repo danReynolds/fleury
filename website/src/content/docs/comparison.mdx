@@ -25,10 +25,10 @@ excellent frameworks; this is the particular combination Fleury is built for.
   </Card>
   <Card title="One app, terminal or browser" icon="laptop">
     The same tree runs native, compiles into a page with dart2js, or streams over
-    a socket — kept in lockstep by a parity oracle.
+    a socket, with cross-target output checked by regression tests.
   </Card>
   <Card title="Fast, and measured" icon="rocket">
-    Incremental down to the cell, data widgets virtualized past 100k rows, and
+    Output diffed down to the cell, data widgets virtualized past 100k rows, and
     measured with repeatable local, real-terminal, and browser-pipeline scenarios.
   </Card>
 </CardGrid>
@@ -92,25 +92,25 @@ wire too — so a served preview is as inspectable as a terminal session. See
 The same widget tree runs three ways: natively in a real terminal, compiled into a
 web page client-side with dart2js (no backend — every demo on this page is exactly
 that), or previewed from a native process with [`fleury serve`](/fleury/architecture/serving-and-embedding/).
-They aren't separate ports. A **parity oracle** asserts the terminal and the
-browser render the same tree, cell for cell, so the two surfaces can't quietly
-drift apart — and a `dart:io`-free core is what lets one definition span all three.
+A `dart:io`-free core lets one widget definition span all three. Regression
+tests compare terminal, embedded, and served output for covered fixtures;
+platform input, focus, accessibility, and terminal capabilities still need
+testing where your app runs.
 
 ### Fast by construction — and measured
 
-A `setState` marks one subtree dirty; only that path rebuilds, re-lays-out, and
-re-paints, and the target diffs down to the **cell** — an idle app emits nothing, a
-busy one pays only for what moved. A cursor move in a 10,000-character editor costs
-about **0.8 ms in the saved development fixture**, tracking the change rather
-than how much is on screen. Data widgets are virtualized, so paging through a
-hundred-thousand-row table costs about the same as a screenful (both figures:
-`SB.2` and `SB.3` in the saved
-[peer scorecards](https://github.com/danReynolds/fleury/blob/main/docs/implementation/peer-scorecards.md)).
-The [benchmark suite](/fleury/architecture/performance/) measures local pipeline work,
-real-terminal bytes and process cost, and the browser frame path. The numbers back a
-peer-competitive claim across many matched workloads — not a universal "fastest
-framework" ranking. The chart below streams a new point several times a second
-and repaints only the cells that change:
+A `setState` queues dirty elements, while clean builds and unchanged layout can
+be reused. Each visual frame paints a back buffer from the root, using culling
+and repaint caches where available; comparing buffers keeps output tied to the
+cells that changed. An idle app can skip the visual pipeline entirely.
+
+Data widgets virtualize visible rows so navigation need not build the entire
+dataset. Filtering and indexing still depend on how the app supplies its data.
+The [benchmark suite](/fleury/architecture/performance/) measures these workloads,
+local pipeline work, real-terminal bytes and process cost, and the browser frame
+path. Compare results with the fixture, machine, and run conditions attached.
+The chart below streams a new point several times a second and presents only
+changed cells:
 
 <FleuryExample id="linechart.basic" cols={60} rows={16} />
 

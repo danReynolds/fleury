@@ -1095,8 +1095,8 @@ const SHOWCASE_TRY = {
     '*Try it: the process table has focus — ↑/↓ move the row selection ' +
     'while the charts stream.*',
   files:
-    '*Try it: arrow through the tree — the preview swaps viewers as the ' +
-    'selection changes.*',
+    '*Try it: use the arrows to move through the tree, then press Enter or ' +
+    'click a file to open its preview.*',
   commands:
     '*Try it: edit the file, then save it with Ctrl+S or press Ctrl+K and ' +
     'choose **Save current file**. Choose **New file** from the palette to ' +
@@ -1125,8 +1125,11 @@ const SHOWCASE_TRY = {
     '*Try it: press Space to launch, then steer with A/D/W and fire with ' +
     'Space—or click and drag directly in the playfield.*',
   sprite:
-    '*Try it: drag across the cell canvas, press R to play your edit, then ' +
-    'Ctrl+Z to undo the entire stroke. Copy JSON exports exactly what plays.*',
+    '*Try it in this browser: drag across the cell canvas, press R to play your edit, then ' +
+    'Ctrl+Z to undo the entire stroke. Copy JSON exports exactly what plays.*\n\n' +
+    'In a native POSIX terminal, Ctrl+Z suspends the app by default. An app that ' +
+    'uses it for undo must opt out of that driver behavior; see ' +
+    '[reserved keys](/fleury/guides/focus-and-keyboard/#keys-handled-by-the-host).',
 };
 
 // Catalog widget name → { slug, category }, for the "widgets used" links.

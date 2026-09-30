@@ -1,23 +1,23 @@
 # Performance
 
-For Fleury, "performance" means keeping work proportional to the change the app
-made, not to the size of the whole screen or dataset. A dashboard tick should
-not repaint the app shell. A row selection should not rebuild a hundred-thousand
-rows. An idle app should not write bytes.
+Fleury reduces rebuilds, virtualizes large datasets, and emits only changed
+cells. A row selection should not rebuild a hundred-thousand rows, and an idle
+app should not write bytes. A visual frame still paints a complete back buffer
+and compares it with the previous frame; culling and repaint caches reduce the
+work inside that paint pass.
 
-This page describes that contract, then points to the benchmarks that check
-whether the implementation is still honoring it.
+This page describes those boundaries and the benchmarks that check them.
 
 ## The contract
 
-Fleury's performance model has five practical promises:
+Fleury's performance model has five practical goals:
 
 | Promise | What should happen |
 | --- | --- |
-| Dirty work stays local | `setState` marks one part of the retained tree dirty; unrelated widgets, layout, and paint are reused. |
+| Build and layout work are retained | `setState` queues dirty elements; clean builds and unchanged layout can be reused. Painting starts at the root, with culling and explicit repaint caches. |
 | Output is damage-based | The terminal target writes changed cells as ANSI. The browser target applies changed cell ranges or DOM patches. |
 | Large data is virtualized | Tables, trees, and lists bind the visible window instead of rebuilding the full dataset. |
-| Streaming work stays scoped | Logs and subprocess output append incrementally. Markdown currently reparses the accumulated document on each append, while retained updates and damage-based output keep unrelated regions out of the frame work. |
+| Streaming work stays scoped | Logs and subprocess output append incrementally. Markdown reuses complete parsed lines and reparses the appended tail; source replacements or parser-option changes rebuild the parse. |
 | Idle is quiet | If nothing changed, Fleury should schedule no meaningful work and emit no frame output. |
 
 Those promises come from the same architecture described in
@@ -36,7 +36,7 @@ expensive:
 | Startup and first paint | How much runtime overhead every app pays before the UI gets interesting. |
 | Input latency | Whether text fields, paste, cursor movement, completions, and command entry stay responsive. |
 | Large data navigation | Whether tables and trees stay tied to the virtualized visible window instead of dataset size. |
-| Streaming text | Whether logs and subprocess output append cheaply, and whether Markdown's current full-document parse-on-append remains inside its explicit workload budget without broad repaint work. |
+| Streaming text | Whether log, subprocess, and Markdown appends stay within their workload budgets, including parsing, layout, paint, and output. |
 | Update cadence | Whether many independent widgets can tick without broad redraws. |
 | Layout and resize churn | Whether Fleury recomputes only affected layout regions and recovers cleanly from terminal resizes. |
 | App-shell churn | Whether overlays, command palettes, focus restoration, and transient UI creation stay cheap. |
@@ -48,14 +48,19 @@ The full scenario matrix and peer target rationale live in the
 ## Driving an agent stays cheap, too
 
 The same discipline carries to the [MCP agent surface](/guides/driving-with-agents/).
-Reads are bounded — `get_ui` and every action result are node-capped and
-token-trimmed, so a large screen can't blow an agent's context. Change delivery is
-incremental: a host that subscribes to the tree gets a **delta** — only the
-changed node ids — when the UI settles, ~0.3% of a full re-read on a busy
-dashboard. Id→node lookup is O(1) per revision (~477× vs a full tree walk), and
-the settle behind `wait_for_change` is capped so a continuously-animating app
-returns promptly (~3.7× faster than running to its timeout). A committed benchmark
-and a perf gate hold these numbers against regression.
+Reads are bounded: `get_ui` and action results use node and token budgets.
+Id-to-node lookup uses a cached index for each tree revision, and
+`wait_for_change` caps settling so an animating app can return without running
+to its timeout. Legacy `2025-06-18` clients can subscribe to compact tree deltas;
+current clients use revision-based `wait_for_change` because Fleury does not yet
+advertise modern MCP streaming subscriptions.
+
+The [June 29, 2026 baseline](https://github.com/danReynolds/fleury/blob/main/packages/fleury_mcp/benchmark/BASELINE.md)
+measured a delta at about 0.3% of a full re-read, indexed lookup at about 477×
+faster than a tree walk, and capped settling at about 3.7× faster than uncapped
+settling on its 80-row fixture. Those are recorded measurements, not guarantees
+for every app. CI enforces the baseline's stated thresholds, which allow timing
+variance and do not require reproducing those exact speedups.
 
 ## How to inspect it
 

@@ -64,7 +64,7 @@ DataTable(
 <Fragment slot="code-2">
 ```dart
 // Streamed on a ticker: setState with fresh values each
-// frame, and Fleury repaints only the bars that changed.
+// frame, and Fleury sends only changed cells to the target.
 BarChart(
   bars: [
     for (final (i, v) in load.indexed) Bar('q${i + 1}', v),
@@ -98,7 +98,8 @@ terminal. [How that works →](/fleury/architecture/serving-and-embedding/)
   <FeatureCard icon="laptop" title="One App, Multiple Targets" href="/fleury/architecture/serving-and-embedding/" cta="Serving & embedding">
     The same widget tree renders natively to a terminal, or to the browser —
     compiled in with dart2js, or streamed live by <code>fleury serve</code>. A
-    parity oracle diffs the targets so they can't drift.
+    shared rendering pipeline and cross-target regression tests keep their
+    output aligned.
   </FeatureCard>
   <FeatureCard icon="rocket" title="Fast Development & Debugging" href="/fleury/guides/hot-reload/" cta="Hot reload">
     Stateful hot reload on save — rare in a terminal — so a running app picks up

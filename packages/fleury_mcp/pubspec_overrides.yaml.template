@@ -1,0 +1,6 @@
+# Local development only. From the repository root, run:
+#   dart tool/fleury_dev.dart bootstrap
+# Bootstrap copies this template only when pubspec_overrides.yaml is missing.
+dependency_overrides:
+  fleury:
+    path: ../fleury

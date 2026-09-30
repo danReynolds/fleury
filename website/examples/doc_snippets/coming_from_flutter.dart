@@ -7,18 +7,20 @@ import 'package:fleury/fleury.dart';
 import 'package:fleury_widgets/fleury_widgets.dart';
 
 // `FleuryApp` is deliberately smaller than `MaterialApp`.
-void main() => runApp(
+void main(List<String> args) => runApp(
   FleuryApp(
     title: 'My app',
     theme: ThemeData(
       colorScheme: const ColorScheme(primary: RgbColor(0x3D, 0xDC, 0x97)),
     ),
-    home: const MyApp(),
+    home: const MyHomeScreen(),
   ),
+  args: args,
+  mode: const TerminalMode(mouse: true),
 );
 
-class MyApp extends StatelessWidget {
-  const MyApp({super.key});
+class MyHomeScreen extends StatelessWidget {
+  const MyHomeScreen({super.key});
 
   @override
   Widget build(BuildContext context) => const Text('My app');

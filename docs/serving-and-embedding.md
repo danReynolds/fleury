@@ -1,10 +1,9 @@
 # Serving and embedding Fleury in the browser
 
 Fleury runs in a browser two different ways. They paint to the **same** DOM
-cell-grid surface, so cell output renders identically — inline images are the
-one exception (served sessions get true-pixel `<img>` overlays; embeds still
-ship `Image` via `Image.bytes` / `Image.decoded`, while `Image.file` stays
-native-only). They differ in **where your widget tree
+cell-grid surface, and both support inline images as true-pixel `<img>`
+overlays. Embeds supply images through `Image.bytes` or `Image.decoded`;
+`Image.file` stays native-only. They differ in **where your widget tree
 actually executes**:
 
 - **Embed** — compile your app to JavaScript with **dart2js** and run the whole
@@ -85,6 +84,9 @@ offline apps, or anything that should deploy as a static asset.
 
 ## Serve — `fleury serve` (local bridge)
 
+`fleury serve` requires macOS or Linux: its connection to the native app uses
+Unix-domain sockets. The Windows terminal driver does not support this path.
+
 `fleury serve` carries a **native** Dart app's rendering to the browser. The
 native process holds the real widget tree. Its remote driver emits visual
 cell-diff frames over a WebSocket; semantic updates are diffed and sent
@@ -95,8 +97,9 @@ grid and sends input events back.
 There are two lifecycle models:
 
 - **Bridge mode** (no `--spawn`) attaches one app process that you start and
-  serves one shared session. It is useful for IDE-driven debugging and local
-  demos.
+  accepts one browser at a time. Close that browser before connecting another;
+  a second simultaneous browser is rejected. It is useful for IDE-driven
+  debugging and local demos.
 - **Spawn mode** (`--spawn <command …>`) owns an isolated app subprocess per
   browser connection and keeps a warm standby so reconnects start quickly.
 
@@ -184,10 +187,10 @@ authenticating reverse proxy.
 
 **Constraints**
 
-- **Needs a running native process** — one shared app in bridge mode, or one
-  managed subprocess per connection in spawn mode. The spawn pool's warm
-  standby reduces reconnect latency but still carries process startup and
-  memory costs.
+- **Needs a running native process** — one app with one connected browser in
+  bridge mode, or one managed subprocess per connection in spawn mode. The
+  spawn pool's warm standby reduces reconnect latency but still carries process
+  startup and memory costs.
 - **Network latency** sits between input and paint.
 - **Not public hosting.** Origin and token checks are useful local/trusted-network
   safeguards, not a user-account or internet-service security boundary.
@@ -202,9 +205,9 @@ access), debugging, and deliberately trusted remote pairing.
 | | **Embed** (`mountApp`) | **Serve** (`fleury serve`) |
 |---|---|---|
 | Widget tree runs… | in the browser (dart2js) | in a local native Dart process |
-| Backend required | **none** — static asset | one native app process (shared in bridge mode; managed per connection in spawn mode) |
-| Scaling | static/CDN asset | one shared process (bridge) or one per connection (spawn) |
-| `dart:io` widgets (files/process/log) | ❌ no | ✅ yes |
+| Backend required | **none** — static asset | one native app process (manually started in bridge mode; managed per connection in spawn mode) |
+| Scaling | static/CDN asset | one browser at a time (bridge) or one process per connection (spawn) |
+| File and log widgets | Browser-safe data sources | Host files, processes, and logs |
 | Host machine access | ❌ sandbox only | ✅ full |
 | Latency | local | network round-trip |
 | Offline | ✅ | ❌ |

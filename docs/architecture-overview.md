@@ -23,15 +23,17 @@ Fleury is a **retained-mode** framework. Its pipeline has four related views
 A state change runs one **incremental** pipeline:
 
 ```
-setState → rebuild only the dirty subtree → lay it out → paint into a
-damage-tracked CellBuffer → hand the changed cells to a target
+setState → rebuild dirty elements → update layout → paint the next
+CellBuffer → compare buffers → present the changed cells
 ```
 
-Only the dirty path does work; the rest of the tree is reused untouched, and the
-target is handed only the cells that actually changed. A button label changing
-doesn't re-lay-out the table next to it, and an idle frame produces nothing at
-all. (This four-tree pipeline is the part most directly inherited from Flutter —
-see [Influences](#influences).)
+Elements retain state and skip clean builds; render objects reuse layout when
+their constraints and layout state are unchanged. A visual frame still paints
+from the root into a cleared back buffer, using culling and explicit repaint
+caches where available. Comparing the previous and next buffers identifies the
+cells the target needs to update. An idle app can skip the visual pipeline
+entirely. (The retained model is influenced by Flutter — see
+[Influences](#influences).)
 
 ## A platform-neutral core, plus targets
 
@@ -78,10 +80,11 @@ server (so it can use the filesystem, processes, anything `dart:io`) and streams
 the changed cells to a thin browser client. Same widget tree, different place the
 code lives.
 
-Everything above the seam is identical regardless of where it ends up; the
-target is the only part that *talks to* a terminal, the DOM, or a socket. A parity
-oracle asserts the terminal and the browser render the same tree, so the surfaces
-can't quietly diverge.
+The targets share the framework above the seam; each host supplies its input,
+clipboard, and presentation services. Parity tests compare terminal, embedded,
+and served output for covered fixtures, including scrolling and overlays. They
+catch regressions in those paths; terminal capabilities, browser focus, and
+accessibility still need testing in the environments an app supports.
 
 ## How this section is organized
 

@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.1.0
+
+- The CLI reports its package version through `--version` and `diagnose`.
+  `serve` reports invalid or occupied ports cleanly, releases startup resources,
+  and prints the selected browser URL when `--port=0` chooses a free port.
+
 - `LogBuffer`, `LogLine`, `LogSource`, `LogBufferScope`, `OutputCaptureView`,
   and `OutputCaptureConsole` are exported from `fleury_core.dart`, so browser
   apps can fill a log buffer and show it. `fleury.dart` still exports them.
@@ -403,8 +409,6 @@
 - Add `TextEditPolicy` to `TextEditingController` for bounded fields: reject
   invalid edits before commit, preserve selection and undo/redo, and admit
   streamed pastes atomically without buffering beyond the configured limit.
-
-## 0.1.0
 
 - Inline images respect later text and opaque popup backgrounds across cached,
   web, remote and terminal composition. Visible slices retain the original fit

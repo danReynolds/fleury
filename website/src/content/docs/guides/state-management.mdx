@@ -100,7 +100,9 @@ before starting a service there, see
 
 A widget that already holds a model, for example from its constructor, can
 listen to it without a scope. `NotifierBuilder` rebuilds its builder;
-`context.listen(model)` rebuilds the calling widget and returns the same model:
+`context.listen(model)` rebuilds the calling widget and returns the same model.
+Both readers below share one cart: add an item in either and both counts update.
+Edit either tab to change its matching reader:
 
 <GuidePad id="state.cart-notifier" codeMaxHeight="30rem">
 <FleuryExample slot="demo" id="state.cart-notifier" cols={38} rows={9} interactive />

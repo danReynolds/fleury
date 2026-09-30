@@ -19,10 +19,17 @@ The default. Lives in `package:fleury/fleury.dart` and drives a real terminal:
 ```dart title="bin/run_app.dart"
 import 'package:fleury/fleury.dart';
 
-void main() => runApp(
+void main(List<String> args) => runApp(
   const FleuryApp(title: 'My app', home: MyHomeScreen()),
+  args: args,
+  mode: const TerminalMode(mouse: true),
 );
 ```
+
+`MyHomeScreen` is the screen inside the shell. A project made with
+`fleury create my_app` instead defines `MyApp` in `lib/app.dart`, which builds its
+`FleuryApp`; its entrypoint passes `const MyApp()` directly to `runApp`. Keep
+that one shell when changing or replacing the screen.
 
 `runApp` takes a **widget instance** and returns a `Future<AppExit>` that completes
 after the app exits and the terminal has been restored. `AppExit` distinguishes
@@ -41,6 +48,7 @@ The options you'll actually reach for:
 ```dart
 runApp(
   const FleuryApp(title: 'My app', home: MyHomeScreen()),
+  mode: const TerminalMode(mouse: true),
   onEvent: (event) {
     // Observe events after widget dispatch and default Ctrl+C handling.
     // Return EventHandled to claim a signal, or ExitRequested to finish.
@@ -53,7 +61,9 @@ runApp(
 `TerminalMode.inline(rows: ...)`. Both leave mouse input off unless you pass
 `mouse: true`, as the generated `bin/run_app.dart` does with
 `TerminalMode(mouse: true)`; without it, clicks never reach
-`GestureDetector` or buttons. `enableHotReload` (default `true`) wires up state-
+`GestureDetector` or buttons. For hover, use `mouseMotion: true`, which also
+enables clicks. Forward `main`'s `args` to `runApp` so app arguments survive
+supervised `dart run` startup and hot restart. `enableHotReload` (default `true`) wires up state-
 preserving hot reload under the Dart VM. Because `runApp` depends on `dart:io`,
 it's exported from `fleury.dart` — *not* from the web-safe `fleury_core`.
 
@@ -174,7 +184,9 @@ Future<void> main() async {
 
 Two host-API differences from `runApp` worth flagging:
 
-- It takes a **widget factory** (`() => const MyApp()`), not an instance.
+- It takes a **widget factory**, as the `() => const FleuryApp(...)` above
+  shows. For a generated app whose `MyApp` already builds the shell, use
+  `() => const MyApp()`.
 - Its future completes as soon as the app is **mounted**, with a `MountedApp`
   handle to the running surface (call `dispose()` on it to unmount). The future
   from `runApp` completes only when the app **exits**.
@@ -199,7 +211,13 @@ surface is a real Fleury tree compiled with `dart2js` and mounted with
 | Browser, embedded | `mountApp` | a widget factory and `into:` host element |
 
 To preview a native app in a browser *without* compiling it yourself, reach for
-`fleury serve` instead — it runs your native app and streams the frames to a thin
-client. That's local development tooling, not an entry point;
+`fleury serve` instead. Spawn mode launches a native app per browser connection;
+bridge mode attaches an app you start yourself. Both stream its frames to the
+browser. File access, process execution, and log collection happen on the
+machine running that native app. Browser embeds can still display files through
+a browser-safe `FileSource` and logs through `LogRegion`; they supply their own
+data instead of reading the host's disk or processes.
+
+Serve is local development tooling, not an entry point;
 [Serving and embedding](/fleury/architecture/serving-and-embedding/) covers when to
 embed versus serve.

@@ -110,6 +110,7 @@ are unmodified `runApp` apps and drive over MCP as-is.
 # then invoke it with `dart run fleury_mcp -- <your app>`.
 
 # Today, from a Fleury checkout — put it on your PATH:
+dart tool/fleury_dev.dart bootstrap
 dart pub global activate --source path packages/fleury_mcp
 ```
 
@@ -310,6 +311,8 @@ Developed in the Fleury monorepo and packaged for publication with an exact
 dependency on the matching Fleury release (`fleury: 0.1.0`). That pairing covers
 Fleury's supported host/process SPI and its explicitly unstable, lockstep wire.
 Local development uses `pubspec_overrides.yaml` to resolve the sibling package.
+Run `dart tool/fleury_dev.dart bootstrap` from the repository root to create it
+from the tracked template; existing local overrides are preserved.
 Matching builds are covered by protocol-level tests, a host-process end-to-end
 harness, and live drives of the sample apps; app-wire version skew is rejected
 during INIT. Official `2026-07-28` conformance-suite qualification remains a

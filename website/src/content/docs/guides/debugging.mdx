@@ -110,8 +110,13 @@ profile in Tree also helps separate app behavior from a
 
 ## Keep the debugger out of the reproduction
 
-The app continues running beneath the panel, but debugger shortcuts take
-precedence while it is open. Close it to reproduce normal keyboard behavior.
+The app continues running beneath the panel. **Ctrl+G and F12 stay reserved
+whenever debug tooling is enabled**, including when the panel is closed. The
+other shortcuts below apply while the panel is open. To reproduce app bindings
+for Ctrl+G or F12, disable the tooling with
+`debug: const DebugConfig(enabled: false)` when calling `runApp`.
+See [Key handling](/fleury/guides/focus-and-keyboard/#keys-handled-by-the-host)
+for native Ctrl+Z and Ctrl+C behavior.
 
 | Key | Action |
 | --- | --- |
@@ -121,7 +126,12 @@ precedence while it is open. Close it to reproduce normal keyboard behavior.
 | Page Up / Page Down | Scroll Live, Tree, Rebuilds, or Errors. |
 | F12 | Open Logs; press again there to close. |
 | Esc | Clear a log filter, otherwise dock a fullscreen panel. |
-| F5 | Hot restart when a development supervisor is attached; application state is lost. |
+| F5 | Hot restart while the panel is open and a development supervisor is attached; application state is lost. |
+
+F5 must reach the terminal for the in-app restart to work. If your editor or
+terminal intercepts it during a `fleury run` session, press `Ctrl+C` and rerun
+the command. If you launched with VS Code's F5, use the editor's **Restart**
+action instead: the editor owns that session and Fleury's restart is unavailable.
 
 ## Configuring it
 
@@ -138,8 +148,8 @@ await runApp(
 );
 ```
 
-Set `enabled: false` to disable the shell and its recording. A bottom panel
-uses `side: DebugPanelSide.bottom` and `panelHeight`. For restarting and editor
+Set `enabled: false` to disable the shell, its recording, and its shortcuts.
+A bottom panel uses `side: DebugPanelSide.bottom` and `panelHeight`. For restarting and editor
 integration, see [Hot reload](/fleury/guides/hot-reload/).
 
 ## Share a reproducible investigation

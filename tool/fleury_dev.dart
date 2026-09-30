@@ -171,7 +171,7 @@ void _printUsage() {
   stdout.writeln('Primary contributor commands:');
   stdout.writeln('  list                          Show runnable demos');
   stdout.writeln(
-    '  bootstrap                     Run dart pub get in local packages',
+    '  bootstrap                     Prepare local overrides and run pub get',
   );
   stdout.writeln(
     '  check [--quick]               Analyze and test local packages',
@@ -365,6 +365,17 @@ class _Runner {
       profiling,
       webExamples,
     ]) {
+      final template = File('$dir/pubspec_overrides.yaml.template');
+      final overrides = File('$dir/pubspec_overrides.yaml');
+      // Release snapshots contain only the template, so Pub validates hosted
+      // dependencies. Preserve any developer-customized local overrides.
+      if (template.existsSync() && !overrides.existsSync()) {
+        stdout.writeln(
+          '(${_relative(dir)}) Copy pubspec_overrides.yaml.template '
+          'to pubspec_overrides.yaml',
+        );
+        if (!dryRun) template.copySync(overrides.path);
+      }
       await _run('dart', ['pub', 'get'], workingDirectory: dir);
     }
   }

@@ -1,6 +1,6 @@
 ---
 title: Hot reload
-description: Save a file and the running terminal app updates in place — state, focus, and scroll intact. Works in any editor, with hot restart for the edits reload can't apply.
+description: Save a file and the running terminal app updates in place — state, focus, and scroll intact. Use the dev supervisor on macOS or Linux, or your editor's Dart debugger.
 ---
 
 import GuidePad from '../../../components/GuidePad.astro';
@@ -10,7 +10,9 @@ Fleury supports **stateful hot reload**: save a changed source file and the
 running terminal app updates in place — widget state, focus, and scroll
 positions survive. It uses the Dart VM's own code reloading (the mechanism
 Flutter developers rely on), driven by a dev supervisor rather than a file
-watcher that restarts your process. It works in any editor, with no plugin.
+watcher that restarts your process. On macOS and Linux, the supervisor works
+with any editor, with no plugin. On Windows, use an
+[editor debug session](#in-an-editor-debug-session).
 
 Try it in the browser first. Press **Run**, write a draft in the notes app, then
 change the heading in the editor and press **Hot reload** (or **⌘/Ctrl+S**).
@@ -90,10 +92,14 @@ For valid changes the VM cannot migrate, or when you deliberately want fresh
 state, use **hot restart**: it drops all state and runs `main()` again in the
 same terminal session. Fix compilation errors before restarting.
 
-- Press `Ctrl+G` to open the debug shell, then `F5` (the shell header shows
-  `F5 restart` whenever it's available).
-- Or invoke the `ext.fleury.restart` service extension from a VM-service
-  client, such as an editor or a script.
+- In a terminal-owned `fleury run` or supervised `dart run` session, press
+  `Ctrl+G` to open the debug shell, then `F5`. The shell header shows
+  `F5 restart` when available. If your editor or terminal intercepts F5, press
+  `Ctrl+C` and rerun the command.
+- If you launched with VS Code's F5, use the editor's **Restart** action. The
+  editor owns that session, so Fleury's in-app restart is unavailable.
+- A VM-service client can also invoke `ext.fleury.restart` in a supervised
+  session.
 
 ### What survives a reload
 
@@ -167,7 +173,9 @@ When you launch under a debugger (VS Code's F5 with the
 or any editor that speaks the VM service protocol), the editor owns the run
 and the supervisor steps aside — Fleury detects the editor's reload instead:
 when the editor calls `reloadSources`, Fleury picks up the VM's reload event
-and reassembles the widget tree automatically.
+and reassembles the widget tree automatically. Use the editor's **Restart**
+action when you need fresh state; Fleury's in-app F5 restart is unavailable in
+this mode.
 
 `fleury create` projects come pre-wired for this: the generated
 `.vscode/launch.json` points the app at the integrated terminal, and

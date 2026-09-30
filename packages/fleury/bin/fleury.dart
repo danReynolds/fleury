@@ -32,6 +32,7 @@ import 'dart:convert';
 import 'dart:io';
 import 'dart:typed_data' show Uint8List;
 
+import 'package:fleury/src/version.dart';
 import 'package:fleury/src/cli/create_command.dart';
 import 'package:fleury/src/cli/dart_sdk.dart';
 import 'package:fleury/src/cli/run_command.dart';
@@ -62,6 +63,9 @@ Future<void> main(List<String> args) async {
     exit(2);
   }
   switch (args[0]) {
+    case '--version':
+      stdout.writeln('fleury $fleuryVersion');
+      exit(0);
     case 'create':
       exit(await runCreateCommand(args.sublist(1)));
     case 'shell':
@@ -90,6 +94,7 @@ Future<void> main(List<String> args) async {
 
 void _printUsage() {
   stderr.writeln('fleury <subcommand> [args]');
+  stderr.writeln('fleury --version');
   stderr.writeln('');
   stderr.writeln('App developer commands:');
   stderr.writeln(
@@ -553,7 +558,14 @@ Future<int> _runServe(List<String> args) async {
   for (var i = 0; i < args.length; i++) {
     final arg = args[i];
     if (arg.startsWith('--port=')) {
-      port = int.parse(arg.substring('--port='.length));
+      final parsed = int.tryParse(arg.substring('--port='.length));
+      if (parsed == null || parsed < 0 || parsed > 65535) {
+        stderr.writeln(
+          '--port requires an integer from 0 to 65535 (0 chooses a free port).',
+        );
+        return 2;
+      }
+      port = parsed;
     } else if (arg.startsWith('--host=')) {
       host = arg.substring('--host='.length);
     } else if (arg.startsWith('--allow-origin=')) {
@@ -934,7 +946,9 @@ Future<int> _runServeBridge({
   // Do not let callers treat the bridge as ready until its listeners and
   // shutdown cleanup are fully armed.
   stderr.writeln('fleury serve ready (bridge mode)');
-  stderr.writeln('  browser:    ${serveBrowserUrl(host, port, token)}');
+  stderr.writeln(
+    '  browser:    ${serveBrowserUrl(host, httpServer.port, token)}',
+  );
   stderr.writeln('  app handle: $socketPath');
   stderr.writeln('');
   stderr.writeln('Open the URL in your browser, then attach your app:');
@@ -1314,8 +1328,25 @@ Future<int> _runServeSpawn({
     ...Platform.environment,
     'FLEURY_DEBUG_WIRE': debugWire ? '1' : '0',
   };
-  final handleDir = _createSpawnHandleDir();
-  final httpServer = await HttpServer.bind(host, port);
+  // Bind before allocating session resources: a busy port must not leave a
+  // temporary handle directory behind or launch the warm subprocess.
+  late final HttpServer httpServer;
+  try {
+    httpServer = await HttpServer.bind(host, port);
+  } on SocketException catch (error) {
+    stderr.writeln('fleury serve: could not bind $host:$port: $error');
+    return 1;
+  }
+  late final Directory handleDir;
+  try {
+    handleDir = _createSpawnHandleDir();
+  } on FileSystemException catch (error) {
+    await httpServer.close(force: true);
+    stderr.writeln(
+      'fleury serve: could not allocate a local socket directory: $error',
+    );
+    return 1;
+  }
 
   final exitCode = Completer<int>();
   final sessions = <_SpawnSession>{};
@@ -1590,7 +1621,7 @@ Future<int> _runServeSpawn({
   // The ready marker is consumed by scripts, so emit it only after HTTP
   // admission, the warm-session machinery, and shutdown cleanup are armed.
   stderr.writeln('fleury serve ready (spawn mode)');
-  stderr.writeln('  browser: ${serveBrowserUrl(host, port, token)}');
+  stderr.writeln('  browser: ${serveBrowserUrl(host, httpServer.port, token)}');
   stderr.writeln('  spawn:   ${command.join(' ')}');
   stderr.writeln(
     'Sessions are isolated; a warm standby is kept ready so connections '
@@ -1892,7 +1923,7 @@ Future<int> _runDiagnose(List<String> args) async {
   if (json || jsonOutputPath != null) {
     final jsonText = const JsonEncoder.withIndent(
       '  ',
-    ).convert(diagnosis.toJson());
+    ).convert({'fleuryVersion': fleuryVersion, ...diagnosis.toJson()});
     if (jsonOutputPath != null) {
       final output = File(jsonOutputPath);
       output.parent.createSync(recursive: true);
@@ -1931,7 +1962,7 @@ Future<int> _runDiagnose(List<String> args) async {
   stdout.writeln('| | |');
   stdout.writeln('|---|---|');
   row('Dart', Platform.version);
-  row('fleury', '(0.0.0 - pre-release)');
+  row('fleury', fleuryVersion);
   stdout.writeln();
   stdout.writeln('## Platform');
   stdout.writeln('| | |');

@@ -92,6 +92,10 @@ if the target disappears, the gesture is cancelled.
 
 Wrap a row in `MouseRegion` when its hover state should include child controls.
 This adds enter/exit callbacks without intercepting the children's presses.
+For hover in a native terminal, start the app with
+`runApp(const MyApp(), mode: const TerminalMode(mouseMotion: true))`;
+`mouse: true` alone enables clicks and drags but not hover. Browser demos
+receive pointer motion automatically.
 
 <GuidePad id="input.nesting" codeMaxHeight="32rem" codeLabel="Hover on the parent, action on the button" demoLabel="Move from the filename to Pin, then outside the row" referencesLabel="Full source">
 <FleuryExample slot="demo" id="input.nesting" cols={38} rows={9} interactive />

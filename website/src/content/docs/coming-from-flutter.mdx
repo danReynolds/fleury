@@ -30,7 +30,7 @@ structured terminal/browser surfaces.
 | `MaterialApp` / `WidgetsApp` | `FleuryApp(title:, home:, theme:)` is the lightweight app shell. |
 | logical pixels | integer cells (`EdgeInsets.all(1)`, not `8.0`). |
 | Material controls | Fleury core widgets plus `fleury_widgets` for tables, charts, forms, agent surfaces, and controls. |
-| Flutter web build | `mountApp(() => const FleuryApp(title: 'My app', home: MyApp()), into: host)` for client-side browser embeds, or `fleury serve` for a native app streamed to the browser. |
+| Flutter web build | `mountApp(() => const FleuryApp(title: 'My app', home: MyHomeScreen()), into: host)` for client-side browser embeds, or `fleury serve` for a native app streamed to the browser. |
 
 ## The same counter, twice
 
@@ -75,7 +75,7 @@ class _CounterState extends State<Counter> {
 }
 ```
 </Fragment>
-<SourceExcerpt slot="fleury" code={[counterMain, demos]} region="counter" mark={[1, 3, 17, { range: '22-25' }]} />
+<SourceExcerpt slot="fleury" code={[counterMain, demos]} region="counter" mark={[1, { range: '3-7' }, 21, { range: '26-29' }]} />
 </FlutterComparison>
 
 The Fleury version runs in your browser. Press Enter, or click **Increment**.
@@ -92,6 +92,8 @@ What changed:
   is the screen's root.
 - `SizedBox(height: 16)` in pixels becomes `height: 1`: one row of cells.
 - `ElevatedButton(child: Text(...))` becomes `Button(text: ...)`.
+- `TerminalMode(mouse: true)` enables terminal clicks, as in a generated
+  `fleury create` app. The entrypoint also forwards command-line `args` to the host.
 - `autofocus: true` gives the button keyboard focus, so Enter presses it.
   Terminal apps are keyboard-first; see
   [Input is keyboard-first](#input-is-keyboard-first-pointer-aware).
@@ -106,10 +108,15 @@ the same widget tree, but different host entrypoints:
 
 | Use case | Import | Entrypoint |
 |---|---|---|
-| Native terminal app | `package:fleury/fleury.dart` | `runApp(const FleuryApp(title: 'My app', home: MyApp()))` |
+| Native terminal app | `package:fleury/fleury.dart` | `runApp(const FleuryApp(title: 'My app', home: MyHomeScreen()))` |
 | Higher-level widgets in a terminal app | `package:fleury_widgets/fleury_widgets.dart` | still `runApp` |
-| Client-side browser embed | `package:fleury/fleury_core.dart`, `package:fleury_web/fleury_web.dart`, plus web-safe widgets | `mountApp(() => const FleuryApp(title: 'My app', home: MyApp()), into: host)` |
+| Client-side browser embed | `package:fleury/fleury_core.dart`, `package:fleury_web/fleury_web.dart`, plus web-safe widgets | `mountApp(() => const FleuryApp(title: 'My app', home: MyHomeScreen()), into: host)` |
 | Browser session backed by a native process | terminal app imports | `fleury serve --spawn dart --enable-vm-service=0 run bin/run_app.dart` |
+
+`MyHomeScreen` below is the first screen inside the shell. In a project made
+with `fleury create my_app`, `MyApp` already builds `FleuryApp`: pass
+`const MyApp()` directly to `runApp`, or `() => const MyApp()` to `mountApp`,
+without another shell.
 
 For a browser embed, the entrypoint is a tiny web file:
 
@@ -121,7 +128,7 @@ import 'package:web/web.dart' as web;
 Future<void> main() async {
   final host = web.document.getElementById('app')!;
   await mountApp(
-    () => const FleuryApp(title: 'My app', home: MyApp()),
+    () => const FleuryApp(title: 'My app', home: MyHomeScreen()),
     into: host,
   );
 }
@@ -129,9 +136,12 @@ Future<void> main() async {
 
 Client-side browser bundles can only use web-safe code. Import
 `package:fleury_widgets/fleury_widgets_web.dart` instead of the full
-`fleury_widgets.dart` barrel when compiling with dart2js. If the app needs
-`dart:io` widgets such as file/process/log surfaces, ship it as a terminal app
-or use `fleury serve`.
+`fleury_widgets.dart` barrel when compiling with dart2js. `FileBrowser` and
+`FilePicker` work with a browser-safe `FileSource`, such as `MemoryFileSource`;
+`LogRegion` displays log entries supplied by your app. `LocalFileSource` and
+code that reads host files or launches processes need a native app. With
+`fleury serve`, that work runs on the machine hosting the app; the browser
+displays the app host's files and logs.
 
 ## Same API, same mental model
 
@@ -145,7 +155,6 @@ These transfer with little or no adjustment:
 | Async | `FutureBuilder`, `StreamBuilder`, `AsyncSnapshot`, `ConnectionState` |
 | Navigation guards | `PopScope` |
 | Focus and pointer input | `FocusNode`, `Focus`, `FocusScope`, `GestureDetector`, `MouseRegion` |
-| Lists | `ListView`, `ListView.builder`, `ScrollView` |
 | Inherited data | `Theme.of`, `MediaQuery.of`, `DefaultTextStyle` |
 | Text | `Text`, `RichText`, `TextSpan` |
 
@@ -202,6 +211,22 @@ That sounds small, but it changes what "polish" means. You tune information
 density, alignment, wrapping, keyboard flow, and semantic structure before you
 think about pixel-perfect spacing.
 
+### Lists include a row cursor
+
+`ListView.builder` requires a finite `itemCount` and an
+`itemBuilder: (context, index, highlighted) => ...` that returns a widget for
+each index. The extra `highlighted` argument identifies the current row;
+Fleury applies the default highlight automatically. Only visible rows are
+mounted, so it remains suitable for long lists.
+
+By default, `selectable: true` gives the list a row cursor. Arrow keys move it
+and report `onFocusedItemChanged`; Enter or a completed row click calls
+`onSelect`. Moving the cursor or scrolling does not select an item. Set
+`selectable: false` for scrolling without a row cursor; controls inside rows
+still handle their own input. Use `ScrollView` for one child rather than a
+collection. [Lists & scrolling](/fleury/guides/lists-and-scrolling/) demonstrates
+these interactions and controllers.
+
 ### `FleuryApp` is deliberately smaller than `MaterialApp`
 
 You do not port `MaterialApp`, `CupertinoApp`, or `WidgetsApp` wholesale.
@@ -211,14 +236,16 @@ application concerns: its theme and command/status/extension scopes sit above
 its `Navigator`, so pushed routes keep the same app context.
 
 ```dart
-void main() => runApp(
+void main(List<String> args) => runApp(
   FleuryApp(
     title: 'My app',
     theme: ThemeData(
       colorScheme: const ColorScheme(primary: RgbColor(0x3D, 0xDC, 0x97)),
     ),
-    home: const MyApp(),
+    home: const MyHomeScreen(),
   ),
+  args: args,
+  mode: const TerminalMode(mouse: true),
 );
 ```
 
@@ -237,8 +264,10 @@ their labels feed the hint bar:
 <FleuryExample slot="demo" id="flutter.keys" cols={44} rows={8} interactive />
 </GuidePad>
 
-Pointer and hover still exist through `GestureDetector` and `MouseRegion`, but
-terminal users expect every important workflow to work from the keyboard.
+Pointer input uses `GestureDetector` and `MouseRegion`. Native clicks need
+`TerminalMode(mouse: true)`; hover needs `TerminalMode(mouseMotion: true)`,
+which also enables clicks. Browser hosts already deliver pointer motion. Keep
+every important workflow reachable from the keyboard too.
 
 ### Animation is value-first
 

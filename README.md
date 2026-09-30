@@ -20,7 +20,7 @@
 
 Fleury brings a Flutter-shaped authoring model to cell-based interfaces:
 compose widgets, keep state with `StatefulWidget`, rebuild with `setState`, and
-let the framework incrementally lay out and paint the result.
+let the framework update layout, paint cells, and present the changed output.
 
 The same reusable widget tree can run in a native terminal or mount into a web
 page. Alongside the visual tree, Fleury builds a semantic graph that tests and
