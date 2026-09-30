@@ -2,12 +2,15 @@
 
 Fleury supports stateful hot reload: save a changed source file and the
 running terminal updates in place while widget state, focus, and scroll
-positions survive. It works in any editor, using the Dart VM's
-`reloadSources` RPC followed by a framework reassemble.
+positions survive. It uses the Dart VM's `reloadSources` RPC followed by a
+framework reassemble. On macOS and Linux, Fleury's dev supervisor makes it
+work in any editor. The supervisor doesn't run on Windows, where `fleury run`
+and `dart run` start the app without reload or restart; use an editor debug
+session there (see [Quick start (VS Code)](#quick-start-vs-code)).
 
 ## Quick start (any editor)
 
-From your app's project directory:
+On macOS or Linux, from your app's project directory:
 
 ```sh
 fleury run
@@ -17,7 +20,9 @@ Without a globally installed CLI, use `dart run fleury run`. The launcher
 starts your source app once with the VM service enabled, watches `lib/`,
 `bin/`, and local path dependencies, and reloads on save. A compiled Fleury
 CLI supports the same development workflow; the app itself runs in the Dart
-SDK's JIT VM. A compiled app has no hot reload.
+SDK's JIT VM. A compiled app has no hot reload. If the app fails to compile
+at startup, the launcher doesn't run it again: the compiler's errors print
+once and the launcher exits with the app's exit code.
 
 With no script named, the launcher picks the only Dart file in `bin/`, then
 prefers `main.dart`, `run_app.dart`, or the package-named file. Name a script
@@ -54,8 +59,12 @@ error banner over the app. A successful save clears the failed-edit banner.
   `F5`) to run `main()` in a fresh child. Restart drops state. It does not fix
   compilation errors.
 
-Any VM-service client can also invoke `ext.fleury.restart`. The debug header
-shows `F5 restart` only when a development supervisor is attached.
+The debug header shows `F5 restart` only when a development supervisor is
+attached. Under an editor's debugger the editor owns the run, so use its
+**Restart** instead. If `F5` never reaches the app (a Mac keyboard may need
+`Fn`, and VS Code's integrated terminal takes `F5` to start debugging), see
+[When F5 doesn't restart](https://danreynolds.github.io/fleury/guides/hot-reload/#when-f5-doesnt-restart)
+in the site guide.
 
 ## Plain `dart run` and other launch modes
 
@@ -66,17 +75,18 @@ must happen once. Both paths keep the same terminal session and return the
 app's exit code.
 
 Opt out with `FLEURY_HOT_RELOAD=0`, or `runApp(enableHotReload: false)`. The
-supervisor also steps aside for an editor-owned VM service, a serve/MCP
-handle, an actual compiled app, Windows, a non-TTY, or an injected test driver.
-For a browser preview, enable the service in the spawned command:
+supervisor also steps aside for an editor-owned VM service, a `fleury serve`,
+`fleury shell`, or `fleury_mcp` handle, an actual compiled app, Windows, a
+non-TTY, or an app that passes its own `driver:` to `runApp` (under
+`fleury run`, such an app still reloads on save but has no restart). For a
+browser preview, enable the service in the spawned command:
 
 ```sh
 fleury serve --spawn dart --enable-vm-service=0 run bin/run_app.dart
 ```
 
 That preview reloads on save but has no hot restart: the serve socket accepts
-one connection. The launcher reports initial compilation failures once and
-returns the child's exit code.
+one connection.
 
 ## Quick start (VS Code)
 
@@ -94,8 +104,9 @@ Then:
   "allIfDirty"` in their workspace settings, so saving a dirty file during a
   debug session reloads automatically. (This repo's own workspace leaves it
   unset — delete the line from a generated project to opt out.)
-- Stop and relaunch when you deliberately want to rebuild from scratch and
-  drop state.
+- Use the editor's **Restart** (or stop and relaunch) when you deliberately
+  want to rebuild from scratch and drop state. The debug shell offers no
+  restart in a debug session.
 
 Try this: launch `fleury · hot reload demo`, press `→` a few times
 to bump the counter, then edit `_titleColor = AnsiColor(4)` to
@@ -143,9 +154,10 @@ Future<void> main(List<String> args) async {
 }
 ```
 
-Launch it through Dart-Code as described above. Fleury listens for the VM's
-source-reload event; a filesystem watcher that only restarts the
-process or sends a signal is not stateful hot reload.
+Run it with `fleury run` as in the quick start, or launch it through Dart-Code
+as described above. Fleury listens for the VM's source-reload event; a
+filesystem watcher that only restarts the process or sends a signal is not
+stateful hot reload.
 
 ## What survives a reload
 
@@ -198,8 +210,9 @@ This is exactly the Flutter contract — same hook name, same semantics.
 
 A plain `dart run` has no VM service, so nothing could trigger a reload —
 that's the gap the supervisor closes. When `runApp` starts in a plain JIT dev
-run (real TTY, no injected driver, no live VM service, no serve handle), the
-first process becomes a thin supervisor instead of running the app:
+run on macOS or Linux (real TTY, no injected driver, no live VM service, no
+serve handle), the first process becomes a thin supervisor instead of running
+the app:
 
 1. It re-spawns the same entrypoint script as a **child process** with
    `--enable-vm-service=0 --no-serve-devtools --write-service-info=<file>`
@@ -220,12 +233,17 @@ first process becomes a thin supervisor instead of running the app:
    skipped), debounces saves, and calls `reloadSources` on the child's main
    isolate — then reports the outcome through `ext.fleury.reloadReport` so
    it lands in the debug shell.
-4. `ext.fleury.restart` (registered in the app) asks the supervisor — via a
-   `postEvent` on the service's Extension stream — to restart: it requests a
-   graceful teardown (`ext.fleury.shutdown` → the normal exit path, terminal
-   restored), then respawns the child fresh. A wedged child is SIGKILLed,
-   the supervisor restores the terminal from outside (its own stdout *is*
-   the tty), and the respawn proceeds.
+4. Hot restart (the debug shell's `F5`) posts a `fleury.restartRequested`
+   event on the child's VM-service Extension stream, which the supervisor
+   listens to. The supervisor requests a graceful teardown
+   (`ext.fleury.shutdown` → the normal exit path, terminal restored), then
+   respawns the child fresh. A wedged child is SIGKILLed, the supervisor
+   restores the terminal from outside (its own stdout *is* the tty), and the
+   respawn proceeds. The app's `ext.fleury.restart` extension posts the same
+   event, but it is the supervisor's hook, not an entry point for other
+   tools: the child's service address goes to a temp file that the
+   supervisor deletes once it has read it, and in an editor debug session no
+   supervisor is listening, so the extension does nothing.
 5. When the child exits for real — quit, Ctrl+C, crash — the supervisor
    mirrors its exit code. Both processes sit in the foreground process
    group; the supervisor swallows its own signal deliveries and lets the
@@ -250,8 +268,8 @@ supervised-child environment either way.
    `BuildOwner.reassembleApplication()` followed by
    `TickerScheduler.reassemble()`, then schedules a frame.
 2. The controller registers a `dart:developer` service extension at
-   `ext.fleury.reassemble`. Any tool that can speak the VM service
-   protocol can trigger a reassemble explicitly.
+   `ext.fleury.reassemble`. A VM-service client connected to the app (an
+   editor's debug session, for example) can trigger a reassemble explicitly.
 3. The controller probes `Service.getInfo()`. If a VM service URI is
    available, it opens a `VmService` connection and subscribes to
    `IsolateReload` events. When one fires, it calls onReassemble. This
@@ -295,27 +313,28 @@ and VM-service connection. The binary works fine without
 ## Troubleshooting
 
 **"Nothing happens when I save"** — In `fleury run` or a plain `dart run`,
-check that you are using a real terminal, `FLEURY_HOT_RELOAD` is not `0`, and
-`dart pub get` has produced `.dart_tool/package_config.json`. In an editor
-session, the editor triggers reload: use **Dart: Hot Reload**, or enable
-`dart.hotReloadOnSave: "allIfDirty"`. Generated projects already include that
-setting.
+check that you are on macOS or Linux in a real terminal, `FLEURY_HOT_RELOAD`
+is not `0`, and `dart pub get` has produced `.dart_tool/package_config.json`.
+Setting `FLEURY_DEV_BOOTSTRAP_LOG` to a file path logs what the supervisor
+watches and reloads. In an editor session, the editor triggers reload: use
+**Dart: Hot Reload**, or enable `dart.hotReloadOnSave: "allIfDirty"`.
+Generated projects already include that setting.
 
 **"The compiler rejected my save"** — Fix the reported source error and save
 again; your running app keeps its state. Restart only after the source
 compiles, when the VM cannot migrate the changed program or you want to reset
 state.
 
-**"VS Code reloads my code but the UI doesn't update"** — Same root
-cause: the VM service is enabled, but fleury's controller didn't
-attach. Check that `enableHotReload: true` (the default) in your
-`runApp` call.
+**"VS Code reloads my code but the UI doesn't update"** — The VM service is
+enabled, but Fleury's controller didn't attach. Check that
+`enableHotReload: true` (the default) in your `runApp` call.
 
 **"Hot reload says it succeeded but my widget tree looks wrong"** —
 Some edits can't be applied cleanly to a running tree (changing a
 `StatefulWidget` to a `StatelessWidget`, removing a field that the
 State references). The VM accepts the source change but the next
-build crashes. Stop and relaunch the process.
+build crashes. Hot restart (`Ctrl+G`, then `F5`), or stop and relaunch the
+process where restart isn't available.
 
 **A new field throws `type 'Null' is not a subtype of type …` after a
 reload** — Existing objects never ran the constructor that sets the new
