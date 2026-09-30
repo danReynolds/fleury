@@ -1,5 +1,5 @@
 import 'package:fleury/fleury_core.dart';
-import 'package:fleury/fleury_internal.dart';
+import 'package:fleury/fleury_widget_support.dart';
 
 /// A grid of color swatches. The preview cursor is bracketed with the theme's
 /// focus style while the committed swatch remains marked; arrow chords preview

@@ -1,7 +1,7 @@
 name: Fleury Pad
 on:
   pull_request:
-    paths: ['experiments/fleury_pad/**', 'packages/fleury/lib/**', 'packages/fleury_web/lib/**', 'packages/fleury_widgets/lib/**', 'packages/fleury_themes/lib/**', 'website/examples/**', 'website/src/components/pad/**', 'website/src/components/GuidePad.astro', 'packages/*/pubspec.yaml', '.github/workflows/fleury-pad.yml']
+    paths: ['experiments/fleury_pad/**', 'packages/fleury/lib/**', 'packages/fleury_web/lib/**', 'packages/fleury_widgets/lib/**', 'website/examples/**', 'website/src/components/pad/**', 'website/src/components/GuidePad.astro', 'packages/*/pubspec.yaml', '.github/workflows/fleury-pad.yml']
   push:
     tags: ['fleury-v*', 'fleury_web-v*']
   workflow_dispatch:

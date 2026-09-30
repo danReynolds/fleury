@@ -1,7 +1,7 @@
 import 'dart:async' show Completer, FutureOr, scheduleMicrotask, unawaited;
 
 import 'package:fleury/fleury_core.dart';
-import 'package:fleury/fleury_internal.dart';
+import 'package:fleury/fleury_widget_support.dart';
 
 /// Coordinates validation and submission for one mounted [Form].
 ///

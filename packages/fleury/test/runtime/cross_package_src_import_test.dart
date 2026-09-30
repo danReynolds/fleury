@@ -37,7 +37,10 @@ void main() {
           '''^\\s*(?:import|export)\\s+['"]package:fleury/src/''',
           multiLine: true,
         );
-        if (pattern.hasMatch(source)) offenders.add(entity.path);
+        if (pattern.hasMatch(source) ||
+            source.contains('package:fleury/fleury_internal.dart')) {
+          offenders.add(entity.path);
+        }
       }
       expect(
         offenders,
@@ -45,6 +48,7 @@ void main() {
         reason:
             'Import package:fleury/fleury_core.dart (widgets/apps) or '
             'fleury_host.dart / fleury_host_io.dart (stable hosts), or the '
+            'supported fleury_widget_support.dart (custom controls), or the '
             'explicitly unstable fleury_wire.dart / fleury_wire_io.dart '
             '(first-party lockstep peers). If a genuinely host-facing symbol '
             'is missing from a barrel, promote it with a show combinator '

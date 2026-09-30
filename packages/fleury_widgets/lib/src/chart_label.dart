@@ -1,13 +1,13 @@
 import 'package:characters/characters.dart';
 import 'package:fleury/fleury_core.dart';
-import 'package:fleury/fleury_internal.dart' show projectText;
+import 'package:fleury/fleury_widget_support.dart' show projectDisplayText;
 
 /// A single-line chart label, measured and painted with the same surface policy.
 /// Plot symbols use a one-cell fallback; labels retain their Unicode text.
 class ChartLabel {
   ChartLabel(String text, TextPresentationPolicy policy)
     : this._(
-        projectText(sanitizeSingleLine(text), policy: policy).displayText,
+        projectDisplayText(sanitizeSingleLine(text), policy: policy),
         policy.widths,
       );
 

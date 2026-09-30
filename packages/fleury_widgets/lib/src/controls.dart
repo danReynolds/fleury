@@ -1,9 +1,10 @@
 import 'package:fleury/fleury_core.dart';
-import 'package:fleury/fleury_internal.dart';
+import 'package:fleury/fleury_widget_support.dart';
 
 import 'component_theme.dart';
 
-export 'package:fleury/fleury_core.dart' show Button, ButtonAppearance, ButtonVariant;
+export 'package:fleury/fleury_core.dart'
+    show Button, ButtonAppearance, ButtonVariant;
 
 Widget _row(String indicator, String? label, CellStyle style) {
   return Row(

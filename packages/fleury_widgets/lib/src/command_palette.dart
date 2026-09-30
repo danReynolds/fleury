@@ -1,7 +1,7 @@
 import 'dart:async' show scheduleMicrotask;
 
 import 'package:fleury/fleury_core.dart';
-import 'package:fleury/fleury_internal.dart' show readScope;
+import 'package:fleury/fleury_widget_support.dart' show readScope;
 
 import 'semantic_roles.dart';
 

@@ -21,7 +21,6 @@ CommonServerApi createCompilerBackend(String root, String sdkPath) {
       'fleury',
       'fleury_web',
       'fleury_widgets',
-      'fleury_themes',
       'http',
       'image',
     },

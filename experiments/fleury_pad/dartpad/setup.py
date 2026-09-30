@@ -45,10 +45,9 @@ def setup():
     fleury_path = os.path.relpath(repo / 'packages/fleury', project)
     web_path = os.path.relpath(repo / 'packages/fleury_web', project)
     widgets_path = os.path.relpath(repo / 'packages/fleury_widgets', project)
-    themes_path = os.path.relpath(repo / 'packages/fleury_themes', project)
     (project / 'pubspec.yaml').write_text(
         f'name: fleury_pad\npublish_to: none\nenvironment:\n  sdk: ^3.12.0\n'
-        f'dependencies:\n  fleury:\n    path: {fleury_path}\n  fleury_web:\n    path: {web_path}\n  fleury_widgets:\n    path: {widgets_path}\n  fleury_themes:\n    path: {themes_path}\n  http: ^1.6.0\n  image: ^4.5.4\n  web: ^1.1.1\n'
+        f'dependencies:\n  fleury:\n    path: {fleury_path}\n  fleury_web:\n    path: {web_path}\n  fleury_widgets:\n    path: {widgets_path}\n  http: ^1.6.0\n  image: ^4.5.4\n  web: ^1.1.1\n'
         f'dependency_overrides:\n  fleury:\n    path: {fleury_path}\n')
     lock = HERE / 'project.pubspec.lock'
     if lock.exists():

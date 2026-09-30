@@ -13,10 +13,6 @@ publish = ["pub.dev"]
 path = "packages/fleury_test"
 publish = ["pub.dev"]
 
-[release.fleury_themes]                 # tag fleury_themes-v{version}
-path = "packages/fleury_themes"
-publish = ["pub.dev"]
-
 [release.fleury_web]                 # tag fleury_web-v{version}
 path = "packages/fleury_web"
 tag = "fleury_web-v{version}"

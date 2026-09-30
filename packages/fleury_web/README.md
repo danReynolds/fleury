@@ -91,11 +91,11 @@ Browser entry points cannot import libraries backed by `dart:io`. Use:
 
 - `package:fleury/fleury_core.dart` for the shared framework;
 - `package:fleury_web/fleury_web.dart` for the browser host;
-- `package:fleury_widgets/fleury_widgets_web.dart` when an app also depends on
+- `package:fleury_widgets/fleury_widgets.dart` when an app also depends on
   `fleury_widgets`.
 
 The native `package:fleury/fleury.dart` and
-`package:fleury_widgets/fleury_widgets.dart` barrels include terminal-only
+`package:fleury_widgets/fleury_widgets_io.dart` libraries include terminal-only
 APIs. Keep those imports in native entry points.
 
 ## Embed or serve

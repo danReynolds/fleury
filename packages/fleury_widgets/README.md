@@ -18,6 +18,18 @@ The lower-level primitives — `Text`, `Row`/`Column`, `Spinner`,
 `fleury` itself. This package is the catalog you reach for once the
 layout bones are in place.
 
+## Shared UI and custom controls
+
+`fleury_widgets.dart` is browser-safe and is the same import on both targets.
+Explicit local filesystem access uses `fleury_widgets_io.dart`; native file
+pickers still default to the local disk. Browser apps pass a `FileSource` such
+as `MemoryFileSource`.
+
+A custom widget library can use `package:fleury/fleury_widget_support.dart` for
+unstyled `FocusableControl`, form registration, and interactive style contracts.
+It follows core's compatibility guarantees. See
+[Core and targets](../../docs/core-and-targets.md#implementing-a-widget-library).
+
 ## Catalog
 
 ### Inputs & forms

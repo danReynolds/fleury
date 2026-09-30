@@ -9,9 +9,6 @@
 !packages/fleury_widgets
 !packages/fleury_widgets/pubspec.yaml
 !packages/fleury_widgets/lib/**
-!packages/fleury_themes
-!packages/fleury_themes/pubspec.yaml
-!packages/fleury_themes/lib/**
 !experiments
 !experiments/fleury_pad/**
 !website

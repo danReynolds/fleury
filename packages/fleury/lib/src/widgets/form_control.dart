@@ -1,9 +1,10 @@
 import 'focus.dart';
 import 'framework.dart';
 
-/// Internal bridge used by first-party value controls inside a form field.
+/// Registration contract for value controls inside a form field.
 ///
-/// Application code should use `FormField`, not this protocol. It lives in
+/// Application code normally uses `FormField`. Custom controls can implement
+/// this contract through `fleury_widget_support.dart`. It lives in
 /// core so controls such as [TextInput] can participate without depending on
 /// the higher-level `fleury_widgets` package.
 abstract interface class FormControlRegistration {
@@ -35,7 +36,7 @@ abstract interface class FormControlRegistration {
 
 /// Publishes the current form-field registration to one control subtree.
 ///
-/// This is framework plumbing for `fleury_widgets.FormField`. A control only
+/// Used by `fleury_widgets.FormField` and custom form hosts. A control only
 /// participates when it is below this scope; being below a `Form` alone does
 /// not alter its behavior.
 class FormControlScope extends Scope<FormControlRegistration> {

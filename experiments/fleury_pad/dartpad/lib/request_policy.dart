@@ -113,7 +113,7 @@ void _validateUri(String? value, String file, Set<String> files) {
   // Decoded Dart string literals only; reject URI escapes, traversal, queries,
   // authorities and backslashes before the compiler resolves any path.
   if (RegExp(
-    r'^package:(fleury|fleury_web|fleury_widgets|fleury_themes|http|image|web)/[a-zA-Z0-9_/\.]*$',
+    r'^package:(fleury|fleury_web|fleury_widgets|http|image|web)/[a-zA-Z0-9_/\.]*$',
   ).hasMatch(value)) {
     final segments = value.substring(8).split('/');
     if (!segments.contains('..') &&

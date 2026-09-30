@@ -1,5 +1,5 @@
 import 'package:fleury/fleury_core.dart';
-import 'package:fleury/fleury_internal.dart';
+import 'package:fleury/fleury_widget_support.dart';
 
 /// A numeric stepper: `[ − 42 + ]`. When focused, Up / Down (or + / −)
 /// change the value by [step], PageUp / PageDown by [largeStep], and Home /

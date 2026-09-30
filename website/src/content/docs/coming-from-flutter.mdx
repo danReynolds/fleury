@@ -135,8 +135,8 @@ Future<void> main() async {
 ```
 
 Client-side browser bundles can only use web-safe code. Import
-`package:fleury_widgets/fleury_widgets_web.dart` instead of the full
-`fleury_widgets.dart` barrel when compiling with dart2js. `FileBrowser` and
+`package:fleury_widgets/fleury_widgets.dart` for shared UI. Explicit local
+filesystem access lives in `fleury_widgets_io.dart`. `FileBrowser` and
 `FilePicker` work with a browser-safe `FileSource`, such as `MemoryFileSource`;
 `LogRegion` displays log entries supplied by your app. `LocalFileSource` and
 code that reads host files or launches processes need a native app. With

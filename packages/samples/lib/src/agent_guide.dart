@@ -1,5 +1,5 @@
 import 'package:fleury/fleury_core.dart';
-import 'package:fleury_widgets/fleury_widgets_web.dart';
+import 'package:fleury_widgets/fleury_widgets.dart';
 
 /// The small release workflow used by the Driving with an agent guide.
 ///

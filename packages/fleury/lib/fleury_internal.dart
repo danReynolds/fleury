@@ -1,6 +1,7 @@
-/// Cross-package implementation hooks used by Fleury's first-party packages.
+/// Implementation hooks for Fleury's own tests and profiling tools.
 ///
-/// These APIs are not part of the application-facing widget surface.
+/// Reusable widget packages must use the supported `fleury_widget_support.dart`
+/// contracts instead. These implementation hooks have no compatibility promise.
 library;
 
 export 'src/rendering/cell.dart' show CellStyleState, resolveCellStyle;

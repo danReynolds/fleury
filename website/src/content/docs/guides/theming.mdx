@@ -134,14 +134,14 @@ Ordinary application code should not need to call it.
 
 ## Community themes
 
-[`fleury_themes`](https://github.com/danReynolds/fleury/tree/main/packages/fleury_themes)
-is Fleury's community theme collection. It currently includes Nord, Dracula,
+[`package:fleury/themes.dart`](https://github.com/danReynolds/fleury/blob/main/packages/fleury/lib/themes.dart)
+is Fleury's opt-in community theme collection, included in the core package. It currently includes Nord, Dracula,
 Gruvbox Dark, Tokyo Night, Catppuccin Mocha, One Dark, and Solarized in dark
 and light variants, and contributions can add more:
 
 ```dart
 import 'package:fleury/fleury.dart';
-import 'package:fleury_themes/fleury_themes.dart';
+import 'package:fleury/themes.dart';
 
 FleuryApp(title: 'Dashboard', theme: tokyoNight, home: const Dashboard());
 ```

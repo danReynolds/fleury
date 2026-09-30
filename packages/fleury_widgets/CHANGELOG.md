@@ -1,5 +1,7 @@
 ## 0.1.0
 
+- The default `fleury_widgets.dart` import is browser-safe. Import `fleury_widgets_io.dart` for explicit `LocalFileSource` access. The former web import remains a forwarding alias.
+
 - **Breaking:** `FileBrowser` and `FilePicker` read directories through a
   `FileSource` and report `FileEntry` values, so both run in the browser.
   Natively they default to `LocalFileSource`, the local disk; in a browser,
@@ -9,7 +11,7 @@
   `filter` receive a `FileEntry` instead of a `dart:io` `File` or
   `FileSystemEntity`.
 - `LogRegion`, `TerminalOutputRegion`, and `WorkflowSnapshot` are exported from
-  `fleury_widgets_web.dart`; none of them needed `dart:io`. A test now walks the
+  `fleury_widgets.dart`; none of them needed `dart:io`. A test now walks the
   web barrel's imports so `dart:io` can't reach it: dart2js compiles `dart:io`
   code, which only fails when it runs.
 - **Layout contract:** DataTable requires bounded height by default. Place it in

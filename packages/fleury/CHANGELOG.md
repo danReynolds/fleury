@@ -2,6 +2,8 @@
 
 ## 0.1.0
 
+- Community presets are available from `package:fleury/themes.dart`. Widget authors can use the supported, browser-safe `fleury_widget_support.dart` contracts to build their own controls.
+
 - The CLI reports its package version through `--version` and `diagnose`.
   `serve` reports invalid or occupied ports cleanly, releases startup resources,
   and prints the selected browser URL when `--port=0` chooses a free port.

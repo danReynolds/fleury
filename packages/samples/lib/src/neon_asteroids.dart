@@ -1,7 +1,7 @@
 import 'dart:math' as math;
 
 import 'package:fleury/fleury_core.dart';
-import 'package:fleury_widgets/fleury_widgets_web.dart';
+import 'package:fleury_widgets/fleury_widgets.dart';
 
 import 'neon_asteroids_controls.dart';
 import 'neon_asteroids_model.dart';

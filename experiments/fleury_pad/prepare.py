@@ -26,8 +26,8 @@ def prepare(package_config=None):
     (BUILD / 'deps.dart').write_text("import 'package:fleury/fleury_core.dart' as fleury;\n"
                                     "import 'package:fleury_web/fleury_web.dart' as host;\n"
                                     "import 'package:web/web.dart' as web;\n"
-                                    "import 'package:fleury_widgets/fleury_widgets_web.dart';\n"
-                                    "import 'package:fleury_themes/fleury_themes.dart';\n"
+                                    "import 'package:fleury_widgets/fleury_widgets.dart';\n"
+                                    "import 'package:fleury/themes.dart';\n"
                                     "import 'package:http/http.dart';\n"
                                     "import 'package:image/image.dart';\n")
     compiler = [str(sdk / 'bin/dart'), str(sdk / 'bin/snapshots/dartdevc.dart.snapshot')]

@@ -1,11 +1,11 @@
-/// Ready-made themes for Fleury.
+/// Optional ready-made themes for Fleury.
 ///
 /// Each theme is a plain `const ThemeData` — hand one to `FleuryApp` or wrap
 /// a subtree in a `Theme`:
 ///
 /// ```dart
 /// import 'package:fleury/fleury_core.dart';
-/// import 'package:fleury_themes/fleury_themes.dart';
+/// import 'package:fleury/themes.dart';
 ///
 /// // Hand this root to `runApp` on a terminal or `mountApp` in a browser —
 /// // the theme is the same object either way. (The web-safe `fleury_core`
@@ -18,17 +18,17 @@
 /// ```
 ///
 /// Nothing here is special: a theme is data, and yours can sit alongside
-/// these. See the package README for how to build one, and `fleuryThemes` for
+/// these. See `doc/themes.md` for how to build one, and `fleuryThemes` for
 /// the full list ready to drop into a picker.
 library;
 
-export 'src/catppuccin.dart';
-export 'src/dracula.dart';
-export 'src/gruvbox.dart';
-export 'src/named_theme.dart';
-export 'src/nord.dart';
-export 'src/one_dark.dart';
-export 'src/registry.dart';
-export 'src/solarized_dark.dart';
-export 'src/solarized_light.dart';
-export 'src/tokyo_night.dart';
+export 'src/themes/catppuccin.dart';
+export 'src/themes/dracula.dart';
+export 'src/themes/gruvbox.dart';
+export 'src/themes/named_theme.dart';
+export 'src/themes/nord.dart';
+export 'src/themes/one_dark.dart';
+export 'src/themes/registry.dart';
+export 'src/themes/solarized_dark.dart';
+export 'src/themes/solarized_light.dart';
+export 'src/themes/tokyo_night.dart';

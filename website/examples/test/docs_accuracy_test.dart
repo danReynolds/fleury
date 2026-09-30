@@ -191,12 +191,12 @@ void main() {
       expect(sharedTree, isNot(contains("package:fleury/fleury.dart")));
       expect(
         '$snippet\n$sharedTree',
-        contains("package:fleury_widgets/fleury_widgets_web.dart"),
+        contains("package:fleury_widgets/fleury_widgets.dart"),
       );
       expect(snippet, isNot(contains("package:fleury/fleury.dart")));
       expect(
         '$snippet\n$sharedTree',
-        isNot(contains("package:fleury_widgets/fleury_widgets.dart")),
+        isNot(contains("package:fleury_widgets/fleury_widgets_io.dart")),
       );
     });
 
@@ -323,7 +323,7 @@ void main() {
       expect(guide, contains("import 'package:fleury/fleury_core.dart';"));
       expect(
         guide,
-        contains("import 'package:fleury_widgets/fleury_widgets_web.dart';"),
+        contains("import 'package:fleury_widgets/fleury_widgets.dart';"),
       );
       expect(guide, contains('() => const MyApp()'));
       expect(guide, contains('title="web/index.html"'));
@@ -444,7 +444,6 @@ void main() {
       for (final package in const <String>[
         'fleury',
         'fleury_widgets',
-        'fleury_themes',
         'fleury_test',
         'fleury_web',
         'fleury_mcp',
@@ -542,7 +541,7 @@ List<File> _publicDocs(Directory repo) {
     File(p.join(repo.path, 'packages/fleury_web/README.md')),
     File(p.join(repo.path, 'packages/fleury_mcp/README.md')),
     File(p.join(repo.path, 'packages/fleury_test/README.md')),
-    File(p.join(repo.path, 'packages/fleury_themes/README.md')),
+    File(p.join(repo.path, 'packages/fleury/doc/themes.md')),
     for (final name in const <String>[
       'architecture.md',
       'architecture-overview.md',
@@ -557,12 +556,10 @@ List<File> _publicDocs(Directory repo) {
     // caught every README and guide while `key_bindings.dart`'s own class
     // docs went on teaching two deleted constructors. Scan the public lib of
     // every publishable package so pub.dev-rendered docs meet the same bar —
-    // sweeping only `fleury` left `fleury_themes`' library dartdoc (which
-    // taught `runApp(const MyApp(), theme: …)`) unscanned entirely.
+    // scan optional libraries as well as each primary package entry point.
     for (final package in const <String>[
       'fleury',
       'fleury_widgets',
-      'fleury_themes',
       'fleury_test',
       'fleury_web',
       'fleury_mcp',

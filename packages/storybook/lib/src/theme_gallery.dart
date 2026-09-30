@@ -1,8 +1,8 @@
 import 'package:fleury/fleury.dart';
-import 'package:fleury_themes/fleury_themes.dart';
+import 'package:fleury/themes.dart';
 import 'package:fleury_widgets/fleury_widgets.dart';
 
-/// A styleguide for one theme from `fleury_themes` at a time, with a
+/// A styleguide for one theme from `package:fleury/themes.dart` at a time, with a
 /// dropdown to switch palettes — the storybook's "Themes" story.
 ///
 /// Two halves, because they answer different questions. A small mock app shows

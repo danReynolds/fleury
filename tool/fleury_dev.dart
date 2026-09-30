@@ -340,7 +340,6 @@ class _Runner {
   String get fleury => '$root/packages/fleury';
   String get fleuryTest => '$root/packages/fleury_test';
   String get widgets => '$root/packages/fleury_widgets';
-  String get themes => '$root/packages/fleury_themes';
   String get web => '$root/packages/fleury_web';
   String get git => '$root/packages/fleury_git';
   String get demo => '$root/packages/fleury_example_console';
@@ -355,7 +354,6 @@ class _Runner {
       fleury,
       fleuryTest,
       widgets,
-      themes,
       web,
       git,
       demo,
@@ -395,7 +393,6 @@ class _Runner {
       fleury,
       fleuryTest,
       widgets,
-      themes,
       git,
       demo,
       storybook,
@@ -440,7 +437,6 @@ class _Runner {
       // other package's tests inherit a non-UTC clock.
       environment: const {'TZ': 'America/New_York'},
     );
-    await _run('dart', ['test'], workingDirectory: themes);
     await _run('dart', ['test'], workingDirectory: git);
     await _run('dart', [
       'test',
@@ -493,7 +489,7 @@ class _Runner {
       ], workingDirectory: webExamples);
 
       // dart2js smoke: the doc-examples entrypoint pulls in fleury_core,
-      // fleury_widgets_web, fleury_web, and the samples — the whole
+      // fleury_widgets, fleury_web, and the samples — the whole
       // browser-safe surface compiles or this fails.
       await _run('dart', [
         'compile',
@@ -522,7 +518,6 @@ class _Runner {
       fleury,
       fleuryTest,
       widgets,
-      themes,
       git,
       demo,
       storybook,

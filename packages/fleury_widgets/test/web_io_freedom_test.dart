@@ -1,4 +1,4 @@
-// Guards the claim in fleury_widgets_web.dart: everything it reaches compiles
+// Guards the claim in fleury_widgets.dart: everything it reaches compiles
 // to a working browser program, free of dart:io and dart:ffi. A successful
 // dart2js build does not prove it, because dart2js compiles a dart:io import
 // into stubs that only throw once they are called. This walks the imports the
@@ -19,7 +19,7 @@ const _webLibraries = {
 
 void main() {
   test(
-    'fleury_widgets_web.dart is transitively free of dart:io and dart:ffi',
+    'fleury_widgets.dart is transitively free of dart:io and dart:ffi',
     () {
       final packages = _packageLibDirs();
       final offenders = <String>[];
@@ -52,7 +52,7 @@ void main() {
         }
       }
 
-      visit('lib/fleury_widgets_web.dart', 'the web barrel');
+      visit('lib/fleury_widgets.dart', 'the web barrel');
       expect(
         offenders,
         isEmpty,

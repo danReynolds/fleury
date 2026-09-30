@@ -6,7 +6,7 @@ import 'dart:async';
 // #enddocregion transmission
 
 import 'package:fleury/fleury_core.dart';
-import 'package:fleury_widgets/fleury_widgets_web.dart';
+import 'package:fleury_widgets/fleury_widgets.dart';
 // #docregion fetch-photo
 import 'package:http/http.dart' as http;
 import 'package:image/image.dart' as img;

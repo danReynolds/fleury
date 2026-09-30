@@ -1,11 +1,11 @@
-# fleury_themes
+# Community themes
 
 Ready-made themes for [Fleury](https://github.com/danReynolds/fleury), mapped
 onto Fleury's `ColorScheme` roles.
 
 ```dart
 import 'package:fleury/fleury.dart';
-import 'package:fleury_themes/fleury_themes.dart';
+import 'package:fleury/themes.dart';
 
 void main() =>
     runApp(const FleuryApp(title: 'My app', theme: tokyoNight, home: MyApp()));
@@ -45,7 +45,7 @@ Select<int>(
 
 ## Writing your own
 
-A theme is just a `ThemeData`, so you don't need this package to make one — see
+A theme is just a `ThemeData`, so you don't need this library to make one — see
 the [theming guide](https://danreynolds.github.io/fleury/guides/theming/) for
 the roles, the text styles, and the one rule worth knowing (pair colour with an
 attribute, so cues survive `NO_COLOR`).
@@ -54,6 +54,6 @@ attribute, so cues survive `NO_COLOR`).
 
 These are community colour schemes, each the work of its authors and included
 here with attribution — see
-[THIRD_PARTY_NOTICES.txt](THIRD_PARTY_NOTICES.txt). No upstream source code is
+[THIRD_PARTY_NOTICES.txt](../THIRD_PARTY_NOTICES.txt). No upstream source code is
 vendored, only published colour values; the mapping onto Fleury's nine roles is
-this package's own work.
+this library's own work.

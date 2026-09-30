@@ -1,6 +1,6 @@
 import 'package:fleury/fleury.dart';
 import 'package:fleury_storybook/src/theme_gallery.dart';
-import 'package:fleury_themes/fleury_themes.dart';
+import 'package:fleury/themes.dart';
 import 'package:fleury_test/fleury_test.dart';
 import 'package:test/test.dart';
 

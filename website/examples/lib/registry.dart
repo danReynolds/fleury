@@ -1,6 +1,6 @@
 // Web-safe widget examples for the docs site. These run client-side via
 // dart2js (mountApp), so everything imports the dart:io-free host SPI
-// (fleury_host) and the web-safe widget barrel (fleury_widgets_web) — never the
+// (fleury_host) and the web-safe widget barrel (fleury_widgets) — never the
 // full `fleury.dart` / `fleury_widgets.dart` umbrellas, which pull in native
 // drivers and the dart:io-backed widgets.
 import 'dart:async';
@@ -8,8 +8,8 @@ import 'dart:math';
 
 import 'package:fleury/fleury_core.dart';
 import 'package:fleury_samples/samples.dart';
-import 'package:fleury_themes/fleury_themes.dart';
-import 'package:fleury_widgets/fleury_widgets_web.dart';
+import 'package:fleury/themes.dart';
+import 'package:fleury_widgets/fleury_widgets.dart';
 
 import 'state_management_guide.dart' as state;
 import 'loading_data_guide.dart' as loading;
@@ -3069,13 +3069,13 @@ return Text(focused ? '▸ Track 1' : '  Track 1');''',
     widget: 'Themes',
     category: 'Theming',
     blurb:
-        'Every theme in fleury_themes, on a slice of real UI. Arrow through '
+        'Every bundled community theme, on a slice of real UI. Arrow through '
         'the picker to switch.',
     cols: 62,
     rows: 18,
     interactive: true,
     code: '''import 'package:fleury/fleury.dart';
-import 'package:fleury_themes/fleury_themes.dart';
+import 'package:fleury/themes.dart';
 
 void main() =>
     runApp(const FleuryApp(title: 'My app', theme: tokyoNight, home: MyApp()));''',

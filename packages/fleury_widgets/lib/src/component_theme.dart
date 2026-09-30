@@ -1,5 +1,5 @@
 import 'package:fleury/fleury_core.dart';
-import 'package:fleury/fleury_internal.dart';
+import 'package:fleury/fleury_widget_support.dart';
 
 /// Component-level defaults for `fleury_widgets`.
 ///

@@ -13,8 +13,6 @@ COPY packages/fleury_web/pubspec.yaml packages/fleury_web/pubspec.yaml
 COPY packages/fleury_web/lib packages/fleury_web/lib
 COPY packages/fleury_widgets/pubspec.yaml packages/fleury_widgets/pubspec.yaml
 COPY packages/fleury_widgets/lib packages/fleury_widgets/lib
-COPY packages/fleury_themes/pubspec.yaml packages/fleury_themes/pubspec.yaml
-COPY packages/fleury_themes/lib packages/fleury_themes/lib
 COPY experiments/fleury_pad experiments/fleury_pad
 COPY website/public/fonts/fleury-mono.woff2 website/public/fonts/fleury-mono.woff2
 RUN python3 experiments/fleury_pad/dartpad/setup.py

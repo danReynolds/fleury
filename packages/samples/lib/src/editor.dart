@@ -17,7 +17,7 @@
 // to `KeyBindings` as commands; INSERT claims them as text).
 
 import 'package:fleury/fleury_core.dart';
-import 'package:fleury_widgets/fleury_widgets_web.dart';
+import 'package:fleury_widgets/fleury_widgets.dart';
 
 import 'scaffold.dart';
 

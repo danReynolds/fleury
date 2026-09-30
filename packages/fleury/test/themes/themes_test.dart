@@ -5,7 +5,7 @@
 import 'dart:io';
 
 import 'package:fleury/fleury_core.dart';
-import 'package:fleury_themes/fleury_themes.dart';
+import 'package:fleury/themes.dart';
 import 'package:test/test.dart';
 
 void main() {
@@ -91,9 +91,11 @@ void main() {
 /// a hypothetical: it broke the docs-site compile the first time this package
 /// was wired up, and the failure surfaces two packages away from the cause.
 void _webSafetyGuard() {
-  test('the package never imports the native umbrella', () {
+  test('theme presets never import the native umbrella', () {
     final offenders = <String>[];
-    for (final entity in Directory('lib').listSync(recursive: true)) {
+    for (final entity in Directory(
+      'lib/src/themes',
+    ).listSync(recursive: true)) {
       if (entity is! File || !entity.path.endsWith('.dart')) continue;
       final source = entity.readAsStringSync();
       if (source.contains("package:fleury/fleury.dart")) {

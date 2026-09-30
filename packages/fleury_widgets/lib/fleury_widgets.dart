@@ -4,7 +4,8 @@
 /// tabs, tables, trees, menus, form controls, and more — built entirely
 /// on the core primitives (layout, focus, keybindings, overlay,
 /// scrolling, anchoring). The core stays lean and terminal-true; this is
-/// where the higher-level patterns live.
+/// where the higher-level patterns live. Every widget is browser-safe.
+/// Import `fleury_widgets_io.dart` for explicit local filesystem access.
 library;
 
 export 'src/autocomplete.dart' show Autocomplete;
@@ -152,7 +153,6 @@ export 'src/line_chart.dart'
         ReferenceStyle,
         TickFormat,
         TickFormatter;
-export 'src/local_file_source.dart' show LocalFileSource;
 export 'src/log_region.dart'
     show
         LogEntry,
