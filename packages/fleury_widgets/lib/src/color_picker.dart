@@ -95,7 +95,7 @@ class _ColorPickerState extends State<ColorPicker>
   /// palette and Tab away without changing the value.
   int _cursor = 0;
 
-  /// The committed colour when focus was gained, so Esc can cancel back to it.
+  /// The committed color when focus was gained, so Esc can cancel back to it.
   Color? _initial;
 
   /// Tracks focus transitions in [build] (FocusNode has no listener API) so we
@@ -200,14 +200,14 @@ class _ColorPickerState extends State<ColorPicker>
     setState(() => _cursor = index);
   }
 
-  /// Commits the cursor's colour — the "lock in" Enter / Space / a click do.
+  /// Commits the cursor's color — the "lock in" Enter / Space / a click do.
   void _commit() {
     if (!_enabled || _cursor < 0 || _cursor >= _palette.length) return;
     final color = _palette[_cursor];
     if (color != widget.value) _emit(color);
   }
 
-  /// Esc: abandon the in-progress browse, restoring the colour (and cursor)
+  /// Esc: abandon the in-progress browse, restoring the color (and cursor)
   /// from when focus was gained.
   void _cancel() {
     final initial = _initial ?? widget.value;
@@ -578,7 +578,7 @@ Map<String, Object?> _colorComponents(Color color) {
   };
 }
 
-/// A small popover, anchored under the picker, for typing a hex colour code.
+/// A small popover, anchored under the picker, for typing a hex color code.
 /// Enter applies it as an [RgbColor]; Esc dismisses without changing anything.
 class _HexEntry extends StatefulWidget {
   const _HexEntry({

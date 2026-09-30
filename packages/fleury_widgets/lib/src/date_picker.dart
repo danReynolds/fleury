@@ -140,7 +140,7 @@ class _DatePickerState extends State<DatePicker> implements TextInputClaimant {
       _formRegistration?.updateClaim(this, focusNode: _node, enabled: _enabled);
 
   /// Publishes a selection. Normalizes to local midnight unconditionally so
-  /// every emitted value honours the picker's contract — a day-granular
+  /// every emitted value honors the picker's contract — a day-granular
   /// control never hands the app a stray time-of-day, whatever route
   /// (keyboard, pointer, semantics, paste) produced the date.
   void _emit(DateTime value) {
@@ -253,7 +253,7 @@ class _DatePickerState extends State<DatePicker> implements TextInputClaimant {
     _emit(next);
   }
 
-  /// The neighbouring day, on the same calendar lattice as [_move]. Used for
+  /// The neighboring day, on the same calendar lattice as [_move]. Used for
   /// the semantic `canIncrement` / `canDecrement` probes.
   DateTime _neighbour(int days) {
     final v = _midnight(widget.value);

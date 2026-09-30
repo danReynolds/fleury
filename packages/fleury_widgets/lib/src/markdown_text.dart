@@ -38,7 +38,7 @@ import 'package:fleury/fleury_core.dart';
 
 import 'component_theme.dart';
 
-/// Accent colour for Markdown links — a mint green that reads on dark
+/// Accent color for Markdown links — a mint green that reads on dark
 /// backgrounds (unlike a browser's default link blue) and matches Fleury's
 /// default styling. Applies to safe-scheme links on every surface (terminal
 /// OSC 8 text, browser `<a>`), since the browser anchor inherits the cell's
