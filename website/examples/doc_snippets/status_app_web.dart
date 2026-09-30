@@ -1,3 +1,5 @@
+// The browser entrypoint for Getting started's MyApp (web/main.dart in
+// Getting started).
 import 'package:fleury_web/fleury_web.dart';
 import 'package:web/web.dart' as web;
 
