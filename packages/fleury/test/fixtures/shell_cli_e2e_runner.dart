@@ -85,9 +85,18 @@ environment:
       );
     }
 
+    // The shell outlives its app: the next run attaches to it. It quits on
+    // the interrupt a user's Ctrl+C sends while no app is attached.
+    var shellExited = false;
+    unawaited(shell.exitCode.then((_) => shellExited = true));
+    await Future<void>.delayed(const Duration(milliseconds: 500));
+    if (shellExited || !handle.existsSync()) {
+      throw StateError('the shell ended with its app instead of waiting');
+    }
+    shell.kill(ProcessSignal.sigint);
     final shellCode = await shell.exitCode.timeout(const Duration(seconds: 10));
-    if (shellCode != 0) {
-      throw StateError('shell exited $shellCode');
+    if (shellCode != 130) {
+      throw StateError('shell exited $shellCode on SIGINT instead of 130');
     }
     await _waitFor(
       () => !handle.existsSync() && !File(socketPath).existsSync(),

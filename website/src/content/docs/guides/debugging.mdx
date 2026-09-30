@@ -198,7 +198,15 @@ terminal, where `runApp` stops with “runApp needs an interactive terminal”.
 2. Run or debug the app from the IDE. The app finds the shell through the
    `.fleury/handle` file the shell wrote, draws in the shell’s terminal, and
    reads keys from it, while the IDE keeps its console and debugger.
-3. When the app exits, the shell exits too. Start it again before the next run.
+3. Leave the shell running. When the app exits, or you stop or restart it
+   from the IDE, the shell waits for the next run, which attaches to it.
+
+While an app is attached, every key goes to the app, Ctrl+C and Ctrl+Z
+included: a focused text field undoes on Ctrl+Z, and a Ctrl+C the app doesn’t
+handle ends it, as in a terminal of its own. A Ctrl+Z the app doesn’t handle
+suspends nothing, though: the app runs in the IDE, not as a job of the
+shell’s terminal. With no app attached, Ctrl+C quits the shell, and keys typed
+then reach no app.
 
 The app finds the shell when its working directory is that package directory
 or one below it. If the IDE runs the app from somewhere else, set the
