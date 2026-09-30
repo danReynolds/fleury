@@ -1267,14 +1267,14 @@ const SAMPLE_FILES = {
 };
 const SHOWCASE_COMPONENT = '../../../components/ShowcaseWidgets.astro';
 const SHOWCASE_STAGE_COMPONENT = '../../../components/ShowcaseStage.astro';
-const SAMPLES_DIR = join(here, '..', '..', 'packages', 'samples', 'lib', 'src');
+const SAMPLES_DIR = join(ROOT, 'packages', 'samples', 'lib', 'src');
 
 // One-paragraph pitch per showcase: what it is + why Fleury made it easy.
 const SHOWCASE_GOALS = {
   dashboard:
     'A live operations dashboard — per-core gauges, a streaming history chart, ' +
-    "and a sortable process table — the kind of thing you'd normally reach for " +
-    'htop or a Grafana panel to build.\n\n' +
+    "and a live process table sorted by CPU — the kind of thing you'd normally " +
+    'reach for htop or a Grafana panel to build.\n\n' +
     "In Fleury it's one widget tree: the same `Gauge`, `Sparkline`, `LineChart`, " +
     "and `DataTable` you'd use anywhere, composed with `Row`/`Column` and updated " +
     'on a ticker. No canvas math, no manual redraw bookkeeping — call `setState`, ' +
@@ -1282,8 +1282,8 @@ const SHOWCASE_GOALS = {
     'smoothly.',
   files:
     'A two-pane file explorer whose preview adapts to each file type. The left ' +
-    "pane is a tree; the right pane swaps in the right viewer for what's selected " +
-    '— `CodeView` for source, `MarkdownView` for docs, `JsonView` for data.\n\n' +
+    'pane is a tree; the right pane swaps in the right viewer for the file you ' +
+    'open — `CodeView` for source, `MarkdownView` for docs, `JsonView` for data.\n\n' +
     'Each viewer is a drop-in widget with selection, scrolling, and copy already ' +
     'handled, so "the preview matches the file" comes down to a `switch` in ' +
     '`build()`.',
@@ -1299,11 +1299,14 @@ const SHOWCASE_GOALS = {
   agent:
     'A Claude-Code-style streaming session — prose, tool cards, a live todo list, ' +
     'a colored diff, a prompt box.\n\n' +
-    'None of it uses special "agent" widgets: it is just the Fleury primitives ' +
-    'over a cell grid, expressive enough that a rich agent UI comes down to ' +
-    'layout and color. And because it is an ordinary Fleury tree, the same UI is ' +
-    'inspectable as a semantic tree — so a test, or another agent, can read it. ' +
-    'See [Built for agents](/fleury/architecture/agents-and-semantics/).',
+    'It is built from core primitives alone — `Text`, `Row`, `Column`, a ' +
+    '`ListView`, and a `TextInput` over a cell grid — so a rich agent UI comes ' +
+    'down to layout and color. The [Agent surfaces](/fleury/widgets/#agent-surfaces) ' +
+    'widgets package pieces like these (transcripts, tool-call cards, diffs) ' +
+    'when you would rather not build them. And because it is an ordinary ' +
+    'Fleury tree, the same UI is inspectable as a semantic tree — so a test, or ' +
+    'another agent, can read it. See ' +
+    '[Built for agents](/fleury/architecture/agents-and-semantics/).',
   editor:
     'One buffer, two editors. The same text, the same widget tree — but ' +
     'Ctrl+B swaps the entire keymap between a nano-style modeless one and a ' +
@@ -1372,8 +1375,8 @@ const SHOWCASE_TRY = {
     '*Try it: the process table has focus — ↑/↓ move the row selection ' +
     'while the charts stream.*',
   files:
-    '*Try it: use the arrows to move through the tree, then press Enter or ' +
-    'click a file to open its preview.*',
+    '*Try it: use the arrows to move to a file, then press Enter or click it ' +
+    'to open its preview.*',
   commands:
     '*Try it: edit the file, then save it with Ctrl+S or press Ctrl+K and ' +
     'choose **Save current file**. Choose **New file** from the palette to ' +
@@ -1404,42 +1407,75 @@ const SHOWCASE_TRY = {
   sprite:
     '*Try it in this browser: drag across the cell canvas, press R to play your edit, then ' +
     'Ctrl+Z to undo the entire stroke. Copy JSON exports exactly what plays.*\n\n' +
-    'In a native POSIX terminal, Ctrl+Z suspends the app by default. An app that ' +
-    'uses it for undo must opt out of that driver behavior; see ' +
-    '[reserved keys](/fleury/guides/focus-and-keyboard/#keys-handled-by-the-host).',
+    'In a native POSIX terminal, the app sees Ctrl+Z first, and Fleury ' +
+    'suspends it only when nothing handles the key. The undo binding is off ' +
+    'while there is nothing to undo, so an extra Ctrl+Z suspends the studio; ' +
+    '`fg` resumes it. See ' +
+    '[keys handled by the host](/fleury/guides/focus-and-keyboard/#keys-handled-by-the-host).',
 };
 
-// Catalog widget name → { slug, category }, for the "widgets used" links.
-const catalog = new Map();
-for (const e of widgets)
-  catalog.set(e.widget, { slug: e.id.split('.')[0], category: e.category });
-for (const d of DOC_ONLY) catalog.set(d.widget, { slug: d.slug, category: d.category });
-for (const d of CORE.filter((entry) => WIDGET_GUIDES[entry.slug]?.includes('state-management')))
-  catalog.set(d.widget, { slug: d.slug, category: d.category });
+// Layout and text primitives nearly every app is built from. Listing them
+// under "Widgets used" would bury what makes each showcase distinct, so they
+// stay out on purpose, and every other widget with a page is listed.
+const SHOWCASE_PRIMITIVES = new Set([
+  'Text', 'RichText', 'TextSpan', 'Row', 'Column', 'Expanded', 'Flexible',
+  'Spacer', 'Container', 'Padding', 'SizedBox', 'ConstrainedBox', 'Center',
+  'Align', 'Stack', 'Positioned', 'Wrap',
+]);
+// Widget name → { slug, category }, for the "widgets used" links.
+const catalog = new Map(
+  catalogEntries
+    .filter(({ entry }) => !SHOWCASE_PRIMITIVES.has(entry.widget))
+    .map(({ entry }) => [
+      entry.widget,
+      { slug: entry.id.split('.')[0], category: entry.category },
+    ])
+);
+// Dart source without its comments, so a widget named in a comment or doc
+// comment doesn't count as used. (String contents stay; none of the samples
+// spell a constructor call inside a string.)
+const withoutDartComments = (src) =>
+  src.replace(/\/\*[\s\S]*?\*\//g, '').replace(/^\s*\/\/.*$/gm, '').replace(/\s\/\/\s.*$/gm, '');
 const widgetsUsedIn = (file) => {
-  const src = readFileSync(join(SAMPLES_DIR, file), 'utf8');
+  const src = withoutDartComments(readFileSync(join(SAMPLES_DIR, file), 'utf8'));
   const used = [];
   for (const [name, info] of catalog) {
-    if (new RegExp(`\\b${name}(?:<[^>]+>)?\\s*\\(`).test(src))
+    // A constructor call, named constructor, or static helper that builds the
+    // widget (`ListView.builder(`, `CommandPalette.open(`). Lookups such as
+    // `Theme.of(context)` read an ancestor the app did not build here.
+    for (const [, member] of src.matchAll(
+      new RegExp(`\\b${name}(?:<(?:[^<>]|<[^<>]*>)*>)?(?:\\.(\\w+))?\\s*\\(`, 'g')
+    )) {
+      if (member && /^(maybeOf|of|\w+Of)$/.test(member)) continue;
       used.push({ name, slug: info.slug, category: info.category });
+      break;
+    }
   }
   return used;
 };
 
+// Starlight orders an autogenerated sidebar group by `sidebar.order`, then by
+// file name; give the showcases the index's order instead of alphabetical.
+const showcaseOrder = (e) => showcases.indexOf(e) + 1;
+const withFrontmatter = (mdx, lines) => mdx.replace(/^---\n/, `---\n${lines}`);
 for (const e of showcases) {
   const slug = e.id.split('.')[1]; // showcase.dashboard -> dashboard
   // This command-shaped showcase has an illustrated shell and native recording,
   // so it owns its presentation instead of using the fullscreen-app template.
   if (slug === 'inline') {
-    writeFileSync(join(showDir, 'inline.mdx'), readFileSync(join(here, '..', 'showcases', 'inline.mdx'), 'utf8'));
+    const source = readFileSync(join(here, '..', 'showcases', 'inline.mdx'), 'utf8');
+    writeFileSync(
+      join(showDir, 'inline.mdx'),
+      withFrontmatter(source, `sidebar:\n  order: ${showcaseOrder(e)}\n`)
+    );
     continue;
   }
   const file = SAMPLE_FILES[slug];
   const used = file ? widgetsUsedIn(file) : [];
   writeFileSync(
     join(showDir, `${slug}.mdx`),
-    `---\ntitle: ${yaml(e.widget)}\ndescription: ${yaml(e.blurb)}\n` +
-      `tableOfContents: false\n---\n\n` +
+    `---\ntitle: ${yaml(e.widget)}\ndescription: ${yaml(plainText(e.blurb))}\n` +
+      `tableOfContents: false\neditUrl: false\nsidebar:\n  order: ${showcaseOrder(e)}\n---\n\n` +
       `import FleuryExample from '${COMPONENT}';\n` +
       `import ShowcaseStage from '${SHOWCASE_STAGE_COMPONENT}';\n` +
       `import ShowcaseWidgets from '${SHOWCASE_COMPONENT}';\n\n` +
@@ -1462,7 +1498,8 @@ for (const e of showcases) {
   );
 }
 const showIndex =
-  `---\ntitle: Showcases\ndescription: Full-screen apps and interactive CLI commands, running live in your browser.\n---\n\n` +
+  `---\ntitle: Showcases\ndescription: Full-screen apps and interactive CLI commands, running live in your browser.\n` +
+  `editUrl: false\nsidebar:\n  order: 0\n---\n\n` +
   `${showcases.length} complete apps, each built entirely from Fleury widgets and **running ` +
   `live in your browser** — open one and use your keyboard and mouse. Each is ` +
   `also runnable from a Fleury framework checkout with ` +
