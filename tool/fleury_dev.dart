@@ -469,6 +469,7 @@ class _Runner {
       // Keep its shared scenario and JS handle lifecycle in the PR gate too.
       // Live charts exercise production rAF scheduling; manually flushing the
       // catalog tests would conceal first-paint starvation under animation.
+      // Docs hosts must show their declared grid at devicePixelRatio 1.
       await _run('dart', [
         'test',
         '-p',
@@ -477,6 +478,7 @@ class _Runner {
         'test/loading_error_browser_test.dart',
         'test/live_charts_browser_test.dart',
         'test/examples_browser_test.dart',
+        'test/grid_fit_browser_test.dart',
       ], workingDirectory: webExamples);
 
       // dart2js smoke: the doc-examples entrypoint pulls in fleury_core,
