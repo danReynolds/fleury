@@ -109,6 +109,27 @@ class DeployTest(unittest.TestCase):
                 deploy.deploy(self.args())
         run.assert_not_called()
 
+    def test_public_release_keeps_anonymous_access_without_the_staging_proxy(self):
+        responses = [io.BytesIO(json.dumps(value).encode()) for value in [
+            {'buildId': 'test-build'}, {'deltaDill': 'signed-checkpoint'}, {'result': 'Reload smoke'}]]
+        public = self.calls({'bindings': [{'role': 'roles/run.invoker', 'members': ['allUsers']}]})
+        with patch('deploy.command', side_effect=public), patch('deploy.subprocess.run') as run, patch('deploy.urlopen', side_effect=responses), patch('builtins.print'):
+            deploy.deploy(self.args(public=True, docs_origin='https://danreynolds.github.io'))
+        deployed = run.call_args_list[0].args[0]
+        self.assertIn('--allow-unauthenticated', deployed)
+        self.assertNotIn('--no-allow-unauthenticated', deployed)
+        self.assertIn('--invoker-iam-check', deployed)
+        env = next(flag for flag in deployed if flag.startswith('--set-env-vars='))
+        self.assertNotIn('FLEURY_PAD_PROXY_ORIGIN', env)
+        self.assertIn('FLEURY_PAD_DOCS_ORIGIN=https://danreynolds.github.io', env)
+        self.assertIn('--to-revisions=candidate-revision=100', run.call_args_list[1].args[0])
+
+    def test_public_release_requires_the_docs_origin(self):
+        with patch('deploy.command') as command:
+            with self.assertRaisesRegex(ValueError, 'docs-origin'):
+                deploy.deploy(self.args(public=True))
+            command.assert_not_called()
+
     def test_docs_origin_rejects_credentials_paths_and_environment_injection(self):
         for origin in ['http://docs.example.com', 'https://user:pass@docs.example.com', 'https://docs.example.com/path', 'https://docs.example.com,OTHER=value']:
             with patch('deploy.command') as command:

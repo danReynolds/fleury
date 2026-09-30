@@ -1,7 +1,9 @@
-"""Deploy an already verified image to private Cloud Run staging.
+"""Deploy an already verified image to Cloud Run.
 
 Requires an explicit project, pre-provisioned registry/runtime identity/secret,
-and deployer credentials. It never creates IAM grants or public access.
+and deployer credentials. By default the service is private staging and this
+never grants public access. `--public` is the deliberate exception: the docs
+compiler, invocable anonymously from the docs origin only.
 """
 import argparse
 import json
@@ -44,8 +46,11 @@ def verify_profile(service, *, cpu_boost=False):
 
 def deploy(args):
     docs_origin = getattr(args, 'docs_origin', None)
+    public = getattr(args, 'public', False)
     if docs_origin and not re.fullmatch(r'https://[a-z0-9](?:[a-z0-9.-]*[a-z0-9])?(?::[0-9]{1,5})?', docs_origin):
         raise ValueError('Use an exact HTTPS docs origin without a path or credentials.')
+    if public and not docs_origin:
+        raise ValueError('A public Pad serves the docs; pass --docs-origin.')
     if not re.fullmatch(r'[a-z][a-z0-9-]{4,28}[a-z0-9]', args.project):
         raise ValueError('Expected an explicit Google Cloud project ID.')
     if not re.fullmatch(r'[a-z]+-[a-z]+[0-9]+', args.region):
@@ -66,14 +71,17 @@ def deploy(args):
     previous = None
     if exists:
         policy = json.loads(command(['gcloud', 'run', 'services', 'get-iam-policy', args.service, *common, '--format=json']))
-        if any(member in {'allUsers', 'allAuthenticatedUsers'} for binding in policy.get('bindings', []) for member in binding.get('members', [])):
-            raise ValueError('Refusing a public service; choose a private staging service.')
+        if not public and any(member in {'allUsers', 'allAuthenticatedUsers'} for binding in policy.get('bindings', []) for member in binding.get('members', [])):
+            raise ValueError('Refusing a public service; choose a private staging service, or release it with --public.')
         previous = json.loads(command(['gcloud', 'run', 'services', 'describe', args.service, *common, '--format=json']))
         if previous['metadata'].get('annotations', {}).get('run.googleapis.com/invoker-iam-disabled') == 'true':
             raise ValueError('Staging requires the Cloud Run invoker IAM check.')
     subprocess.run([
         'gcloud', 'run', 'deploy', args.service, *common, '--image', args.image,
-        '--service-account', args.runtime_account, '--no-allow-unauthenticated', '--invoker-iam-check',
+        '--service-account', args.runtime_account,
+        # A public release grants run.invoker to allUsers; the service still
+        # checks browser origins, and the frame's CSP limits who may embed it.
+        '--allow-unauthenticated' if public else '--no-allow-unauthenticated', '--invoker-iam-check',
         # Absolute paths also repair services created with older image entrypoints.
         '--command=/usr/bin/python3', '--args=/app/experiments/fleury_pad/dartpad/supervise.py',
         '--execution-environment=gen2', '--cpu=1', '--memory=2Gi',
@@ -83,7 +91,9 @@ def deploy(args):
         '--concurrency=8', '--min=0', '--min-instances=0',
         '--max=1', '--max-instances=1', '--timeout=60s',
         '--port=8080', '--tag=candidate', *(['--no-traffic'] if exists else []),
-        '--set-env-vars=FLEURY_PAD_BIND=0.0.0.0,FLEURY_PAD_PROXY_ORIGIN=http://127.0.0.1:8080' +
+        # The loopback proxy origin is for testers of a private service only.
+        '--set-env-vars=FLEURY_PAD_BIND=0.0.0.0' +
+        ('' if public else ',FLEURY_PAD_PROXY_ORIGIN=http://127.0.0.1:8080') +
         (f',FLEURY_PAD_DOCS_ORIGIN={docs_origin}' if docs_origin else ''),
         f'--set-secrets=FLEURY_CHECKPOINT_KEY={args.checkpoint_secret}',
         '--startup-probe=httpGet.path=/healthz,initialDelaySeconds=0,timeoutSeconds=2,periodSeconds=2,failureThreshold=60',
@@ -129,5 +139,6 @@ if __name__ == '__main__':
     parser.add_argument('--service', default='fleury-pad-staging')
     parser.add_argument('--invoker-account', help='Service account the deployer may impersonate for the smoke test')
     parser.add_argument('--cpu-boost', action='store_true', help='Temporarily use 2 CPUs during startup; steady CPU and scaling caps stay unchanged')
-    parser.add_argument('--promote', action='store_true', help='Route private staging traffic to the candidate after its smoke test passes')
+    parser.add_argument('--promote', action='store_true', help='Route traffic to the candidate after its smoke test passes')
+    parser.add_argument('--public', action='store_true', help='Serve the docs: allow anonymous invocation and drop the staging proxy origin (requires --docs-origin)')
     deploy(parser.parse_args())
