@@ -155,7 +155,9 @@ source file (`fleury run`, `dart run bin/run_app.dart`,
 `fleury serve --spawn dart run …`, `fleury_mcp -- dart run …`) or with assertions enabled (`--enable-asserts`).
 They’re off in AOT executables (`dart compile exe`) and in snapshots, such as
 the ones `dart pub global activate` installs; browser bundles don’t include
-them. Pass a `DebugConfig` to `runApp` to change that either way, or to open
+them. A `dart run` without a file path, or `dart run package:exe`, also runs a
+precompiled snapshot, so name the file (`dart run bin/run_app.dart`) or use
+`fleury run` during development. Pass a `DebugConfig` to `runApp` to change that either way, or to open
 the panel at launch and record from startup:
 
 ```dart

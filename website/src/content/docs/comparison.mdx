@@ -25,7 +25,8 @@ excellent frameworks; this is the particular combination Fleury is built for.
   </Card>
   <Card title="One app, terminal or browser" icon="laptop">
     The same tree runs native, compiles into a page with dart2js, or streams over
-    a socket, with cross-target output checked by regression tests.
+    a socket, with regression tests checking each target's output against the
+    shared cell buffer.
   </Card>
   <Card title="Fast, and measured" icon="rocket">
     Output diffed down to the cell, data widgets virtualized past 100k rows, and
@@ -93,7 +94,8 @@ The same widget tree runs three ways: natively in a real terminal, compiled into
 web page client-side with dart2js (no backend — every demo on this page is exactly
 that), or previewed from a native process with [`fleury serve`](/fleury/architecture/serving-and-embedding/).
 A `dart:io`-free core lets one widget definition span all three. Regression
-tests compare terminal, embedded, and served output for covered fixtures;
+tests check each target's output, the browser DOM and the terminal's ANSI
+stream, against the core cell buffer for covered fixtures;
 platform input, focus, accessibility, and terminal capabilities still need
 testing where your app runs.
 

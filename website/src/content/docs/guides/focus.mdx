@@ -30,7 +30,7 @@ reaches the focused region, see
 | Move focus from code | `FocusNode` |
 | React when focus enters or leaves a subtree | `FocusDetector` |
 | Render from whether this `Focus` is the keyboard target | `Focus.of(context).hasFocus` |
-| Open a dialog and restore focus afterward | `Navigator.present` |
+| Open a dialog and restore focus afterward | `context.present` |
 
 ## Automatic traversal
 
@@ -241,7 +241,7 @@ control focused inside it, so returning to a screen restores the user's place.
 Opening another screen or dialog activates its scope; closing it restores the
 previous screen's remembered control.
 
-`Navigator.present` also traps focus inside the dialog. Tab, arrow traversal,
+`context.present` also traps focus inside the dialog. Tab, arrow traversal,
 clicks, and direct focus requests cannot move focus to the covered screen, and
 unmatched keys do not fall through to it. The `Publish…` flow in the first demo
 shows both behaviors: focus starts on Cancel, stays in the dialog, and returns
@@ -264,7 +264,7 @@ without trapping app-level focus or shortcuts as a dialog would.
 
 Most applications never configure a focus trap directly. Use
 `FocusScope(trapFocus: true)` only for a custom overlay that does not go through
-`Navigator.present`:
+`context.present`:
 
 ```dart
 FocusScope(
@@ -276,7 +276,7 @@ FocusScope(
 Every `FocusScope` remembers its last focused descendant. `trapFocus` adds the
 stronger rule that focus cannot leave the subtree; it does not swallow key
 events. When unmatched keys must not reach the app behind the overlay either,
-also wrap it in `KeyBindings(modal: true)`. `Navigator.present` applies both
+also wrap it in `KeyBindings(modal: true)`. `context.present` applies both
 for you.
 
 ### Bare roots

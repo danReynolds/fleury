@@ -768,14 +768,14 @@ const SEE_ALSO = {
     ['Toggle', 'toggle', 'for a compact on/off switch'],
     ['Checkbox', 'checkbox', 'for a checklist item'],
   ],
-  radio: [['RadioGroup', 'radiogroup', 'to make a group one Tab stop with arrow-key selection']],
+  radio: [['RadioGroup', 'radiogroup', 'for a ready-made group whose arrow keys move the selection']],
   radiogroup: [['Radio', 'radio', 'to lay out each choice yourself']],
   stepper: [['NumberInput', 'numberinput', 'for typed numeric entry']],
   numberinput: [['Stepper', 'stepper', 'for arrow-key increments']],
   filepicker: [['FileBrowser', 'filebrowser', 'to browse with filtering and copy']],
   filebrowser: [['FilePicker', 'filepicker', 'to pick a single file']],
   progressbar: [
-    ['Gauge', 'gauge', 'for a labelled meter with thresholds'],
+    ['Gauge', 'gauge', 'for a labeled meter with thresholds'],
     ['Spinner', 'spinner', 'for activity without a known end'],
   ],
   spinner: [['ProgressBar', 'progressbar', 'when progress can be measured']],
@@ -804,7 +804,7 @@ const SEE_ALSO = {
   menu: [['Select', 'select', 'to choose a value rather than run an action']],
   tooltip: [['Anchored', 'anchored', 'to float any content next to a trigger']],
   keybindings: [['KeyDetector', 'keydetector', 'for low-level key handling inside a custom control']],
-  keydetector: [['KeyBindings', 'keybindings', 'for declared, labelled shortcuts']],
+  keydetector: [['KeyBindings', 'keybindings', 'for declared, labeled shortcuts']],
   text: [['RichText', 'richtext', 'to style parts of a line differently']],
   richtext: [['Text', 'text', 'when one style covers the whole string']],
   textspan: [['RichText', 'richtext', 'to render a span tree']],
@@ -1318,7 +1318,7 @@ const SHOWCASE_GOALS = {
     'vim reveals on demand: press `d`, `g` or the `Space` leader and pause, ' +
     'and the which-key popup (`WhichKey`, fed by `KeyBindings.pendingOf`) ' +
     'lists what can come next.\n\n' +
-    'The modal behaviour underneath is ordinary app state. In vim NORMAL the ' +
+    'The modal behavior underneath is ordinary app state. In vim NORMAL the ' +
     'editor declines typed text, so printables route to `KeyBindings` as ' +
     'commands; in INSERT it claims them. See ' +
     '[Key handling](/fleury/guides/key-handling/).',

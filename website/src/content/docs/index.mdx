@@ -98,8 +98,8 @@ terminal. [How that works →](/fleury/architecture/serving-and-embedding/)
   <FeatureCard icon="laptop" title="One App, Multiple Targets" href="/fleury/architecture/serving-and-embedding/" cta="Serving & embedding">
     The same widget tree renders natively to a terminal, or to the browser —
     compiled in with dart2js, or streamed live by <code>fleury serve</code>. A
-    shared rendering pipeline and cross-target regression tests keep their
-    output aligned.
+    shared rendering pipeline, and regression tests that check each target's
+    output against the same cell buffer, keep them aligned.
   </FeatureCard>
   <FeatureCard icon="rocket" title="Fast Development & Debugging" href="/fleury/guides/hot-reload/" cta="Hot reload">
     Stateful hot reload on save — rare in a terminal — so a running app picks up
@@ -127,7 +127,7 @@ terminal. [How that works →](/fleury/architecture/serving-and-embedding/)
   <LinkCard
     title="Guides"
     href="/fleury/guides/"
-    description="Task-focused guides to layout, state, input, testing, and shipping, with live examples."
+    description="Task-focused guides to layout, state, input, testing, and shipping, most with live examples."
   />
   <LinkCard
     title="Widget reference"

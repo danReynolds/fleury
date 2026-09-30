@@ -93,11 +93,9 @@ if the target disappears, the gesture is cancelled.
 
 Wrap a row in `MouseRegion` when its hover state should include child controls.
 This adds enter/exit callbacks without intercepting the children's presses.
-For hover in a native terminal, start the app with
-`runApp(const MyApp(), mode: const TerminalMode(mouseMotion: true))`;
-`mouse: true` alone enables clicks and drags but not hover, so enter and exit
-then fire only on clicks. The `bin/run_app.dart` that `fleury create` generates
-sets `mouse: true`, so change it there; see
+In a native terminal, hover needs `TerminalMode(mouseMotion: true)`; the
+`bin/run_app.dart` that `fleury create` generates sets only `mouse: true`, which
+reports presses, drags, and the wheel but not plain motion. See
 [Enable mouse input in a terminal](#enable-mouse-input-in-a-terminal). Browser
 demos receive pointer motion automatically.
 

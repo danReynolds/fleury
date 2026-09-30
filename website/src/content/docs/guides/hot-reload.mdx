@@ -223,8 +223,10 @@ steps.
 ## When the supervisor steps aside
 
 The supervisor runs only when it can own the session safely: a source app
-launched through `fleury run` or a plain JIT `dart run` on a real terminal, on
-macOS or Linux. It automatically yields to anything else that owns the run — an
+launched through `fleury run` or a plain JIT `dart run bin/run_app.dart` on a
+real terminal, on macOS or Linux. A `dart run` without a file path, or
+`dart run package:exe`, runs a precompiled snapshot instead, so it gets neither
+hot reload nor the debug shell. It automatically yields to anything else that owns the run — an
 editor debug session (a live VM service), a `fleury serve`, `fleury shell`, or
 `fleury_mcp` handle, a compiled app, Windows, a non-TTY, or an app that passes
 its own `driver:` to `runApp` — and the app runs exactly as it would without

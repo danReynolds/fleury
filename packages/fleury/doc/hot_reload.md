@@ -127,9 +127,8 @@ automatically when the VM reports a reload.
 For an existing project, copy those three fields and point `program` at your
 entrypoint. No Fleury-specific VS Code extension is required.
 
-There is no fleury-specific VS Code extension. The hot reload
-mechanism rides on the standard VM service protocol that Dart-Code
-already speaks — when it fires `reloadSources`, fleury's
+The hot reload mechanism rides on the standard VM service protocol that
+Dart-Code already speaks — when it fires `reloadSources`, fleury's
 `HotReloadController` picks up the `IsolateReload` event via
 the VM-service client and calls `BuildOwner.reassembleApplication()`.
 

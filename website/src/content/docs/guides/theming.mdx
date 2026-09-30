@@ -106,8 +106,9 @@ Use `CellStyle.interactive` when a widget should change as users interact with
 it. Assign it to `ThemeData.interactiveStyle` for the whole app, or pass it to
 one widget's ordinary `style` property for a local exception. Native hover
 feedback also needs `TerminalMode(mouseMotion: true)` in `runApp`;
-`mouse: true` alone does not report hover, so `hovered` then changes only on
-clicks. An app created by `fleury create` starts with `mouse: true`;
+`mouse: true` alone doesn't report plain motion, so `hovered` changes only when
+a press, drag, or wheel event arrives. An app created by `fleury create` starts
+with `mouse: true`;
 [Enable mouse input in a terminal](/fleury/guides/input-and-gestures/#enable-mouse-input-in-a-terminal)
 shows the change. Browser hosts already provide pointer motion. This reference
 renders each entry directly so the differences are easy to compare:

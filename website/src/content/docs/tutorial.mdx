@@ -131,13 +131,10 @@ always `''`, so nothing's filtered — until we wire up the input. (Until then t
 analyzer suggests making `_query` final; step 3 assigns it.)
 
 Turning a stateless widget into a stateful one is a change a reload can't
-apply, so restart after saving this step. In a terminal-owned `fleury run`
-session, press `Ctrl+G` to open the debug shell, then `F5` (`Fn+F5` on a Mac
-laptop unless the top row is set to standard function keys). If your editor or
-terminal intercepts F5, as VS Code's integrated terminal does, press `Ctrl+C`
-and rerun the command, or use another terminal; [Hot reload](/fleury/guides/hot-reload/#when-f5-doesnt-restart)
-shows a VS Code setting that lets F5 through. If you launched with VS Code's F5,
-use the editor's **Restart** action instead.
+apply, so restart after saving this step: in a `fleury run` session, press
+`Ctrl+G`, then `F5`, or use the editor's **Restart** action if you launched
+with VS Code's F5. If F5 doesn't reach the app, see
+[When F5 doesn't restart](/fleury/guides/hot-reload/#when-f5-doesnt-restart).
 
 ## 3. Add the text field
 
@@ -239,7 +236,8 @@ Here is the finished `lib/app.dart`:
   [`DataTable`](/fleury/widgets/datatable/), or [`Select`](/fleury/widgets/select/) — from the
   [widget reference](/fleury/widgets/). (Those live in `fleury_widgets`; add
   `import 'package:fleury_widgets/fleury_widgets.dart';` when you reach for them.)
-- Preview the app in a browser: `fleury serve --spawn` runs it and streams it
-  to a tab, as in step 5 of [Getting started](/fleury/getting-started/).
+- Preview the app in a browser on macOS or Linux: `fleury serve --spawn` runs
+  it and streams it to a tab, as in step 5 of
+  [Getting started](/fleury/getting-started/).
 - Browse the [guides](/fleury/guides/) for forms, navigation, key handling, and
   more.

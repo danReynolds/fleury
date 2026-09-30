@@ -107,9 +107,9 @@ server's `env` setting, because both the `fleury_mcp` script that
 `dart run` compiles the app each time the server starts, and `fleury_mcp`
 suggests compiling it once instead: `dart compile exe bin/run_app.dart -o my_app`,
 then `fleury_mcp -- ./my_app`. A compiled app starts faster, but its debug
-tooling is off, so `read_frames`, `read_logs`, and `read_errors` have nothing
-to report unless the app passes `DebugConfig(enabled: true)` to `runApp` (see
-[Inspect what happened](#inspect-what-happened)).
+tooling is off, so `read_frames`, `read_logs`, and `read_errors` return
+`available: false` unless the app passes `DebugConfig(enabled: true)` to
+`runApp` (see [Inspect what happened](#inspect-what-happened)).
 
 The server supports [the stateless MCP `2026-07-28`
 revision](https://modelcontextprotocol.io/specification/2026-07-28/changelog)
@@ -273,8 +273,7 @@ same evidence as Fleury's debug shell. An agent can trigger an action, then
 check whether it threw, logged an unexpected result, or caused expensive
 frames. They need the app's debug tooling, which is on when the app runs from
 a `.dart` source file, as with `dart run bin/run_app.dart`, or with assertions
-enabled. A
-compiled app or a snapshot turns it off, and the tools return
+enabled. A compiled app or a snapshot turns it off, and the tools return
 `available: false`, unless the app passes `DebugConfig(enabled: true)` to
 `runApp`.
 

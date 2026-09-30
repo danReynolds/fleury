@@ -156,14 +156,12 @@ class _StatusAppState extends State<StatusApp> {
 ```
 
 This edit changes the app's structure and starts a timer in `initState`, which a
-reload doesn't rerun, so **restart** instead. In a terminal-owned `fleury run`
-session, press `Ctrl+G` to open the debug shell, then `F5` (`Fn+F5` on a Mac
-laptop unless the top row is set to standard function keys). If your editor or
-terminal intercepts F5, as VS Code's integrated terminal does, press `Ctrl+C`
-and run `fleury run` again, or use another terminal; [Hot reload](/fleury/guides/hot-reload/#when-f5-doesnt-restart)
-shows a VS Code setting that lets F5 through. If you launched with VS Code's F5,
-use the editor's **Restart** action instead. The uptime line ticks
-every second, and the progress bar fills over the minute.
+reload doesn't rerun, so **restart** instead: in a `fleury run` session, press
+`Ctrl+G` to open the debug shell, then `F5`. If F5 doesn't reach the app, as on
+a Mac laptop's top row or in VS Code's integrated terminal, see
+[When F5 doesn't restart](/fleury/guides/hot-reload/#when-f5-doesnt-restart).
+If you launched with VS Code's F5, use the editor's **Restart** action instead.
+The uptime line ticks every second, and the progress bar fills over the minute.
 
 The scaffold's test describes the counter you just replaced, so update it at
 the same time:
@@ -242,9 +240,9 @@ screen gets.
 
 ## 5. Open it in a browser
 
-You can preview the same app in a browser tab without any changes.
-`fleury serve --spawn` starts the native app and streams its frames to the
-page:
+On macOS and Linux, you can preview the same app in a browser tab without any
+changes. `fleury serve --spawn` starts the native app and streams its frames to
+the page:
 
 ```sh
 fleury serve --spawn dart --enable-vm-service=0 run bin/run_app.dart

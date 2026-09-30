@@ -30,7 +30,7 @@ structured terminal/browser surfaces.
 | `MaterialApp` / `WidgetsApp` | `FleuryApp(title:, home:, theme:)` is the lightweight app shell. |
 | logical pixels | integer cells (`EdgeInsets.all(1)`, not `8.0`). |
 | Material controls | Fleury core widgets plus `fleury_widgets` for tables, charts, forms, agent surfaces, and controls. |
-| Flutter web build | `mountApp(() => const FleuryApp(title: 'My app', home: MyHomeScreen()), into: host)` in a client-side dart2js bundle. (`fleury serve` previews a native app in a browser during development; it isn't a web build.) |
+| Flutter web build | `mountApp(() => const FleuryApp(title: 'My app', home: MyHomeScreen()), into: host)` in a client-side dart2js bundle. (`fleury serve` previews a native app in a browser during development, on macOS and Linux; it isn't a web build.) |
 | `flutter run`, then `r` / `R` | `fleury run` hot reloads when you save a file (macOS and Linux). For a hot restart, press `Ctrl+G` to open the debug shell, then `F5`; see [Hot reload](/fleury/guides/hot-reload/). |
 
 ## The same counter, twice
@@ -112,7 +112,7 @@ the same widget tree, but different host entrypoints:
 | Native terminal app | `package:fleury/fleury.dart` | `runApp(const FleuryApp(title: 'My app', home: MyHomeScreen()))` |
 | Higher-level widgets in a terminal app | `package:fleury_widgets/fleury_widgets.dart` | still `runApp` |
 | Client-side browser embed | `package:fleury/fleury_core.dart`, `package:fleury_web/fleury_web.dart`, plus web-safe widgets | `mountApp(() => const FleuryApp(title: 'My app', home: MyHomeScreen()), into: host)` |
-| Local browser preview of a native app, during development | terminal app imports | `fleury serve --spawn dart --enable-vm-service=0 run bin/run_app.dart` |
+| Local browser preview of a native app, during development (macOS and Linux) | terminal app imports | `fleury serve --spawn dart --enable-vm-service=0 run bin/run_app.dart` |
 
 `MyHomeScreen` below is the first screen inside the shell. In a project made
 with `fleury create my_app`, `MyApp` already builds `FleuryApp`: pass
@@ -341,7 +341,7 @@ in Flutter.
 5. Add keyboard paths first, then pointer affordances.
 6. Decide the host: terminal `runApp`, or a static browser bundle with
    `mountApp`. `fleury serve` previews a native app in a browser during
-   development; it isn't a way to host one.
+   development on macOS and Linux; it isn't a way to host one.
 
 The fastest way in is the [tutorial](/fleury/tutorial/), then
 [Widgets & state](/fleury/concepts/widgets-and-state/) and [App entry points](/fleury/concepts/app-entry/).

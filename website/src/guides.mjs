@@ -33,8 +33,8 @@ export const GUIDE_GROUPS = [
   {
     label: 'Terminal apps',
     items: [
-      { label: 'Full-screen and inline UIs', slug: 'guides/terminal-modes' },
-      { label: 'Shutdown and signals', slug: 'guides/shutdown-and-signals' },
+      { label: 'Full-screen & inline UIs', slug: 'guides/terminal-modes' },
+      { label: 'Shutdown & signals', slug: 'guides/shutdown-and-signals' },
       { label: 'Terminal capabilities', slug: 'guides/terminal-capabilities' },
       { label: 'Deployment & distribution', slug: 'guides/deployment' },
     ],

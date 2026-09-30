@@ -142,7 +142,7 @@ tree, then `invoke_action` / `set_value` to drive it. Legacy `2025-06-18`
 clients can additionally use focus-relative text and key input. The app needs
 no changes.
 
-### 3. (Recommended) AOT-compile for instant startup
+### 3. Optional: AOT-compile for instant startup
 
 Launching via `dart run` JIT-compiles the app on the first read (a few seconds);
 `fleury_mcp` prints a one-time hint when it sees this. Compile once for a
@@ -153,8 +153,10 @@ dart compile exe bin/run_app.dart -o my_app
 claude mcp add my-app -- fleury_mcp -- ./my_app
 ```
 
-An AOT executable has Fleury's debug tooling off, so the `read_*` tools below
-report `available:false` unless the app turns it on.
+The trade-off: an AOT executable has Fleury's debug tooling off, so the
+`read_*` tools below report `available:false` unless the app passes
+`DebugConfig(enabled: true)` to `runApp`. Keep `dart run` while an agent needs
+them.
 
 ### Drive it by hand (for debugging)
 
