@@ -126,22 +126,23 @@ with layout widgets like `Expanded` and `Wrap` (see [Layout](/fleury/guides/layo
 ## Who owns a control's value?
 
 With `value` and `onChanged`, your state owns the value. The control asks for a
-change, and you supply the updated value:
+change, and you supply the updated value. Here `region` is a `String` field on
+your `State`:
 
 ```dart
-Select<EdgeBehavior>(
-  value: edgeBehavior,
+Select<String>(
+  value: region,
   options: const [
-    SelectOption(value: EdgeBehavior.bubble, label: 'Bubble (leave pane)'),
-    SelectOption(value: EdgeBehavior.contain, label: 'Contain (stay in pane)'),
+    SelectOption(value: 'us-east', label: 'US East'),
+    SelectOption(value: 'eu-west', label: 'EU West'),
   ],
-  onChanged: (value) => setState(() => edgeBehavior = value),
+  onChanged: (value) => setState(() => region = value),
 )
 ```
 
-Try that selector in the [scroll-edge demo](/fleury/guides/lists-and-scrolling/#scroll-edges).
-The same `edgeBehavior` field controls both the option it shows and the pane's
-edge behavior.
+The select always shows `region`. Picking an option calls `onChanged`, and the
+new choice appears only after your `setState` stores it. The
+[Select reference](/fleury/widgets/select/) has a live example.
 
 A controller holds live state that both your code and the widget can change.
 Create it once in `State` and dispose it with that state:
@@ -165,10 +166,11 @@ An `initial*` widget argument seeds internal state once. For example,
 Use a controller for later programmatic changes, or a new key for a deliberate
 reset. Supply a seed or a controller for the same value, not both.
 
-Input `onChanged` callbacks report user and semantic edits. Programmatic
-controller writes notify controller listeners, so updating a model does not
-echo through an input callback. Replacing a controller adopts the new one's
-state; omitting it creates fresh internally owned state.
+Input `onChanged` callbacks report edits from the user and edits made through
+the semantic tree, such as a test's `fill` or an agent setting the field's
+value. Programmatic controller writes notify controller listeners, so updating
+a model does not echo through an input callback. Replacing a controller adopts
+the new one's state; omitting it creates fresh internally owned state.
 
 ## Keys
 
