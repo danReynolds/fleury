@@ -26,7 +26,7 @@ class Bar {
   /// Bar label drawn below the column (when `showLabels: true`).
   final String label;
 
-  /// The bar's single value, or null when [segments] is non-empty.
+  /// The bar's single value; null for a stacked bar.
   final num? value;
 
   /// Stacked segment values (bottom→top). Empty for single-value bars.
@@ -79,7 +79,8 @@ class Bar {
 /// ```
 ///
 /// Screen readers and agents get one chart node: [semanticLabel] plus the
-/// bar count and the smallest and largest bar totals, not a node per bar.
+/// bar count and the value range (from the smallest bar total up to the
+/// largest total or [max], whichever is larger), not a node per bar.
 class BarChart extends StatelessWidget {
   const BarChart({
     super.key,
@@ -108,10 +109,10 @@ class BarChart extends StatelessWidget {
   /// Cells between bars.
   final int gap;
 
-  /// Colors used for stacked-bar segments and as the default for
-  /// single-value bars that don't set [Bar.color] explicitly. Defaults to
-  /// a palette derived from the theme's color scheme (primary, info,
-  /// warning, success, error).
+  /// Colors cycled through for stacked-bar segments. Single-value bars that
+  /// don't set [Bar.color] all use its first color. Defaults to a palette
+  /// derived from the theme's color scheme (primary, info, warning, success,
+  /// error).
   ///
   /// For stacked bars where segments are categorical (no semantic
   /// meaning), prefer overriding with `Palettes.categorical` to avoid
@@ -119,8 +120,8 @@ class BarChart extends StatelessWidget {
   final List<Color>? palette;
 
   /// Labels for stacked-bar segments, parallel to each [Bar.stacked]'s
-  /// `segments` list. Required for the legend to render — without it,
-  /// stacked bars are unreadable, so peer libs all auto-emit one.
+  /// `segments` list. [showLegend] draws a legend only when these are set,
+  /// and without one, stacked segments are hard to tell apart.
   final List<String>? segmentLabels;
 
   /// Whether to draw a row of category labels under the chart.

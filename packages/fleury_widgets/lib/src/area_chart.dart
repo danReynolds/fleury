@@ -73,7 +73,8 @@ class AreaChart extends StatelessWidget {
   /// Draw min/mid/max labels for both axes.
   final bool showAxes;
 
-  /// Draw faint mid-axis crosshair lines through the plot area.
+  /// Draw faint dotted gridlines at the minimum, middle, and maximum of both
+  /// axes.
   final bool showGrid;
 
   /// Draw a one-row legend with a colored bullet and label per series.
@@ -92,7 +93,8 @@ class AreaChart extends StatelessWidget {
   /// Formatter for y-axis tick labels and the crosshair tooltip y values.
   final TickFormatter? yTickFormat;
 
-  /// Reference lines drawn under the data.
+  /// Reference lines for targets or thresholds, drawn over the filled
+  /// areas.
   final List<ReferenceLine> references;
 
   /// When true, the chart is focusable with an arrow-key crosshair.

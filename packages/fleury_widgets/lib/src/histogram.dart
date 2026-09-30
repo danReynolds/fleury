@@ -11,8 +11,8 @@ import 'bar_chart.dart';
 /// ```
 ///
 /// Range defaults to autoscaled `[min(values), max(values)]`. Bin labels
-/// are the midpoint of each bucket; turn them off with `showLabels: false`
-/// when packing many bins into a narrow space.
+/// are the midpoint of each bucket; when they would collide, only an evenly
+/// spaced subset is shown, and `showLabels: false` turns them off.
 ///
 /// Screen readers and agents get one chart node: [semanticLabel] plus the
 /// bin count, how many values fell in the range, and the range's low and high
@@ -41,7 +41,8 @@ class Histogram extends StatelessWidget {
   /// [values]. Values outside the range are dropped.
   final (num, num)? range;
 
-  /// Whether each bar shows its bin midpoint label.
+  /// Whether bars show their bin midpoint labels. When labels would collide,
+  /// only an evenly spaced subset is shown.
   final bool showLabels;
 
   /// Whether each bar shows its observation count.

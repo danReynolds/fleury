@@ -5,8 +5,8 @@ import 'glyphs.dart';
 /// A compact, single-row history graph of recent numeric values, rendered
 /// with the eight vertical block elements (`▁▂▃▄▅▆▇█`).
 ///
-/// Right-aligned (newest value on the right, like `htop`/`bashtop`); values
-/// older than the available width are dropped from the left. Sized by the
+/// Right-aligned (newest value on the right); values older than the
+/// available width are dropped from the left. Sized by the
 /// parent — a row that fills its width by default, or wrap in `SizedBox`
 /// for an explicit width.
 ///
@@ -15,7 +15,8 @@ import 'glyphs.dart';
 /// ```
 ///
 /// Screen readers and agents get one chart node: [semanticLabel] with the
-/// latest value, plus the point count and the plotted range.
+/// latest value, plus the point count, [min], and [max] (or, when [max] is
+/// null, the largest value in [data]).
 class Sparkline extends StatelessWidget {
   const Sparkline({
     super.key,
@@ -32,7 +33,7 @@ class Sparkline extends StatelessWidget {
   final List<num> data;
 
   /// When true, append the latest value as muted text to the right of the
-  /// sparkline — a shape alone doesn't convey magnitude (btop/bashtop show it).
+  /// sparkline — a shape alone doesn't convey magnitude.
   final bool showValue;
 
   /// Top of the visible range. `null` autoscales to the data window.

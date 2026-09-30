@@ -22,8 +22,8 @@ import 'glyphs.dart';
 /// ```
 ///
 /// Screen readers and agents get one chart node: [semanticLabel] plus the
-/// row and column counts and the smallest and largest values, not a node per
-/// cell.
+/// row and column counts and the value range the blocks are scaled to, not a
+/// node per cell.
 class Heatmap extends StatelessWidget {
   const Heatmap({
     super.key,

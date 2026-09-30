@@ -48,7 +48,8 @@ class Gauge extends StatelessWidget {
   /// the bar amber then red) so "high" reads without parsing the number.
   final List<(double, Color)> thresholds;
 
-  /// Empty-track color. Defaults to the theme's muted style.
+  /// Empty-track color, always drawn dim. Defaults to the foreground of the
+  /// theme's muted style.
   final Color? trackColor;
 
   /// Label exposed through the semantic app graph.
