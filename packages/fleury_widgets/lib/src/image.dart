@@ -298,7 +298,8 @@ class Image extends StatefulWidget {
   /// to [backgroundColor]. True-pixel placements retain the source alpha.
   ///
   /// When null, cells whose pixels are all transparent stay empty (showing
-  /// the terminal's own background) and semitransparent pixels are
+  /// the terminal's own background), a transparent half of a half-block
+  /// cell shows the background too, and semitransparent pixels are
   /// weighted by their α in the area average — readable but doesn't
   /// match what designers expect from a compositor. Provide
   /// [backgroundColor] (typically the surrounding container's color)
@@ -767,9 +768,11 @@ class RenderImage extends RenderObject {
         }
 
         // Write the quantized color into the half-cell. We accumulate
-        // per cell: the top half writes the foreground first, the
-        // bottom half merges its color into the existing style as
-        // background.
+        // per cell: the top half writes `▀` in its color as foreground,
+        // then the bottom half merges its color in as background. A
+        // transparent top wrote nothing, and `▀` would paint it in whatever
+        // foreground the cell holds, so an opaque bottom under it is `▄`
+        // in the bottom's color, leaving the top to the background.
         final tgtCol = offset.col + px;
         final tgtRow = offset.row + ry;
         if (tgtCol < 0 ||
@@ -781,10 +784,15 @@ class RenderImage extends RenderObject {
 
         final color = _packColor(qr, qg, qb, _colorMode);
         final existing = buffer.atColRow(tgtCol, tgtRow).style;
-        final newStyle = isTopHalf
+        final bottomOnly = !isTopHalf && sampled[idx - tgtW] == null;
+        final newStyle = isTopHalf || bottomOnly
             ? existing.merge(CellStyle(foreground: color))
             : existing.merge(CellStyle(background: color));
-        buffer.writeGrapheme(CellOffset(tgtCol, tgtRow), '▀', style: newStyle);
+        buffer.writeGrapheme(
+          CellOffset(tgtCol, tgtRow),
+          bottomOnly ? '▄' : '▀',
+          style: newStyle,
+        );
       }
     }
   }
