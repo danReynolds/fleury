@@ -2,8 +2,8 @@
 // of the framework, not a wrapper over the ambient Overlay.
 //
 //   final picked = await context.push<File>(FilePicker(dir: d));
-//   context.pop(chosenFile);     // completes the push future
-//   context.maybePop();          // Esc/back pops if not at the root
+//   context.pop(chosenFile);         // completes the push future
+//   context.navigator.maybePop();    // Esc/back: pops unless at root or vetoed
 //
 // Architecture
 //
@@ -226,9 +226,34 @@ class _Route {
   final Set<_PopScopeState> guards = <_PopScopeState>{};
 }
 
-/// Hosts a screen stack. Install one at the app root for a full-screen
-/// navigator, or nest one inside any layout slot for scoped, embedded
-/// navigation. Single-screen apps don't need it.
+/// Hosts a stack of screens: pages pushed on top of each other, and dialogs
+/// presented over them. `FleuryApp(home: ...)` creates one at the app root;
+/// nest another inside any layout slot to navigate within that region.
+///
+/// [NavigatorState.push] adds a page and [NavigatorState.present] shows a
+/// dialog over the current screen, which stays visible behind it. Both return
+/// a future that completes with the result passed to [NavigatorState.pop].
+/// `context.push`, `context.present`, and `context.pop` do the same on the
+/// nearest navigator. Screens below the top stay mounted and keep their
+/// state, and popping back restores focus to where it was on the revealed
+/// screen.
+///
+/// An Escape that the screen doesn't handle itself pops the top page, and pops
+/// a dialog unless it was presented with `barrierDismissible: false`. At the
+/// root, where there's nothing to pop, Escape passes on to key bindings
+/// outside the navigator. A [PopScope] in the top route can veto an Escape
+/// pop. Clicking outside a dialog doesn't dismiss it.
+///
+/// While a dialog is on top, focus stays inside it, keys it doesn't handle
+/// stop at the dialog instead of reaching bindings outside it, and clicks on
+/// the screen behind it do nothing.
+///
+/// [NavigatorState.pop] ignores [PopScope]. For a Back button that should
+/// respect it, call `Navigator.of(context).maybePop()`, which pops only when
+/// Escape would.
+///
+/// Routes animate in and out with [transition], a cross-fade by default;
+/// each push or present can pass its own.
 class Navigator extends StatefulWidget {
   const Navigator({required this.home, this.transition, super.key});
 
@@ -240,7 +265,9 @@ class Navigator extends StatefulWidget {
   /// recreate it.
   final Widget home;
 
-  /// Default transition for pushes that don't specify one.
+  /// The transition for pushes and presents that don't pass their own; null
+  /// means [RouteTransition.fade]. Use [RouteTransition.none] to switch routes
+  /// instantly.
   final RouteTransition? transition;
 
   /// The nearest enclosing [NavigatorState], or — with
@@ -420,7 +447,8 @@ class NavigatorState extends State<Navigator> {
   /// nothing painted beneath shows through it — a modal is never see-through.
   /// [barrierColor] optionally fills the surround (over the screen behind);
   /// null leaves it composited. [barrierDismissible] (default true) controls
-  /// whether Esc dismisses it.
+  /// whether Esc dismisses it. Clicking the surround never dismisses it, and
+  /// the screen behind doesn't receive those clicks.
   ///
   /// Framing (a border, padding, an edge for a sheet) is just widgets — wrap
   /// [screen] — and [alignment] is the only placement knob you usually need.
@@ -469,7 +497,8 @@ class NavigatorState extends State<Navigator> {
   }
 
   /// Pops the top route (no-op at the root), completing its future
-  /// with [result].
+  /// with [result]. This ignores [PopScope] and `barrierDismissible`; use
+  /// [maybePop] for a user's request to go back.
   void pop([Object? result]) {
     if (depth <= 1) return;
     final route = _topLive;
@@ -541,11 +570,14 @@ class NavigatorState extends State<Navigator> {
         });
   }
 
-  /// Back/Esc: pops the top route unless a [PopScope] in it vetoes the
-  /// attempt (in which case its `onBlocked` fires and this returns
-  /// false). Returns whether a pop happened. Unlike [pop], this consults
-  /// pop guards — including at the root, so a screen can intercept a
-  /// would-be app exit. [pop] itself is unconditional (programmatic).
+  /// Pops the top route the way Escape does, for a Back button or command:
+  /// returns true if it popped. It returns false without popping when a
+  /// [PopScope] in the top route vetoes the pop (its `onBlocked` fires), when
+  /// the top route is a dialog presented with `barrierDismissible: false`, or
+  /// at the root.
+  ///
+  /// A [PopScope] at the root is consulted too, so a screen can intercept a
+  /// would-be app exit. [pop] skips all of these checks.
   bool maybePop() => _tryPop() == _PopAttempt.popped;
 
   /// [maybePop], reporting why nothing popped: a guard or a non-dismissible
@@ -1117,7 +1149,8 @@ class _PopScopeState extends State<PopScope> {
   Widget build(BuildContext context) => widget.child;
 }
 
-/// `context.push(...)` / `context.pop()` — the terse fluent entry.
+/// `context.push(...)` / `context.pop()` — the terse fluent entry. For a back
+/// action that respects [PopScope], use `context.navigator.maybePop()`.
 extension NavigatorContext on BuildContext {
   /// The nearest [NavigatorState].
   NavigatorState get navigator => Navigator.of(this);
@@ -1159,7 +1192,8 @@ extension NavigatorContext on BuildContext {
     barrierDismissible: barrierDismissible,
   );
 
-  /// Pops the current screen with an optional [result].
+  /// Pops the current screen with an optional [result], ignoring [PopScope]
+  /// (see [NavigatorState.pop]).
   void pop([Object? result]) => Navigator.of(this).pop(result);
 
   /// Pops until the top screen is a [T].
