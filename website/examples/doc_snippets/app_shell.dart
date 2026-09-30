@@ -3,7 +3,7 @@
 
 import 'package:fleury/fleury.dart';
 
-void main() => runApp(
+void main(List<String> args) => runApp(
   const FleuryApp(
     title: 'Status monitor',
     theme: ThemeData(
@@ -12,6 +12,8 @@ void main() => runApp(
     ),
     home: HomeScreen(),
   ),
+  args: args,
+  mode: const TerminalMode(mouse: true),
 );
 
 class HomeScreen extends StatelessWidget {

@@ -7,7 +7,7 @@ targets begin.
 
 Fleury is not an ANSI string builder with widgets on top. It is a retained UI
 engine for a cell grid. Every visual target consumes the same framework output:
-a damage-tracked `CellBuffer`. Semantics are a parallel product of the same
+a `CellBuffer` with changes derived from the previous frame. Semantics are a parallel product of the same
 mounted tree, projected or shipped by tests, browser hosts, served sessions,
 agents, and debug tooling. That distinction is deliberate: the terminal
 renderer should not need an accessibility tree to write ANSI, and the browser
@@ -77,10 +77,12 @@ The render layer has two invalidation paths:
 - `markNeedsPaintOnly` is for audited visual-only changes such as color, cursor
   blink, and style.
 
-Fleury keeps this conservative by default. A layout-affecting change can make
-old cells disappear without writing over them, so the presenter cannot trust a
-paint-bounds hint for that frame. Paint-only changes can stay bounded by the
-cells written during paint.
+Fleury keeps invalidation conservative by default. A layout-affecting change
+must recompute size and placement; a paint-only change can reuse valid layout.
+For a visual frame, painting starts at the root and fills a cleared back buffer.
+Culling and repaint caches can skip work inside that traversal. The presenter
+gets changes derived by comparing the finished buffers, including cells that
+disappeared or moved.
 
 `RenderRepaintBoundary` is also deliberately different from a Flutter layer. It
 is a CPU paint cache for a subtree: on a clean frame it blits cached cells into
@@ -101,21 +103,22 @@ placement against the contract in debug mode and delegates to
 `performPaint` — so every painted frame of every test verifies the two agree.
 See [RFC 0024](rfcs/0024-derived-geometry.md).
 
-### CellBuffer: frame truth and paint damage
+### CellBuffer: frame truth and derived damage
 
 `CellBuffer` is the frame image: a two-dimensional grid where each cell is a
 grapheme plus style and role metadata. It enforces wide-grapheme invariants, so
 writing over one half of a wide character repairs the neighboring cell instead
 of leaving an impossible grid.
 
-During a frame, the buffer records paint damage: a conservative rectangle plus
-the exact rows written. Clearing the back buffer is done with damage suppressed,
-then damage tracking starts before framework paint. That way reconstructing the
-next frame does not itself count as user-visible damage.
+For each visual frame, the frame loop clears the back buffer, paints the next
+image, and calls `diffAgainst(previous)` to derive changed rows, bounds, and cell
+counts. A layout change that removes content is therefore visible in the diff
+even when no render object paints over the old location.
 
-The damage signal is a hint to diffing presenters, not the source of truth. The
-source of truth is always the previous and next buffers. When damage is unsafe
-or missing, presenters fall back to buffer diffs.
+The frame buffers do not record per-write paint damage. Repaint boundaries still
+use that tracking inside their own caches to identify the cells they painted.
+Presentation damage comes from comparing complete frame images, so it does not
+need a fallback for missing or unsafe paint hints.
 
 ### Semantics tree: meaning and actions
 
@@ -153,16 +156,16 @@ Here is the visual path for a normal state change:
 3. The host `FrameScheduler` coalesces pending frame requests. With the default
    `Duration.zero` interval it flushes as soon as possible; hosts may opt into a
    minimum frame interval to merge high-rate streams.
-4. `BuildOwner.flushBuild` rebuilds dirty elements shallow-first.
-5. `BuildOwner.renderFrame` finds the root render object, attaches this
-   runtime's damage tracker, runs layout with loose root constraints, and paints
-   into the back `CellBuffer`.
-6. `TuiFrameLoop` clears the back buffer without damage, enables damage
-   tracking for paint, captures paint bounds/rows, consumes render damage, and
-   returns the previous buffer, next buffer, and `TuiFrameDamage`.
+4. `TuiFrameLoop` clears the back buffer for the next image.
+5. Through the frame loop's paint callback, `BuildOwner.renderFrame` rebuilds
+   dirty elements shallow-first, finds the root render object, runs layout with
+   loose root constraints, and paints into that buffer.
+6. The frame loop compares the previous and next buffers, optionally detects a
+   beneficial scroll, and returns both buffers with a `TuiFrameDamage` describing
+   an unchanged frame, changed cells, a scroll, or a forced full repaint.
 7. A presenter turns that into output:
-   - The terminal target calls `AnsiRenderer.renderDiff(previous, next, ...)`,
-     bounded by damage when safe.
+   - The terminal target calls `AnsiRenderer.renderDiff(previous, next, ...)`
+     with the derived changed rows and bounds, or a full-repaint plan.
    - The embedded browser target builds a `FramePresentationPlan` and replaces
      only dirty retained DOM rows.
    - The served browser target encodes a binary plan, the browser client applies
@@ -216,10 +219,10 @@ alternate screen setup, terminal capability detection, and ANSI output. It uses
 the shared frame loop to get previous/next buffers, then diffs them through
 `AnsiRenderer`.
 
-When a frame is a full repaint, the terminal path clears the screen and homes
-the cursor before diffing. Otherwise it passes safe damage bounds to the
-renderer. If layout damage made bounds unsafe, the renderer receives no bounds
-and compares the full buffers.
+When a frame requires a full repaint, the presenter clears its owned terminal
+area and redraws it. Otherwise it passes the derived changed rows and bounds to
+the renderer. Layout changes use the same buffer comparison as paint-only
+changes; they do not require a separate fallback diff.
 
 Scroll is handled as an optimization over buffers, not as a special list API.
 Shared scroll-up detection looks for a row shift that reduces residual dirty
@@ -275,10 +278,8 @@ oracles around the places drift would be subtle:
 
 - **Renderer equivalence:** ANSI diff output must reproduce the same visible
   buffer as a full repaint.
-- **Frame presentation tests:** bounded paint damage, full repaints, and
-  scroll residual rows are tested directly. (The conservative full-diff and
-  row-diff fallbacks these tests once covered no longer exist: damage is
-  derived exactly, so there is nothing to fall back from.)
+- **Frame presentation tests:** derived changed rows and bounds, full repaints,
+  and scroll residual rows are tested directly.
 - **Transport parity:** a server-produced frame must survive the wire and
   reconstruct the same client mirror buffer, including scroll and overlay cases.
 - **DOM parity:** the retained DOM rendered from a remote mirror must match the
@@ -299,16 +300,14 @@ not a claim that Fleury has the smallest possible runtime for one-off CLIs, the
 fastest possible large-grid browser renderer, or a free incremental path for
 every tree mutation. These are the pressure points worth keeping visible.
 
-### Conservative damage is a feature
+### Invalidation still matters
 
-Fleury intentionally treats layout damage as unsafe for bounded diffs. A layout
-change can remove or move cells without painting every stale location. Falling
-back to a wider diff for that frame is cheaper than debugging a stale character
-that only appears after a resize or conditional child disappears.
-
-That also means new render objects have to earn paint-only invalidation. If a
-setter can move children, change size, or leave stale cells behind, it belongs on
-the layout path until tests prove a tighter bound is safe.
+Buffer comparison catches content that moved or disappeared, but it cannot
+repair an incorrectly reused layout or a stale repaint cache. A setter that can
+move children or change size must invalidate layout. Paint-only invalidation is
+for changes that preserve geometry. Repaint caches must also invalidate when
+their subtree changes; the debug cache verifier compares a cache hit with a fresh
+paint to catch stale reuse.
 
 ### Full buffers remain the correctness boundary
 

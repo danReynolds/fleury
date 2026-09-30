@@ -119,29 +119,67 @@ Take the live `DataTable` below — the real widget, running in your browser:
 
 <!-- fleury-example: datatable.basic 48x8 | A DataTable — and the semantic tree behind it -->
 
-Behind those characters, the semantic graph an agent (or a test) reads looks
-roughly like this:
+This excerpt was captured from `tester.semanticInspectionJson()` after
+rendering this example at 48×8 cells. It shows the table and its selected data
+row; snapshot metadata, node ids, the header, other rows, and additional node
+state are omitted:
 
 ```json
 {
   "role": "table",
-  "label": "People",
-  "children": [
-    { "role": "tableRow", "selected": true, "children": [
-      { "role": "tableCell", "label": "name",    "value": "dan" },
-      { "role": "tableCell", "label": "role",    "value": "author" },
-      { "role": "tableCell", "label": "commits", "value": 1284 }
-    ]},
-    { "role": "tableRow", "children": [ /* ada, reviewer, 642 … */ ] }
+  "label": "Data table",
+  "value": 0,
+  "actions": [
+    "copy",
+    "focus",
+    "select",
+    "setValue"
   ],
-  "actions": ["focus", "select", "copy"]
+  "state": {
+    "currentRowIndex": 0,
+    "selectionMode": "row"
+  },
+  "children": [
+    {
+      "role": "tableRow",
+      "selected": true,
+      "children": [
+        {
+          "role": "tableCell",
+          "label": "dan",
+          "value": "dan",
+          "state": {
+            "columnId": "name"
+          }
+        },
+        {
+          "role": "tableCell",
+          "label": "author",
+          "value": "author",
+          "state": {
+            "columnId": "role"
+          }
+        },
+        {
+          "role": "tableCell",
+          "label": "1284",
+          "value": "1284",
+          "state": {
+            "columnId": "commits"
+          }
+        }
+      ]
+    }
+  ]
 }
 ```
 
-No ANSI parsing. The agent knows there's a table, which row is selected, the
-typed cell values, and that it can `select` a different row or `copy` the
-current one — then it issues that `SemanticAction` instead of guessing which
-arrow keys to press.
+No ANSI parsing. The agent can read the selected row and available actions;
+`state.columnId` identifies each column. This table exposes the strings returned
+by its `cellBuilder`, so even the commit count is a string, `"1284"`, rather than
+a typed domain value. An agent can invoke `select` on a row, use the table's
+`setValue` action to jump to a row index, or `copy` the current selection,
+without guessing which arrow keys to press.
 
 ## Holding a reference — stable ids
 
@@ -301,8 +339,10 @@ uses:
   through them — a typed surface, not a screenshot to interpret.
 - **Tests** assert on meaning (above), so they survive a re-theme, a relayout, or
   a port to the browser.
-- **Accessibility** comes along for free: it's the same roles-and-state tree a
-  screen reader wants, so accessible output isn't a separate effort.
+- **Accessibility adapters** read the same roles and state. Custom controls
+  still need meaningful semantics, and screen-reader behavior needs validation
+  on each target; sharing the tree does not guarantee equivalent accessibility
+  across terminals and browsers.
 
 ## On both surfaces
 

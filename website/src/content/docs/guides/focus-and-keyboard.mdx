@@ -32,6 +32,25 @@ This guide starts with scoped bindings, then covers lower-level key handling.
 To control *where* keys go—focusable widgets, Tab order, and traversal—see
 [Focus management](/fleury/guides/focus/).
 
+## Keys handled by the host
+
+A few keys have behavior outside the widget binding chain:
+
+- **Ctrl+G and F12** are reserved while Fleury's debug tooling is enabled, even
+  when its panel is closed. Pass `debug: const DebugConfig(enabled: false)` to
+  `runApp` to release them. Other panel shortcuts apply while it is open; see
+  [Debugging](/fleury/guides/debugging/#keep-the-debugger-out-of-the-reproduction).
+- **Ctrl+Z** suspends a native POSIX terminal app by default, before a widget can
+  handle it; `fg` resumes it. If the app needs that chord, pass
+  `driver: PosixTerminalDriver(suspendOnCtrlZ: false)` to `runApp` and declare its
+  binding. Browser examples do not use this POSIX job-control path.
+- **Ctrl+C** exits a native app when no widget handles it. A handled binding
+  keeps the app running. The structured browser host does not apply this exit
+  fallback, so browser copy gestures can pass through without closing the app.
+
+An editor, terminal emulator, or browser may also intercept a shortcut before
+Fleury receives it. Offer another way to trigger essential commands.
+
 ## Scoped keyboard bindings
 
 ### Declare a binding

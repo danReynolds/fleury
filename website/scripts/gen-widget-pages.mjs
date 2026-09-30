@@ -1125,8 +1125,11 @@ const SHOWCASE_TRY = {
     '*Try it: press Space to launch, then steer with A/D/W and fire with ' +
     'Space—or click and drag directly in the playfield.*',
   sprite:
-    '*Try it: drag across the cell canvas, press R to play your edit, then ' +
-    'Ctrl+Z to undo the entire stroke. Copy JSON exports exactly what plays.*',
+    '*Try it in this browser: drag across the cell canvas, press R to play your edit, then ' +
+    'Ctrl+Z to undo the entire stroke. Copy JSON exports exactly what plays.*\n\n' +
+    'In a native POSIX terminal, Ctrl+Z suspends the app by default. An app that ' +
+    'uses it for undo must opt out of that driver behavior; see ' +
+    '[reserved keys](/fleury/guides/focus-and-keyboard/#keys-handled-by-the-host).',
 };
 
 // Catalog widget name → { slug, category }, for the "widgets used" links.

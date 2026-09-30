@@ -12,15 +12,15 @@ markers to decide the flagship look.
 
 ## Braille line — 1px hairline
 
-The original thin stroke. Highest resolution, but reads as a dotted trail in a
-sparse mono font.
+The default braille stroke (`strokeWidth: 1`). Highest resolution, but reads as a
+dotted trail in a sparse mono font.
 
 <FleuryExample id="linechart.lab.braille1" cols={58} rows={15} />
 
 ## Braille line — 2px band
 
 The same braille, drawn one pixel thicker so the dots fill into a continuous
-band. Portable default; heavier in a dense font.
+band (`strokeWidth: 2`). An optional heavier stroke, especially in a dense font.
 
 <FleuryExample id="linechart.lab.braille2" cols={58} rows={15} />
 
