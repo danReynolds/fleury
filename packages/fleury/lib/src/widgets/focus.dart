@@ -83,7 +83,7 @@ abstract interface class CaretHost implements ScreenGeometrySource {
 /// focus itself. The `InputDispatcher` walks the chain and reads
 /// [activeBindings] from each source it meets. User-facing key discovery
 /// surfaces use `resolveActiveKeyBindings`, which applies the same precedence
-/// plus hint visibility and text-input shadowing rules.
+/// and modal boundary plus hint visibility and text-input shadowing rules.
 abstract interface class KeyBindingSource {
   // Declared here rather than in key_bindings.dart so FocusNode can reference
   // it without a circular import between the focus and bindings libraries.
@@ -97,6 +97,8 @@ abstract interface class KeyBindingSource {
   /// Enforced by the dispatcher rather than by truncating the focus chain,
   /// so a binding here that matches and calls `bubble()` still has
   /// ancestors to reach — that bubble IS the per-key passthrough.
+  /// `resolveActiveKeyBindings` stops here too, after this scope's own
+  /// bindings.
   bool get isModalScope;
 }
 

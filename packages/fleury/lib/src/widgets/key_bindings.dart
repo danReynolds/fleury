@@ -405,9 +405,14 @@ final class ActiveKeyBinding {
 
 /// Resolves the discoverable key bindings active in [manager]'s focus context.
 ///
-/// Resolution follows the same precedence as key dispatch: the deepest local
-/// binding wins each sequence. It also applies the framework's user-facing
-/// discovery rules:
+/// Resolution follows the same rules as key dispatch: the deepest local
+/// binding wins each sequence, and the walk ends at a [KeyBindings] with
+/// [KeyBindings.modal] set, such as the one around a dialog shown with
+/// `Navigator.present`, so bindings beyond it are left out. The modal scope's
+/// own bindings are listed, including one that lets its key through with
+/// [KeyBindingEvent.bubble]: whether a handler bubbles is decided when it
+/// runs, so the key is listed under that binding's label. Resolution also
+/// applies the framework's user-facing discovery rules:
 ///
 ///  * bindings need an explicit [KeyBinding.label];
 ///  * disabled and [KeyBinding.hideFromHintBar] bindings are omitted;
@@ -425,7 +430,25 @@ final class ActiveKeyBinding {
 /// what they answered for that widget, and the focus manager asks them again
 /// at the start of each frame: when one answers differently, the widget
 /// rebuilds. A resolution outside a build remembers nothing.
-List<ActiveKeyBinding> resolveActiveKeyBindings(FocusManager manager) {
+List<ActiveKeyBinding> resolveActiveKeyBindings(FocusManager manager) =>
+    _resolveKeyBindings(manager, stopAtModalScope: true);
+
+/// Framework-internal: [resolveActiveKeyBindings] without the stop at modal
+/// scopes, so it also lists the bindings a dialog keeps keys from while it is
+/// open.
+///
+/// The dispatcher's dead-control check asks whether a binding carries a key
+/// at all. A pause dialog over a running game doesn't take the game's
+/// fallback bindings away; it only holds their keys until it closes.
+@internal
+List<ActiveKeyBinding> resolveKeyBindingsPastModalScopes(
+  FocusManager manager,
+) => _resolveKeyBindings(manager, stopAtModalScope: false);
+
+List<ActiveKeyBinding> _resolveKeyBindings(
+  FocusManager manager, {
+  required bool stopAtModalScope,
+}) {
   final result = <ActiveKeyBinding>[];
   // Canonical sequence identity mirrors dispatch. Differently spelled aliases
   // for the same firing event must not evade deeper-binding precedence.
@@ -470,6 +493,9 @@ List<ActiveKeyBinding> resolveActiveKeyBindings(FocusManager manager) {
     for (final binding in source.activeBindings) {
       consider(binding);
     }
+    // Dispatch stops here too, for every key no binding at this scope
+    // handled (see `InputDispatcher`'s plain dispatch).
+    if (stopAtModalScope && source.isModalScope) break;
   }
   manager.recordLiveAnswers(liveAnswers);
   return List<ActiveKeyBinding>.unmodifiable(result);
@@ -550,6 +576,11 @@ class KeyBindings extends StatefulWidget {
   /// bind it here and call [KeyBindingEvent.bubble] in its handler. This
   /// doesn't keep focus inside the subtree; for a custom overlay, pair it with
   /// `FocusScope(trapFocus: true)`, as `Navigator` does for dialogs.
+  ///
+  /// Hint bars stop here too: while focus is inside, [activeOf] lists these
+  /// bindings and the ones inside, not the ones beyond. A key let through
+  /// with [KeyBindingEvent.bubble] is listed under its binding here, so give
+  /// that binding a label to show it.
   final bool modal;
 
   /// The subtree these bindings cover. A key fires them when focus is on this
@@ -559,6 +590,8 @@ class KeyBindings extends StatefulWidget {
   /// The discoverable bindings active in [context]'s focus context — hint
   /// bars, help overlays, and command palettes read this instead of walking
   /// the focus tree. Rebuilds when focus moves or the active bindings change.
+  /// Like key dispatch, it stops at a [modal] scope; see
+  /// [resolveActiveKeyBindings].
   static List<ActiveKeyBinding> activeOf(BuildContext context) {
     final manager = FocusManager.maybeOf(context);
     if (manager == null) return const <ActiveKeyBinding>[];

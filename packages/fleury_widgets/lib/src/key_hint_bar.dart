@@ -15,7 +15,9 @@ import 'package:fleury/fleury_core.dart';
 ///
 /// A binding appears only when it has a `label`, does not set
 /// `hideFromHintBar: true`, and is enabled. When two scopes bind the same key,
-/// the nearer (deeper) binding is shown.
+/// the nearer (deeper) binding is shown. While focus is in a dialog shown with
+/// `Navigator.present`, or inside any other `KeyBindings(modal: true)`, the
+/// bindings outside it aren't shown: keys don't reach them.
 class KeyHintBar extends StatelessWidget {
   const KeyHintBar({
     super.key,
