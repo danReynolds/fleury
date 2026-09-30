@@ -447,4 +447,124 @@ void main() {
       expect(tester.target(role: SemanticRole.tree, label: 'Files'), isFocused);
     });
   });
+
+  group('FilePicker across parent rebuilds', () {
+    String? selectedPath(FleuryTester tester) =>
+        tester.semantics().single(role: SemanticRole.tree).state['selectedPath']
+            as String?;
+
+    testWidgets('an inline filter keeps the cursor and reads nothing', (
+      tester,
+    ) {
+      final source = _CountingSource(
+        MemoryFileSource(['/p/a.txt', '/p/b.txt', '/p/c.txt', '/p/d.log']),
+      );
+      final rebuild = ValueNotifier<int>(0);
+      tester.pumpWidget(
+        NotifierBuilder(
+          notifier: rebuild,
+          builder: (context, _) => FilePicker(
+            initialDirectory: '/p',
+            source: source,
+            autofocus: true,
+            // A new closure on every build of the parent.
+            filter: (entry) => !entry.name.endsWith('.log'),
+            onSelect: (_) {},
+          ),
+        ),
+      );
+      tester.sendKey(const KeyEvent(KeyCode.arrowDown));
+      tester.sendKey(const KeyEvent(KeyCode.arrowDown));
+      expect(selectedPath(tester), '/p/c.txt');
+      final reads = source.reads;
+
+      rebuild.value++;
+      tester.pump();
+      expect(selectedPath(tester), '/p/c.txt', reason: 'cursor stays put');
+      expect(source.reads, reads, reason: 'the directory was not read again');
+    });
+
+    testWidgets('a filter that changes what it hides applies at once, keeping '
+        'the cursor on its entry', (tester) {
+      final source = _CountingSource(
+        MemoryFileSource(['/p/a.md', '/p/b.txt', '/p/c.txt']),
+      );
+      final hideMarkdown = ValueNotifier<bool>(false);
+      tester.pumpWidget(
+        NotifierBuilder(
+          notifier: hideMarkdown,
+          builder: (context, notifier) {
+            final hide = notifier.value;
+            return FilePicker(
+              initialDirectory: '/p',
+              source: source,
+              autofocus: true,
+              filter: (entry) => !(hide && entry.name.endsWith('.md')),
+              onSelect: (_) {},
+            );
+          },
+        ),
+      );
+      tester.sendKey(const KeyEvent(KeyCode.arrowDown));
+      tester.sendKey(const KeyEvent(KeyCode.arrowDown));
+      expect(selectedPath(tester), '/p/c.txt');
+      final reads = source.reads;
+
+      hideMarkdown.value = true;
+      tester.pump();
+      var tree = tester.semantics().single(role: SemanticRole.tree);
+      expect(tree.state.collectionRowCount, 2, reason: 'a.md is hidden now');
+      expect(tree.state['selectedPath'], '/p/c.txt');
+      expect(tree.state['currentIndex'], 1);
+      expect(source.reads, reads, reason: 'filtering needs no read');
+
+      // An entry the filter now hides can't keep the cursor: first row.
+      tester.sendKey(const KeyEvent(KeyCode.home));
+      hideMarkdown.value = false;
+      tester.pump();
+      tree = tester.semantics().single(role: SemanticRole.tree);
+      expect(tree.state.collectionRowCount, 3);
+      expect(tree.state['selectedPath'], '/p/b.txt');
+    });
+
+    testWidgets('a different source re-reads the directory, keeping the '
+        'cursor on its entry', (tester) {
+      Widget picker(FileSource source) => FilePicker(
+        initialDirectory: '/p',
+        source: source,
+        autofocus: true,
+        onSelect: (_) {},
+      );
+      tester.pumpWidget(picker(MemoryFileSource(['/p/a.txt', '/p/b.txt'])));
+      tester.sendKey(const KeyEvent(KeyCode.arrowDown));
+      expect(selectedPath(tester), '/p/b.txt');
+
+      tester.pumpWidget(
+        picker(MemoryFileSource(['/p/0.txt', '/p/a.txt', '/p/b.txt'])),
+      );
+      final tree = tester.semantics().single(role: SemanticRole.tree);
+      expect(tree.state.collectionRowCount, 3, reason: 'read from the new one');
+      expect(tree.state['selectedPath'], '/p/b.txt');
+    });
+  });
+}
+
+/// Counts directory reads, so a test can tell a re-read from a re-filter.
+final class _CountingSource implements FileSource {
+  _CountingSource(this._inner);
+
+  final FileSource _inner;
+  int reads = 0;
+
+  @override
+  String absolute(String path) => _inner.absolute(path);
+
+  @override
+  String parent(String path) => _inner.parent(path);
+
+  @override
+  List<FileEntry> list(String directory) {
+    reads++;
+    return _inner.list(directory);
+  }
 }
