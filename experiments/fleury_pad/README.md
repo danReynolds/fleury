@@ -18,7 +18,9 @@ first compilation, versus 10.17 seconds combined previously. These are single
 samples, excluding editor downloads and browser rendering.
 The docs now have a dedicated Fleury Pad page at `/fleury/pad/`, linked from the
 homepage, Start here navigation, and hot-reload guide. That page is the full Pad
-workspace. Guide examples also use Pad's editor and compiler.
+workspace. Every docs demo that shows its code also uses Pad's editor and
+compiler: the guides, concepts, Coming from Flutter, the home page, and the
+widget reference.
 
 ## Docs integration
 
@@ -26,9 +28,13 @@ workspace. Guide examples also use Pad's editor and compiler.
 same Monaco controller, API protocol, and sandbox handoff as the standalone
 host, with a full-height code/app workspace, stateful hot reload, formatting,
 source download, local drafts, site themes, and Code/App tabs on narrow screens.
-The editor bundle loads on the Pad page and as guide examples approach the
-viewport. Guide code is editable immediately. Guide previews remain prebuilt, so reading a guide makes
-no compiler requests. The docs page contains no launch card or outbound editor link.
+The editor bundle loads on the Pad page and as demos approach the viewport.
+Demo code is editable immediately, with no edit button. Previews remain
+prebuilt, so reading a page makes no compiler requests; the first Run compiles
+the reader's edit and replaces the prebuilt preview with a frame that matches
+it: the docs theme, the FleuryMono font, and the example's exact grid. The
+frame's runtime is named by build and cached by the browser, so later runs
+download only the compiled edit. Revert returns to the prebuilt example.
 
 For local development, start the authenticated Cloud Run proxy described in
 [DEPLOYMENT.md](DEPLOYMENT.md), then from `website/` run:
@@ -38,7 +44,9 @@ npm ci
 FLEURY_PAD_PROXY_TARGET=http://127.0.0.1:8080 npx astro dev --host 127.0.0.1 --port 4334
 ```
 
-Open `/fleury/pad/` and run the example. The dev-only middleware forwards an
+A local compiler (`dartpad/run.py`, below) works the same way:
+`FLEURY_PAD_PROXY_TARGET=http://127.0.0.1:4346`. Open `/fleury/pad/` and run
+the example, or edit any docs demo and press Run. The dev-only middleware forwards an
 allowlist of API routes through that loopback proxy. It checks browser origins
 before forwarding, and keeps authentication out of browser code. The sandbox
 loads the runtime matching the hosted compiler build.
@@ -59,20 +67,23 @@ service is still private; the updated origin policy needs deployment alongside
 the docs before public access is enabled. Missing compiler configuration leaves
 the editor usable and reports a connection error when using language tools.
 
-## Editable guide projects
+## Editable demo projects
 
-Guide demos expose whole files or focused source regions backed by complete
+Demos expose whole files, `#docregion`s, or declarations backed by complete
 runnable Dart projects. Edits replace those regions in their original files;
 imports and private declarations keep their normal Dart library boundaries.
 Protocol version 3 adds bounded multi-file requests to the existing scheduler,
 compiler, and language services. Single-file Pad requests still work unchanged.
 
-The catalogue currently contains 55 demos across 15 guides. Source ranges are
-generated from the same canonical Dart examples used by the prebuilt previews.
-See [the authoring guide](../../website/examples/GUIDE_PADS.md) for adding or
-changing a demo. CI compiles every catalogue entry against the deployable image.
-This integration is verified locally; the hosted compiler must be updated before
-published guide editors can use project requests.
+The catalogue currently contains 125 projects: 59 guide, concept, and home
+page demos, and 66 widget reference demos derived from the registry. Source
+ranges are generated from the same canonical Dart examples used by the
+prebuilt previews. See [the authoring guide](../../website/examples/GUIDE_PADS.md)
+for adding or changing a demo. CI compiles every catalogue entry against the
+deployable image. This integration is verified locally, where every project
+compiles and runs in the docs; the hosted compiler must be redeployed from this
+source (protocol 3, the docs font, and the frame's grid sizing) before published
+editors can use it.
 
 ## Run locally
 

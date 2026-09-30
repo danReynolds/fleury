@@ -876,7 +876,7 @@ TextInput(
   onChanged: (text) => updateDraft(text),
   onSubmit: (text) => runCommand(text),
 )''',
-    builder: () => const _TextInputExample(),
+    builder: () => _framed(const _TextInputExample()),
   ),
   ExampleInfo(
     id: 'textarea.basic',
@@ -901,7 +901,7 @@ TextArea(
 )''',
     // Seeded with a few lines so the demo reads as a filled multi-line editor
     // instead of an empty field floating in the frame.
-    builder: () => const _TextAreaExample(),
+    builder: () => _framed(const _TextAreaExample()),
   ),
   ExampleInfo(
     id: 'form.basic',
@@ -991,7 +991,7 @@ NotifierBuilder(
   variant: ButtonVariant.primary,
   onPressed: () => save(),
 )''',
-    builder: () => const _ButtonExample(),
+    builder: () => _framed(const _ButtonExample()),
   ),
   ExampleInfo(
     id: 'checkbox.basic',
@@ -1006,7 +1006,7 @@ NotifierBuilder(
   label: 'Accept terms',
   onChanged: (value) => setState(() => _accepted = value),
 )''',
-    builder: () => const _CheckboxExample(),
+    builder: () => _framed(const _CheckboxExample()),
   ),
   ExampleInfo(
     id: 'toggle.basic',
@@ -1021,7 +1021,7 @@ NotifierBuilder(
   label: 'Compact rows',
   onChanged: (value) => setState(() => _compact = value),
 )''',
-    builder: () => const _ToggleExample(),
+    builder: () => _framed(const _ToggleExample()),
   ),
   ExampleInfo(
     id: 'switch.basic',
@@ -1036,7 +1036,7 @@ NotifierBuilder(
   label: 'Streaming updates',
   onChanged: (value) => setState(() => _streaming = value),
 )''',
-    builder: () => const _SwitchExample(),
+    builder: () => _framed(const _SwitchExample()),
   ),
   ExampleInfo(
     id: 'radio.basic',
@@ -1052,7 +1052,7 @@ NotifierBuilder(
   label: 'Fast',
   onChanged: (value) => setState(() => _mode = value),
 )''',
-    builder: () => const _RadioExample(),
+    builder: () => _framed(const _RadioExample()),
   ),
   ExampleInfo(
     id: 'radiogroup.basic',
@@ -1071,7 +1071,7 @@ NotifierBuilder(
   ],
   onChanged: (value) => setState(() => _mode = value),
 )''',
-    builder: () => const _RadioGroupExample(),
+    builder: () => _framed(const _RadioGroupExample()),
   ),
   ExampleInfo(
     id: 'select.basic',
@@ -1090,7 +1090,7 @@ NotifierBuilder(
   ],
   onChanged: (value) => setState(() => _size = value),
 )''',
-    builder: () => const _SelectExample(),
+    builder: () => _framed(const _SelectExample()),
   ),
   ExampleInfo(
     id: 'multiselect.basic',
@@ -1105,7 +1105,7 @@ NotifierBuilder(
   values: _selected,
   onChanged: (values) => setState(() => _selected = values),
 )''',
-    builder: () => const _MultiSelectExample(),
+    builder: () => _framed(const _MultiSelectExample()),
   ),
   ExampleInfo(
     id: 'rangeslider.basic',
@@ -1123,7 +1123,7 @@ NotifierBuilder(
   showValues: true,
   onChanged: (values) => setState(() => _range = values),
 )''',
-    builder: () => const _RangeSliderExample(),
+    builder: () => _framed(const _RangeSliderExample()),
   ),
   ExampleInfo(
     id: 'stepper.basic',
@@ -1142,7 +1142,7 @@ NotifierBuilder(
   label: 'Quantity',
   onChanged: (value) => setState(() => _quantity = value),
 )''',
-    builder: () => const _StepperExample(),
+    builder: () => _framed(const _StepperExample()),
   ),
   ExampleInfo(
     id: 'numberinput.basic',
@@ -1179,7 +1179,7 @@ NotifierBuilder(
 )''',
     // Seeded with a value so the demo shows the obscuring dots (the widget's
     // point) rather than a bare "Password" placeholder.
-    builder: () => const _PasswordInputExample(),
+    builder: () => _framed(const _PasswordInputExample()),
   ),
   ExampleInfo(
     id: 'autocomplete.basic',
@@ -1197,7 +1197,7 @@ NotifierBuilder(
     // Seeded with a query + autofocus so the demo opens on the filtered matches
     // (the point of the widget) instead of a bare prompt. Clear it to type your
     // own.
-    builder: () => const _AutocompleteExample(),
+    builder: () => _framed(const _AutocompleteExample()),
   ),
   ExampleInfo(
     id: 'filebrowser.basic',
@@ -1268,7 +1268,7 @@ FileBrowser(
   ],
   onChanged: (color) => setState(() => _color = color),
 )''',
-    builder: () => const _ColorPickerExample(),
+    builder: () => _framed(const _ColorPickerExample()),
   ),
   ExampleInfo(
     id: 'datepicker.basic',
@@ -1283,7 +1283,7 @@ FileBrowser(
   label: 'Date',
   onChanged: (date) => setState(() => _date = date),
 )''',
-    builder: () => const _DatePickerExample(),
+    builder: () => _framed(const _DatePickerExample()),
   ),
 
   // ── Navigation & overlays ────────────────────────────────────────────────
@@ -1307,15 +1307,24 @@ FileBrowser(
         tabs: <TabItem>[
           TabItem(
             label: 'Overview',
-            content: _framed(const Text('Project at a glance.')),
+            content: const Padding(
+              padding: EdgeInsets.all(1),
+              child: Text('Project at a glance.'),
+            ),
           ),
           TabItem(
             label: 'Logs',
-            content: _framed(const Text('› build finished in 1.8s')),
+            content: const Padding(
+              padding: EdgeInsets.all(1),
+              child: Text('› build finished in 1.8s'),
+            ),
           ),
           TabItem(
             label: 'Settings',
-            content: _framed(const Text('Theme · keybindings · …')),
+            content: const Padding(
+              padding: EdgeInsets.all(1),
+              child: Text('Theme · keybindings · …'),
+            ),
           ),
         ],
       ),
@@ -1414,7 +1423,7 @@ Toaster.show(context, 'Saved', severity: ToastSeverity.success);''',
     // Toggling is the demo: while the framed layer is open the wall behind
     // is covered (it owns every cell it draws over), and closing restores
     // that content untouched — it layers, it doesn't overwrite.
-    builder: () => const _ContainerFillExample(),
+    builder: () => _framed(const _ContainerFillExample()),
   ),
   ExampleInfo(
     id: 'dialog.basic',
@@ -3341,42 +3350,40 @@ class _ContainerFillExampleState extends State<_ContainerFillExample> {
         for (var i = 0; i < 6; i++) const Text('live content behind the layer'),
       ],
     );
-    return _framed(
-      KeyBindings(
-        bindings: <KeyBinding>[
+    return KeyBindings(
+      bindings: <KeyBinding>[
+        if (_open)
+          KeyBinding(
+            KeySequence.escape,
+            label: 'Close',
+            onTrigger: (_) => _toggle(),
+          ),
+      ],
+      child: Stack(
+        children: <Widget>[
+          behind,
           if (_open)
-            KeyBinding(
-              KeySequence.escape,
-              label: 'Close',
-              onTrigger: (_) => _toggle(),
-            ),
-        ],
-        child: Stack(
-          children: <Widget>[
-            behind,
-            if (_open)
-              Align(
-                alignment: Alignment.center,
-                child: Container.framed(
-                  padding: const EdgeInsets.symmetric(horizontal: 1),
-                  // Deliberately ragged: the shorter line leaves interior
-                  // cells the content never writes — exactly the cells that
-                  // would show the wall through an unfilled Container.
-                  child: Column(
-                    mainAxisSize: MainAxisSize.min,
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: const <Widget>[
-                      Text('Container.framed'),
-                      Text(
-                        'opaque fill + theme border',
-                        style: CellStyle(dim: true),
-                      ),
-                    ],
-                  ),
+            Align(
+              alignment: Alignment.center,
+              child: Container.framed(
+                padding: const EdgeInsets.symmetric(horizontal: 1),
+                // Deliberately ragged: the shorter line leaves interior
+                // cells the content never writes — exactly the cells that
+                // would show the wall through an unfilled Container.
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: const <Widget>[
+                    Text('Container.framed'),
+                    Text(
+                      'opaque fill + theme border',
+                      style: CellStyle(dim: true),
+                    ),
+                  ],
                 ),
               ),
-          ],
-        ),
+            ),
+        ],
       ),
     );
   }
@@ -3393,13 +3400,11 @@ class _CheckboxExampleState extends State<_CheckboxExample> {
   bool _accepted = false;
 
   @override
-  Widget build(BuildContext context) => _framed(
-    Checkbox(
-      value: _accepted,
-      label: 'Accept terms',
-      autofocus: true,
-      onChanged: (value) => setState(() => _accepted = value),
-    ),
+  Widget build(BuildContext context) => Checkbox(
+    value: _accepted,
+    label: 'Accept terms',
+    autofocus: true,
+    onChanged: (value) => setState(() => _accepted = value),
   );
 }
 
@@ -3414,13 +3419,11 @@ class _ToggleExampleState extends State<_ToggleExample> {
   bool _compact = true;
 
   @override
-  Widget build(BuildContext context) => _framed(
-    Toggle(
-      value: _compact,
-      label: 'Compact rows',
-      autofocus: true,
-      onChanged: (value) => setState(() => _compact = value),
-    ),
+  Widget build(BuildContext context) => Toggle(
+    value: _compact,
+    label: 'Compact rows',
+    autofocus: true,
+    onChanged: (value) => setState(() => _compact = value),
   );
 }
 
@@ -3435,13 +3438,11 @@ class _SwitchExampleState extends State<_SwitchExample> {
   bool _streaming = false;
 
   @override
-  Widget build(BuildContext context) => _framed(
-    Switch(
-      value: _streaming,
-      label: 'Streaming updates',
-      autofocus: true,
-      onChanged: (value) => setState(() => _streaming = value),
-    ),
+  Widget build(BuildContext context) => Switch(
+    value: _streaming,
+    label: 'Streaming updates',
+    autofocus: true,
+    onChanged: (value) => setState(() => _streaming = value),
   );
 }
 
@@ -3456,26 +3457,24 @@ class _RadioExampleState extends State<_RadioExample> {
   String _mode = 'fast';
 
   @override
-  Widget build(BuildContext context) => _framed(
-    Column(
-      mainAxisSize: MainAxisSize.min,
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: <Widget>[
-        Radio<String>(
-          value: 'fast',
-          groupValue: _mode,
-          label: 'Fast',
-          autofocus: true,
-          onChanged: (value) => setState(() => _mode = value),
-        ),
-        Radio<String>(
-          value: 'safe',
-          groupValue: _mode,
-          label: 'Safe',
-          onChanged: (value) => setState(() => _mode = value),
-        ),
-      ],
-    ),
+  Widget build(BuildContext context) => Column(
+    mainAxisSize: MainAxisSize.min,
+    crossAxisAlignment: CrossAxisAlignment.start,
+    children: <Widget>[
+      Radio<String>(
+        value: 'fast',
+        groupValue: _mode,
+        label: 'Fast',
+        autofocus: true,
+        onChanged: (value) => setState(() => _mode = value),
+      ),
+      Radio<String>(
+        value: 'safe',
+        groupValue: _mode,
+        label: 'Safe',
+        onChanged: (value) => setState(() => _mode = value),
+      ),
+    ],
   );
 }
 
@@ -3490,17 +3489,15 @@ class _RadioGroupExampleState extends State<_RadioGroupExample> {
   String _mode = 'fast';
 
   @override
-  Widget build(BuildContext context) => _framed(
-    RadioGroup<String>(
-      value: _mode,
-      autofocus: true,
-      options: const <RadioOption<String>>[
-        RadioOption(value: 'fast', label: 'Fast'),
-        RadioOption(value: 'safe', label: 'Safe'),
-        RadioOption(value: 'thorough', label: 'Thorough'),
-      ],
-      onChanged: (value) => setState(() => _mode = value),
-    ),
+  Widget build(BuildContext context) => RadioGroup<String>(
+    value: _mode,
+    autofocus: true,
+    options: const <RadioOption<String>>[
+      RadioOption(value: 'fast', label: 'Fast'),
+      RadioOption(value: 'safe', label: 'Safe'),
+      RadioOption(value: 'thorough', label: 'Thorough'),
+    ],
+    onChanged: (value) => setState(() => _mode = value),
   );
 }
 
@@ -3515,18 +3512,16 @@ class _MultiSelectExampleState extends State<_MultiSelectExample> {
   Set<String> _selected = <String>{'logs'};
 
   @override
-  Widget build(BuildContext context) => _framed(
-    MultiSelect<String>(
-      autofocus: true,
-      semanticLabel: 'Enabled telemetry',
-      options: const <SelectOption<String>>[
-        SelectOption(value: 'logs', label: 'Logs'),
-        SelectOption(value: 'traces', label: 'Traces'),
-        SelectOption(value: 'metrics', label: 'Metrics'),
-      ],
-      values: _selected,
-      onChanged: (values) => setState(() => _selected = values),
-    ),
+  Widget build(BuildContext context) => MultiSelect<String>(
+    autofocus: true,
+    semanticLabel: 'Enabled telemetry',
+    options: const <SelectOption<String>>[
+      SelectOption(value: 'logs', label: 'Logs'),
+      SelectOption(value: 'traces', label: 'Traces'),
+      SelectOption(value: 'metrics', label: 'Metrics'),
+    ],
+    values: _selected,
+    onChanged: (values) => setState(() => _selected = values),
   );
 }
 
@@ -3549,14 +3544,12 @@ class _TextInputExampleState extends State<_TextInputExample> {
   }
 
   @override
-  Widget build(BuildContext context) => _framed(
-    TextInput(
-      controller: _controller,
-      autofocus: true,
-      semanticLabel: 'Command',
-      onChanged: (_) {},
-      onSubmit: (_) {},
-    ),
+  Widget build(BuildContext context) => TextInput(
+    controller: _controller,
+    autofocus: true,
+    semanticLabel: 'Command',
+    onChanged: (_) {},
+    onSubmit: (_) {},
   );
 }
 
@@ -3579,12 +3572,10 @@ class _PasswordInputExampleState extends State<_PasswordInputExample> {
   }
 
   @override
-  Widget build(BuildContext context) => _framed(
-    PasswordInput(
-      controller: _controller,
-      autofocus: true,
-      semanticLabel: 'Password',
-    ),
+  Widget build(BuildContext context) => PasswordInput(
+    controller: _controller,
+    autofocus: true,
+    semanticLabel: 'Password',
   );
 }
 
@@ -3668,13 +3659,11 @@ class _AutocompleteExampleState extends State<_AutocompleteExample> {
   }
 
   @override
-  Widget build(BuildContext context) => _framed(
-    Autocomplete<String>(
-      controller: _controller,
-      autofocus: true,
-      placeholder: 'Type a fruit…',
-      options: const <String>['Apple', 'Apricot', 'Banana', 'Cherry', 'Grape'],
-    ),
+  Widget build(BuildContext context) => Autocomplete<String>(
+    controller: _controller,
+    autofocus: true,
+    placeholder: 'Type a fruit…',
+    options: const <String>['Apple', 'Apricot', 'Banana', 'Cherry', 'Grape'],
   );
 }
 
@@ -3708,15 +3697,13 @@ class _TextAreaExampleState extends State<_TextAreaExample> {
   }
 
   @override
-  Widget build(BuildContext context) => _framed(
-    TextArea(
-      controller: _controller,
-      autofocus: true,
-      minLines: 4,
-      maxLines: 4,
-      semanticLabel: 'Release notes',
-      onChanged: (_) {},
-    ),
+  Widget build(BuildContext context) => TextArea(
+    controller: _controller,
+    autofocus: true,
+    minLines: 4,
+    maxLines: 4,
+    semanticLabel: 'Release notes',
+    onChanged: (_) {},
   );
 }
 
@@ -3729,16 +3716,14 @@ class _SelectExample extends StatefulWidget {
 class _SelectExampleState extends State<_SelectExample> {
   String _v = 'medium';
   @override
-  Widget build(BuildContext context) => _framed(
-    Select<String>(
-      value: _v,
-      onChanged: (v) => setState(() => _v = v),
-      options: const <SelectOption<String>>[
-        SelectOption(value: 'low', label: 'Low'),
-        SelectOption(value: 'medium', label: 'Medium'),
-        SelectOption(value: 'high', label: 'High'),
-      ],
-    ),
+  Widget build(BuildContext context) => Select<String>(
+    value: _v,
+    onChanged: (v) => setState(() => _v = v),
+    options: const <SelectOption<String>>[
+      SelectOption(value: 'low', label: 'Low'),
+      SelectOption(value: 'medium', label: 'Medium'),
+      SelectOption(value: 'high', label: 'High'),
+    ],
   );
 }
 
@@ -3751,16 +3736,14 @@ class _RangeSliderExample extends StatefulWidget {
 class _RangeSliderExampleState extends State<_RangeSliderExample> {
   (num, num) _v = (20, 70);
   @override
-  Widget build(BuildContext context) => _framed(
-    RangeSlider(
-      values: _v,
-      min: 0,
-      max: 100,
-      label: 'Range',
-      showValues: true,
-      autofocus: true,
-      onChanged: (v) => setState(() => _v = v),
-    ),
+  Widget build(BuildContext context) => RangeSlider(
+    values: _v,
+    min: 0,
+    max: 100,
+    label: 'Range',
+    showValues: true,
+    autofocus: true,
+    onChanged: (v) => setState(() => _v = v),
   );
 }
 
@@ -3773,21 +3756,19 @@ class _ButtonExample extends StatefulWidget {
 class _ButtonExampleState extends State<_ButtonExample> {
   int _count = 0;
   @override
-  Widget build(BuildContext context) => _framed(
-    Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      mainAxisSize: MainAxisSize.min,
-      children: [
-        Text('Pressed $_count×'),
-        const SizedBox(height: 1),
-        Button(
-          text: 'Press me',
-          variant: ButtonVariant.primary,
-          autofocus: true,
-          onPressed: () => setState(() => _count++),
-        ),
-      ],
-    ),
+  Widget build(BuildContext context) => Column(
+    crossAxisAlignment: CrossAxisAlignment.start,
+    mainAxisSize: MainAxisSize.min,
+    children: [
+      Text('Pressed $_count×'),
+      const SizedBox(height: 1),
+      Button(
+        text: 'Press me',
+        variant: ButtonVariant.primary,
+        autofocus: true,
+        onPressed: () => setState(() => _count++),
+      ),
+    ],
   );
 }
 
@@ -3800,14 +3781,12 @@ class _StepperExample extends StatefulWidget {
 class _StepperExampleState extends State<_StepperExample> {
   num _v = 3;
   @override
-  Widget build(BuildContext context) => _framed(
-    Stepper(
-      value: _v,
-      min: 0,
-      max: 10,
-      label: 'Quantity',
-      onChanged: (v) => setState(() => _v = v),
-    ),
+  Widget build(BuildContext context) => Stepper(
+    value: _v,
+    min: 0,
+    max: 10,
+    label: 'Quantity',
+    onChanged: (v) => setState(() => _v = v),
   );
 }
 
@@ -3820,18 +3799,16 @@ class _ColorPickerExample extends StatefulWidget {
 class _ColorPickerExampleState extends State<_ColorPickerExample> {
   Color _c = const RgbColor(0x3D, 0xDC, 0x97);
   @override
-  Widget build(BuildContext context) => _framed(
-    ColorPicker(
-      value: _c,
-      onChanged: (c) => setState(() => _c = c),
-      colors: const <Color>[
-        RgbColor(0xFF, 0x5C, 0x57),
-        RgbColor(0xF5, 0xC2, 0x11),
-        RgbColor(0x3D, 0xDC, 0x97),
-        RgbColor(0x56, 0xC2, 0xFF),
-        RgbColor(0xBD, 0x93, 0xF9),
-      ],
-    ),
+  Widget build(BuildContext context) => ColorPicker(
+    value: _c,
+    onChanged: (c) => setState(() => _c = c),
+    colors: const <Color>[
+      RgbColor(0xFF, 0x5C, 0x57),
+      RgbColor(0xF5, 0xC2, 0x11),
+      RgbColor(0x3D, 0xDC, 0x97),
+      RgbColor(0x56, 0xC2, 0xFF),
+      RgbColor(0xBD, 0x93, 0xF9),
+    ],
   );
 }
 
@@ -3844,12 +3821,10 @@ class _DatePickerExample extends StatefulWidget {
 class _DatePickerExampleState extends State<_DatePickerExample> {
   DateTime _d = DateTime(2026, 6, 22);
   @override
-  Widget build(BuildContext context) => _framed(
-    DatePicker(
-      value: _d,
-      label: 'Date',
-      onChanged: (d) => setState(() => _d = d),
-    ),
+  Widget build(BuildContext context) => DatePicker(
+    value: _d,
+    label: 'Date',
+    onChanged: (d) => setState(() => _d = d),
   );
 }
 

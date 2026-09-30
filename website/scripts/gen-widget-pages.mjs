@@ -211,6 +211,18 @@ const REPO = 'https://github.com/danReynolds/fleury/blob/main';
 // API reference + example source, extracted from the Dart source at build time.
 const api = JSON.parse(readFileSync(API, 'utf8'));
 const exampleCode = JSON.parse(readFileSync(CODE, 'utf8'));
+// Runnable Pad projects (npm run guides:projects), keyed by example id: a
+// demo with one is editable in place; the rest stay prebuilt-only.
+const padProjects = JSON.parse(readFileSync(join(here, '..', 'src', 'guide_projects.json'), 'utf8'));
+const PAD_COMPONENT = '../../../components/GuidePad.astro';
+const demoBlock = (e) => {
+  const example = `<FleuryExample${padProjects[e.id] ? ' slot="demo"' : ''} id="${e.id}" cols={${e.cols}} rows={${e.rows}}` +
+    `${e.interactive ? ' interactive' : ''} />`;
+  return padProjects[e.id]
+    ? `<GuidePad id="${e.id}" compact codeLabel="Example" codeMaxHeight="18rem">\n${example}\n</GuidePad>`
+    : example;
+};
+const padImport = (e) => (padProjects[e.id] ? `import GuidePad from '${PAD_COMPONENT}';\n` : '');
 
 // Reference pages are a public contract, so generation must not quietly turn a
 // missing source comment into an em dash. Keep this check beside the generator:
@@ -810,13 +822,13 @@ for (const e of widgets) {
     : `import FleuryExample from '${COMPONENT}';`;
   const liveBlock = isKnob
     ? `<FleuryKnobs id="${slug}" cols={${e.cols}} rows={${e.rows}} />`
-    : `<FleuryExample id="${e.id}" cols={${e.cols}} rows={${e.rows}}` +
-      `${e.interactive ? ' interactive' : ''} />`;
+    : demoBlock(e);
   writeFileSync(
     join(widgetsDir, `${slug}.mdx`),
     `---\ntitle: ${yaml(e.widget)}\ndescription: ${yaml(e.blurb)}\n` +
       `tableOfContents: false\n---\n\n` +
       `${importLine}\n` +
+      (isKnob ? '' : padImport(e)) +
       `import WidgetLayout from '${LAYOUT_COMPONENT}';\n` +
       (slug === 'datatable' ? `import DataTableExamples from '../../../components/DataTableExamples.astro';\n` : '') +
       (EXTRA_EXAMPLES[slug] ? `${TABS_IMPORT}\n` : '') +
@@ -875,10 +887,10 @@ for (const d of DOC_PAGES) {
       `---\n\n` +
       (example
         ? `import FleuryExample from '${COMPONENT}';\n` +
+          padImport(example) +
           `import WidgetLayout from '${LAYOUT_COMPONENT}';\n\n` +
           `<WidgetLayout>\n\n<Fragment slot="aside">\n\n` +
-          `<FleuryExample id="${example.id}" cols={${example.cols}} rows={${example.rows}}` +
-          `${example.interactive ? ' interactive' : ''} />\n\n</Fragment>\n\n` +
+          `${demoBlock(example)}\n\n</Fragment>\n\n` +
           `${body}\n</WidgetLayout>\n`
         : body)
   );

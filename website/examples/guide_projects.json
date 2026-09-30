@@ -9,8 +9,7 @@
     {
       "label": "app.dart",
       "source": "website/examples/lib/registry.dart",
-      "declaration": "buildExample",
-      "expression": "HotReloadNotes"
+      "declaration": "example"
     },
     {
       "source": "website/examples/lib/hot_reload_guide.dart",

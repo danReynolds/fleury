@@ -110,9 +110,10 @@ class Source {
   }
 }
 
-/// Finds each registry entry's builder expression.
+/// Finds each registry entry's builder expression and category.
 class EntryVisitor extends RecursiveAstVisitor<void> {
   final entries = <String, Expression>{};
+  final categories = <String, String>{};
 
   @override
   void visitMethodInvocation(MethodInvocation node) {
@@ -125,6 +126,7 @@ class EntryVisitor extends RecursiveAstVisitor<void> {
       final id = (args['id'] as StringLiteral).stringValue!;
       final fn = args['builder'] as FunctionExpression;
       entries[id] = (fn.body as ExpressionFunctionBody).expression;
+      categories[id] = (args['category'] as StringLiteral).stringValue!;
     }
     super.visitMethodInvocation(node);
   }
@@ -160,8 +162,8 @@ class Project {
     for (final d in src.unit.directives) {
       if (d is ImportDirective) {
         final target = localImport(file, d.uri.stringValue!);
-        final used = d.prefix == null ||
-            pendingNames[file]!.contains(d.prefix!.name);
+        final used =
+            d.prefix == null || pendingNames[file]!.contains(d.prefix!.name);
         if (target == null) {
           if (used) imports.putIfAbsent(file, () => {}).add(d);
         } else {
@@ -214,9 +216,9 @@ class Project {
   String renderWhole(String file) {
     final src = source(file);
     var text = src.text;
-    final directives = src.unit.directives.whereType<UriBasedDirective>()
-        .toList()
-      ..sort((a, b) => b.uri.offset.compareTo(a.uri.offset));
+    final directives =
+        src.unit.directives.whereType<UriBasedDirective>().toList()
+          ..sort((a, b) => b.uri.offset.compareTo(a.uri.offset));
     for (final d in directives) {
       final target = localImport(file, d.uri.stringValue!);
       if (target == null || !d.uri.stringValue!.contains(':')) continue;
@@ -240,7 +242,8 @@ class Project {
       if (match[1] == null) {
         open[name] = out.length;
       } else {
-        final start = open.remove(name) ??
+        final start =
+            open.remove(name) ??
             (throw StateError('$file: unopened #enddocregion $name'));
         found.putIfAbsent(name, () => []).add((start: start, end: out.length));
       }
@@ -268,10 +271,15 @@ class Project {
           '${ds.map((d) => directive(file, d)).join('\n')}\n\n'
           '${nodes.map((n) => text.substring(n.offset, n.end)).join('\n\n')}\n';
     }
+    // The docs-only frame stays out of the code a reader edits: `example()`
+    // is the demo, `buildExample()` frames it as the registry does.
+    final demo = unframed(builder);
+    final text = source(root).text;
     files[logical(root)] =
         '${files[logical(root)]}\n'
         'Widget buildExample() => '
-        '${source(root).text.substring(builder.offset, builder.end)};\n';
+        '${identical(demo, builder) ? 'example()' : '_framed(example())'};\n\n'
+        'Widget example() => ${text.substring(demo.offset, demo.end)};\n';
     // The same theme and focus traversal as the prebuilt preview. The frame's
     // URL fragment names the docs page's theme (see experiments/fleury_pad).
     files['main.dart'] =
@@ -308,6 +316,83 @@ class Finder extends RecursiveAstVisitor<void> {
   }
 }
 
+/// [builder] without the registry's docs-only `_framed(...)` wrapper.
+Expression unframed(Expression builder) =>
+    builder is MethodInvocation &&
+        builder.methodName.name == '_framed' &&
+        builder.argumentList.arguments.length == 1
+    ? builder.argumentList.arguments.single
+    : builder;
+
+/// The file a registry import with [prefix] names, if it is a local file.
+String? prefixedImport(String file, String prefix) {
+  for (final d in source(file).unit.directives.whereType<ImportDirective>()) {
+    if (d.prefix?.name == prefix) return localImport(file, d.uri.stringValue!);
+  }
+  return null;
+}
+
+/// The State class a stateful widget declaration creates, if it names one.
+String? stateClassOf(ClassDeclaration widget) {
+  for (final m in widget.members.whereType<MethodDeclaration>()) {
+    if (m.name.lexeme != 'createState') continue;
+    final body = m.body;
+    if (body is! ExpressionFunctionBody) return null;
+    return switch (body.expression) {
+      InstanceCreationExpression e => e.constructorName.type.name2.lexeme,
+      MethodInvocation e => e.methodName.name,
+      _ => null,
+    };
+  }
+  return null;
+}
+
+/// The view a widget reference page edits: the demo's widget, or its State
+/// class when it is stateful, else the demo expression itself.
+List<Map<String, dynamic>> widgetPageViews(
+  String id,
+  String root,
+  Expression builder,
+) {
+  final demo = unframed(builder);
+  String? type;
+  String? prefix;
+  if (demo is InstanceCreationExpression) {
+    type = demo.constructorName.type.name2.lexeme;
+    prefix = demo.constructorName.type.importPrefix?.name.lexeme;
+  } else if (demo is MethodInvocation) {
+    type = demo.methodName.name;
+    prefix = (demo.target as SimpleIdentifier?)?.name;
+  }
+  final label = '${id.split('.').first}_example.dart';
+  final file = type == null
+      ? null
+      : prefix == null
+      ? root
+      : prefixedImport(root, prefix);
+  final declaration = file == null ? null : source(file).declarations[type];
+  if (file != null && declaration is ClassDeclaration) {
+    final state = stateClassOf(declaration);
+    return [
+      {
+        'label': label,
+        'source': p.relative(file, from: repo),
+        'declaration':
+            state != null && source(file).declarations.containsKey(state)
+            ? state
+            : type,
+      },
+    ];
+  }
+  return [
+    {
+      'label': label,
+      'source': p.relative(root, from: repo),
+      'declaration': 'example',
+    },
+  ];
+}
+
 /// The part of [blocks] a reader edits: from the first line of code to the
 /// end of the last, skipping blocks that only hold import directives. [block]
 /// picks one block instead, for a region whose blocks surround other views.
@@ -317,7 +402,9 @@ Block regionView(String content, List<Block> blocks, int? block, String where) {
       .split('\n')
       .map((line) => line.trim())
       .where((line) => line.isNotEmpty)
-      .every((line) => line.startsWith('import ') || line.startsWith('export '));
+      .every(
+        (line) => line.startsWith('import ') || line.startsWith('export '),
+      );
   var code = blocks.where((b) => !directivesOnly(b)).toList();
   if (code.isEmpty) throw StateError('$where has no code outside directives');
   if (block != null) {
@@ -343,103 +430,141 @@ void main() {
       jsonDecode(File('guide_projects.json').readAsStringSync())
           as Map<String, dynamic>;
   final out = <String, Object>{};
-  for (final item in config.entries) {
-    final builder =
-        visitor.entries[item.key] ??
-        (throw StateError('guide_projects.json: no registry example ${item.key}'));
-    final project = Project()
-      ..include(root, {
-        ...names(builder),
-        'themedExampleRoot',
-        'DocsExampleThemeController',
-        'DocsExampleStyle',
-      });
-    final views = (item.value as List).cast<Map<String, dynamic>>();
-    for (final view in views) {
-      final file = '$repo/${view['source']}';
-      if (!File(file).existsSync()) {
-        throw StateError('${item.key}: missing ${view['source']}');
-      }
-      if (view['declaration'] == null) {
-        project.includeWhole(file);
-      } else {
-        project.include(file, {view['declaration'] as String});
-      }
+  // Every widget reference page's demo is editable too. Their views follow
+  // from each example's builder; guide_projects.json lists the rest.
+  final entries = <String, (List<Map<String, dynamic>>, bool)>{
+    for (final item in config.entries)
+      item.key: ((item.value as List).cast<Map<String, dynamic>>(), false),
+  };
+  for (final MapEntry(key: id, value: builder) in visitor.entries.entries) {
+    if (entries.containsKey(id) ||
+        guideCategories.contains(visitor.categories[id]) ||
+        id.contains('.lab.') ||
+        knobWidgets.contains(id.split('.').first)) {
+      continue;
     }
-    final files = project.render(root, builder);
-    final selections = <Map<String, Object>>[];
-    for (var i = 0; i < views.length; i++) {
-      final view = views[i];
-      final file = logical('$repo/${view['source']}');
-      final content = files[file]!;
-      final where = '${item.key} view $i (${view['source']})';
-      Block range;
-      if (view['region'] case final String region) {
-        final blocks = project.regions[file]?[region] ??
-            (throw StateError('$where: no #docregion $region'));
-        range = regionView(content, blocks, view['block'] as int?, where);
-      } else if (view['declaration'] case final String declaration) {
-        final unit = parseString(
-          content: content,
-          throwIfDiagnostics: false,
-        ).unit;
-        AstNode node = unit.declarations.firstWhere(
-          (n) => declared(n).contains(declaration),
-          orElse: () => throw StateError('$where: no $declaration'),
-        );
-        if (view['member'] case final String member) {
-          node = (node as ClassDeclaration).members
-              .whereType<MethodDeclaration>()
-              .firstWhere(
-                (n) => n.name.lexeme == member,
-                orElse: () => throw StateError('$where: no $member'),
-              );
-        }
-        if (view['expression'] case final String expression) {
-          final finder = Finder(expression);
-          node.accept(finder);
-          final occurrence = view['occurrence'] as int? ?? 0;
-          if (finder.nodes.length <= occurrence) {
-            throw StateError('$where: no $expression #$occurrence');
-          }
-          node = finder.nodes[occurrence];
-        }
-        range = (start: node.offset, end: node.end);
-      } else {
-        range = (start: 0, end: content.length);
-      }
-      selections.add({
-        'id': 'view-$i',
-        'label': view['label'] ?? p.basename(file),
-        'file': file,
-        'start': range.start,
-        'end': range.end,
-      });
+    entries[id] = (widgetPageViews(id, root, builder), true);
+  }
+  for (final MapEntry(key: id, value: (views, derived)) in entries.entries) {
+    try {
+      out[id] = generate(id, root, visitor, views);
+    } on StateError catch (error) {
+      // A derived project that cannot run leaves its page's plain demo.
+      if (!derived) rethrow;
+      stderr.writeln('Skipping the editable demo for $id: ${error.message}');
     }
-    final bytes = files.values.fold<int>(
-      0,
-      (n, s) => n + utf8.encode(s).length,
-    );
-    if (bytes > maxBytes || files.length > maxFiles) {
-      throw StateError(
-        '${item.key}: $bytes bytes in ${files.length} files exceeds the '
-        "compiler's $maxBytes bytes / $maxFiles files",
-      );
-    }
-    for (final a in selections) {
-      for (final b in selections) {
-        if (!identical(a, b) &&
-            a['file'] == b['file'] &&
-            (a['start'] as int) < (b['end'] as int) &&
-            (b['start'] as int) < (a['end'] as int)) {
-          throw StateError('${item.key}: views overlap');
-        }
-      }
-    }
-    out[item.key] = {'id': item.key, 'files': files, 'views': selections};
   }
   File(
     '../src/guide_projects.json',
   ).writeAsStringSync('${const JsonEncoder.withIndent('  ').convert(out)}\n');
   stdout.writeln('Generated ${out.length} runnable guide projects.');
+}
+
+/// Registry categories that are not widget reference pages.
+const guideCategories = {'Guide examples', 'Home', 'Showcases', 'Theming'};
+
+/// Widget pages whose demo is a props playground (see gen-widget-pages.mjs).
+const knobWidgets = {
+  'gauge',
+  'progressbar',
+  'histogram',
+  'heatmap',
+  'anchored',
+};
+
+Map<String, Object> generate(
+  String id,
+  String root,
+  EntryVisitor visitor,
+  List<Map<String, dynamic>> views,
+) {
+  final builder =
+      visitor.entries[id] ?? (throw StateError('no registry example $id'));
+  final project = Project()
+    ..include(root, {
+      ...names(builder),
+      'themedExampleRoot',
+      'DocsExampleThemeController',
+      'DocsExampleStyle',
+    });
+  for (final view in views) {
+    final file = '$repo/${view['source']}';
+    if (!File(file).existsSync()) {
+      throw StateError('${id}: missing ${view['source']}');
+    }
+    if (view['declaration'] == null) {
+      project.includeWhole(file);
+    } else {
+      project.include(file, {view['declaration'] as String});
+    }
+  }
+  final files = project.render(root, builder);
+  final selections = <Map<String, Object>>[];
+  for (var i = 0; i < views.length; i++) {
+    final view = views[i];
+    final file = logical('$repo/${view['source']}');
+    final content = files[file]!;
+    final where = '${id} view $i (${view['source']})';
+    Block range;
+    if (view['region'] case final String region) {
+      final blocks =
+          project.regions[file]?[region] ??
+          (throw StateError('$where: no #docregion $region'));
+      range = regionView(content, blocks, view['block'] as int?, where);
+    } else if (view['declaration'] case final String declaration) {
+      final unit = parseString(
+        content: content,
+        throwIfDiagnostics: false,
+      ).unit;
+      AstNode node = unit.declarations.firstWhere(
+        (n) => declared(n).contains(declaration),
+        orElse: () => throw StateError('$where: no $declaration'),
+      );
+      if (view['member'] case final String member) {
+        node = (node as ClassDeclaration).members
+            .whereType<MethodDeclaration>()
+            .firstWhere(
+              (n) => n.name.lexeme == member,
+              orElse: () => throw StateError('$where: no $member'),
+            );
+      }
+      if (view['expression'] case final String expression) {
+        final finder = Finder(expression);
+        node.accept(finder);
+        final occurrence = view['occurrence'] as int? ?? 0;
+        if (finder.nodes.length <= occurrence) {
+          throw StateError('$where: no $expression #$occurrence');
+        }
+        node = finder.nodes[occurrence];
+      }
+      range = (start: node.offset, end: node.end);
+    } else {
+      range = (start: 0, end: content.length);
+    }
+    selections.add({
+      'id': 'view-$i',
+      'label': view['label'] ?? p.basename(file),
+      'file': file,
+      'start': range.start,
+      'end': range.end,
+    });
+  }
+  final bytes = files.values.fold<int>(0, (n, s) => n + utf8.encode(s).length);
+  if (bytes > maxBytes || files.length > maxFiles) {
+    throw StateError(
+      '${id}: $bytes bytes in ${files.length} files exceeds the '
+      "compiler's $maxBytes bytes / $maxFiles files",
+    );
+  }
+  for (final a in selections) {
+    for (final b in selections) {
+      if (!identical(a, b) &&
+          a['file'] == b['file'] &&
+          (a['start'] as int) < (b['end'] as int) &&
+          (b['start'] as int) < (a['end'] as int)) {
+        throw StateError('${id}: views overlap');
+      }
+    }
+  }
+  return {'id': id, 'files': files, 'views': selections};
 }

@@ -30,6 +30,9 @@ interface Props {
   referencesLabel?: string;
   /** Show the references expanded, when they are what the section teaches. */
   referencesOpen?: boolean;
+  /** Stack the demo above its code for a narrow column, such as a widget
+   * reference page's live demo. */
+  compact?: boolean;
 }
 const {
   id,
@@ -40,6 +43,7 @@ const {
   mark,
   referencesLabel = 'Test references',
   referencesOpen = false,
+  compact = false,
 } = Astro.props;
 const project = projects[id as keyof typeof projects];
 if (!project) throw new Error(`Missing runnable guide project: ${id}`);
@@ -54,7 +58,7 @@ const markedLines = (mark ?? []).flatMap((m) => {
 });
 const expandIcon = '<svg viewBox="0 0 20 20" width="13" height="13" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 4h4v4M8 16H4v-4M16 4l-5 5M4 16l5-5"/></svg>';
 ---
-<dialog open role="group" aria-label={`${id} playground`} class:list={['cds', 'cds-bounded-code', 'guide-pad', 'not-content', { 'cds-demo-wide': layout === 'demo-wide', 'cds-code-wide': layout === 'code-wide' }]} data-example={id} data-compiler={compiler} data-marks={markedLines.length ? JSON.stringify(markedLines) : undefined} data-compact="true" data-ready="false" data-running="false" data-busy="false" style={`--guide-code-height:${codeMaxHeight}`}>
+<dialog open role="group" aria-label={`${id} playground`} class:list={['cds', 'cds-bounded-code', 'guide-pad', 'not-content', { 'cds-demo-wide': layout === 'demo-wide', 'cds-code-wide': layout === 'code-wide', 'guide-pad-compact': compact }]} data-example={id} data-compiler={compiler} data-marks={markedLines.length ? JSON.stringify(markedLines) : undefined} data-compact="true" data-ready="false" data-running="false" data-busy="false" style={`--guide-code-height:${codeMaxHeight}`}>
   <script type="application/json" data-project set:html={serialized} />
   <header class="cds-bar guide-pad-bar">
     {source.views.length === 1 ? <span class="cds-file">{source.views[0].label}</span> :
@@ -99,7 +103,9 @@ const expandIcon = '<svg viewBox="0 0 20 20" width="13" height="13" fill="none" 
 </script>
 <style is:global>
 /* Keep the CodeDemoSplit frame, tabs and breakout layout. Pad supplies editing
-   and execution inside it; the docs example remains the visual unit. */
+   and execution inside it; the docs example remains the visual unit. A build
+   without a compiler shows the code and prebuilt demo only. */
+.guide-pad[data-compiler=""] :is([data-pad="run"],[data-pad="reload"],[data-pad="restart"],[data-pad="format"],[data-guide="revert"],.guide-pad-hint) { display:none !important; }
 .guide-pad { position:relative; inset:auto; max-width:none; max-height:none; padding:0; color:var(--sl-color-text); }
 .guide-pad [hidden] { display:none !important; }
 .guide-pad button:disabled { opacity:.4; cursor:default; }
@@ -148,6 +154,12 @@ const expandIcon = '<svg viewBox="0 0 20 20" width="13" height="13" fill="none" 
 .guide-pad:modal .guide-pad-preview { flex:1; }
 .guide-pad:modal .guide-pad-preview iframe { width:100%; height:100%; }
 .guide-pad:modal .guide-pad-references { max-height:30vh; overflow:auto; }
+/* Compact: a narrow column's demo, with its code below it. */
+.guide-pad-compact:not(:modal) { width:100%; margin:0; }
+.guide-pad-compact:not(:modal) .cds-body { grid-template-columns:minmax(0,1fr); padding:.4rem .7rem .7rem; }
+.guide-pad-compact:not(:modal) [data-pane="demo"] { order:-1; }
+.guide-pad-compact:not(:modal) [data-pane="demo"] .cds-cap { display:none; }
+.guide-pad-compact .guide-pad-actions .cds-toggle span { display:none; }
 @media(min-width:760px) { .guide-pad:modal .guide-pad-workspace { grid-template-columns:minmax(0,1fr) minmax(0,1fr); gap:1.25rem; } }
 @media(max-width:759px) { .guide-pad:modal { inset:.4rem; width:calc(100vw - .8rem); height:calc(100dvh - .8rem); } .guide-pad:modal .guide-pad-editor { height:40vh; flex:auto; } .guide-pad:modal .guide-pad-preview { min-height:35vh; } .guide-pad .cds-bar { flex-wrap:wrap; gap:.4rem; } .guide-pad .cds-file-tabs { flex-basis:100%; margin-block:0; } }
 </style>

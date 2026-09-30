@@ -125,11 +125,14 @@ for (const root of document.querySelectorAll<HTMLDialogElement>('.guide-pad')) {
   $<HTMLButtonElement>('[data-guide="revert"]').onclick = () => pad?.revert();
   // Prepare code as it approaches the viewport. This loads only local editor
   // assets: language tools start after an edit or an explicit editor action.
-  const observer = new IntersectionObserver(entries => {
-    if (entries.some(entry => entry.isIntersecting)) { observer.disconnect(); void mountEditor(); }
-  }, { rootMargin: '400px' });
-  observer.observe(root);
-  root.addEventListener('focusin', () => { void mountEditor(); });
+  // Without a compiler there is nothing to run; the code stays read-only.
+  if (root.dataset.compiler) {
+    const observer = new IntersectionObserver(entries => {
+      if (entries.some(entry => entry.isIntersecting)) { observer.disconnect(); void mountEditor(); }
+    }, { rootMargin: '400px' });
+    observer.observe(root);
+    root.addEventListener('focusin', () => { void mountEditor(); });
+  }
   const expand = $<HTMLButtonElement>('[data-guide="expand"]');
   function fullscreen(value: boolean) {
     if (value === expanded) return;
