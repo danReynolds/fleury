@@ -16,9 +16,10 @@ class Bar {
       colors = const [];
 
   /// A stacked bar of [segments] (rendered bottom→top). Segment heights
-  /// sum to determine the bar's total height. [colors] (optional) pairs
-  /// each segment with an explicit color — by index, falling back to the
-  /// chart's palette for any unspecified index.
+  /// sum to determine the bar's total height, so an empty list is a bar of
+  /// zero height. [colors] (optional) pairs each segment with an explicit
+  /// color — by index, falling back to the chart's palette for any
+  /// unspecified index.
   const Bar.stacked(this.label, this.segments, {this.colors = const []})
     : value = null,
       color = null;
@@ -184,7 +185,7 @@ SemanticState _barChartSemanticState(List<Bar> bars, num? explicitMax) {
       if (minValue == null || total < minValue) minValue = total;
       if (maxValue == null || total > maxValue) maxValue = total;
     }
-    segmentCount += bar.segments.isEmpty ? 1 : bar.segments.length;
+    segmentCount += bar.value == null ? bar.segments.length : 1;
   }
   return SemanticState({
     'chartType': 'bar',
@@ -503,10 +504,13 @@ class RenderBarChart extends RenderObject {
       if (col >= rightEdge) break;
       final b = _bars[i];
 
-      if (b.segments.isNotEmpty) {
+      // The constructor decides the kind: a stacked bar has no value, even
+      // with no segments to stack.
+      final value = b.value;
+      if (value == null) {
         _paintStackedBar(buffer, b, col, chartTopRow, chartRows, topVal);
       } else {
-        _paintSingleBar(buffer, b, col, chartTopRow, chartRows, topVal);
+        _paintSingleBar(buffer, b, value, col, chartTopRow, chartRows, topVal);
       }
 
       // Value label above the bar — totals for stacked.
@@ -524,11 +528,12 @@ class RenderBarChart extends RenderObject {
     }
   }
 
-  /// Paints a single-value [bar] starting at column [col]. Top of bar
-  /// uses a partial 1/8 glyph; full cells below use `█`.
+  /// Paints a single-value [bar] of [value] starting at column [col]. Top of
+  /// bar uses a partial 1/8 glyph; full cells below use `█`.
   void _paintSingleBar(
     CellBuffer buffer,
     Bar bar,
+    num value,
     int col,
     int chartTopRow,
     int chartRows,
@@ -537,7 +542,7 @@ class RenderBarChart extends RenderObject {
     final style = CellStyle(foreground: bar.color ?? _defaultColor);
     // A non-finite value (or scale) renders as an empty column — round()
     // on NaN/±Infinity would throw.
-    final rawTicks = (bar.value!.toDouble() / topVal) * chartRows * 8;
+    final rawTicks = (value.toDouble() / topVal) * chartRows * 8;
     final ticks = rawTicks.isFinite ? rawTicks.round() : 0;
     final fullRows = ticks ~/ 8;
     final partial = ticks % 8;
