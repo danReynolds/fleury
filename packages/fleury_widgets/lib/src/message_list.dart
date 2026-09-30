@@ -648,28 +648,7 @@ _FormattedMessageLine _formatMessageLine(
   );
 }
 
-String _sanitizeMessageText(String original) {
-  if (!_needsMessageSanitization(original)) return original;
-  return sanitizeSingleLine(original);
-}
-
-bool _needsMessageSanitization(String text) {
-  for (final codeUnit in text.codeUnits) {
-    if (codeUnit == 0x1b ||
-        codeUnit == 0x9b ||
-        codeUnit == 0x9d ||
-        codeUnit == 0x90 ||
-        codeUnit == 0x98 ||
-        codeUnit == 0x9e ||
-        codeUnit == 0x9f ||
-        codeUnit == 0x0a ||
-        codeUnit == 0x0d ||
-        codeUnit == 0x09) {
-      return true;
-    }
-  }
-  return false;
-}
+String _sanitizeMessageText(String text) => sanitizeSingleLine(text);
 
 String _truncateGraphemes(String text, int? maxLineLength) {
   if (maxLineLength == null) return text;
@@ -682,7 +661,8 @@ String _truncateGraphemes(String text, int? maxLineLength) {
 String _prefixFor(MessageEntry message) {
   final parts = <String>[
     message.role.name,
-    if (message.author != null && message.author!.isNotEmpty) message.author!,
+    if (message.author != null && message.author!.isNotEmpty)
+      _sanitizeMessageText(message.author!),
   ];
   return '[${parts.join(' ')}] ';
 }

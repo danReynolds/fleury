@@ -141,8 +141,13 @@ final _singleLineBreaks = RegExp(r'[\r\n\t]');
 /// strips breaks gets `�` where a space belonged (the break is already gone).
 /// Use this for single-line labels — table/tree rows, tool cards, log lines,
 /// menu options — instead of hand-rolling the order per widget.
-String sanitizeSingleLine(String input) =>
-    sanitizeForDisplay(input.replaceAll(_singleLineBreaks, ' '));
+String sanitizeSingleLine(String input) {
+  // Nothing to rewrite, the common case: return it without the regex pass.
+  // Callers that copy text rely on this, rather than a pre-check of their
+  // own that could miss a control.
+  if (isSanitizedForDisplay(input)) return input;
+  return sanitizeForDisplay(input.replaceAll(_singleLineBreaks, ' '));
+}
 
 const _esc = 0x1B;
 const _bel = 0x07;
