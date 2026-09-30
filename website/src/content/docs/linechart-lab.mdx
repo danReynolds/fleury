@@ -1,6 +1,8 @@
 ---
 title: LineChart rendering lab
 # A rendering comparison for maintainers; not part of the docs' reading path.
+# As a draft it's left out of production builds; `astro dev` still serves it.
+draft: true
 pagefind: false
 description: "Live side-by-side of the LineChart rendering options — 1px vs 2px braille, solid octant, and gradient area — to compare what looks best."
 ---
@@ -27,7 +29,7 @@ band (`strokeWidth: 2`). An optional heavier stroke, especially in a dense font.
 ## Octant line — solid
 
 Unicode 16 octant glyphs: a solid, gap-free line at braille resolution. Needs a
-Unicode-16 font (this site ships JuliaMono) or a kitty/Ghostty terminal.
+Unicode-16 font (this site ships a JuliaMono subset) or a kitty/Ghostty terminal.
 
 <FleuryExample id="linechart.lab.octant" cols={58} rows={15} />
 
