@@ -50,12 +50,32 @@ if (root) {
       show(next.dataset.view!); next.focus();
     };
   }
+  const preview = root.querySelector<HTMLElement>('[data-pad="preview"]')!;
+  const initialPreview = [...preview.childNodes];
   const pad = mountPad(root, {
     monaco, sample, compilerUrl: root.dataset.compiler, frameUrl: root.dataset.frame,
     createWorker: () => new EditorWorker(), autoRunSample: true,
     onRun: () => show('app'),
+    onReset: () => preview.replaceChildren(...initialPreview),
   });
-  root.querySelector<HTMLButtonElement>('[data-pad="start"]')!.onclick = () => pad.run();
+  const reset = root.querySelector<HTMLButtonElement>('[data-pad="reset"]')!;
+  const start = root.querySelector<HTMLButtonElement>('[data-pad="start"]')!;
+  const syncControls = () => {
+    const busy = root.dataset.busy === 'true';
+    reset.disabled = busy || root.dataset.revertable !== 'true';
+    start.disabled = busy;
+  };
+  const controlsObserver = new MutationObserver(syncControls);
+  controlsObserver.observe(root, { attributes: true, attributeFilter: ['data-busy', 'data-revertable'] });
+  addEventListener('pagehide', event => { if (!event.persisted) controlsObserver.disconnect(); });
+  syncControls();
+  reset.onclick = () => {
+    pad.revert();
+    show('editor');
+    root.querySelector<HTMLElement>('[data-pad="status"]')!.textContent = 'Example restored. Run to start fresh.';
+    pad.editor.focus();
+  };
+  start.onclick = () => pad.run();
   root.querySelector<HTMLButtonElement>('[data-pad="download"]')!.onclick = () => {
     const url = URL.createObjectURL(new Blob([pad.editor.getValue()], { type: 'text/plain' }));
     const link = document.createElement('a');

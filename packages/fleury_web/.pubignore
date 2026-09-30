@@ -1,0 +1,10 @@
+.dart_tool/
+build/
+.flutter-plugins-dependencies
+pubspec.lock
+pubspec_overrides.yaml
+pubspec_overrides.yaml.template
+# Preserve the package .gitignore exclusions for compiled examples.
+web/*.dart.js
+web/*.dart.js.deps
+web/*.dart.js.map

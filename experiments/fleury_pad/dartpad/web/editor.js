@@ -40,7 +40,8 @@ export function mountPad(root, { monaco, sample, createWorker, compilerUrl = '',
   const values = () => Object.fromEntries([...models].map(([id, model]) => [id, model.getValue()]));
   function snapshot() {
     if (workspace) return workspace.snapshot(values());
-    return { source: model.getValue(), fingerprint: model.getValue(), toFile: (_id, offset) => offset,
+    const source = model.getValue();
+    return { source, fingerprint: source, viewText: () => source, toFile: (_id, offset) => offset,
       toView: (_file, offset) => ({ id: 'main', offset }), formatted: (_id, source) => source };
   }
   function payload(snap, id = activeId, offset) {

@@ -211,7 +211,7 @@ class CartValueView extends StatelessWidget {
 }
 // #enddocregion value-notifier
 
-// The builder embed owns its model in State, the third owner the guide lists:
+// The two readers share a model owned by State, the third owner the guide lists:
 // created once with the state, disposed with it.
 class CartDemo extends StatefulWidget {
   const CartDemo({super.key});
@@ -230,5 +230,14 @@ class _CartDemoState extends State<CartDemo> {
   }
 
   @override
-  Widget build(BuildContext context) => CartView(cart: cart);
+  Widget build(BuildContext context) => Column(
+    crossAxisAlignment: CrossAxisAlignment.start,
+    children: [
+      const Text('NotifierBuilder', style: CellStyle(bold: true)),
+      CartView(cart: cart),
+      const SizedBox(height: 1),
+      const Text('context.listen', style: CellStyle(bold: true)),
+      CartContextView(cart: cart),
+    ],
+  );
 }

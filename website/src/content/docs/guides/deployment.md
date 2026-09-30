@@ -38,6 +38,14 @@ run it once in a real terminal before release, and distribute it like any CLI
 tool. The supported baseline is a modern UTF-8, xterm-compatible terminal on
 macOS or Linux; the Windows driver is a preview.
 
+Native `runApp` requires an interactive terminal by default. Piping or
+redirecting standard output, or running in a CI log without a terminal, fails
+before the UI starts.
+
+Debug tools are disabled by default in AOT executables. If you distribute a
+JIT app instead, pass `debug: const DebugConfig(enabled: false)` to `runApp`
+to disable the debug shell, its shortcuts, and event recording.
+
 ## Run it in a browser (embed)
 
 The *same* widget tree compiles to JavaScript and runs client-side — no server.
@@ -99,6 +107,10 @@ browser, use `serve` instead.
 
 ## Preview a native app with `serve`
 
+The socket-based tools — `fleury serve`, `fleury shell`, and `fleury_mcp` —
+currently require macOS or Linux. They use Unix-domain sockets and are not
+available with the Windows preview driver.
+
 `fleury serve` carries a **native** app's rendered frames to a browser over a
 WebSocket, painting into a DOM cell grid. (The `fleury` command comes from the
 CLI — [install it](#installing-the-fleury-cli) first if you haven't.) In spawn
@@ -118,7 +130,7 @@ as the command to run):
 
 | Flag | Default | Meaning |
 |---|---|---|
-| `--port=<n>` | `5777` | Port to listen on |
+| `--port=<n>` | `5777` | Port to listen on; `0` chooses a free port |
 | `--host=<addr>` | `127.0.0.1` | Bind address (`0.0.0.0` to expose) |
 | `--allow-origin=<origin>` | same-origin | Allow an embedding origin, or `*` |
 | `--token=<secret>` | none on loopback; generated otherwise | Require `?token=<secret>` on the WebSocket |
@@ -126,10 +138,11 @@ as the command to run):
 | `--max-sessions=<n>` | `8` | Cap concurrent browser sessions in spawn mode |
 | `--spawn <cmd …>` | bridge mode | Spawn an isolated process per connection |
 
-There are two models. **Bridge mode** (no `--spawn`) serves a single shared
-session — good for a local demo or IDE-driven debugging. **Spawn mode**
-(`--spawn dart run bin/run_app.dart`) gives every browser connection its own isolated
-subprocess, with a warm standby so reconnects start quickly.
+There are two models. **Bridge mode** (no `--spawn`) attaches the app you
+start and accepts one browser at a time — good for a local demo or IDE-driven
+debugging. Close that browser before connecting another. **Spawn mode**
+(`--spawn dart run bin/run_app.dart`) gives every browser connection its own
+isolated subprocess, with a warm standby so reconnects start quickly.
 
 The default bind address is loopback. A bind that is not loopback always
 requires a token: pass `--token`, or `serve` generates one for the run and
@@ -146,7 +159,7 @@ semantic tree.
 | Where it runs | In the browser | A native process |
 | Backend needed | None — static asset | Yes — the running app |
 | Widgets | Web-safe only | All, incl. file/process/log |
-| Scaling | Static/CDN asset | One shared app (bridge) or one process per connection (spawn) |
+| Scaling | Static/CDN asset | One browser at a time (bridge) or one process per connection (spawn) |
 | Use when | It fits the browser sandbox | Local preview needs the real machine |
 
 Rule of thumb: ship an embed when it can run in the sandbox; use `serve` during

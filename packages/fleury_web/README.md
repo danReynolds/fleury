@@ -118,8 +118,8 @@ This package includes a counter and a retained-DOM demo under
 From a Fleury framework checkout:
 
 ```sh
+dart tool/fleury_dev.dart bootstrap
 cd packages/fleury_web
-dart pub get
 dart compile js web/dom_demo.dart -o web/dom_demo.dart.js
 ```
 

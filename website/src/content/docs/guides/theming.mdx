@@ -58,8 +58,11 @@ boolean attribute to `false` turns that inherited attribute off.
 
 Use `CellStyle.interactive` when a widget should change as users interact with
 it. Assign it to `ThemeData.interactiveStyle` for the whole app, or pass it to
-one widget's ordinary `style` property for a local exception. This reference
-renders each entry directly so the differences are easy to compare:
+one widget's ordinary `style` property for a local exception. Native hover
+feedback also needs `TerminalMode(mouseMotion: true)` in `runApp`;
+`mouse: true` alone does not report hover. Browser hosts already provide
+pointer motion. This reference renders each entry directly so the differences
+are easy to compare:
 
 <GuidePad id="themes.interactive_styles" layout="demo-wide">
 <FleuryExample

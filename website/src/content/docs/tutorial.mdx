@@ -128,8 +128,10 @@ always `''`, so nothing's filtered — until we wire up the input. (Until then t
 analyzer suggests making `_query` final; step 3 assigns it.)
 
 Turning a stateless widget into a stateful one is a change a reload can't
-apply, so restart after saving this step: press `Ctrl+G` to open the debug
-shell, then `F5`.
+apply, so restart after saving this step. In a terminal-owned `fleury run`
+session, press `Ctrl+G` to open the debug shell, then `F5`. If your editor or
+terminal intercepts F5, press `Ctrl+C` and rerun the command. If you launched
+with VS Code's F5, use the editor's **Restart** action instead.
 
 ## 3. Add the text field
 

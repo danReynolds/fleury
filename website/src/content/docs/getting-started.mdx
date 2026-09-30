@@ -84,8 +84,8 @@ keeps its value. Press `Ctrl-C` in the terminal to quit.
 In VS Code with the [Dart extension](https://marketplace.visualstudio.com/items?itemName=Dart-Code.dart-code),
 you can press F5 instead: the generated launch configuration runs the app in an
 integrated terminal under the debugger, and saving reloads it the same way.
-Save-to-reload under `fleury run` needs macOS or Linux; on Windows, use F5. A
-plain `dart run bin/run_app.dart` also works; [Hot reload](/fleury/guides/hot-reload/)
+Save-to-reload under `fleury run` needs macOS or Linux; on Windows, launch
+through VS Code's debugger. A plain `dart run bin/run_app.dart` also works; [Hot reload](/fleury/guides/hot-reload/)
 explains the difference.
 
 ## 3. Drive state over time
@@ -156,9 +156,11 @@ class _StatusAppState extends State<StatusApp> {
 ```
 
 This edit changes the app's structure and starts a timer in `initState`, which a
-reload doesn't rerun, so **restart** instead: press `Ctrl+G` to open the debug
-shell, then `F5`. (Quitting and running `fleury run` again works too.) The
-uptime line ticks every second, and the progress bar fills over the minute.
+reload doesn't rerun, so **restart** instead. In a terminal-owned `fleury run`
+session, press `Ctrl+G` to open the debug shell, then `F5`. If your editor or
+terminal intercepts F5, press `Ctrl+C` and run `fleury run` again. If you launched
+with VS Code's F5, use the editor's **Restart** action instead. The uptime line
+ticks every second, and the progress bar fills over the minute.
 
 The scaffold's test describes the counter you just replaced, so update it at
 the same time:
@@ -225,7 +227,7 @@ class StatusApp extends StatelessWidget {
 }
 ```
 
-Restart once more (`Ctrl+G`, then `F5`), since `StatusApp` is now stateless.
+Restart once more using the same method, since `StatusApp` is now stateless.
 From here, edits reload on save: change the CPU value from `0.62` to `0.95` and
 save, and the gauge updates in place.
 

@@ -24,7 +24,7 @@ const frameUrl = `${compilerUrl}/frame.html`;
           <strong>Make a change. Keep your place.</strong>
           <p>The example starts automatically. Click its counter and write a draft, then edit the code and hot reload: your state stays with you.</p>
           <dl><dt>⌘ / Ctrl + Enter</dt><dd>Run or hot reload</dd><dt>Ctrl + Space</dt><dd>Dart completions</dd><dt>Restart</dt><dd>Run again with fresh state</dd></dl>
-          <p>Your code is saved in this browser. Restored custom code waits for Run. Download it to keep a copy. The Pad supports one file with Fleury’s bundled packages.</p>
+          <p>Your code is saved in this browser. Restored custom code waits for Run. Download it to keep a copy. Reset restores the original example. Define <code>Widget buildApp()</code> to return your app; the Pad supplies the browser entry point and supports one file with Fleury’s bundled packages.</p>
           <a href="/fleury/guides/hot-reload/">About hot reload <Icon name="right-arrow" size="0.9rem" /></a>
         </div>
       </details>
@@ -50,6 +50,7 @@ const frameUrl = `${compilerUrl}/frame.html`;
         <div class="pad-pane-bar">
           <span class="pad-file"><Icon name="document" size="1rem" />main.dart</span>
           <span class="pad-dirty" data-pad="dirty">Dart</span>
+          <button data-pad="reset" disabled title="Restore the original example and clear this draft">Reset</button>
           <button data-pad="format" disabled title="Format Dart source">Format</button>
         </div>
         <div class="pad-editor" data-pad="editor" aria-label="Dart source editor"></div>
@@ -61,8 +62,8 @@ const frameUrl = `${compilerUrl}/frame.html`;
             <div class="pad-empty-mark" aria-hidden="true"><Icon name="laptop" size="2rem" /></div>
             <h2 class="pad-idle-heading">A little code. A live app.</h2>
           <h2 class="pad-loading-heading">Starting your app…</h2>
-            <p>Run the example, make it your own,<br />and hot reload without losing your place.</p>
-            <button class="pad-empty-run" data-pad="start">Run the example <Icon name="right-arrow" size="1rem" /></button>
+            <p>Run your code, make it your own,<br />and hot reload without losing your place.</p>
+            <button class="pad-empty-run" data-pad="start">Run your code <Icon name="right-arrow" size="1rem" /></button>
             <span class="pad-shortcut">⌘ / Ctrl + Enter</span>
           </div>
         </div>
@@ -110,6 +111,7 @@ const frameUrl = `${compilerUrl}/frame.html`;
   .pad-file svg { color: var(--sl-color-gray-3); }
   .pad-dirty { color: var(--sl-color-gray-3); font-size: 0.7rem; }
   .pad-pane-bar button { margin-left: auto; padding: 0.25rem 0.45rem; font-size: 0.7rem; border-color: transparent; }
+  .pad-pane-bar [data-pad="format"] { margin-left: 0; }
   .pad-live { display: inline-flex; align-items: center; gap: 0.4rem; margin-left: auto; color: var(--sl-color-gray-3); font-size: 0.7rem; }
   .pad-live span, .app-indicator { height: 0.35rem; width: 0.35rem; background: var(--sl-color-gray-4); border-radius: 50%; }
   [data-running='true'] .pad-live span, [data-running='true'] .app-indicator { background: var(--sl-color-text-accent); }

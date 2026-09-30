@@ -6,7 +6,7 @@ import 'package:fleury_doc_examples/registry.dart' as demos;
 import 'package:fleury_test/fleury_test.dart';
 import 'package:test/test.dart';
 
-import '../lib/state_management_guide.dart' as guide;
+import 'package:fleury_doc_examples/state_management_guide.dart' as guide;
 
 class _CartService {
   _CartService(this.cart) {
@@ -153,6 +153,36 @@ void main() {
     expect(count.value, 2);
   });
 
+  final cartDemo = demos.exampleList.singleWhere(
+    (demo) => demo.id == 'state.cart-notifier',
+  );
+  testWidgets(
+    'both editable cart readers are visible and update together',
+    (tester) async {
+      final theme = demos.DocsExampleThemeController(
+        demos.DocsExampleStyle.dark,
+      );
+      addTearDown(theme.dispose);
+      tester.pumpWidget(demos.themedExampleRoot(cartDemo.builder, theme));
+      var output = tester.renderToString();
+      expect(output, contains('NotifierBuilder'));
+      expect(output, contains('context.listen'));
+      expect('Items: 0'.allMatches(output).length, 2);
+      expect('[ Add item ]'.allMatches(output).length, 2);
+
+      await tester.target(type: guide.CartView).button('Add item').press();
+      expect('Items: 1'.allMatches(tester.renderToString()).length, 2);
+      await tester
+          .target(type: guide.CartContextView)
+          .button('Add item')
+          .press();
+      output = tester.renderToString();
+      expect('Items: 2'.allMatches(output).length, 2);
+      expect('[ Add item ]'.allMatches(output).length, 2);
+    },
+    viewportSize: CellSize(cartDemo.cols, cartDemo.rows),
+  );
+
   // The registry and runnable snippets import the same web-safe source.
   for (final (id, initial, action, updated, next) in [
     ('state.local-counter', 'Count: 0', 'Increment', 'Count: 1', 'Count: 2'),
@@ -164,7 +194,6 @@ void main() {
       'Project: Atlas',
     ),
     ('state.shop', 'In cart: 0', 'Add coffee', 'In cart: 1', 'In cart: 2'),
-    ('state.cart-notifier', 'Items: 0', 'Add item', 'Items: 1', 'Items: 2'),
   ]) {
     final demo = demos.exampleList.singleWhere((demo) => demo.id == id);
     testWidgets(

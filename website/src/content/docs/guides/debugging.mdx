@@ -121,7 +121,12 @@ precedence while it is open. Close it to reproduce normal keyboard behavior.
 | Page Up / Page Down | Scroll Live, Tree, Rebuilds, or Errors. |
 | F12 | Open Logs; press again there to close. |
 | Esc | Clear a log filter, otherwise dock a fullscreen panel. |
-| F5 | Hot restart when a development supervisor is attached; application state is lost. |
+| F5 | Hot restart while the panel is open and a development supervisor is attached; application state is lost. |
+
+F5 must reach the terminal for the in-app restart to work. If your editor or
+terminal intercepts it during a `fleury run` session, press `Ctrl+C` and rerun
+the command. If you launched with VS Code's F5, use the editor's **Restart**
+action instead: the editor owns that session and Fleury's restart is unavailable.
 
 ## Configuring it
 

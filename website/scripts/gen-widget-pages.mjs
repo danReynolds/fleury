@@ -1095,8 +1095,8 @@ const SHOWCASE_TRY = {
     '*Try it: the process table has focus — ↑/↓ move the row selection ' +
     'while the charts stream.*',
   files:
-    '*Try it: arrow through the tree — the preview swaps viewers as the ' +
-    'selection changes.*',
+    '*Try it: use the arrows to move through the tree, then press Enter or ' +
+    'click a file to open its preview.*',
   commands:
     '*Try it: edit the file, then save it with Ctrl+S or press Ctrl+K and ' +
     'choose **Save current file**. Choose **New file** from the palette to ' +

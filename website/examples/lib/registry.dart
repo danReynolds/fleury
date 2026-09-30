@@ -2552,7 +2552,7 @@ Text('\${summary.health.name}: \${summary.activeTaskCount} of \${summary.taskCou
     id: 'state.cart-notifier',
     widget: 'NotifierBuilder',
     category: 'Guide examples',
-    blurb: 'A cart notifies its builder when an item is added.',
+    blurb: 'Two readers listen to the same cart and update together.',
     cols: 38,
     rows: 9,
     interactive: true,
