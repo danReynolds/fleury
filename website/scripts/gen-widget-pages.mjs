@@ -312,7 +312,7 @@ function assertReferenceComplete(widgetNames, section) {
 // every public parameter it documents has a doc comment; until then generation
 // lists what is missing instead of publishing an em dash. Every other page must
 // be complete, and generation fails when one is not.
-const AWAITING_SOURCE_DOCS = new Set(['PopScope', 'Scrollbar', 'Theme']);
+const AWAITING_SOURCE_DOCS = new Set();
 const deferred = new Map();
 const awaitingEntries = new Set();
 const publishable = (widget) => {

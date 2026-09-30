@@ -1078,7 +1078,7 @@ final class _StreamingMarkdownScenario implements _ScenarioBenchmark {
       notes: const <String>[
         'Candidate thresholds are informational until stable baselines exist.',
         'Scenario appends markdown chunks and measures parse/update/frame cost separately.',
-        'The first implementation intentionally measures full-document parse-on-append before committing to an incremental parser.',
+        'Measures full-document parsing per chunk through MarkdownView.document; MarkdownView re-parses appends incrementally.',
         'Fixture includes unsafe OSC/link payloads to verify sanitized visible, copied, and semantic output.',
       ],
     );
