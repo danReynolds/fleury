@@ -341,8 +341,10 @@ _Parameter _resolveParameter(
 }
 
 /// The superclass constructor parameter a `super.x` [parameter] of [ctor]
-/// forwards to: the same-named parameter for a named one, the one at the same
-/// position among the positionals otherwise.
+/// forwards to: the same-named parameter for a named one; for a positional one,
+/// the superclass positional at its index among [ctor]'s positional super
+/// parameters (Dart forwards those in order, and forbids positional arguments
+/// in the super call beside them).
 (ClassDeclaration, ConstructorDeclaration, FormalParameter)? _superParameter(
   ClassDeclaration cls,
   ConstructorDeclaration ctor,
@@ -373,7 +375,7 @@ _Parameter _resolveParameter(
     return match == null ? null : (superClass, superCtor, match);
   }
   final position = ctor.parameters.parameters
-      .where((candidate) => candidate.isPositional)
+      .where((candidate) => candidate.isPositional && _isSuper(candidate))
       .toList()
       .indexOf(parameter);
   final positionals = superParameters
@@ -383,6 +385,11 @@ _Parameter _resolveParameter(
       ? null
       : (superClass, superCtor, positionals[position]);
 }
+
+bool _isSuper(FormalParameter parameter) => switch (parameter) {
+  DefaultFormalParameter(:final parameter) => parameter is SuperFormalParameter,
+  _ => parameter is SuperFormalParameter,
+};
 
 bool _isFrameworkIdentityKey(
   ClassDeclaration cls,

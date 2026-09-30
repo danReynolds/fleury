@@ -188,6 +188,11 @@ void main() {
       // parameter it forwards to.
       expect(param('Required', 'flex')['default'], isNull);
       expect(param('Expanded', 'flex')['default'], '1');
+      // Positional super parameters forward in order among themselves, not by
+      // their index among all positionals.
+      expect(param('LabeledPair', 'first')['type'], 'int');
+      expect(param('LabeledPair', 'first')['doc'], 'The first value.');
+      expect(param('LabeledPair', 'second')['type'], 'String');
     });
 
     test('keeps every paragraph of constructor and parameter docs', () {
@@ -536,6 +541,25 @@ class Labelled {
 
 class Named extends Labelled {
   const Named({required super.label}) : super.named();
+}
+
+class Pair {
+  const Pair(
+    /// The first value.
+    this.first,
+
+    /// The second value.
+    this.second,
+  );
+
+  final int first;
+  final String second;
+}
+
+class LabeledPair extends Pair {
+  const LabeledPair(this.label, super.first, super.second);
+
+  final String label;
 }
 ''';
 
