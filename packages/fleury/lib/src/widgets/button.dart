@@ -25,16 +25,18 @@ enum ButtonAppearance {
   plain,
 }
 
-/// A pressable button: `[ content ]`. Provide exactly one of [text] or [child].
-/// [text] is the convenience form for a plain label; [child] accepts composed
-/// content with the same frame and interaction styling. [appearance] defaults
-/// to [ButtonAppearance.bracketed]; [ButtonAppearance.plain] removes the frame
-/// and left-aligns either content form. Do not put other
-/// interactive controls inside [child].
+/// A focusable button, drawn as `[ content ]` by default, that calls
+/// [onPressed] on Enter, Space, or a click.
 ///
-/// Focusable; Enter/Space or a click
-/// fires [onPressed]. Passing a null [onPressed] disables it — shown
-/// muted and not focusable.
+/// Provide exactly one of [text] or [child]. [text] is the convenience form
+/// for a plain label; [child] accepts composed content with the same frame and
+/// interaction styling. Do not put other interactive controls inside [child].
+/// [appearance] defaults to [ButtonAppearance.bracketed];
+/// [ButtonAppearance.plain] removes the frame and left-aligns either content
+/// form.
+///
+/// A null [onPressed] disables the button: it is shown muted and can't take
+/// focus.
 ///
 /// [variant] tints the label from the theme's [ColorScheme] (primary for
 /// the default action, error for a destructive one, etc.); when focused
@@ -77,8 +79,12 @@ class Button extends StatelessWidget {
   /// An explicit name replaces descendant semantics, not visible content.
   final String? semanticLabel;
 
-  /// Pressed handler, or null to disable the button. Nothing waits on work it
-  /// starts; see [FocusableControl.onActivate] for how a press declines.
+  /// Called when the button is pressed with Enter, Space, a click, or a
+  /// semantic `activate` action; null disables the button. The button doesn't
+  /// wait for asynchronous work the handler starts. To decline a press, such as
+  /// when the action it runs turns out to be unavailable, throw
+  /// [SemanticActionDeclined]: a key press or click ignores it, and a semantic
+  /// activation reports `unsupported` instead of `completed`.
   final void Function()? onPressed;
 
   /// Called after a completed right-button click, without calling [onPressed].
