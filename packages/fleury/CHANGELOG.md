@@ -53,6 +53,9 @@
   bindings outside the modal scope stay out of reach. An unmodified Esc that
   can't continue a pending sequence aborts it: the held keys are dropped and
   the Esc does nothing else. `KeyBindings.cancelPending` aborts the same way.
+  If focus moves away mid-sequence, as when a dialog opens in front of it, the
+  sequence ends and the keys typed so far are dropped, so a held `y` can never
+  answer a prompt that appeared after it was typed.
 
 - The CLI reports its package version through `--version` and `diagnose`.
   `serve` reports invalid or occupied ports cleanly, releases startup resources,

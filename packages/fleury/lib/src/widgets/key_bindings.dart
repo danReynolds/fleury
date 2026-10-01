@@ -528,7 +528,10 @@ List<ActiveKeyBinding> resolveActiveKeyBindings(FocusManager manager) {
 /// as usual. When a single-key binding in the same list shares the first key
 /// (`g` beside `g g`), it fires once a key other than Esc rules out the
 /// sequence, or after the sequence timeout (500 ms by default; see `runApp`'s
-/// `sequenceTimeout`).
+/// `sequenceTimeout`). If focus moves away from these bindings partway through,
+/// for example into a dialog that opens in front of them, the sequence ends
+/// there and the keys typed so far are dropped: they never reach what has
+/// focus now.
 ///
 /// With [modal] set, keys that nothing inside this subtree handles stop here.
 /// `Navigator` sets it for dialogs shown with `present`.

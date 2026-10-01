@@ -586,7 +586,15 @@ public.
 > and Esc in which-key.nvim. `cancelPending()` aborts the same way. An Esc the
 > sequence binds as its next step still completes or extends it. Sequences
 > bound at or inside a `modal` scope start and complete there; nothing outside
-> the modal scope advances or fires while focus is inside it.
+> the modal scope advances or fires while focus is inside it. The held prefix
+> replays only into the focus context it was typed in: once a scope the
+> sequence came from is out of reach (it left the focus chain, or a modal
+> scope the first key wasn't let through now stands in front of it, as when a
+> dialog takes focus), pending clears at once — the "clears on scope exit"
+> rule above — and the prefix is dropped, on the next key and on timeout
+> alike. A key or paste that cancels a sequence is dropped too when replaying
+> the prefix moves focus out of that context, because it was typed before the
+> dialog the replay opened.
 
 ### 14.5 `KeyBinding.hold`
 

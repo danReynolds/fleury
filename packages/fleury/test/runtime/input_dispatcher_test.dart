@@ -1623,12 +1623,13 @@ void main() {
       expect(calls, isEmpty);
     });
 
-    test('a sequence opened outside cannot complete once focus moves inside '
-        'a modal scope', () {
+    test('a sequence opened outside ends when focus moves inside a modal '
+        'scope, and its held key never reaches the modal', () {
       // A dialog can open between two keys of an app-level sequence (a click,
       // a timer). The app's scope is still an ancestor of the dialog's focus,
       // so without the boundary the next key would finish the app's sequence
-      // from inside the dialog.
+      // from inside the dialog; and the Space typed for the app, before the
+      // dialog existed, must not act on the dialog either.
       final calls = <String>[];
       final page = FocusNode(debugLabel: 'page');
       final dialog = FocusNode(debugLabel: 'dialog');
@@ -1647,7 +1648,16 @@ void main() {
             Focus(focusNode: page, autofocus: true, child: const EmptyBox()),
             KeyBindings(
               modal: true,
-              bindings: const <KeyBinding>[],
+              bindings: [
+                KeyBinding(
+                  KeySequence.space,
+                  onTrigger: (_) => calls.add('dialog space'),
+                ),
+                KeyBinding(
+                  KeySequence.q,
+                  onTrigger: (_) => calls.add('dialog q'),
+                ),
+              ],
               child: Focus(focusNode: dialog, child: const EmptyBox()),
             ),
           ],
@@ -1657,9 +1667,17 @@ void main() {
       h.dispatch(_char(' '));
       expect(h.dispatcher.hasPendingSequence, isTrue);
       dialog.requestFocus();
+      expect(
+        h.dispatcher.hasPendingSequence,
+        isFalse,
+        reason: 'the sequence ends when focus leaves the scope it was typed in',
+      );
       h.dispatch(_char('q'));
-      expect(calls, isEmpty, reason: 'the app behind the modal saw the q');
-      expect(h.dispatcher.hasPendingSequence, isFalse);
+      expect(
+        calls,
+        ['dialog q'],
+        reason: 'the held Space goes nowhere; the q is the dialog\'s own key',
+      );
     });
 
     test('a key the boundary lets through can open an outer sequence, and '
@@ -1760,6 +1778,248 @@ void main() {
       h.dispatch(_char('z'));
       expect(calls, ['g']);
       expect(h.dispatcher.hasPendingSequence, isFalse);
+    });
+  });
+
+  group('Held keys stay in the focus context they were typed in', () {
+    // A sequence holds its keys until it knows what they mean. If focus has
+    // moved on by then — another pane, a dialog that opened in front — those
+    // keys were typed for something the user is no longer looking at. They
+    // must never act on what has focus now: a held `y` must not approve a
+    // prompt that appeared after it was typed.
+    test('focus moving to another pane ends the sequence without replaying '
+        'its keys there', () async {
+      final calls = <String>[];
+      final a = FocusNode(debugLabel: 'a');
+      final b = FocusNode(debugLabel: 'b');
+      addTearDown(() {
+        a.dispose();
+        b.dispose();
+      });
+      final h = _TestHarness();
+      h.mountRoot(
+        Column(
+          children: [
+            KeyBindings(
+              bindings: [
+                KeyBinding(KeySequence.g, onTrigger: (_) => calls.add('A g')),
+                KeyBinding(
+                  KeySequence.g.g,
+                  onTrigger: (_) => calls.add('A gg'),
+                ),
+              ],
+              child: Focus(
+                focusNode: a,
+                autofocus: true,
+                child: const EmptyBox(),
+              ),
+            ),
+            KeyBindings(
+              bindings: [
+                KeyBinding(KeySequence.g, onTrigger: (_) => calls.add('B g')),
+              ],
+              child: Focus(focusNode: b, child: const EmptyBox()),
+            ),
+          ],
+        ),
+      );
+
+      h.dispatch(_char('g'));
+      expect(h.dispatcher.hasPendingSequence, isTrue);
+      b.requestFocus();
+      expect(h.dispatcher.hasPendingSequence, isFalse);
+      // Harness timeout is 50ms: nothing commits later either.
+      await Future<void>.delayed(const Duration(milliseconds: 100));
+      expect(calls, isEmpty, reason: 'the held g reaches neither pane');
+
+      h.dispatch(_char('g'));
+      expect(calls, ['B g'], reason: 'a key typed in B is B\'s');
+    });
+
+    group('when the context changes without focus moving', () {
+      // The scope around the focused node turns into a modal one. Nothing
+      // moved focus: the manager hears about new bindings only on a
+      // microtask, and about a bare `modal` flip not at all. So an event that
+      // arrives first, or the timeout, must see for itself that the
+      // sequence's scope is out of reach.
+      _TestHarness walledOff(List<String> calls, {bool withBindings = true}) {
+        final key = GlobalKey<_ModalSwitchState>();
+        final h = _TestHarness(
+          rootBindings: [
+            KeyBinding(KeySequence.g, onTrigger: (_) => calls.add('app g')),
+            KeyBinding(KeySequence.g.g, onTrigger: (_) => calls.add('app gg')),
+          ],
+        );
+        h.mountRoot(
+          _ModalSwitch(
+            key: key,
+            modalBindings: withBindings
+                ? [
+                    KeyBinding(
+                      KeySequence.g,
+                      onTrigger: (_) => calls.add('modal g'),
+                    ),
+                    KeyBinding(
+                      KeySequence.x,
+                      onTrigger: (_) => calls.add('modal x'),
+                    ),
+                  ]
+                : const <KeyBinding>[],
+          ),
+        );
+        h.dispatch(_char('g'));
+        expect(h.dispatcher.hasPendingSequence, isTrue);
+        key.currentState!.becomeModal();
+        h.owner.flushBuild();
+        return h;
+      }
+
+      test('the next key drops the held keys and is handled where it '
+          'landed', () {
+        final calls = <String>[];
+        final h = walledOff(calls);
+        h.dispatch(_char('x'));
+        expect(calls, ['modal x']);
+        expect(h.dispatcher.hasPendingSequence, isFalse);
+      });
+
+      test('the next key completes nothing behind the modal scope', () {
+        final calls = <String>[];
+        final h = walledOff(calls);
+        h.dispatch(_char('g'));
+        expect(calls, ['modal g'], reason: 'not app gg, and not a replayed g');
+      });
+
+      test('a paste replays nothing into the modal scope', () {
+        final calls = <String>[];
+        final h = walledOff(calls);
+        h.dispatcher.dispatch(const PasteEvent('p'));
+        expect(calls, isEmpty);
+        expect(h.dispatcher.hasPendingSequence, isFalse);
+      });
+
+      test('the timeout commits nothing', () async {
+        final calls = <String>[];
+        final h = walledOff(calls);
+        await Future<void>.delayed(const Duration(milliseconds: 100));
+        expect(calls, isEmpty);
+        expect(h.dispatcher.hasPendingSequence, isFalse);
+      });
+
+      test('the timeout ends it, and commits nothing behind the modal scope, '
+          'when nothing announced the change', () async {
+        // `app g` is the shorter binding the timeout would commit, but it is
+        // behind the modal scope now; the prefix must not stay held open for
+        // completions that can no longer fire.
+        final calls = <String>[];
+        final h = walledOff(calls, withBindings: false);
+        await Future<void>.delayed(const Duration(milliseconds: 100));
+        expect(calls, isEmpty);
+        expect(h.dispatcher.hasPendingSequence, isFalse);
+      });
+    });
+
+    test('a replayed key that opens a dialog keeps the rest, and the key that '
+        'broke the sequence, out of it', () {
+      // The held Ctrl+X replays when z breaks the sequence, and its binding
+      // opens a dialog. The held a and the z were both typed before that
+      // dialog existed.
+      final calls = <String>[];
+      final page = FocusNode(debugLabel: 'page');
+      final dialog = FocusNode(debugLabel: 'dialog');
+      addTearDown(() {
+        page.dispose();
+        dialog.dispose();
+      });
+      final h = _TestHarness(
+        rootBindings: [
+          KeyBinding(
+            KeySequence.ctrl.x,
+            onTrigger: (_) {
+              calls.add('open dialog');
+              dialog.requestFocus();
+            },
+          ),
+          KeyBinding(
+            KeySequence.ctrl.x.a.b,
+            onTrigger: (_) => calls.add('app'),
+          ),
+        ],
+      );
+      h.mountRoot(
+        Column(
+          children: [
+            Focus(focusNode: page, autofocus: true, child: const EmptyBox()),
+            KeyBindings(
+              modal: true,
+              bindings: [
+                KeyBinding(
+                  KeySequence.a,
+                  onTrigger: (_) => calls.add('dialog a'),
+                ),
+                KeyBinding(
+                  KeySequence.z,
+                  onTrigger: (_) => calls.add('dialog z'),
+                ),
+              ],
+              child: Focus(focusNode: dialog, child: const EmptyBox()),
+            ),
+          ],
+        ),
+      );
+
+      h.dispatch(_char('x', ctrl: true));
+      h.dispatch(_char('a'));
+      expect(h.dispatcher.hasPendingSequence, isTrue);
+      expect(h.dispatch(_char('z')), KeyEventResult.handled);
+      expect(calls, ['open dialog']);
+      expect(dialog.hasFocus, isTrue);
+      expect(h.dispatcher.hasPendingSequence, isFalse);
+    });
+
+    test('a paste that ends a sequence whose replay opens a dialog is not '
+        'pasted into it', () {
+      final calls = <String>[];
+      final field = _PasteLog();
+      final page = FocusNode(debugLabel: 'page');
+      final dialog = FocusNode(debugLabel: 'dialog field')
+        ..textInputClaimant = field;
+      addTearDown(() {
+        page.dispose();
+        dialog.dispose();
+      });
+      final h = _TestHarness(
+        rootBindings: [
+          KeyBinding(
+            KeySequence.ctrl.x,
+            onTrigger: (_) {
+              calls.add('open dialog');
+              dialog.requestFocus();
+            },
+          ),
+          KeyBinding(
+            KeySequence.ctrl.x.ctrl.s,
+            onTrigger: (_) => calls.add('save'),
+          ),
+        ],
+      );
+      h.mountRoot(
+        Column(
+          children: [
+            Focus(focusNode: page, autofocus: true, child: const EmptyBox()),
+            KeyBindings(
+              modal: true,
+              bindings: const <KeyBinding>[],
+              child: Focus(focusNode: dialog, child: const EmptyBox()),
+            ),
+          ],
+        ),
+      );
+
+      h.dispatch(_char('x', ctrl: true));
+      h.dispatcher.dispatch(const PasteEvent('secret'));
+      expect(calls, ['open dialog']);
+      expect(field.events, isEmpty, reason: 'pasted before the field existed');
     });
   });
 
@@ -3073,6 +3333,30 @@ class _RebuildingScopeState extends State<_RebuildingScope> {
   @override
   Widget build(BuildContext context) => KeyBindings(
     bindings: widget.bindings(),
+    child: const Focus(autofocus: true, child: EmptyBox()),
+  );
+}
+
+/// A scope around the focused node that turns modal, with [modalBindings],
+/// when asked — without moving focus.
+class _ModalSwitch extends StatefulWidget {
+  const _ModalSwitch({super.key, required this.modalBindings});
+
+  final List<KeyBinding> modalBindings;
+
+  @override
+  State<_ModalSwitch> createState() => _ModalSwitchState();
+}
+
+class _ModalSwitchState extends State<_ModalSwitch> {
+  bool _modal = false;
+
+  void becomeModal() => setState(() => _modal = true);
+
+  @override
+  Widget build(BuildContext context) => KeyBindings(
+    modal: _modal,
+    bindings: _modal ? widget.modalBindings : const <KeyBinding>[],
     child: const Focus(autofocus: true, child: EmptyBox()),
   );
 }
