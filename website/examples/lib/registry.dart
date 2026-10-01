@@ -1220,7 +1220,7 @@ FileBrowser(
   initialDirectory: '/my_app',
   onActivate: (entry) => openFile(entry.path),
 )''',
-    builder: () => _framed(const live.FileBrowserPreview()),
+    builder: () => _framed(const _FileBrowserExample()),
   ),
   ExampleInfo(
     id: 'filepicker.basic',
@@ -1232,15 +1232,24 @@ FileBrowser(
     cols: 48,
     rows: 13,
     interactive: true,
-    code: '''FilePicker(
+    code: '''// In a terminal, FilePicker reads the local disk:
+FilePicker(
   initialDirectory: Directory.current.path,
   filter: (entry) => entry.isDirectory || entry.name.endsWith('.dart'),
   onSelect: (file) => openFile(file.path),
 )
 
-// In the browser, pass a source, such as the MemoryFileSource this demo uses:
-// FilePicker(source: projectFiles, initialDirectory: '/my_app', ...)''',
-    builder: () => _framed(const live.FilePickerPreview()),
+// In the browser there is no disk to list, so pass a source, as this demo
+// does:
+FilePicker(
+  source: MemoryFileSource([
+    '/my_app/lib/app.dart',
+    '/my_app/test/app_test.dart',
+  ]),
+  initialDirectory: '/my_app',
+  onSelect: (file) => openFile(file.path),
+)''',
+    builder: () => _framed(const _FilePickerExample()),
   ),
   ExampleInfo(
     id: 'colorpicker.basic',
@@ -4173,6 +4182,90 @@ class _WorkflowSnapshotExampleState extends State<_WorkflowSnapshotExample> {
       ],
     );
   }
+}
+
+class _FileBrowserExample extends StatefulWidget {
+  const _FileBrowserExample();
+
+  @override
+  State<_FileBrowserExample> createState() => _FileBrowserExampleState();
+}
+
+class _FileBrowserExampleState extends State<_FileBrowserExample> {
+  // The browser has no disk to list, so this demo browses a project held in
+  // memory. In a terminal, leave out `source` to browse the local disk.
+  final _project = MemoryFileSource([
+    '/my_app/.gitignore',
+    '/my_app/README.md',
+    '/my_app/pubspec.yaml',
+    '/my_app/bin/run_app.dart',
+    '/my_app/lib/app.dart',
+    '/my_app/lib/src/status_panel.dart',
+    '/my_app/lib/src/theme.dart',
+    '/my_app/test/app_test.dart',
+    '/my_app/web/index.html',
+    '/my_app/web/main.dart',
+  ]);
+  String _status = 'Enter opens · Backspace goes up';
+
+  @override
+  Widget build(BuildContext context) => Column(
+    crossAxisAlignment: CrossAxisAlignment.stretch,
+    children: [
+      Expanded(
+        child: FileBrowser(
+          source: _project,
+          initialDirectory: '/my_app',
+          autofocus: true,
+          maxVisible: 8,
+          onActivate: (entry) =>
+              setState(() => _status = 'opened ${entry.path}'),
+        ),
+      ),
+      Text(_status, style: const CellStyle(dim: true)),
+    ],
+  );
+}
+
+class _FilePickerExample extends StatefulWidget {
+  const _FilePickerExample();
+
+  @override
+  State<_FilePickerExample> createState() => _FilePickerExampleState();
+}
+
+class _FilePickerExampleState extends State<_FilePickerExample> {
+  // The browser has no disk to list, so this demo picks from a project held
+  // in memory. In a terminal, leave out `source` to pick from the local disk.
+  final _project = MemoryFileSource([
+    '/my_app/README.md',
+    '/my_app/pubspec.yaml',
+    '/my_app/bin/run_app.dart',
+    '/my_app/lib/app.dart',
+    '/my_app/lib/src/status_panel.dart',
+    '/my_app/lib/src/theme.dart',
+    '/my_app/test/app_test.dart',
+    '/my_app/web/main.dart',
+  ]);
+  String _status = 'Pick a Dart file';
+
+  @override
+  Widget build(BuildContext context) => Column(
+    crossAxisAlignment: CrossAxisAlignment.stretch,
+    children: [
+      Expanded(
+        child: FilePicker(
+          source: _project,
+          initialDirectory: '/my_app',
+          autofocus: true,
+          maxVisible: 8,
+          filter: (entry) => entry.isDirectory || entry.name.endsWith('.dart'),
+          onSelect: (file) => setState(() => _status = 'picked ${file.path}'),
+        ),
+      ),
+      Text(_status, style: const CellStyle(dim: true)),
+    ],
+  );
 }
 
 // ── Knobs (interactive props) ───────────────────────────────────────────────
