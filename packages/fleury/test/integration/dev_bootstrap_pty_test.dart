@@ -562,9 +562,14 @@ Future<void> main() async {
         app.entrypoint.writeAsStringSync(
           'void main() {\n  UNDEFINED_NAME_FOR_THIS_TEST;\n}\n',
         );
+        // An isolated temp root, so the launcher's own `fleury_dev_*`
+        // directory is the only thing that could be left in it.
+        final launcherTmp = Directory('${tempDir.path}/launcher_tmp')
+          ..createSync();
         final session = await _startSession(
           app: app,
           timeoutSeconds: 90,
+          environment: {'TMPDIR': launcherTmp.path},
           scriptArguments: [
             '${repoRoot.path}/packages/fleury/bin/fleury.dart',
             'run',
@@ -574,6 +579,13 @@ Future<void> main() async {
         try {
           final metadata = await session.finish();
           expect(metadata['exitCode'], 254, reason: session.diagnostics());
+          expect(
+            launcherTmp.listSync().where(
+              (e) => e.uri.pathSegments.any((s) => s.startsWith('fleury_dev_')),
+            ),
+            isEmpty,
+            reason: 'a failed first start must not leak the launcher temp dir',
+          );
           expect(
             "Undefined name 'UNDEFINED_NAME_FOR_THIS_TEST'"
                 .allMatches(session.output())
