@@ -52,7 +52,9 @@ backing filename. Each demo has its own revision-bound local draft.
 The registry's docs-only `_framed(...)` helper belongs in a builder, never in a
 demo's own `build`, so the code a reader edits reads as app code. A builder
 should only create the demo widget, `_framed(const _Demo())`, so its
-`example()` hides nothing.
+`example()` hides nothing. The generator writes each `example()` through
+`dart format`, and fails on any generated line over 80 columns: rewrap the
+string or comment in its source.
 
 ## Guide and reference demos
 
@@ -65,14 +67,21 @@ widget below it that raises toasts, list a view for each here instead of
 hiding one. Props-playground pages (`FleuryKnobs`) keep their knobs.
 
 Every demo's views must show the code it runs. The generator fails when a
-view refers to a declaration none of the views shows, when a view of part of a
-class uses one of the class's members that no view shows, when the builder
-does more than create the demo widget and no view shows it, or when no view
-shows the widget the builder creates. A State class's view stands for its
-widget. `hiddenByDesign` in `bin/guide_projects.dart` lists the few
-deliberate exceptions, such as the input guide's excerpts, whose pages show
-the whole file read-only; each entry says why, and an entry that no longer
-matches anything fails too.
+view refers to a declaration none of the views shows (an extension method
+counts, and so does the class a named constructor builds), when a view of part
+of a class uses one of the class's members that no view shows, when the
+builder does more than create the demo widget and no view shows it, or when no
+view shows the widget the builder creates. A State class's view stands for its
+widget's declaration, but whatever that declaration reads, such as a
+constant used as a parameter default, must still be shown.
+
+`hiddenByDesign` in `bin/guide_projects.dart` lists the few deliberate
+exceptions, each with its reason: a declaration (whose excuse covers a class's
+members) or a whole project file, such as an input guide file that the page
+shows read-only as the demo's "Full source". What excused code uses needs a
+view or its own entry, so nothing runs hidden behind an excuse unlisted, and
+an entry that no longer matches anything fails too.
+`test/guide_projects_check_test.dart` covers these rules on small projects.
 
 ## Adding an example
 

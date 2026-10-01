@@ -49,9 +49,12 @@ class _TaskBrowserState extends State<TaskBrowser> {
         notifier: list,
         builder: (context, _) {
           final range = list.visibleRange;
+          final showing = range == null
+              ? '…'
+              : '${range.first + 1}–${range.last + 1}';
           return Text(
             'Current: ${(list.currentIndex ?? -1) + 1} / 1000\n'
-            'Showing: ${range == null ? '…' : '${range.first + 1}–${range.last + 1}'}',
+            'Showing: $showing',
           );
         },
       ),
