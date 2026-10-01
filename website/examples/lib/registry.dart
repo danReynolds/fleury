@@ -5983,9 +5983,6 @@ class _TickerSimulationState extends State<_TickerSimulation>
   }
 }
 
-/// A local-breakpoint demo: its buttons change only the child envelope, so the
-/// LayoutBuilder proves that panes adapt to parent constraints rather than the
-/// global browser or terminal size.
 /// Two panes side by side when there is room, stacked when there is not.
 class _Workspace extends StatelessWidget {
   const _Workspace();
@@ -6043,6 +6040,9 @@ class _Workspace extends StatelessWidget {
   }
 }
 
+/// A local-breakpoint demo: its buttons change only the child envelope, so the
+/// LayoutBuilder proves that panes adapt to parent constraints rather than the
+/// global browser or terminal size.
 class _ResizableWorkspace extends StatefulWidget {
   const _ResizableWorkspace();
 
