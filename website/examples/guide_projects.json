@@ -120,6 +120,11 @@
       "label": "independent_timing.dart",
       "source": "website/examples/lib/registry.dart",
       "declaration": "_independentTimingStatus"
+    },
+    {
+      "label": "timing_comparison.dart",
+      "source": "website/examples/lib/registry.dart",
+      "declaration": "_TimingComparisonState"
     }
   ],
   "animation.manual": [

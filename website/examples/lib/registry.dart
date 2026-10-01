@@ -5671,10 +5671,6 @@ class _ConnectionStatusState extends State<_ConnectionStatus> {
   );
 }
 
-enum _EntryEffectChoice { fade, slide, wipe, expand }
-
-enum _ExitEffectChoice { fade, slide, wipe, shrink }
-
 class _EffectPicker extends StatefulWidget {
   const _EffectPicker();
 
@@ -5683,149 +5679,122 @@ class _EffectPicker extends StatefulWidget {
 }
 
 class _EffectPickerState extends State<_EffectPicker> {
-  var _entry = _EntryEffectChoice.fade;
-  var _exit = _ExitEffectChoice.fade;
+  // Each choice pairs an effect with a duration that follows its distance:
+  // slides and wipes cross the 24-column sample, so they run longest.
+  static final _entrances = <String, (Effect, Duration)>{
+    'Fade in': (Effects.fadeIn(), const Duration(milliseconds: 400)),
+    'Slide in': (
+      Effects.slideIn(from: Edge.left),
+      const Duration(milliseconds: 800),
+    ),
+    'Wipe in': (
+      Effects.wipeIn(from: Edge.left),
+      const Duration(milliseconds: 800),
+    ),
+    'Expand': (Effects.expand(), const Duration(milliseconds: 300)),
+  };
+  static final _exits = <String, (Effect, Duration)>{
+    'Fade out': (Effects.fadeOut(), const Duration(milliseconds: 400)),
+    'Slide out': (
+      Effects.slideOut(to: Edge.right),
+      const Duration(milliseconds: 800),
+    ),
+    'Wipe out': (
+      Effects.wipeOut(to: Edge.right),
+      const Duration(milliseconds: 800),
+    ),
+    'Shrink': (Effects.shrink(), const Duration(milliseconds: 300)),
+  };
+
+  var _entry = 'Fade in';
+  var _exit = 'Fade out';
   var _visible = true;
 
-  Effect get _entryEffect => switch (_entry) {
-    _EntryEffectChoice.fade => Effects.fadeIn(),
-    _EntryEffectChoice.slide => Effects.slideIn(from: Edge.left),
-    _EntryEffectChoice.wipe => Effects.wipeIn(from: Edge.left),
-    _EntryEffectChoice.expand => Effects.expand(),
-  };
-
-  Effect get _exitEffect => switch (_exit) {
-    _ExitEffectChoice.fade => Effects.fadeOut(),
-    _ExitEffectChoice.slide => Effects.slideOut(to: Edge.right),
-    _ExitEffectChoice.wipe => Effects.wipeOut(to: Edge.right),
-    _ExitEffectChoice.shrink => Effects.shrink(),
-  };
-
-  Duration get _transitionDuration {
-    if (_visible) {
-      return switch (_entry) {
-        _EntryEffectChoice.fade => const Duration(milliseconds: 400),
-        _EntryEffectChoice.slide ||
-        _EntryEffectChoice.wipe => const Duration(milliseconds: 800),
-        _EntryEffectChoice.expand => const Duration(milliseconds: 300),
-      };
-    }
-    return switch (_exit) {
-      _ExitEffectChoice.fade => const Duration(milliseconds: 400),
-      _ExitEffectChoice.slide ||
-      _ExitEffectChoice.wipe => const Duration(milliseconds: 800),
-      _ExitEffectChoice.shrink => const Duration(milliseconds: 300),
-    };
-  }
-
   @override
-  Widget build(BuildContext context) => Column(
-    crossAxisAlignment: CrossAxisAlignment.start,
-    children: <Widget>[
-      const Text('ENTRANCE + EXIT LAB', style: CellStyle(bold: true)),
-      const Text('Choose a pair, then toggle the sample.'),
-      const SizedBox(height: 1),
-      Row(
-        children: <Widget>[
-          SizedBox(
-            width: 25,
-            child: Column(
+  Widget build(BuildContext context) {
+    final (enter, enterDuration) = _entrances[_entry]!;
+    final (exit, exitDuration) = _exits[_exit]!;
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: <Widget>[
+        const Text('ENTRANCE + EXIT LAB', style: CellStyle(bold: true)),
+        const Text('Choose a pair, then toggle the sample.'),
+        const SizedBox(height: 1),
+        Row(
+          children: <Widget>[
+            SizedBox(
+              width: 25,
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: <Widget>[
+                  const Text('ENTER'),
+                  Select<String>(
+                    semanticLabel: 'Entrance effect',
+                    autofocus: true,
+                    value: _entry,
+                    options: [
+                      for (final label in _entrances.keys)
+                        SelectOption(value: label, label: label),
+                    ],
+                    onChanged: (value) => setState(() => _entry = value),
+                  ),
+                ],
+              ),
+            ),
+            SizedBox(
+              width: 25,
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: <Widget>[
+                  const Text('EXIT'),
+                  Select<String>(
+                    semanticLabel: 'Exit effect',
+                    value: _exit,
+                    options: [
+                      for (final label in _exits.keys)
+                        SelectOption(value: label, label: label),
+                    ],
+                    onChanged: (value) => setState(() => _exit = value),
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
+        const SizedBox(height: 1),
+        Button(
+          text: _visible ? 'Hide sample' : 'Show sample',
+          onPressed: () => setState(() => _visible = !_visible),
+        ),
+        const SizedBox(height: 1),
+        AnimatedVisibility(
+          visible: _visible,
+          enter: enter,
+          exit: exit,
+          // The transition that is starting decides the duration.
+          duration: _visible ? enterDuration : exitDuration,
+          curve: Curves.linear,
+          child: Container(
+            width: 24,
+            border: BoxBorder(style: Theme.of(context).borderStyle),
+            padding: const EdgeInsets.symmetric(horizontal: 1),
+            child: const Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: <Widget>[
-                const Text('ENTER'),
-                Select<_EntryEffectChoice>(
-                  semanticLabel: 'Entrance effect',
-                  autofocus: true,
-                  value: _entry,
-                  options: const <SelectOption<_EntryEffectChoice>>[
-                    SelectOption(
-                      value: _EntryEffectChoice.fade,
-                      label: 'Fade in',
-                    ),
-                    SelectOption(
-                      value: _EntryEffectChoice.slide,
-                      label: 'Slide in',
-                    ),
-                    SelectOption(
-                      value: _EntryEffectChoice.wipe,
-                      label: 'Wipe in',
-                    ),
-                    SelectOption(
-                      value: _EntryEffectChoice.expand,
-                      label: 'Expand',
-                    ),
-                  ],
-                  onChanged: (value) => setState(() => _entry = value),
-                ),
+                Text('DEPLOY PREVIEW', style: CellStyle(bold: true)),
+                Text('✓ Resolve'),
+                Text('✓ Analyze'),
+                Text('✓ Test'),
+                Text('✓ Package'),
+                Text('✓ Sign'),
+                Text('✓ Publish'),
               ],
             ),
-          ),
-          SizedBox(
-            width: 25,
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: <Widget>[
-                const Text('EXIT'),
-                Select<_ExitEffectChoice>(
-                  semanticLabel: 'Exit effect',
-                  value: _exit,
-                  options: const <SelectOption<_ExitEffectChoice>>[
-                    SelectOption(
-                      value: _ExitEffectChoice.fade,
-                      label: 'Fade out',
-                    ),
-                    SelectOption(
-                      value: _ExitEffectChoice.slide,
-                      label: 'Slide out',
-                    ),
-                    SelectOption(
-                      value: _ExitEffectChoice.wipe,
-                      label: 'Wipe out',
-                    ),
-                    SelectOption(
-                      value: _ExitEffectChoice.shrink,
-                      label: 'Shrink',
-                    ),
-                  ],
-                  onChanged: (value) => setState(() => _exit = value),
-                ),
-              ],
-            ),
-          ),
-        ],
-      ),
-      const SizedBox(height: 1),
-      Button(
-        text: _visible ? 'Hide sample' : 'Show sample',
-        onPressed: () => setState(() => _visible = !_visible),
-      ),
-      const SizedBox(height: 1),
-      AnimatedVisibility(
-        visible: _visible,
-        enter: _entryEffect,
-        exit: _exitEffect,
-        duration: _transitionDuration,
-        curve: Curves.linear,
-        child: Container(
-          width: 24,
-          border: BoxBorder(style: Theme.of(context).borderStyle),
-          padding: const EdgeInsets.symmetric(horizontal: 1),
-          child: const Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: <Widget>[
-              Text('DEPLOY PREVIEW', style: CellStyle(bold: true)),
-              Text('✓ Resolve'),
-              Text('✓ Analyze'),
-              Text('✓ Test'),
-              Text('✓ Package'),
-              Text('✓ Sign'),
-              Text('✓ Publish'),
-            ],
           ),
         ),
-      ),
-    ],
-  );
+      ],
+    );
+  }
 }
 
 class _PilotValidation extends StatefulWidget {
