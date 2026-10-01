@@ -262,6 +262,22 @@ def supervised_suspend(dart):
         app.close()
 
 
+def termios_diff(expected, actual):
+    """Names each termios field that differs, with the bits that changed."""
+    names = ["iflag", "oflag", "cflag", "lflag", "ispeed", "ospeed"]
+    changes = [
+        f"{name} {want:#x} -> {got:#x} (bits {want ^ got:#x})"
+        for name, want, got in zip(names, expected, actual)
+        if want != got
+    ]
+    changes += [
+        f"cc[{i}] {want!r} -> {got!r}"
+        for i, (want, got) in enumerate(zip(expected[6], actual[6]))
+        if want != got
+    ]
+    return "; ".join(changes)
+
+
 def suspend_and_resume(app, job):
     """Presses Ctrl+Z, checks that every process in [job] stopped and that
     the terminal is the shell's again, then continues the job as `fg` does.
@@ -299,7 +315,8 @@ def suspend_and_resume(app, job):
     pending_input = getattr(termios, "PENDIN", 0)
     restored_modes[3] &= ~pending_input
     expected_modes[3] &= ~pending_input
-    assert restored_modes == expected_modes, "suspend left terminal modes changed"
+    assert restored_modes == expected_modes, \
+        f"suspend left terminal modes changed: {termios_diff(expected_modes, restored_modes)}"
     # fg continues the job's whole process group, not only the app.
     os.killpg(os.getpgid(job[0]), signal.SIGCONT)
     app.wait(lambda: "INLINE-READY" in app.text(), "resume frame")
