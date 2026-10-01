@@ -24,7 +24,6 @@ import 'forms/related_fields.dart';
 import 'forms/custom_field.dart';
 import 'concepts.dart' as concepts;
 import 'flutter_map.dart' as flutter_map;
-import 'live_previews.dart' as live;
 import 'home_pad.dart' as home_pad;
 import 'hot_reload_guide.dart';
 
@@ -215,18 +214,7 @@ final List<ExampleInfo> exampleList = <ExampleInfo>[
   color: theme.colorScheme.success,
   showValue: true,
 )''',
-    builder: () => _framed(
-      _LiveSeries(
-        length: 28,
-        min: 0,
-        max: 20,
-        builder: (data) => Sparkline(
-          data: data,
-          color: _theme.colorScheme.success,
-          showValue: true,
-        ),
-      ),
-    ),
+    builder: () => _framed(const _SparklineExample()),
   ),
   ExampleInfo(
     id: 'linechart.basic',
@@ -246,25 +234,7 @@ final List<ExampleInfo> exampleList = <ExampleInfo>[
   showLegend: true,
   yRange: const (0, 100),
 )''',
-    builder: () => _framed(
-      _LiveSeries(
-        length: 40,
-        min: 0,
-        max: 100,
-        builder: (data) => LineChart(
-          series: <LineSeries>[
-            LineSeries(
-              <(num, num)>[for (var i = 0; i < data.length; i++) (i, data[i])],
-              label: 'load',
-              color: _theme.colorScheme.primary,
-            ),
-          ],
-          showAxes: true,
-          showLegend: true,
-          yRange: const (0, 100),
-        ),
-      ),
-    ),
+    builder: () => _framed(const _LineChartExample()),
   ),
   // --- LineChart rendering-option lab: compare line weights + markers ------
   ExampleInfo(
@@ -373,29 +343,7 @@ final List<ExampleInfo> exampleList = <ExampleInfo>[
   showLegend: true,
   yRange: const (0, 100),
 )''',
-    builder: () => _framed(
-      _LiveSeries(
-        length: 40,
-        min: 0,
-        max: 100,
-        builder: (data) => AreaChart(
-          series: <AreaSeries>[
-            AreaSeries(
-              <(num, num)>[for (var i = 0; i < data.length; i++) (i, data[i])],
-              label: 'load',
-              gradient: <Color>[
-                _theme.colorScheme.success,
-                _theme.colorScheme.warning,
-                _theme.colorScheme.error,
-              ],
-            ),
-          ],
-          showAxes: true,
-          showLegend: true,
-          yRange: const (0, 100),
-        ),
-      ),
-    ),
+    builder: () => _framed(const _AreaChartExample()),
   ),
   ExampleInfo(
     id: 'barchart.basic',
@@ -408,19 +356,7 @@ final List<ExampleInfo> exampleList = <ExampleInfo>[
   bars: <Bar>[Bar('q1', 12), Bar('q2', 19), Bar('q3', 9), Bar('q4', 22)],
   showYAxis: true,
 )''',
-    builder: () => _framed(
-      _LiveSeries(
-        length: 5,
-        min: 2,
-        max: 24,
-        builder: (data) => BarChart(
-          bars: <Bar>[
-            for (var i = 0; i < data.length; i++) Bar('q${i + 1}', data[i]),
-          ],
-          showYAxis: true,
-        ),
-      ),
-    ),
+    builder: () => _framed(const _BarChartExample()),
   ),
   ExampleInfo(
     id: 'histogram.basic',
@@ -507,18 +443,7 @@ Canvas(
   semanticRole: SemanticRole.chart,
   semanticLabel: 'Sine wave',
 )''',
-    builder: () => _framed(
-      SizedBox(
-        width: 48,
-        height: 9,
-        child: Canvas(
-          painter: _DocsCanvasPainter(),
-          bounds: const CanvasBounds(minX: 0, maxX: 6.28, minY: -1, maxY: 1),
-          semanticRole: SemanticRole.chart,
-          semanticLabel: 'Sine wave',
-        ),
-      ),
-    ),
+    builder: () => _framed(const _CanvasExample()),
   ),
   ExampleInfo(
     id: 'panel.basic',
@@ -585,34 +510,7 @@ Canvas(
     cols: 48,
     rows: 8,
     interactive: true,
-    builder: () => _framed(
-      DataTable(
-        rowCount: _people.length,
-        controller: DataTableController(),
-        selectionMode: DataTableSelectionMode.row,
-        columns: const <DataTableColumn>[
-          DataTableColumn(
-            id: 'name',
-            title: 'NAME',
-            width: FixedColumnWidth(10),
-          ),
-          DataTableColumn(id: 'role', title: 'ROLE'),
-          DataTableColumn(
-            id: 'commits',
-            title: 'COMMITS',
-            width: FixedColumnWidth(9),
-          ),
-        ],
-        cellBuilder: (row, col) {
-          final p = _people[row];
-          return switch (col) {
-            'name' => p.$1,
-            'role' => p.$2,
-            _ => p.$3.toString(),
-          };
-        },
-      ),
-    ),
+    builder: () => _framed(const _DataTableExample()),
   ),
   ExampleInfo(
     id: 'datatable.rows',
@@ -1310,7 +1208,7 @@ FileBrowser(
   initialDirectory: '/my_app',
   onActivate: (entry) => openFile(entry.path),
 )''',
-    builder: () => _framed(const live.FileBrowserPreview()),
+    builder: () => _framed(const _FileBrowserExample()),
   ),
   ExampleInfo(
     id: 'filepicker.basic',
@@ -1322,15 +1220,24 @@ FileBrowser(
     cols: 48,
     rows: 13,
     interactive: true,
-    code: '''FilePicker(
+    code: '''// In a terminal, FilePicker reads the local disk:
+FilePicker(
   initialDirectory: Directory.current.path,
   filter: (entry) => entry.isDirectory || entry.name.endsWith('.dart'),
   onSelect: (file) => openFile(file.path),
 )
 
-// In the browser, pass a source, such as the MemoryFileSource this demo uses:
-// FilePicker(source: projectFiles, initialDirectory: '/my_app', ...)''',
-    builder: () => _framed(const live.FilePickerPreview()),
+// In the browser there is no disk to list, so pass a source, as this demo
+// does:
+FilePicker(
+  source: MemoryFileSource([
+    '/my_app/lib/app.dart',
+    '/my_app/test/app_test.dart',
+  ]),
+  initialDirectory: '/my_app',
+  onSelect: (file) => openFile(file.path),
+)''',
+    builder: () => _framed(const _FilePickerExample()),
   ),
   ExampleInfo(
     id: 'colorpicker.basic',
@@ -1489,7 +1396,7 @@ Toaster(child: app)
 
 // …then from anywhere below it:
 Toaster.show(context, 'Saved', severity: ToastSeverity.success);''',
-    builder: () => _framed(const live.ToasterPreview()),
+    builder: () => _framed(const _ToasterExample()),
   ),
   ExampleInfo(
     id: 'container.filled',
@@ -3026,13 +2933,25 @@ context.pop('done'); // completes the push that opened this screen''',
   ),
   ExampleInfo(
     id: 'focus.explorer',
+    widget: 'Focus traversal',
+    category: 'Guide examples',
+    blurb:
+        'Automatic traversal across two panes: Tab reads each row, arrows '
+        'move by direction, and a dialog keeps focus until it closes.',
+    cols: 70,
+    rows: 18,
+    interactive: true,
+    builder: () => _framed(const Navigator(home: _FocusExplorerTour())),
+  ),
+  ExampleInfo(
+    id: 'focus.basic',
     widget: 'Focus',
     category: 'Input handling & focus',
     blurb:
         'Makes a custom widget focusable, so it receives keys and joins Tab '
         'and arrow traversal.',
-    cols: 70,
-    rows: 18,
+    cols: 40,
+    rows: 8,
     interactive: true,
     code:
         '''// A custom control becomes one focus stop. Handle its keys outside the
@@ -3047,7 +2966,7 @@ KeyBindings(
 // In TrackRow's build, reading Focus.of rebuilds it when focus changes:
 final focused = Focus.of(context).hasFocus;
 return Text(focused ? '▸ Track 1' : '  Track 1');''',
-    builder: () => const Navigator(home: _FocusExplorerTour()),
+    builder: () => _framed(const _FocusExample()),
   ),
   ExampleInfo(
     id: 'focusnode.programmatic',
@@ -3328,13 +3247,6 @@ final Map<String, ExampleBuilder> examples = <String, ExampleBuilder>{
   for (final e in exampleList) e.id: e.builder,
 };
 
-const List<(String, String, int)> _people = <(String, String, int)>[
-  ('dan', 'author', 1284),
-  ('ada', 'reviewer', 642),
-  ('lin', 'docs', 219),
-  ('rey', 'infra', 877),
-];
-
 // Compact docs themes so embedded examples read well against the site chrome.
 final ThemeData _theme = const ThemeData(
   brightness: Brightness.dark,
@@ -3411,20 +3323,69 @@ final class _DocsExampleTheme {
 // ── Stateful wrappers ───────────────────────────────────────────────────────
 // Controlled widgets (value + onChanged) need a holder so interacting with the
 // live example actually moves them; self-managing widgets are used directly.
-final class _DocsCanvasPainter extends CanvasPainter {
+class _CanvasExample extends StatelessWidget {
+  const _CanvasExample();
+
+  @override
+  Widget build(BuildContext context) => SizedBox(
+    width: 48,
+    height: 9,
+    child: Canvas(
+      painter: _SineWavePainter(),
+      // The painter draws in these logical coordinates: one period of sin(x).
+      bounds: const CanvasBounds(minX: 0, maxX: 6.28, minY: -1, maxY: 1),
+      semanticRole: SemanticRole.chart,
+      semanticLabel: 'Sine wave',
+    ),
+  );
+}
+
+/// Draws one period of sin(x) as short line segments.
+class _SineWavePainter extends CanvasPainter {
   @override
   void paint(CanvasContext ctx) {
     const segments = 96;
-    var previousX = 0.0;
-    var previousY = 0.0;
-    for (var i = 1; i <= segments; i++) {
-      final x = 6.28 * i / segments;
-      final y = sin(x);
-      ctx.drawLine(previousX, previousY, x, y);
-      previousX = x;
-      previousY = y;
+    for (var i = 0; i < segments; i++) {
+      final x1 = 6.28 * i / segments;
+      final x2 = 6.28 * (i + 1) / segments;
+      ctx.drawLine(x1, sin(x1), x2, sin(x2));
     }
   }
+}
+
+class _DataTableExample extends StatelessWidget {
+  const _DataTableExample();
+
+  static const _people = [
+    (name: 'dan', role: 'author', commits: 1284),
+    (name: 'ada', role: 'reviewer', commits: 642),
+    (name: 'lin', role: 'docs', commits: 219),
+    (name: 'rey', role: 'infra', commits: 877),
+  ];
+
+  @override
+  Widget build(BuildContext context) => DataTable(
+    rowCount: _people.length,
+    selectionMode: DataTableSelectionMode.row,
+    columns: const [
+      DataTableColumn(id: 'name', title: 'NAME', width: FixedColumnWidth(10)),
+      DataTableColumn(id: 'role', title: 'ROLE'),
+      DataTableColumn(
+        id: 'commits',
+        title: 'COMMITS',
+        width: FixedColumnWidth(9),
+      ),
+    ],
+    // Asked only for the rows on screen, so the list can be any length.
+    cellBuilder: (row, column) {
+      final person = _people[row];
+      return switch (column) {
+        'name' => person.name,
+        'role' => person.role,
+        _ => '${person.commits}',
+      };
+    },
+  );
 }
 
 class _ContainerFillExample extends StatefulWidget {
@@ -4024,6 +3985,61 @@ class _FocusScopeExampleState extends State<_FocusScopeExample> {
   );
 }
 
+class _FocusExample extends StatefulWidget {
+  const _FocusExample();
+
+  @override
+  State<_FocusExample> createState() => _FocusExampleState();
+}
+
+class _FocusExampleState extends State<_FocusExample> {
+  static const _tracks = ['Intro', 'Night drive', 'Outro'];
+  String _playing = 'nothing';
+
+  @override
+  Widget build(BuildContext context) => Column(
+    crossAxisAlignment: CrossAxisAlignment.start,
+    children: [
+      for (final (i, track) in _tracks.indexed)
+        // Each row is one focus stop. Keys travel from the focused node up
+        // through its ancestors, so Enter reaches the focused row's binding.
+        KeyBindings(
+          bindings: [
+            KeyBinding(
+              KeySequence.enter,
+              label: 'Play',
+              onTrigger: (_) => setState(() => _playing = track),
+            ),
+          ],
+          child: Focus(autofocus: i == 0, child: _TrackRow(track)),
+        ),
+      const SizedBox(height: 1),
+      const Text(
+        'Tab or arrows move · Enter plays',
+        style: CellStyle(dim: true),
+      ),
+      Text('Playing: $_playing'),
+    ],
+  );
+}
+
+/// One track title, marked while its row has focus.
+class _TrackRow extends StatelessWidget {
+  const _TrackRow(this.title);
+
+  final String title;
+
+  @override
+  Widget build(BuildContext context) {
+    // Reading Focus.of rebuilds this row when its focus changes.
+    final focused = Focus.of(context).hasFocus;
+    return Text(
+      focused ? '▸ $title' : '  $title',
+      style: CellStyle(bold: focused),
+    );
+  }
+}
+
 // Log surfaces read as a running process: each demo appends its next scripted
 // line every 0.7 seconds, looping at the end.
 
@@ -4237,6 +4253,141 @@ class _WorkflowSnapshotExampleState extends State<_WorkflowSnapshotExample> {
   }
 }
 
+class _FileBrowserExample extends StatefulWidget {
+  const _FileBrowserExample();
+
+  @override
+  State<_FileBrowserExample> createState() => _FileBrowserExampleState();
+}
+
+class _FileBrowserExampleState extends State<_FileBrowserExample> {
+  // The browser has no disk to list, so this demo browses a project held in
+  // memory. In a terminal, leave out `source` to browse the local disk.
+  final _project = MemoryFileSource([
+    '/my_app/.gitignore',
+    '/my_app/README.md',
+    '/my_app/pubspec.yaml',
+    '/my_app/bin/run_app.dart',
+    '/my_app/lib/app.dart',
+    '/my_app/lib/src/status_panel.dart',
+    '/my_app/lib/src/theme.dart',
+    '/my_app/test/app_test.dart',
+    '/my_app/web/index.html',
+    '/my_app/web/main.dart',
+  ]);
+  String _status = 'Enter opens · Backspace goes up';
+
+  @override
+  Widget build(BuildContext context) => Column(
+    crossAxisAlignment: CrossAxisAlignment.stretch,
+    children: [
+      Expanded(
+        child: FileBrowser(
+          source: _project,
+          initialDirectory: '/my_app',
+          autofocus: true,
+          maxVisible: 8,
+          onActivate: (entry) =>
+              setState(() => _status = 'opened ${entry.path}'),
+        ),
+      ),
+      Text(_status, style: const CellStyle(dim: true)),
+    ],
+  );
+}
+
+class _FilePickerExample extends StatefulWidget {
+  const _FilePickerExample();
+
+  @override
+  State<_FilePickerExample> createState() => _FilePickerExampleState();
+}
+
+class _FilePickerExampleState extends State<_FilePickerExample> {
+  // The browser has no disk to list, so this demo picks from a project held
+  // in memory. In a terminal, leave out `source` to pick from the local disk.
+  final _project = MemoryFileSource([
+    '/my_app/README.md',
+    '/my_app/pubspec.yaml',
+    '/my_app/bin/run_app.dart',
+    '/my_app/lib/app.dart',
+    '/my_app/lib/src/status_panel.dart',
+    '/my_app/lib/src/theme.dart',
+    '/my_app/test/app_test.dart',
+    '/my_app/web/main.dart',
+  ]);
+  String _status = 'Pick a Dart file';
+
+  @override
+  Widget build(BuildContext context) => Column(
+    crossAxisAlignment: CrossAxisAlignment.stretch,
+    children: [
+      Expanded(
+        child: FilePicker(
+          source: _project,
+          initialDirectory: '/my_app',
+          autofocus: true,
+          maxVisible: 8,
+          filter: (entry) => entry.isDirectory || entry.name.endsWith('.dart'),
+          onSelect: (file) => setState(() => _status = 'picked ${file.path}'),
+        ),
+      ),
+      Text(_status, style: const CellStyle(dim: true)),
+    ],
+  );
+}
+
+/// Wraps the app once, so any widget below it can raise a toast.
+class _ToasterExample extends StatelessWidget {
+  const _ToasterExample();
+
+  @override
+  Widget build(BuildContext context) =>
+      const Toaster(duration: Duration(seconds: 3), child: _ToastButtons());
+}
+
+/// Raises toasts with [Toaster.show], from below the [Toaster].
+class _ToastButtons extends StatelessWidget {
+  const _ToastButtons();
+
+  @override
+  Widget build(BuildContext context) => Column(
+    crossAxisAlignment: CrossAxisAlignment.start,
+    children: [
+      const Text('Raise a toast:'),
+      const SizedBox(height: 1),
+      Row(
+        children: [
+          Button(
+            text: 'Save',
+            autofocus: true,
+            onPressed: () =>
+                Toaster.show(context, 'Saved', severity: ToastSeverity.success),
+          ),
+          const SizedBox(width: 1),
+          Button(
+            text: 'Retry',
+            onPressed: () => Toaster.show(
+              context,
+              'Connection slow, retrying',
+              severity: ToastSeverity.warning,
+            ),
+          ),
+          const SizedBox(width: 1),
+          Button(
+            text: 'Fail',
+            onPressed: () => Toaster.show(
+              context,
+              'Upload failed',
+              severity: ToastSeverity.error,
+            ),
+          ),
+        ],
+      ),
+    ],
+  );
+}
+
 // ── Knobs (interactive props) ───────────────────────────────────────────────
 //
 // A small set of widgets gets a live "playground": the docs UI renders form
@@ -4447,9 +4598,189 @@ class _WorldClockState extends State<_WorldClock>
   }
 }
 
-/// Streams a bounded random-walk series into [builder] on a ticker, so chart
-/// examples animate in the docs. The shown code stays the plain static widget
-/// (see each example's `code` override).
+// Chart demos stream like a live dashboard: a timer updates their simulated
+// readings every 160 ms.
+
+class _SparklineExample extends StatefulWidget {
+  const _SparklineExample();
+
+  @override
+  State<_SparklineExample> createState() => _SparklineExampleState();
+}
+
+class _SparklineExampleState extends State<_SparklineExample> {
+  final _random = Random(5);
+  late final Timer _timer;
+  late List<num> _requests;
+  var _tick = 0;
+
+  // Simulated requests per second: a slow swing around 10, plus some noise.
+  num _read() => (10 + 6 * sin(_tick++ / 4)).round() + _random.nextInt(5) - 2;
+
+  @override
+  void initState() {
+    super.initState();
+    _requests = [for (var i = 0; i < 28; i++) _read()];
+    // Every 160 ms, drop the oldest reading and add a new one.
+    _timer = Timer.periodic(const Duration(milliseconds: 160), (_) {
+      setState(() => _requests = [..._requests.skip(1), _read()]);
+    });
+  }
+
+  @override
+  void dispose() {
+    _timer.cancel();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) => Sparkline(
+    data: _requests,
+    color: Theme.of(context).colorScheme.success,
+    showValue: true,
+  );
+}
+
+class _LineChartExample extends StatefulWidget {
+  const _LineChartExample();
+
+  @override
+  State<_LineChartExample> createState() => _LineChartExampleState();
+}
+
+class _LineChartExampleState extends State<_LineChartExample> {
+  final _random = Random(5);
+  late final Timer _timer;
+  late List<num> _load;
+  var _tick = 0;
+
+  // Simulated CPU load: a slow swing around 50%, plus some noise.
+  num _read() => 50 + 30 * sin(_tick++ / 6) + _random.nextInt(11) - 5;
+
+  @override
+  void initState() {
+    super.initState();
+    _load = [for (var i = 0; i < 40; i++) _read()];
+    // Every 160 ms, drop the oldest reading and add a new one.
+    _timer = Timer.periodic(const Duration(milliseconds: 160), (_) {
+      setState(() => _load = [..._load.skip(1), _read()]);
+    });
+  }
+
+  @override
+  void dispose() {
+    _timer.cancel();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) => LineChart(
+    series: [
+      LineSeries(
+        [for (final (i, load) in _load.indexed) (i, load)],
+        label: 'load',
+        color: Theme.of(context).colorScheme.primary,
+      ),
+    ],
+    showAxes: true,
+    showLegend: true,
+    yRange: const (0, 100),
+  );
+}
+
+class _AreaChartExample extends StatefulWidget {
+  const _AreaChartExample();
+
+  @override
+  State<_AreaChartExample> createState() => _AreaChartExampleState();
+}
+
+class _AreaChartExampleState extends State<_AreaChartExample> {
+  final _random = Random(5);
+  late final Timer _timer;
+  late List<num> _load;
+  var _tick = 0;
+
+  // Simulated CPU load: a slow swing around 50%, plus some noise.
+  num _read() => 50 + 30 * sin(_tick++ / 6) + _random.nextInt(11) - 5;
+
+  @override
+  void initState() {
+    super.initState();
+    _load = [for (var i = 0; i < 40; i++) _read()];
+    // Every 160 ms, drop the oldest reading and add a new one.
+    _timer = Timer.periodic(const Duration(milliseconds: 160), (_) {
+      setState(() => _load = [..._load.skip(1), _read()]);
+    });
+  }
+
+  @override
+  void dispose() {
+    _timer.cancel();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final colors = Theme.of(context).colorScheme;
+    return AreaChart(
+      series: [
+        AreaSeries(
+          [for (final (i, load) in _load.indexed) (i, load)],
+          label: 'load',
+          // Stops run bottom to top: green at low load, red near the top.
+          gradient: [colors.success, colors.warning, colors.error],
+        ),
+      ],
+      showAxes: true,
+      showLegend: true,
+      yRange: const (0, 100),
+    );
+  }
+}
+
+class _BarChartExample extends StatefulWidget {
+  const _BarChartExample();
+
+  @override
+  State<_BarChartExample> createState() => _BarChartExampleState();
+}
+
+class _BarChartExampleState extends State<_BarChartExample> {
+  final _random = Random(5);
+  late final Timer _timer;
+  // Jobs waiting in each queue.
+  List<num> _waiting = [12, 19, 9, 22];
+
+  @override
+  void initState() {
+    super.initState();
+    // Every 160 ms, each queue gains or loses up to 2 jobs.
+    _timer = Timer.periodic(const Duration(milliseconds: 160), (_) {
+      setState(() {
+        _waiting = [
+          for (final jobs in _waiting)
+            (jobs + _random.nextInt(5) - 2).clamp(0, 30),
+        ];
+      });
+    });
+  }
+
+  @override
+  void dispose() {
+    _timer.cancel();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) => BarChart(
+    bars: [for (final (i, jobs) in _waiting.indexed) Bar('q${i + 1}', jobs)],
+    showYAxis: true,
+  );
+}
+
+/// Streams a bounded random-walk series into [builder] on a ticker, for the
+/// LineChart lab's side-by-side rendering comparisons.
 class _LiveSeries extends StatefulWidget {
   const _LiveSeries({
     required this.length,
@@ -6317,64 +6648,62 @@ class _FocusExplorerTourState extends State<_FocusExplorerTour> {
       );
 
   @override
-  Widget build(BuildContext context) => _framed(
-    Column(
-      crossAxisAlignment: CrossAxisAlignment.stretch,
-      children: [
-        const Text(
-          'AUTOMATIC · TAB READS · ARROWS MOVE',
-          style: CellStyle(bold: true),
-        ),
-        Text('active: $_activeRegion', style: const CellStyle(dim: true)),
-        const SizedBox(height: 1),
-        Expanded(
-          child: Row(
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              Expanded(
-                child: _region(
-                  name: 'Files',
-                  controls: [
-                    _actionButton(
-                      label: 'New file',
-                      autofocus: true,
-                      onPressed: () => _act('Created a file'),
-                    ),
-                    _actionButton(
-                      label: 'Open file',
-                      onPressed: () => _act('Opened a file'),
-                    ),
-                    _actionButton(
-                      label: 'Settings',
-                      onPressed: () => _act('Opened settings'),
-                    ),
-                  ],
-                ),
+  Widget build(BuildContext context) => Column(
+    crossAxisAlignment: CrossAxisAlignment.stretch,
+    children: [
+      const Text(
+        'AUTOMATIC · TAB READS · ARROWS MOVE',
+        style: CellStyle(bold: true),
+      ),
+      Text('active: $_activeRegion', style: const CellStyle(dim: true)),
+      const SizedBox(height: 1),
+      Expanded(
+        child: Row(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            Expanded(
+              child: _region(
+                name: 'Files',
+                controls: [
+                  _actionButton(
+                    label: 'New file',
+                    autofocus: true,
+                    onPressed: () => _act('Created a file'),
+                  ),
+                  _actionButton(
+                    label: 'Open file',
+                    onPressed: () => _act('Opened a file'),
+                  ),
+                  _actionButton(
+                    label: 'Settings',
+                    onPressed: () => _act('Opened settings'),
+                  ),
+                ],
               ),
-              const SizedBox(width: 2),
-              Expanded(
-                child: _region(
-                  name: 'Preview',
-                  controls: [
-                    _actionButton(
-                      label: 'Refresh',
-                      onPressed: () => _act('Refreshed preview'),
-                    ),
-                    _actionButton(
-                      label: 'Inspect',
-                      onPressed: () => _act('Opened inspector'),
-                    ),
-                    _actionButton(label: 'Publish…', onPressed: _openDialog),
-                  ],
-                ),
+            ),
+            const SizedBox(width: 2),
+            Expanded(
+              child: _region(
+                name: 'Preview',
+                controls: [
+                  _actionButton(
+                    label: 'Refresh',
+                    onPressed: () => _act('Refreshed preview'),
+                  ),
+                  _actionButton(
+                    label: 'Inspect',
+                    onPressed: () => _act('Opened inspector'),
+                  ),
+                  _actionButton(label: 'Publish…', onPressed: _openDialog),
+                ],
               ),
-            ],
-          ),
+            ),
+          ],
         ),
-        const SizedBox(height: 1),
-        Text('last: $_lastAction'),
-      ],
-    ),
+      ),
+      const SizedBox(height: 1),
+      Text('last: $_lastAction'),
+    ],
   );
 }
 
@@ -6621,7 +6950,7 @@ class _KeyBindingsTourState extends State<_KeyBindingsTour> {
               child: Text(_last, style: const CellStyle(bold: true)),
             ),
             Expanded(
-              child: ListViewSelectionDemoRows(row: _row, saved: _saved),
+              child: _ItemRows(row: _row, saved: _saved),
             ),
             const KeyHintBar(),
           ],
@@ -6632,14 +6961,12 @@ class _KeyBindingsTourState extends State<_KeyBindingsTour> {
 }
 
 /// Seven rows: one highlighted (the j/k cursor), any bookmarked (★, Ctrl+S).
-class ListViewSelectionDemoRows extends StatelessWidget {
-  const ListViewSelectionDemoRows({
-    super.key,
-    required this.row,
-    this.saved = const <int>{},
-  });
+class _ItemRows extends StatelessWidget {
+  const _ItemRows({required this.row, this.saved = const <int>{}});
+
   final int row;
   final Set<int> saved;
+
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);

@@ -21,6 +21,11 @@
       "label": "key_bindings.dart",
       "source": "website/examples/lib/registry.dart",
       "declaration": "_KeyBindingsTourState"
+    },
+    {
+      "label": "item_rows.dart",
+      "source": "website/examples/lib/registry.dart",
+      "declaration": "_ItemRows"
     }
   ],
   "keydetector.basic": [
@@ -42,6 +47,60 @@
       "label": "focus_detector.dart",
       "source": "website/examples/lib/registry.dart",
       "declaration": "_FocusDetectorTourState"
+    }
+  ],
+  "focus.basic": [
+    {
+      "label": "focus_example.dart",
+      "source": "website/examples/lib/registry.dart",
+      "declaration": "_FocusExampleState"
+    },
+    {
+      "label": "track_row.dart",
+      "source": "website/examples/lib/registry.dart",
+      "declaration": "_TrackRow"
+    }
+  ],
+  "form.basic": [
+    {
+      "label": "project_form.dart",
+      "source": "website/examples/lib/forms/project_form.dart"
+    }
+  ],
+  "formfield.basic": [
+    {
+      "label": "custom_field.dart",
+      "source": "website/examples/lib/forms/custom_field.dart"
+    }
+  ],
+  "formcontroller.basic": [
+    {
+      "label": "save_project.dart",
+      "source": "website/examples/lib/forms/save_project.dart"
+    }
+  ],
+  "canvas.basic": [
+    {
+      "label": "canvas_example.dart",
+      "source": "website/examples/lib/registry.dart",
+      "declaration": "_CanvasExample"
+    },
+    {
+      "label": "sine_wave_painter.dart",
+      "source": "website/examples/lib/registry.dart",
+      "declaration": "_SineWavePainter"
+    }
+  ],
+  "toaster.basic": [
+    {
+      "label": "toaster_example.dart",
+      "source": "website/examples/lib/registry.dart",
+      "declaration": "_ToasterExample"
+    },
+    {
+      "label": "toast_buttons.dart",
+      "source": "website/examples/lib/registry.dart",
+      "declaration": "_ToastButtons"
     }
   ],
   "animation.progress": [
@@ -307,6 +366,11 @@
     }
   ],
   "navigation.basics": [
+    {
+      "label": "app.dart",
+      "source": "website/examples/lib/registry.dart",
+      "declaration": "example"
+    },
     {
       "label": "home_screen.dart",
       "source": "website/examples/lib/registry.dart",

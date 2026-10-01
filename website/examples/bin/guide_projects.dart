@@ -435,7 +435,8 @@ void main() {
           as Map<String, dynamic>;
   final out = <String, Object>{};
   // Every widget reference page's demo is editable too. Their views follow
-  // from each example's builder; guide_projects.json lists the rest.
+  // from each example's builder; guide_projects.json lists the rest, and the
+  // widget demos that span more than one declaration.
   final entries = <String, (List<Map<String, dynamic>>, bool)>{
     for (final item in config.entries)
       item.key: ((item.value as List).cast<Map<String, dynamic>>(), false),
@@ -457,6 +458,24 @@ void main() {
       if (!derived) rethrow;
       stderr.writeln('Skipping the editable demo for $id: ${error.message}');
     }
+  }
+  // A widget page's editable code must be the whole demo: a helper, sample
+  // data, or builder argument outside every view is code the reader can't
+  // see or change.
+  final hidden = [
+    for (final MapEntry(key: id, value: project) in out.entries)
+      if (!guideCategories.contains(visitor.categories[id]))
+        for (final code in hiddenCode(project as Map<String, Object>))
+          '  $id: $code',
+  ];
+  if (hidden.isNotEmpty) {
+    stderr.writeln(
+      'Widget demos that run code their editable views do not show:\n'
+      '${hidden.join('\n')}\n'
+      'Move the data or helper into the demo widget, or give the page a view '
+      'of it in guide_projects.json (see GUIDE_PADS.md).',
+    );
+    exit(1);
   }
   File(
     '../src/guide_projects.json',
@@ -572,3 +591,83 @@ Map<String, Object> generate(
   }
   return {'id': id, 'files': files, 'views': selections};
 }
+
+/// Collects the names referred to inside [ranges] of a unit.
+class References extends RecursiveAstVisitor<void> {
+  References(this.ranges);
+
+  final List<Block> ranges;
+  final values = <String>{};
+
+  bool inside(AstNode node) =>
+      ranges.any((r) => r.start <= node.offset && node.end <= r.end);
+
+  @override
+  void visitSimpleIdentifier(SimpleIdentifier node) {
+    if (inside(node)) values.add(node.name);
+  }
+
+  @override
+  void visitNamedType(NamedType node) {
+    if (inside(node)) values.add(node.name2.lexeme);
+    super.visitNamedType(node);
+  }
+}
+
+/// The demo code of [project] that none of its views shows: top-level
+/// declarations the views refer to, and the builder's `example()` expression
+/// when it does more than create the demo widget. A State class's view stands
+/// for its widget, whose declaration is only a constructor and createState.
+List<String> hiddenCode(Map<String, Object> project) {
+  final files = project['files'] as Map<String, String>;
+  final views = (project['views'] as List).cast<Map<String, Object>>();
+  final declaredNames = <String>{};
+  final shown = <String>{};
+  final used = <String>{};
+  final hidden = <String>[];
+  for (final MapEntry(key: file, value: text) in files.entries) {
+    if (file == 'main.dart') continue;
+    final ranges = <Block>[
+      for (final view in views)
+        if (view['file'] == file)
+          (start: view['start'] as int, end: view['end'] as int),
+    ];
+    final unit = parseString(content: text, throwIfDiagnostics: false).unit;
+    final references = References(ranges);
+    unit.accept(references);
+    used.addAll(references.values);
+    for (final node in unit.declarations) {
+      declaredNames.addAll(declared(node));
+      if (references.inside(node)) {
+        shown.addAll(declared(node));
+        if (node case ClassDeclaration(
+          extendsClause: ExtendsClause(:final superclass),
+        ) when superclass.name2.lexeme == 'State') {
+          for (final type in [...?superclass.typeArguments?.arguments]) {
+            if (type is NamedType) shown.add(type.name2.lexeme);
+          }
+        }
+      } else if (node case FunctionDeclaration(
+        :final name,
+        functionExpression: FunctionExpression(
+          body: ExpressionFunctionBody(:final expression),
+        ),
+      ) when name.lexeme == 'example' && !createsWithoutArguments(expression)) {
+        hidden.add('its builder runs `${expression.toSource()}`');
+      }
+    }
+  }
+  final names = used.intersection(declaredNames).difference(shown);
+  return [if (names.isNotEmpty) 'its view uses ${names.join(', ')}', ...hidden];
+}
+
+/// Whether [expression] only creates a widget, such as `const _Demo()`.
+bool createsWithoutArguments(Expression expression) => switch (expression) {
+  // Without `const`, `Demo()` and `prefix.Demo()` parse as invocations.
+  InstanceCreationExpression(:final argumentList) ||
+  MethodInvocation(
+    target: null || SimpleIdentifier(),
+    :final argumentList,
+  ) => argumentList.arguments.isEmpty,
+  _ => false,
+};
