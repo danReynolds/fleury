@@ -341,7 +341,8 @@ const _semanticActionQueueHold = Duration(milliseconds: 500);
 /// field undoes, an app binding fires, and only a press nothing handled
 /// suspends (before [onEvent]). It stops the whole job the shell started —
 /// with the hot-reload supervisor of a plain `dart run`, or the `fleury run`
-/// launcher, that runs the app — until the shell's `fg`. See
+/// launcher, that runs the app — until the shell's `fg`. While the debug
+/// shell is expanded over the app, the press skips the hidden app. See
 /// [PosixTerminalDriver.suspendOnCtrlZ].
 ///
 /// [onStrayOutput] takes ownership of captured output instead of replaying it
@@ -891,7 +892,12 @@ Future<AppExit> _runAppImpl(
           errorReporter.noteInput();
         }
         try {
-          dispatchResult = dispatcher.dispatch(event);
+          // A Ctrl+Z the expanded debug shell withholds skips the hidden app
+          // and takes its unhandled default below.
+          if (!(event is KeyEvent &&
+              debugShellWithholdsKey(debugController, event))) {
+            dispatchResult = dispatcher.dispatch(event);
+          }
         } catch (error, stack) {
           // A throwing handler is reported (the error overlay paints it) but
           // must not take the framework's own quit guard below down with it:
@@ -933,9 +939,7 @@ Future<AppExit> _runAppImpl(
       // redo wherever a terminal can tell them apart.
       if (event is KeyEvent &&
           event.type == KeyEventType.down &&
-          event.code.character == 'z' &&
-          event.hasCtrl &&
-          event.modifiers.length == 1 &&
+          isCtrlZChord(event) &&
           dispatchResult != KeyEventResult.handled &&
           requestCtrlZSuspend(usedDriver)) {
         return;

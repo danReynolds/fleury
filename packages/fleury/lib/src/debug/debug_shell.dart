@@ -116,6 +116,8 @@ class _DebugShellState extends State<DebugShell> {
 ///   F12                 show/hide Logs tab (open if off, close if
 ///                       already on Logs, switch tab otherwise)
 ///   Enter / Backspace   commit / edit the Logs search (while searching)
+///   Ctrl+Z              taken by the Logs search while searching (it keeps
+///                       no undo history, so it does nothing)
 ///   ↑/↓/Home            move semantic cursor while Tree tab is active
 ///   PageUp / PageDown   scroll non-Logs reports without moving app focus
 bool tryConsumeDebugKey(DebugController controller, KeyEvent event) {
@@ -189,6 +191,10 @@ bool tryConsumeDebugKey(DebugController controller, KeyEvent event) {
       controller.backspaceLogQuery();
       return true;
     }
+    // The field being typed in takes Ctrl+Z, as any text field does: an undo
+    // must not reach the app's field, and a key typed into a text field never
+    // suspends the session. The query keeps no history, so it does nothing.
+    if (isCtrlZChord(event)) return true;
   }
   if (controller.mode != DebugMode.off &&
       event.code == KeyCode.tab &&
@@ -238,6 +244,18 @@ bool tryConsumeDebugKey(DebugController controller, KeyEvent event) {
   }
   return false;
 }
+
+/// Whether the app beneath the debug shell must not receive [event]: the
+/// Ctrl+Z press while the shell is expanded over the app. Other keys the shell
+/// does not use still reach the app, but its undo there would edit a field
+/// the user cannot see. A host skips the app for it, and the press takes its
+/// unhandled default — in a native terminal, the session suspends; in a
+/// browser, nothing. (While the Logs search is open, [tryConsumeDebugKey]
+/// gives Ctrl+Z to the search field instead.)
+bool debugShellWithholdsKey(DebugController controller, KeyEvent event) =>
+    controller.enabled &&
+    controller.mode == DebugMode.fullscreen &&
+    isCtrlZChord(event);
 
 /// Consumes a printable [TextInputEvent] as a debug-shell shortcut — the
 /// companion to [tryConsumeDebugKey] for keys the terminal delivers as *text*

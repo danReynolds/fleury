@@ -39,6 +39,8 @@
   hot-reload supervisor of a plain `dart run` and the `fleury run` launcher,
   so one press returns the prompt and `fg` resumes the app; before, under
   either, the app stopped alone and the shell never got the terminal back.
+  While the debug shell is expanded over the app, Ctrl+Z skips the hidden
+  app; its open Logs search takes the key.
   `PosixTerminalDriver(suspendOnCtrlZ: false)` keeps an unhandled Ctrl+Z an
   ordinary key. Browser, served, and `fleury shell` sessions never suspend.
 
