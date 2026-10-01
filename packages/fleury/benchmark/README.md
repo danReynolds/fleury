@@ -54,13 +54,11 @@ Core scenarios:
 Output includes p50/p95/p99/max timing for the journey and each
 scenario-specific action path.
 
-Widget scenarios that depend on `fleury_widgets` live in that package to avoid
-making core `fleury` depend on its higher-level widget catalog:
+Widget scenarios live beside the primitive benchmarks in `benchmark/catalog`:
 
 ```sh
-cd ../fleury_widgets
-dart run benchmark/scenario_benchmarks.dart --list
-dart run benchmark/scenario_benchmarks.dart --filter=SB.3 --json
+dart run benchmark/catalog/scenario_benchmarks.dart --list
+dart run benchmark/catalog/scenario_benchmarks.dart --filter=SB.3 --json
 ```
 
 The integrated demo-app scenario lives in `fleury_example_console` because it

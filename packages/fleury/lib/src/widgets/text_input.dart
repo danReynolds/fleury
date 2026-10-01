@@ -1170,7 +1170,7 @@ class TextInput extends StatefulWidget {
   /// move the selected option, Tab accepts it, and Escape closes the list.
   ///
   /// The field doesn't draw the list or produce suggestions; a widget such as
-  /// `CompletionTextInput` in `fleury_widgets` does that around it.
+  /// the bundled `CompletionTextInput` does that around it.
   final TextCompletionController? completionController;
 
   /// Called after a selected completion option is applied.

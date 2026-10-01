@@ -92,7 +92,10 @@ void main() {
   });
 
   test('host-only symbols stay out of app-facing core exports', () {
-    final coreExports = _exportLines('lib/fleury_core.dart');
+    final coreExports =
+        _exportLines('lib/fleury_core.dart') +
+        _exportLines('lib/src/primitives.dart') +
+        _exportLines('lib/src/catalog/catalog.dart');
     final nativeExports = _exportLines('lib/fleury.dart');
     final hostText = File('lib/fleury_host.dart').readAsStringSync();
 

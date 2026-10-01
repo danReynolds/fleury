@@ -1,0 +1,364 @@
+import '../primitives.dart';
+
+/// One tab: a [label] for the strip and the [content] shown when active.
+class TabItem {
+  const TabItem({required this.label, required this.content});
+
+  /// Text displayed in the tab strip.
+  final String label;
+
+  /// Widget shown while this tab is active.
+  final Widget content;
+}
+
+/// Selected-tab state for a [Tabs]. Optional — [Tabs] creates its own when
+/// none is given. `length` is set by the widget on each build.
+class TabController extends Notifier {
+  TabController({
+    /// Initial zero-based selection; negative values are clamped to zero.
+    int initialIndex = 0,
+  }) : _index = initialIndex < 0 ? 0 : initialIndex;
+
+  int _index;
+  int _length = 0;
+  bool _disposed = false;
+  Object? _owner;
+
+  void _attach(Object owner) {
+    _checkNotDisposed();
+    if (_owner != null && !identical(_owner, owner)) {
+      throw StateError(
+        'TabController can attach to only one owning view at a time.',
+      );
+    }
+    _owner = owner;
+  }
+
+  void _detach(Object owner) {
+    if (identical(_owner, owner)) _owner = null;
+  }
+
+  /// Zero-based index of the selected tab, or the pending selection while no
+  /// tabs are attached.
+  int get index => _index;
+
+  /// Number of tabs attached by the current [Tabs] widget.
+  int get length => _length;
+
+  set index(int value) {
+    _checkNotDisposed();
+    if (_owner == null || _length == 0) {
+      final next = value < 0 ? 0 : value;
+      if (_index == next) return;
+      _index = next;
+      notify();
+      return;
+    }
+    final clamped = value.clamp(0, _length - 1);
+    if (clamped == _index) return;
+    _index = clamped;
+    notify();
+  }
+
+  /// Advances to the next tab, wrapping at the end.
+  void next() {
+    _checkNotDisposed();
+    if (_length == 0) return;
+    index = (_index + 1) % _length;
+  }
+
+  /// Moves to the previous tab, wrapping at the start.
+  void previous() {
+    _checkNotDisposed();
+    if (_length == 0) return;
+    index = (_index - 1) % _length;
+  }
+
+  void _checkNotDisposed() {
+    if (_disposed) {
+      throw StateError('TabController has been disposed.');
+    }
+  }
+
+  @override
+  void dispose() {
+    if (_disposed) return;
+    _disposed = true;
+    super.dispose();
+  }
+}
+
+/// A tab strip over swappable content.
+///
+/// Renders a row of labels (the active one highlighted) above the active
+/// tab's content. Clicking a label switches to its tab. When the strip is
+/// focused, Left/Right switch tabs (wrapping) and Home/End jump to the first
+/// and last tab. From anywhere inside the tab area, Alt+1 through Alt+9 jump
+/// straight to a tab and Ctrl+PageUp/Ctrl+PageDown cycle through them. You
+/// can also drive [controller] directly for programmatic switching. The
+/// active tab's focusable widgets join the normal focus traversal, so Tab
+/// moves into them.
+///
+/// Every tab stays mounted, so each one's state (scroll position, typed
+/// text, expanded nodes…) survives switching away and back. Inactive tabs
+/// are hidden and excluded from focus traversal while they're off-screen.
+class Tabs extends StatefulWidget {
+  const Tabs({
+    super.key,
+    required this.tabs,
+    this.controller,
+    this.focusNode,
+    this.autofocus = false,
+    this.activeStyle,
+    this.inactiveStyle,
+    this.bordered = false,
+  });
+
+  /// Tab labels and content, in strip order.
+  final List<TabItem> tabs;
+
+  /// External selected-tab controller, or null to use widget-owned state.
+  final TabController? controller;
+
+  /// Focus node used by the tab strip's keyboard interaction.
+  final FocusNode? focusNode;
+
+  /// Whether the tab strip should request focus when mounted.
+  final bool autofocus;
+
+  /// When true, the active content sits in a bordered, padded panel below the
+  /// strip (separated by a gap), making the widget's bounds and the strip →
+  /// content split clear. Defaults to false — a bare strip-over-content layout.
+  final bool bordered;
+
+  /// Style for the active tab's label. Defaults to the theme's selection
+  /// style.
+  final CellStyle? activeStyle;
+
+  /// Style for inactive tab labels. Defaults to the theme's muted style.
+  final CellStyle? inactiveStyle;
+
+  @override
+  State<Tabs> createState() => _TabsState();
+}
+
+class _TabsState extends State<Tabs> {
+  late TabController _controller;
+  late FocusNode _focusNode;
+  bool _ownsController = false;
+  bool _ownsFocusNode = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _focusNode = widget.focusNode ?? FocusNode(debugLabel: 'Tabs');
+    _ownsFocusNode = widget.focusNode == null;
+    _controller = widget.controller ?? TabController();
+    _ownsController = widget.controller == null;
+    _controller._attach(this);
+    _controller._length = widget.tabs.length;
+    // Clamp a positive initialIndex now that the controller has a tab count.
+    _controller.index = _controller.index;
+    _controller.addListener(_onChange);
+  }
+
+  @override
+  void didUpdateWidget(Tabs oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (widget.controller != oldWidget.controller) {
+      _controller.removeListener(_onChange);
+      _controller._detach(this);
+      if (_ownsController) _controller.dispose();
+      _controller = widget.controller ?? TabController();
+      _ownsController = widget.controller == null;
+      _controller._attach(this);
+      _controller.addListener(_onChange);
+    }
+    if (widget.focusNode != oldWidget.focusNode) {
+      if (_ownsFocusNode) _focusNode.dispose();
+      _focusNode = widget.focusNode ?? FocusNode(debugLabel: 'Tabs');
+      _ownsFocusNode = widget.focusNode == null;
+    }
+    _controller._length = widget.tabs.length;
+    // Re-clamp through the setter so a shrunk tab list pulls the
+    // selection back into range (and notifies if it moved).
+    _controller.index = _controller.index;
+  }
+
+  void _onChange() => setState(() {});
+
+  KeyEventResult _onKey(KeyEvent event) {
+    // The detector also surrounds the body so explicit tab shortcuts can
+    // bubble through it. Plain navigation belongs to the strip itself.
+    if (!_focusNode.hasFocus) return KeyEventResult.ignored;
+    switch (event.code) {
+      case KeyCode.arrowLeft:
+        _controller.previous();
+        return KeyEventResult.handled;
+      case KeyCode.arrowRight:
+        _controller.next();
+        return KeyEventResult.handled;
+      // WAI-ARIA tablist: Home/End jump to first/last tab when the strip is
+      // focused.
+      case KeyCode.home:
+        if (widget.tabs.isNotEmpty) _controller.index = 0;
+        return KeyEventResult.handled;
+      case KeyCode.end:
+        if (widget.tabs.isNotEmpty) _controller.index = widget.tabs.length - 1;
+        return KeyEventResult.handled;
+      default:
+        return KeyEventResult.ignored;
+    }
+  }
+
+  @override
+  void deactivate() {
+    _controller.removeListener(_onChange);
+    _controller._detach(this);
+    super.deactivate();
+  }
+
+  @override
+  void activate() {
+    super.activate();
+    _controller._attach(this);
+    _controller.addListener(_onChange);
+  }
+
+  @override
+  void dispose() {
+    _controller.removeListener(_onChange);
+    _controller._detach(this);
+    if (_ownsController) _controller.dispose();
+    if (_ownsFocusNode) _focusNode.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    FocusManager.maybeOf(context); // Rebuild tab semantics when focus moves.
+    _controller._length = widget.tabs.length;
+    if (widget.tabs.isEmpty) return const EmptyBox();
+    final active = _controller.index.clamp(0, widget.tabs.length - 1);
+    final theme = Theme.of(context);
+    final activeStyle = widget.activeStyle ?? theme.selectionStyle;
+    final inactiveStyle = widget.inactiveStyle ?? theme.mutedStyle;
+
+    final content = IndexedStack(
+      index: active,
+      children: [
+        for (var i = 0; i < widget.tabs.length; i++)
+          ExcludeFocus(excluding: i != active, child: widget.tabs[i].content),
+      ],
+    );
+
+    final body = KeyDetector(
+      onKey: (event) {
+        if ((_onKey)(event) == KeyEventResult.handled) event.consume();
+      },
+      child: Focus(
+        focusNode: _focusNode,
+        autofocus: widget.autofocus,
+        child: Column(
+          children: [
+            Row(
+              children: [
+                for (var i = 0; i < widget.tabs.length; i++)
+                  Semantics(
+                    role: SemanticRole.tab,
+                    label: widget.tabs[i].label,
+                    focused: _focusNode.hasFocus && i == active,
+                    selected: i == active,
+                    // No `focus`. A tab is not independently focusable — the
+                    // strip is, and `focused` here is
+                    // `strip.hasFocus && i == active`, so an inactive tab can
+                    // never satisfy a focus request. Advertising it made
+                    // `.focus()` throw "Focus was refused"; making it select
+                    // instead turned a read-only sweep destructive. `select`
+                    // is how you move the strip.
+                    actions: const <SemanticAction>{
+                      SemanticAction.select,
+                      SemanticAction.activate,
+                    },
+                    state: SemanticState({
+                      'tabIndex': i,
+                      'tabPosition': i + 1,
+                      'tabCount': widget.tabs.length,
+                      'active': i == active,
+                      if (i < 9) 'shortcut': 'Alt+${i + 1}',
+                    }),
+                    onAction: (action) {
+                      switch (action) {
+                        case SemanticAction.select:
+                        case SemanticAction.activate:
+                          _controller.index = i;
+                          _focusNode.requestFocus();
+                          return;
+                        case _:
+                          return;
+                      }
+                    },
+                    // Click a tab label to switch to it (Tab/arrows/Alt+N by
+                    // keyboard) — the same select the semantic action performs.
+                    child: GestureDetector(
+                      onTap: () {
+                        _controller.index = i;
+                        _focusNode.requestFocus();
+                      },
+                      child: Text(
+                        ' ${widget.tabs[i].label} ',
+                        allowSelect: false, // tab label, not selectable text
+                        style: i == active ? activeStyle : inactiveStyle,
+                      ),
+                    ),
+                  ),
+              ],
+            ),
+            // Keep every tab mounted (state survives switching) but paint
+            // and traverse only the active one.
+            if (widget.bordered) ...[
+              const SizedBox(height: 1),
+              Container(
+                border: BoxBorder(style: theme.borderStyle),
+                padding: const EdgeInsets.symmetric(horizontal: 1),
+                child: content,
+              ),
+            ] else
+              content,
+          ],
+        ),
+      ),
+    );
+
+    if (widget.tabs.length <= 1) return body;
+    // Alt+1..Alt+9 jump straight to a tab from anywhere inside the tab
+    // area (not just the focused strip). Modifier chords arrive as key
+    // events, so they bypass any text field in the active tab's content.
+    return KeyBindings(
+      bindings: [
+        for (var i = 0; i < widget.tabs.length && i < 9; i++)
+          KeyBinding(
+            KeySequence.alt.char('${i + 1}'),
+            onTrigger: (_) {
+              _controller.index = i;
+            },
+            hideFromHintBar: true,
+          ),
+        // Ctrl+PageUp/PageDown cycle tabs from anywhere in the tab area — the
+        // cross-app convention (browsers, VS Code, iTerm2) for switching tabs
+        // while focus is deep inside panel content.
+        KeyBinding(
+          KeySequence.ctrl.pageUp,
+          onTrigger: (_) => _controller.previous(),
+          hideFromHintBar: true,
+        ),
+        KeyBinding(
+          KeySequence.ctrl.pageDown,
+          onTrigger: (_) => _controller.next(),
+          hideFromHintBar: true,
+        ),
+      ],
+      child: body,
+    );
+  }
+}

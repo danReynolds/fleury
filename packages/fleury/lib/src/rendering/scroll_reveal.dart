@@ -25,7 +25,7 @@ abstract interface class RenderScrollViewport implements RenderObject {
 
 /// Reveals a laid-out target through enclosing scroll viewports.
 ///
-/// Internal cross-package hook. Call after layout. When [surrounding] fits,
+/// Call after layout. When [surrounding] fits,
 /// include it as well (for example, a control's label and validation message).
 /// Otherwise prioritize the target, aligning an oversized target's start.
 /// Does not change focus or reveal children hidden by presentation policy.

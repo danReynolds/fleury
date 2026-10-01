@@ -74,7 +74,7 @@ Future<void> main() async {
 
 - **Web-safe code only.** Code that reaches `dart:io` fails in the browser:
   dart2js compiles it, but the call throws when it runs. Every widget in
-  `fleury_widgets_web.dart` is web-safe; `FileBrowser` and `FilePicker` read a
+  `fleury_core.dart` includes the web-safe catalog; `FileBrowser` and `FilePicker` read a
   `FileSource` you pass (such as a `MemoryFileSource`), since there is no local
   disk to list. Import `package:fleury/fleury_core.dart`, not `fleury.dart`
   (see [Core and targets](core-and-targets.md#the-web-safety-boundary)).

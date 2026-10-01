@@ -3,7 +3,6 @@ library;
 import 'dart:async' show Timer, unawaited;
 
 import 'package:fleury/fleury.dart';
-import 'package:fleury_widgets/fleury_widgets.dart';
 
 const demoScreenOverview = 'overview';
 const demoScreenSearch = 'search';
@@ -1951,14 +1950,14 @@ const _demoFileMentions = [
     mentionText: '@demo-scenario',
   ),
   FileMentionEntry(
-    path: 'packages/fleury_widgets/lib/src/message_list.dart',
+    path: 'packages/fleury/lib/src/catalog/message_list.dart',
     label: 'MessageList widget',
     detail: 'Protocol-neutral transcript surface',
     language: 'dart',
     mentionText: '@message-list',
   ),
   FileMentionEntry(
-    path: 'packages/fleury_widgets/lib/src/file_browser.dart',
+    path: 'packages/fleury/lib/src/catalog/file_browser.dart',
     label: 'FileBrowser widget',
     detail: 'Filesystem navigation and path copy surface',
     language: 'dart',

@@ -9,7 +9,6 @@ import 'dart:io';
 
 import 'package:fleury/fleury.dart';
 import 'package:fleury/fleury_test_support.dart';
-import 'package:fleury_widgets/fleury_widgets.dart';
 
 import '../lib/fleury_example_console.dart';
 

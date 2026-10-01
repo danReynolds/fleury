@@ -1,5 +1,4 @@
 import 'package:fleury/fleury_core.dart';
-import 'package:fleury_widgets/fleury_widgets_web.dart';
 
 /// The workspace preview shared by the button and custom-tile examples.
 class NotePreview extends StatelessWidget {

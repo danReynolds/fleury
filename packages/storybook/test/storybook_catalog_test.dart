@@ -164,7 +164,7 @@ void main() {
         stories: storybookStories
             .where((story) => !story.widgets.contains(api))
             .toList(),
-        exportedLibrary: File('../fleury_widgets/lib/fleury_widgets.dart'),
+        exportedLibrary: File('../fleury/lib/src/catalog/catalog.dart'),
       );
 
       expect(report.complete, isFalse);

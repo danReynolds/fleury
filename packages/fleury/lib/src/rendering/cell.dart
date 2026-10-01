@@ -1,6 +1,6 @@
 import 'package:meta/meta.dart';
 
-/// A state used internally while resolving a value from [CellStyle.interactive].
+/// A control state used when resolving a value from [CellStyle.interactive].
 ///
 /// Widgets use only the states that make sense for their surface. For example,
 /// a button never becomes [selected], while a checkbox uses [selected] for its

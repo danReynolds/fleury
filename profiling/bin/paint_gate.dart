@@ -31,7 +31,7 @@
 // the full diff loop; it measures the paint phase in situ).
 //
 // Fixture honesty: S1/S4 drive the REAL ListView.builder; S3 genuinely
-// mounts the real fleury_widgets Toaster inside an app-like overlay; S2/S5
+// mounts the real Fleury catalog Toaster inside an app-like overlay; S2/S5
 // are real leaf widgets in bespoke scaffolding (a hand-built two-entry
 // Overlay), shaped like a dashboard + floater rather than taken from an app.
 //
@@ -90,7 +90,7 @@ import 'package:fleury/fleury_test_support.dart'
         FakeTickerScheduler,
         RepaintBoundaryDebugStats,
         RepaintBoundaryFrameStats;
-import 'package:fleury_widgets/fleury_widgets.dart' show Toaster;
+import 'package:fleury/fleury_core.dart' show Toaster;
 
 import 'gate_support.dart';
 

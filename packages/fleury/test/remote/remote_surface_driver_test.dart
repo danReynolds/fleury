@@ -701,7 +701,7 @@ void main() {
     // propagated capability through MediaQuery must set a linkUri that then
     // rides the v4 wire. Exercises the WHOLE chain — peer INIT → driver caps →
     // runApp MediaQuery → producer gate → PLAN bytes — with NO faked capability.
-    // _LinkProbe stands in for MarkdownText (which lives in fleury_widgets and
+    // _LinkProbe stands in for MarkdownText (which lives in the catalog and
     // can't be imported here without an implementation_imports violation); it
     // mirrors MarkdownText's exact gate.
     test(
@@ -2151,7 +2151,7 @@ final class _KeyCounterState extends State<_KeyCounter> {
 /// (markdown_text.dart): it attaches a real [CellStyle.linkUri] ONLY when the
 /// surface reports it can render links. Used to exercise capability propagation
 /// end-to-end through a real runApp + driver + MediaQuery, without reaching
-/// across the package boundary into fleury_widgets.
+/// across the package boundary into Fleury catalog.
 final class _LinkProbe extends StatelessWidget {
   const _LinkProbe(this.url);
 

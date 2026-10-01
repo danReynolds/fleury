@@ -77,7 +77,7 @@ MeasuredCellBox _box({required int cols, required int rows}) => MeasuredCellBox(
 /// Places [bytes] as an inline image over its whole box, or paints 'G'
 /// when the surface reports no placement support — a minimal stand-in
 /// for the Image widget's dispatch (fleury_web cannot depend on
-/// fleury_widgets).
+/// Fleury catalog).
 class _ProbeImage extends LeafRenderObjectWidget {
   const _ProbeImage(this.bytes);
 

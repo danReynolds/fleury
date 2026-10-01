@@ -1,6 +1,5 @@
 // dart format width=60
 import 'package:fleury/fleury_core.dart';
-import 'package:fleury_widgets/fleury_widgets_web.dart';
 
 // A local service simulation; this demo sends no requests.
 enum SaveScenario { success, nameTaken, offline }

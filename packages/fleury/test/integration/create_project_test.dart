@@ -37,8 +37,6 @@ void main() {
 dependency_overrides:
   fleury:
     path: ${jsonEncode('$repoRoot/packages/fleury')}
-  fleury_widgets:
-    path: ${jsonEncode('$repoRoot/packages/fleury_widgets')}
   fleury_test:
     path: ${jsonEncode('$repoRoot/packages/fleury_test')}
 ''');

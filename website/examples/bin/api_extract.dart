@@ -5,7 +5,7 @@ import 'package:analyzer/dart/analysis/utilities.dart';
 import 'package:analyzer/dart/ast/ast.dart';
 import 'package:analyzer/dart/ast/token.dart';
 
-/// Extracts API metadata for public classes in `fleury_widgets` and Fleury's
+/// Extracts API metadata for public classes in the bundled catalog and Fleury's
 /// core widget and app libraries by parsing their source (no resolution
 /// needed).
 ///
@@ -22,12 +22,12 @@ import 'package:analyzer/dart/ast/token.dart';
 void main(List<String> args) {
   // Scan the high-level widget library AND the framework's core widgets, so the
   // reference can document both. Repo-relative prefix per dir builds the GitHub
-  // "view source" link. fleury_widgets is scanned first; on the (unlikely) name
+  // "view source" link. The catalog is scanned first; on the (unlikely) name
   // clash it wins, preserving existing pages.
   const sources = <(String, String)>[
     (
-      '../../packages/fleury_widgets/lib/src',
-      'packages/fleury_widgets/lib/src',
+      '../../packages/fleury/lib/src/catalog',
+      'packages/fleury/lib/src/catalog',
     ),
     (
       '../../packages/fleury/lib/src/widgets',

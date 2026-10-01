@@ -375,7 +375,7 @@ List<File> writeStorybookSnapshots(
   return files;
 }
 
-// State management lives in fleury_core rather than fleury_widgets. Keep these
+// State management lives in fleury_core rather than Fleury catalog. Keep these
 // entry points explicit: scanning all core exports would also require stories
 // for low-level engine types, and the widget heuristic deliberately excludes
 // Builder suffixes because most widget-package exports with that suffix are

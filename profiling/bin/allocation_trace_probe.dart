@@ -42,9 +42,10 @@ Future<void> main(List<String> args) async {
       retained.clear();
     }
     if (args.contains('--exhaust-buffer')) {
-      // A lost start guard must make this fail, not produce a low passing count.
+      // Exceed the configured buffer even after successful bounded windows.
+      // Losing a guard must fail rather than produce a low passing count.
       await meter.measure(AllocationCounts(), () {
-        for (var i = 0; i < 100000; i++) {
+        for (var i = 0; i < 1000000; i++) {
           keep = CellSize(i, i);
           checksum ^= identityHashCode(keep);
         }

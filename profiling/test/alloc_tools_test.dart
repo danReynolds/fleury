@@ -3,17 +3,14 @@ import 'dart:io';
 
 import 'package:test/test.dart';
 
+import '../bin/allocation_trace_config.dart';
+
 Future<ProcessResult> runTool(String script, List<String> args,
         {bool service = false, bool preserveSamples = true}) =>
     Process.run(Platform.resolvedExecutable, [
-      if (service) ...[
-        '--deterministic',
-        '--profiler',
-        '--max-profile-depth=2',
-        if (preserveSamples) '--profile-startup',
-        '--enable-vm-service=0',
-        '--disable-service-auth-codes',
-      ],
+      if (service)
+        ...allocationTraceVmFlags
+            .where((flag) => preserveSamples || flag != '--profile-startup'),
       'bin/$script.dart',
       ...args,
     ]);
@@ -34,6 +31,9 @@ void main() {
     final result = await runTool('allocation_trace_probe', ['--exhaust-buffer'],
         service: true);
     expect(result.exitCode, isNot(0));
+    // The bounded canaries must succeed before the deliberately oversized
+    // window fails, so startup exhaustion cannot masquerade as this regression.
+    expect(result.stdout, contains('4096 traced after GC (inside=true'));
     expect(result.stderr, contains('Incomplete allocation trace window'));
   }, timeout: const Timeout(Duration(minutes: 2)));
 
@@ -69,24 +69,25 @@ void main() {
     expect(result.stdout, contains('FAIL'));
   });
 
-  test('invalid counts fail before starting a profiler session', () async {
-    for (final (script, argument) in [
-      ('alloc_gate', '--frames=0'),
-      ('alloc_gate', '--warmup=-1'),
-      ('alloc_gate', '--top=-1'),
-      ('alloc_trace', '--frames=0'),
-      ('alloc_trace', '--warmup=-1'),
-      ('alloc_trace', '--depth=0'),
-      ('alloc_trace', '--stacks=0'),
-      ('alloc_trace', '--auto=0'),
-    ]) {
+  for (final (script, argument) in [
+    ('alloc_gate', '--frames=0'),
+    ('alloc_gate', '--warmup=-1'),
+    ('alloc_gate', '--top=-1'),
+    ('alloc_trace', '--frames=0'),
+    ('alloc_trace', '--warmup=-1'),
+    ('alloc_trace', '--depth=0'),
+    ('alloc_trace', '--stacks=0'),
+    ('alloc_trace', '--auto=0'),
+  ]) {
+    test('$script $argument fails before starting a profiler session',
+        () async {
       final result = await runTool(script, [argument]);
       expect(result.exitCode, 64, reason: '$script $argument');
       expect(result.stderr, isNot(contains('no VM service')));
       expect(
           result.stderr, anyOf(contains('positive'), contains('nonnegative')));
-    }
-  });
+    });
+  }
 
   test('both allocation axes independently reject regressions', () async {
     final directory = Directory.systemTemp.createTempSync('fleury-alloc-test-');

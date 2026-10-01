@@ -1,5 +1,4 @@
 import 'package:fleury/fleury_core.dart';
-import 'package:fleury_widgets/fleury_widgets_web.dart';
 
 class ScrollPanes extends StatefulWidget {
   const ScrollPanes({super.key});

@@ -17,7 +17,6 @@ library;
 
 import 'package:fleury/fleury.dart';
 import 'package:fleury_test/fleury_test.dart';
-import 'package:fleury_widgets/fleury_widgets.dart';
 import 'package:test/test.dart';
 
 class _Capture extends StatelessWidget {

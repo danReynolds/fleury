@@ -77,8 +77,8 @@ turns it on in a compiled build, such as one an agent drives. See
 The *same* widget tree compiles to JavaScript and runs client-side, with no
 server. [Getting started](/fleury/getting-started/#6-optional-ship-a-browser-bundle)
 walks through the three pieces: a web-safe library for the app, which imports
-`package:fleury/fleury_core.dart` and
-`package:fleury_widgets/fleury_widgets_web.dart` and never `dart:io`; a
+`package:fleury/fleury_core.dart` (including the full catalog) and never
+`dart:io`; a
 `web/main.dart` that mounts it with [`mountApp`](/fleury/concepts/app-entry/);
 and a `web/index.html` whose host element has an explicit width and height and
 a monospace font. Without a size, the grid measures zero cells and paints
@@ -106,7 +106,7 @@ and call `dispose()` on it when that view goes away.
 
 A client-side bundle runs in the browser sandbox, with no local disk,
 processes, or environment. Every widget in
-`package:fleury_widgets/fleury_widgets_web.dart` runs there; `FileBrowser` and
+`package:fleury/fleury_core.dart` runs there; `FileBrowser` and
 `FilePicker` read a `FileSource` you pass (such as a `MemoryFileSource`)
 instead of the disk. Code that reaches `dart:io` still compiles with dart2js,
 but throws when it runs. To try an app that needs the local machine in a

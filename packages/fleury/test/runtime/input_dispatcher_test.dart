@@ -1056,8 +1056,8 @@ void main() {
   });
 
   group('Acceptance tests — hint-bar binding metadata', () {
-    // KeyHintBar itself moved to fleury_widgets; rendering coverage
-    // lives in fleury_widgets/test/key_hint_bar_test.dart. These
+    // KeyHintBar lives in the bundled catalog; rendering coverage
+    // lives in fleury_test/test/catalog/key_hint_bar_test.dart. These
     // check the binding data fields the bar filters on.
     test('9. Bindings with description=null are hidden from hint bar', () {
       final binding = KeyBinding(KeyCode.char('q'), onTrigger: (_) {});

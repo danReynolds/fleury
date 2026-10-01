@@ -7,6 +7,8 @@ void main() {
     final productionLibraries = <String>[
       'lib/fleury.dart',
       'lib/fleury_core.dart',
+      'lib/src/primitives.dart',
+      'lib/src/catalog/catalog.dart',
     ];
 
     for (final path in productionLibraries) {

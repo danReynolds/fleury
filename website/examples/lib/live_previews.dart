@@ -2,7 +2,6 @@
 // local disk: each runs the real widget in the browser over an in-memory
 // project tree. Also the Toaster preview's buttons.
 import 'package:fleury/fleury_core.dart';
-import 'package:fleury_widgets/fleury_widgets_web.dart';
 
 /// A small Fleury project, as a terminal app would see it on disk.
 final projectFiles = MemoryFileSource(

@@ -1,7 +1,6 @@
 import 'dart:async';
 
 import 'package:fleury/fleury.dart';
-import 'package:fleury_widgets/fleury_widgets.dart';
 
 import 'fleury_wire_support.dart';
 

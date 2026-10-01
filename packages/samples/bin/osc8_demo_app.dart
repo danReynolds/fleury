@@ -1,5 +1,4 @@
 import 'package:fleury/fleury.dart';
-import 'package:fleury_widgets/fleury_widgets.dart';
 
 // OSC 8 hyperlinks demo. Over `fleury serve` the links render as clickable
 // browser anchors; in a supporting terminal (iTerm2/kitty/WezTerm/Ghostty, or
