@@ -2312,41 +2312,6 @@ final class PosixJobControl {
   }
 }
 
-/// The keyboard tier this session actually pushes, from what the app asked for
-/// and what the environment says.
-///
-/// Two rules, both about *pushing* rather than about the verdict — the flags
-/// have to be capped before they go out, not after:
-///
-///  * `FLEURY_KEYBOARD=legacy|disambiguated|lifecycle` wins outright. It is the
-///    lever a support channel can pull on a deployed binary, and the one a bug
-///    report can be asked to set.
-///  * Otherwise the default (`lifecycle`) is capped to the safe tier inside a
-///    MULTIPLEXER. A raw query is not a reliable statement about the host
-///    terminal there — the same reasoning the image probe uses — and tmux may
-///    answer for itself, forward to a host that answers differently, or accept
-///    the flags and fail to translate the enhanced input back. Lifecycle is the
-///    one tier where being wrong costs the user their ability to type, so the
-///    automatic upgrade holds back. An app that knows its deployment handles
-///    the protocol can still force it through the env var.
-KeyboardProtocolMode resolveKeyboardTier({
-  required KeyboardProtocolMode requested,
-  required Map<String, String> environment,
-}) {
-  final override = switch (environment['FLEURY_KEYBOARD']?.toLowerCase()) {
-    'legacy' || 'off' || 'none' => KeyboardProtocolMode.legacy,
-    'disambiguated' || 'default' => KeyboardProtocolMode.disambiguated,
-    'lifecycle' || 'full' => KeyboardProtocolMode.lifecycle,
-    _ => null,
-  };
-  if (override != null) return override;
-  if (requested == KeyboardProtocolMode.lifecycle &&
-      detectTerminalMultiplexerFromEnvironment(environment)) {
-    return KeyboardProtocolMode.disambiguated;
-  }
-  return requested;
-}
-
 /// Whether [error], from terminal I/O, says the terminal itself is
 /// gone: EIO (Linux, a pty whose master closed) or ENXIO ("device not
 /// configured", macOS after the tty is revoked). Both numbers are the same on

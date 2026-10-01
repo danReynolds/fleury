@@ -25,6 +25,23 @@ void main() {
     expect(frame.imageProtocol, capabilities.imageProtocol);
     expect(frame.tmuxPassthrough, isTrue);
     expect(frame.hyperlinks, isTrue);
-    expect(frame.protocolVersion, remoteAnsiProtocolVersion);
+    expect(frame.protocol, RemoteWireProtocol.shell);
+    expect(frame.protocolVersion, shellProtocolVersion);
+    // `fleury shell` declares nothing about the app's input: that is the
+    // app's answer to make.
+    expect(frame.terminalInput, isNull);
+  });
+
+  test('the shell declares its protocol in its own key, never as `v`', () {
+    final bytes = String.fromCharCodes(
+      encodeFrame(
+        buildShellInitFrame(
+          size: const CellSize(80, 24),
+          capabilities: TerminalCapabilities.defaultCapabilities,
+        ),
+      ),
+    );
+    expect(bytes, endsWith(',shell=$shellProtocolVersion'));
+    expect(bytes, isNot(contains('v=')));
   });
 }

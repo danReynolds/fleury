@@ -3,7 +3,8 @@ import '../input/keyboard_state.dart';
 import '../terminal/capabilities.dart';
 import 'remote_protocol.dart';
 
-/// Projects the local terminal into the INIT frame sent by `fleury shell`.
+/// Projects the local terminal into the INIT frame sent by `fleury shell`,
+/// declaring the shell protocol at [shellProtocolVersion].
 ///
 /// Keeping this projection together prevents newly negotiated capabilities
 /// from working in the native driver but silently disappearing through the
@@ -25,6 +26,7 @@ InitFrame buildShellInitFrame({
     // press-only keyboard no matter what the emulator can do — the exact
     // silent-disappearance this file exists to prevent.
     keyboard: keyboard,
-    protocolVersion: remoteAnsiProtocolVersion,
+    // Its own version space: `shell=<n>`, never a structured `v=<n>`.
+    protocol: RemoteWireProtocol.shell,
   );
 }
