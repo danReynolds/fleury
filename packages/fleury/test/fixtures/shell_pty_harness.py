@@ -227,8 +227,24 @@ class Harness:
         self.master = None
         self.note('closed the terminal')
 
+    def drain(self):
+        """Reads everything the shell has written so far."""
+        while self.master is not None:
+            ready, _, _ = select.select([self.master], [], [], 0.1)
+            if not ready:
+                return
+            try:
+                chunk = os.read(self.master, 65536)
+            except OSError:
+                return  # EIO: every slave descriptor closed
+            if not chunk:
+                return
+            self.output.extend(chunk)
+
     def terminal_state(self, label):
-        """Records the emulated terminal's state under [label]."""
+        """Records the emulated terminal's state under [label], once it has
+        everything the shell wrote."""
+        self.drain()
         state = TerminalState(bytes(self.output))
         self.report.setdefault('terminal', {})[label] = state.describe()
         return state
@@ -431,9 +447,10 @@ class Harness:
 WAITING = b'Waiting for the next run'
 
 
-def attach(h, index, start=0):
-    """Starts app [index] and waits for its first frame past [start]."""
-    h.start_app()
+def attach(h, index, start=0, args=()):
+    """Starts app [index] with [args] and waits for its first frame past
+    [start]."""
+    h.start_app(args)
     return h.expect_output(
         b'SHELL-KEYS-READY', 60, f'app {index} first frame', start
     )
@@ -492,29 +509,36 @@ def scenario_unhandled_ctrl_z(h):
 
 
 def scenario_sigterm(h):
-    """SIGTERM while an app is attached restores the terminal, then exits."""
+    """SIGTERM while an app is attached restores the terminal, the app's
+    mouse tracking included, then exits."""
     h.start_shell()
     h.expect_output(b'fleury shell ready', 60, 'shell ready')
     idle = h.termios('idle')
-    attach(h, 0)
+    h.terminal_state('idle')
+    attach(h, 0, args=['--mouse-motion'])
+    h.terminal_state('attached')
     os.kill(h.shell_pid, signal.SIGTERM)
     h.note('sent SIGTERM')
     h.expect_shell_exit(15, 'the shell to exit on SIGTERM')
     h.expect_restored(idle, 'afterShell')
+    h.terminal_state('afterShell')
     h.expect_app_exit(0, 15, 'app 0 to end with the shell')
 
 
 def scenario_app_killed(h):
     """An app that dies without a goodbye still hands the terminal back,
-    and the shell waits for the next run."""
+    its mouse tracking off again, and the shell waits for the next run."""
     h.start_shell()
     h.expect_output(b'fleury shell ready', 60, 'shell ready')
     idle = h.termios('idle')
-    offset = attach(h, 0)
+    h.terminal_state('idle')
+    offset = attach(h, 0, args=['--mouse-motion'])
+    h.terminal_state('attached')
     h.kill_app(0)
     h.expect_output(b'the app disconnected', 15, 'the disconnect status', offset)
     h.expect_shell_alive('after its app was killed')
     h.expect_restored(idle, 'afterSession')
+    h.terminal_state('afterSession')
     os.kill(h.shell_pid, signal.SIGINT)
     h.note('sent SIGINT')
     h.expect_shell_exit(15, 'the shell to quit on SIGINT')

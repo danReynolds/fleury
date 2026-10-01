@@ -288,6 +288,13 @@ void main() {
       run.expectCompleted();
       expect(run.shellExit, 143, reason: run.describe());
       expect(run.restoredExactly('afterShell'), isTrue, reason: run.describe());
+      // The app asked for the mouse with motion; SIGTERM turns it off again.
+      expect(
+        run.terminalModes('attached'),
+        containsAll(<int>[..._mouseButtons, _motion]),
+        reason: run.describe(),
+      );
+      _expectTerminalHandedBack(run, 'afterShell');
       expect(run.appExit(0), 0, reason: 'the shell says goodbye first');
       _expectScreenHandedBack(run);
       _expectDiscoveryRemoved(run);
@@ -307,6 +314,13 @@ void main() {
         isTrue,
         reason: run.describe(),
       );
+      // The app asked for the mouse with motion; its death turns it off.
+      expect(
+        run.terminalModes('attached'),
+        containsAll(<int>[..._mouseButtons, _motion]),
+        reason: run.describe(),
+      );
+      _expectTerminalHandedBack(run, 'afterSession');
       _expectScreenHandedBack(run);
       expect(run.shellExit, 130, reason: 'it waited until SIGINT quit it');
     },
