@@ -260,7 +260,7 @@ class Project {
     return out.toString();
   }
 
-  Map<String, String> render(String root, Expression builder) {
+  Map<String, String> render(String root, Expression builder, String example) {
     final files = <String, String>{};
     for (final file in selected.keys) {
       if (whole.contains(file)) {
@@ -283,7 +283,7 @@ class Project {
         '${files[logical(root)]}\n'
         'Widget buildExample() => '
         '${identical(demo, builder) ? 'example()' : '_framed(example())'};\n\n'
-        'Widget example() => ${topLevel(source(root).text, demo)};\n';
+        '$example';
     // The same theme and focus traversal as the prebuilt preview. The frame's
     // URL fragment names the docs page's theme (see experiments/fleury_pad).
     files['main.dart'] =
@@ -320,52 +320,40 @@ class Finder extends RecursiveAstVisitor<void> {
   }
 }
 
-/// The source ranges of the multi-line strings inside a node.
-class MultilineStrings extends RecursiveAstVisitor<void> {
-  final ranges = <Block>[];
-
-  void add(StringLiteral node) {
-    if (node.toSource().contains('\n')) {
-      ranges.add((start: node.offset, end: node.end));
+/// Each builder's demo as the `example()` function a project declares,
+/// formatted by `dart format`: the builder's text sits at the registry's
+/// nesting, so on its own it would read as code indented inside another call,
+/// and one that fit the registry's line can overflow after `example() =>`.
+/// One formatter run covers every example.
+Map<String, String> formattedExamples(
+  String root,
+  Map<String, Expression> builders,
+) {
+  final text = source(root).text;
+  final dir = Directory.systemTemp.createTempSync('guide_examples');
+  try {
+    final ids = builders.keys.toList();
+    for (final (i, id) in ids.indexed) {
+      final demo = unframed(builders[id]!);
+      File('${dir.path}/example_$i.dart').writeAsStringSync(
+        'Widget example() => ${text.substring(demo.offset, demo.end)};\n',
+      );
     }
-  }
-
-  @override
-  void visitSimpleStringLiteral(SimpleStringLiteral node) => add(node);
-
-  @override
-  void visitStringInterpolation(StringInterpolation node) => add(node);
-}
-
-/// [node]'s source in [text] as code that starts a top-level line, such as
-/// `Widget example() => …`: its continuation lines lose the indentation of
-/// the line [node] starts on, as `dart format` would write them. Lines that
-/// begin inside a multi-line string are its content and stay as written.
-String topLevel(String text, AstNode node) {
-  final lineStart = node.offset == 0
-      ? 0
-      : text.lastIndexOf('\n', node.offset - 1) + 1;
-  var indent = 0;
-  while (text.codeUnitAt(lineStart + indent) == 0x20) {
-    indent++;
-  }
-  final strings = MultilineStrings();
-  node.accept(strings);
-  final lines = text.substring(node.offset, node.end).split('\n');
-  var at = node.offset;
-  final out = <String>[];
-  for (final (i, line) in lines.indexed) {
-    final inString = strings.ranges.any((s) => s.start < at && at < s.end);
-    var cut = 0;
-    if (i > 0 && !inString) {
-      while (cut < indent && cut < line.length && line[cut] == ' ') {
-        cut++;
-      }
+    final format = Process.runSync(Platform.resolvedExecutable, [
+      'format',
+      '--language-version=3.10',
+      dir.path,
+    ]);
+    if (format.exitCode != 0) {
+      throw StateError('dart format failed:\n${format.stdout}${format.stderr}');
     }
-    out.add(line.substring(cut));
-    at += line.length + 1;
+    return {
+      for (final (i, id) in ids.indexed)
+        id: File('${dir.path}/example_$i.dart').readAsStringSync(),
+    };
+  } finally {
+    dir.deleteSync(recursive: true);
   }
-  return out.join('\n');
 }
 
 /// [builder] without the registry's docs-only `_framed(...)` wrapper.
@@ -514,9 +502,10 @@ void main() {
     }
     entries[id] = (widgetPageViews(id, root, builder), true);
   }
+  final examples = formattedExamples(root, visitor.entries);
   for (final MapEntry(key: id, value: (views, derived)) in entries.entries) {
     try {
-      out[id] = generate(id, root, visitor, views);
+      out[id] = generate(id, root, visitor, views, examples[id]!);
     } on StateError catch (error) {
       // A derived project that cannot run leaves its page's plain demo.
       if (!derived) rethrow;
@@ -535,15 +524,32 @@ void main() {
       ))
         '  $id: $problem',
   ];
+  // The code panes are narrow, and every file is formatted Dart: a line
+  // past 80 columns is a string or comment to rewrap in its source.
+  final long = <String>{};
+  for (final MapEntry(key: id, value: project) in out.entries) {
+    final files = (project as Map<String, Object>)['files'] as Map;
+    for (final MapEntry(key: file, value: text) in files.entries) {
+      for (final (i, line) in (text as String).split('\n').indexed) {
+        if (line.runes.length > 80 && long.add('$file: $line')) {
+          problems.add(
+            '  $id: $file line ${i + 1} is ${line.runes.length} columns; '
+            'rewrap it in its source',
+          );
+        }
+      }
+    }
+  }
   for (final id in hiddenByDesign.keys.where((id) => !out.containsKey(id))) {
     problems.add('  $id: hiddenByDesign names a project that does not exist');
   }
   if (problems.isNotEmpty) {
     stderr.writeln(
-      'Demos that run code their editable views do not show:\n'
+      'Guide projects that hide code or overflow their code panes:\n'
       '${problems.join('\n')}\n'
-      'Move the data or helper into the demo widget, or give the demo a view '
-      'of it in guide_projects.json (see GUIDE_PADS.md).',
+      'Move hidden data or helpers into the demo widget, give the demo a view '
+      'of them in guide_projects.json, or excuse them in hiddenByDesign (see '
+      'GUIDE_PADS.md).',
     );
     exit(1);
   }
@@ -605,6 +611,7 @@ Map<String, Object> generate(
   String root,
   EntryVisitor visitor,
   List<Map<String, dynamic>> views,
+  String example,
 ) {
   final builder =
       visitor.entries[id] ?? (throw StateError('no registry example $id'));
@@ -629,7 +636,7 @@ Map<String, Object> generate(
       });
     }
   }
-  final files = project.render(root, builder);
+  final files = project.render(root, builder, example);
   final selections = <Map<String, Object>>[];
   for (var i = 0; i < views.length; i++) {
     final view = views[i];

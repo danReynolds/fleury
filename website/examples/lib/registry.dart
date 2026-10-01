@@ -4494,8 +4494,9 @@ Widget knobRoot(String id, KnobParams params) {
 }
 
 /// An interactive world clock: a [Tabs] strip selects a timezone and a [Digits]
-/// shows that zone's wall-clock time, ticking once a second. Demonstrates making
-/// a display widget interactive — pick a zone with ← / → (or click a tab).
+/// shows that zone's wall-clock time, ticking once a second. Demonstrates
+/// making a display widget interactive: pick a zone with ← / → (or click a
+/// tab).
 class _WorldClock extends StatefulWidget {
   const _WorldClock();
 

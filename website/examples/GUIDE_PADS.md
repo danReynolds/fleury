@@ -52,7 +52,9 @@ backing filename. Each demo has its own revision-bound local draft.
 The registry's docs-only `_framed(...)` helper belongs in a builder, never in a
 demo's own `build`, so the code a reader edits reads as app code. A builder
 should only create the demo widget, `_framed(const _Demo())`, so its
-`example()` hides nothing.
+`example()` hides nothing. The generator writes each `example()` through
+`dart format`, and fails on any generated line over 80 columns: rewrap the
+string or comment in its source.
 
 ## Guide and reference demos
 

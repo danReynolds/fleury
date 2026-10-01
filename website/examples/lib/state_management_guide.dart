@@ -211,8 +211,8 @@ class CartValueView extends StatelessWidget {
 }
 // #enddocregion value-notifier
 
-// The two readers share a model owned by State, the third owner the guide lists:
-// created once with the state, disposed with it.
+// The two readers share a model owned by State, the third owner the guide
+// lists: created once with the state, disposed with it.
 class CartDemo extends StatefulWidget {
   const CartDemo({super.key});
 
