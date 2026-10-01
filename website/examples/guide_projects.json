@@ -485,6 +485,11 @@
       "label": "preferences.dart",
       "source": "website/examples/lib/testing_guide.dart",
       "declaration": "_PreferencesState"
+    },
+    {
+      "label": "preferences_pair.dart",
+      "source": "website/examples/lib/testing_guide.dart",
+      "declaration": "preferencesPair"
     }
   ],
   "testing.save": [
@@ -492,6 +497,11 @@
       "label": "save_status.dart",
       "source": "website/examples/lib/testing_guide.dart",
       "declaration": "_SaveStatusState"
+    },
+    {
+      "label": "save_demo.dart",
+      "source": "website/examples/lib/testing_guide.dart",
+      "declaration": "TestingSaveDemo"
     }
   ],
   "testing.animation": [
