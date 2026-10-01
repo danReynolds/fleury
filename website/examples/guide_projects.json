@@ -516,24 +516,30 @@
       "label": "amber_theme.dart",
       "source": "website/examples/lib/registry.dart",
       "declaration": "_buildCustomTheme"
+    },
+    {
+      "label": "app.dart",
+      "source": "website/examples/lib/registry.dart",
+      "declaration": "example"
+    },
+    {
+      "label": "theme_preview.dart",
+      "source": "website/examples/lib/registry.dart",
+      "declaration": "_ThemePreview"
     }
   ],
   "themes.local_style": [
     {
       "label": "local_style.dart",
       "source": "website/examples/lib/registry.dart",
-      "declaration": "_LocalStyleTourState",
-      "member": "build",
-      "expression": "TextInput"
+      "declaration": "_StyledInputState"
     }
   ],
   "themes.cell_style": [
     {
       "label": "cell_style.dart",
       "source": "website/examples/lib/registry.dart",
-      "declaration": "_CellStyleTour",
-      "member": "build",
-      "expression": "Column"
+      "declaration": "_StyledText"
     }
   ],
   "themes.interactive_styles": [
@@ -547,17 +553,14 @@
     {
       "label": "local_interactive_style.dart",
       "source": "website/examples/lib/registry.dart",
-      "declaration": "_LocalStateTour",
-      "member": "build"
+      "declaration": "_LocalFocusStyle"
     }
   ],
   "themes.invalid_none": [
     {
       "label": "neutral_invalid.dart",
       "source": "website/examples/lib/registry.dart",
-      "declaration": "_InvalidNoneTourState",
-      "member": "build",
-      "expression": "FormField"
+      "declaration": "_NeutralInvalidFieldState"
     }
   ],
   "commands.overview": [

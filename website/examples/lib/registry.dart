@@ -3127,7 +3127,12 @@ FocusDetector(
     cols: 38,
     rows: 14,
     code: _customThemeSource,
-    builder: () => Theme(data: _customTheme, child: const _ThemePreview()),
+    builder: () => Theme(
+      // An app passes its theme to FleuryApp(theme: …); this preview themes
+      // one subtree.
+      data: _buildCustomTheme(),
+      child: const _ThemePreview(),
+    ),
   ),
   ExampleInfo(
     id: 'themes.gallery',
@@ -3155,7 +3160,7 @@ void main() =>
     rows: 4,
     interactive: true,
     code: _localStyleSource,
-    builder: () => const _LocalStyleTour(),
+    builder: () => const _StyledInput(),
   ),
   ExampleInfo(
     id: 'themes.cell_style',
@@ -3165,7 +3170,7 @@ void main() =>
     cols: 34,
     rows: 5,
     code: _cellStyleSource,
-    builder: () => const _CellStyleTour(),
+    builder: () => const _StyledText(),
   ),
   ExampleInfo(
     id: 'themes.local_interactive',
@@ -3176,7 +3181,7 @@ void main() =>
     rows: 8,
     interactive: true,
     code: _localInteractiveSource,
-    builder: () => const _LocalStateTour(),
+    builder: () => _framed(const _LocalFocusStyle()),
   ),
   ExampleInfo(
     id: 'themes.invalid_none',
@@ -3189,7 +3194,7 @@ void main() =>
     rows: 9,
     interactive: true,
     code: _invalidNoneSource,
-    builder: () => const _InvalidNoneTour(),
+    builder: () => _framed(const _NeutralInvalidField()),
   ),
   ExampleInfo(
     id: 'themes.interactive_styles',
@@ -4871,14 +4876,14 @@ TextInput(
   style: const CellStyle(foreground: Colors.cyan),
 )''';
 
-class _LocalStyleTour extends StatefulWidget {
-  const _LocalStyleTour();
+class _StyledInput extends StatefulWidget {
+  const _StyledInput();
 
   @override
-  State<_LocalStyleTour> createState() => _LocalStyleTourState();
+  State<_StyledInput> createState() => _StyledInputState();
 }
 
-class _LocalStyleTourState extends State<_LocalStyleTour> {
+class _StyledInputState extends State<_StyledInput> {
   final _query = TextEditingController(text: 'api-gateway');
 
   @override
@@ -4910,8 +4915,8 @@ Column(children: [
   ),
 ]);''';
 
-class _CellStyleTour extends StatelessWidget {
-  const _CellStyleTour();
+class _StyledText extends StatelessWidget {
+  const _StyledText();
 
   @override
   Widget build(BuildContext context) => const Column(
@@ -4948,8 +4953,8 @@ Row(
   ],
 )''';
 
-class _LocalStateTour extends StatelessWidget {
-  const _LocalStateTour();
+class _LocalFocusStyle extends StatelessWidget {
+  const _LocalFocusStyle();
 
   @override
   Widget build(BuildContext context) => Theme(
@@ -4960,28 +4965,25 @@ class _LocalStateTour extends StatelessWidget {
         focused: CellStyle(inverse: true, bold: true),
       ),
     ),
-    child: Padding(
-      padding: const EdgeInsets.all(1),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: <Widget>[
-          const Text('LOCAL INTERACTION STYLE', style: CellStyle(bold: true)),
-          const Text('Tab or click to compare focus cues'),
-          Row(
-            children: <Widget>[
-              Button(text: 'Theme focus', autofocus: true, onPressed: () {}),
-              const SizedBox(width: 2),
-              Button(
-                text: 'Local focus',
-                style: const CellStyle.interactive(
-                  focused: CellStyle(foreground: Colors.cyan, underline: true),
-                ),
-                onPressed: () {},
+    child: Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: <Widget>[
+        const Text('LOCAL INTERACTION STYLE', style: CellStyle(bold: true)),
+        const Text('Tab or click to compare focus cues'),
+        Row(
+          children: <Widget>[
+            Button(text: 'Theme focus', autofocus: true, onPressed: () {}),
+            const SizedBox(width: 2),
+            Button(
+              text: 'Local focus',
+              style: const CellStyle.interactive(
+                focused: CellStyle(foreground: Colors.cyan, underline: true),
               ),
-            ],
-          ),
-        ],
-      ),
+              onPressed: () {},
+            ),
+          ],
+        ),
+      ],
     ),
   );
 }
@@ -4997,14 +4999,14 @@ FormField(
   ),
 )''';
 
-class _InvalidNoneTour extends StatefulWidget {
-  const _InvalidNoneTour();
+class _NeutralInvalidField extends StatefulWidget {
+  const _NeutralInvalidField();
 
   @override
-  State<_InvalidNoneTour> createState() => _InvalidNoneTourState();
+  State<_NeutralInvalidField> createState() => _NeutralInvalidFieldState();
 }
 
-class _InvalidNoneTourState extends State<_InvalidNoneTour> {
+class _NeutralInvalidFieldState extends State<_NeutralInvalidField> {
   final _form = FormController();
   final _query = TextEditingController();
 
@@ -5016,32 +5018,29 @@ class _InvalidNoneTourState extends State<_InvalidNoneTour> {
   }
 
   @override
-  Widget build(BuildContext context) => Padding(
-    padding: const EdgeInsets.all(1),
-    child: Form(
-      controller: _form,
-      onSubmit: () {},
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: <Widget>[
-          const Text('NEUTRAL INVALID CHROME', style: CellStyle(bold: true)),
-          const Text('Submit empty: the message stays visible'),
-          FormField(
-            validator: () => _query.text.isEmpty ? 'Enter a query.' : null,
-            child: SizedBox(
-              width: 30,
-              child: TextInput(
-                controller: _query,
-                autofocus: true,
-                semanticLabel: 'Query',
-                placeholder: 'Query',
-                style: const CellStyle.interactive(invalid: CellStyle.none),
-              ),
+  Widget build(BuildContext context) => Form(
+    controller: _form,
+    onSubmit: () {},
+    child: Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: <Widget>[
+        const Text('NEUTRAL INVALID CHROME', style: CellStyle(bold: true)),
+        const Text('Submit empty: the message stays visible'),
+        FormField(
+          validator: () => _query.text.isEmpty ? 'Enter a query.' : null,
+          child: SizedBox(
+            width: 30,
+            child: TextInput(
+              controller: _query,
+              autofocus: true,
+              semanticLabel: 'Query',
+              placeholder: 'Query',
+              style: const CellStyle.interactive(invalid: CellStyle.none),
             ),
           ),
-          Button(text: 'Submit', onPressed: _form.submit),
-        ],
-      ),
+        ),
+        Button(text: 'Submit', onPressed: _form.submit),
+      ],
     ),
   );
 }
