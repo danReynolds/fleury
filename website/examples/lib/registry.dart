@@ -520,8 +520,7 @@ Canvas(
     cols: 30,
     rows: 13,
     interactive: true,
-    builder: () =>
-        const Padding(padding: EdgeInsets.all(1), child: TableRows()),
+    builder: () => _framed(const TableRows()),
   ),
   ExampleInfo(
     id: 'datatable.cells',
@@ -532,8 +531,7 @@ Canvas(
     cols: 30,
     rows: 13,
     interactive: true,
-    builder: () =>
-        const Padding(padding: EdgeInsets.all(1), child: TableCells()),
+    builder: () => _framed(const TableCells()),
   ),
   ExampleInfo(
     id: 'tree.basic',
@@ -2358,7 +2356,7 @@ Text('\${summary.health.name}: \${summary.activeTaskCount} of \${summary.taskCou
     cols: 48,
     rows: 12,
     interactive: true,
-    builder: () => const _SnapshotLoadingTour(),
+    builder: () => _framed(const loading.SnapshotExplorer()),
   ),
   ExampleInfo(
     id: 'loading.image',
@@ -2370,7 +2368,7 @@ Text('\${summary.health.name}: \${summary.activeTaskCount} of \${summary.taskCou
     cols: 54,
     rows: 16,
     interactive: true,
-    builder: () => _framed(const _NetworkImageLoadingTour()),
+    builder: () => _framed(const _PhotoPreview()),
   ),
   ExampleInfo(
     id: 'loading.stream',
@@ -2380,7 +2378,7 @@ Text('\${summary.health.name}: \${summary.activeTaskCount} of \${summary.taskCou
     cols: 48,
     rows: 14,
     interactive: true,
-    builder: () => const _StreamLoadingTour(),
+    builder: () => _framed(const loading.TransmissionView()),
   ),
   ExampleInfo(
     id: 'commands.overview',
@@ -2540,12 +2538,7 @@ Text('\${summary.health.name}: \${summary.activeTaskCount} of \${summary.taskCou
     cols: 38,
     rows: 8,
     interactive: true,
-    builder: () => _framed(
-      Navigator(
-        transition: RouteTransition.none,
-        home: const flutter_map.HomeScreen(),
-      ),
-    ),
+    builder: () => _framed(const flutter_map.ProjectsApp()),
   ),
   ExampleInfo(
     id: 'concepts.clock',
@@ -2609,8 +2602,7 @@ Text('\${summary.health.name}: \${summary.activeTaskCount} of \${summary.taskCou
     cols: 38,
     rows: 10,
     interactive: true,
-    builder: () =>
-        const Padding(padding: EdgeInsets.all(1), child: input.ContactFields()),
+    builder: () => _framed(const input.ContactFields()),
   ),
   ExampleInfo(
     id: 'input.actions',
@@ -2620,8 +2612,7 @@ Text('\${summary.health.name}: \${summary.activeTaskCount} of \${summary.taskCou
     cols: 38,
     rows: 11,
     interactive: true,
-    builder: () =>
-        const Padding(padding: EdgeInsets.all(1), child: input.FileActions()),
+    builder: () => _framed(const input.FileActions()),
   ),
   ExampleInfo(
     id: 'input.press',
@@ -2632,8 +2623,7 @@ Text('\${summary.health.name}: \${summary.activeTaskCount} of \${summary.taskCou
     cols: 38,
     rows: 19,
     interactive: true,
-    builder: () =>
-        const Padding(padding: EdgeInsets.all(1), child: input.PressTile()),
+    builder: () => _framed(const input.PressTile()),
   ),
   ExampleInfo(
     id: 'input.selection',
@@ -2643,10 +2633,7 @@ Text('\${summary.health.name}: \${summary.activeTaskCount} of \${summary.taskCou
     cols: 38,
     rows: 12,
     interactive: true,
-    builder: () => const Padding(
-      padding: EdgeInsets.all(1),
-      child: input.SelectableNote(),
-    ),
+    builder: () => _framed(const input.SelectableNote()),
   ),
   ExampleInfo(
     id: 'input.splitter',
@@ -2656,8 +2643,7 @@ Text('\${summary.health.name}: \${summary.activeTaskCount} of \${summary.taskCou
     cols: 38,
     rows: 10,
     interactive: true,
-    builder: () =>
-        const Padding(padding: EdgeInsets.all(1), child: input.SplitPane()),
+    builder: () => _framed(const input.SplitPane()),
   ),
   ExampleInfo(
     id: 'input.nesting',
@@ -2667,8 +2653,7 @@ Text('\${summary.health.name}: \${summary.activeTaskCount} of \${summary.taskCou
     cols: 38,
     rows: 9,
     interactive: true,
-    builder: () =>
-        const Padding(padding: EdgeInsets.all(1), child: input.NestedRow()),
+    builder: () => _framed(const input.NestedRow()),
   ),
   ExampleInfo(
     id: 'input.scrolling',
@@ -2678,8 +2663,7 @@ Text('\${summary.health.name}: \${summary.activeTaskCount} of \${summary.taskCou
     cols: 38,
     rows: 14,
     interactive: true,
-    builder: () =>
-        const Padding(padding: EdgeInsets.all(1), child: input.ScrollPanes()),
+    builder: () => _framed(const input.ScrollPanes()),
   ),
   ExampleInfo(
     id: 'testing.counter',
@@ -2689,8 +2673,7 @@ Text('\${summary.health.name}: \${summary.activeTaskCount} of \${summary.taskCou
     cols: 32,
     rows: 5,
     interactive: true,
-    builder: () =>
-        const Padding(padding: EdgeInsets.all(1), child: testing.Counter()),
+    builder: () => _framed(const testing.Counter()),
   ),
   ExampleInfo(
     id: 'testing.preferences',
@@ -2700,10 +2683,7 @@ Text('\${summary.health.name}: \${summary.activeTaskCount} of \${summary.taskCou
     cols: 32,
     rows: 11,
     interactive: true,
-    builder: () => Padding(
-      padding: const EdgeInsets.all(1),
-      child: testing.preferencesPair(),
-    ),
+    builder: () => _framed(testing.preferencesPair()),
   ),
   ExampleInfo(
     id: 'testing.save',
@@ -2713,10 +2693,7 @@ Text('\${summary.health.name}: \${summary.activeTaskCount} of \${summary.taskCou
     cols: 32,
     rows: 5,
     interactive: true,
-    builder: () => const Padding(
-      padding: EdgeInsets.all(1),
-      child: testing.TestingSaveDemo(),
-    ),
+    builder: () => _framed(const testing.TestingSaveDemo()),
   ),
   ExampleInfo(
     id: 'testing.animation',
@@ -2726,10 +2703,7 @@ Text('\${summary.health.name}: \${summary.activeTaskCount} of \${summary.taskCou
     cols: 32,
     rows: 6,
     interactive: true,
-    builder: () => const Padding(
-      padding: EdgeInsets.all(1),
-      child: testing.AnimatedUpload(),
-    ),
+    builder: () => _framed(const testing.AnimatedUpload()),
   ),
   ExampleInfo(
     id: 'testing.editor',
@@ -2759,8 +2733,7 @@ Text('\${summary.health.name}: \${summary.activeTaskCount} of \${summary.taskCou
     cols: 34,
     rows: 9,
     interactive: true,
-    builder: () =>
-        const Padding(padding: EdgeInsets.all(1), child: lists.FileList()),
+    builder: () => _framed(const lists.FileList()),
   ),
   ExampleInfo(
     id: 'lists.tasks',
@@ -2770,8 +2743,7 @@ Text('\${summary.health.name}: \${summary.activeTaskCount} of \${summary.taskCou
     cols: 40,
     rows: 22,
     interactive: true,
-    builder: () =>
-        const Padding(padding: EdgeInsets.all(1), child: lists.TaskBrowser()),
+    builder: () => _framed(const lists.TaskBrowser()),
   ),
   ExampleInfo(
     id: 'lists.reorder',
@@ -2781,8 +2753,7 @@ Text('\${summary.health.name}: \${summary.activeTaskCount} of \${summary.taskCou
     cols: 38,
     rows: 11,
     interactive: true,
-    builder: () =>
-        const Padding(padding: EdgeInsets.all(1), child: lists.ReorderTasks()),
+    builder: () => _framed(const lists.ReorderTasks()),
   ),
   ExampleInfo(
     id: 'lists.document',
@@ -2793,8 +2764,7 @@ Text('\${summary.health.name}: \${summary.activeTaskCount} of \${summary.taskCou
     cols: 40,
     rows: 18,
     interactive: true,
-    builder: () =>
-        const Padding(padding: EdgeInsets.all(1), child: lists.ScrollEdges()),
+    builder: () => _framed(const lists.ScrollEdges()),
   ),
   ExampleInfo(
     id: 'lists.horizontal',
@@ -2804,10 +2774,7 @@ Text('\${summary.health.name}: \${summary.activeTaskCount} of \${summary.taskCou
     cols: 40,
     rows: 8,
     interactive: true,
-    builder: () => const Padding(
-      padding: EdgeInsets.all(1),
-      child: lists.HorizontalList(),
-    ),
+    builder: () => _framed(const lists.HorizontalList()),
   ),
   ExampleInfo(
     id: 'lists.wide-content',
@@ -2817,10 +2784,7 @@ Text('\${summary.health.name}: \${summary.activeTaskCount} of \${summary.taskCou
     cols: 40,
     rows: 10,
     interactive: true,
-    builder: () => const Padding(
-      padding: EdgeInsets.all(1),
-      child: lists.HorizontalContent(),
-    ),
+    builder: () => _framed(const lists.HorizontalContent()),
   ),
   ExampleInfo(
     id: 'lists.log',
@@ -2830,8 +2794,7 @@ Text('\${summary.health.name}: \${summary.activeTaskCount} of \${summary.taskCou
     cols: 46,
     rows: 14,
     interactive: true,
-    builder: () =>
-        const Padding(padding: EdgeInsets.all(1), child: lists.BuildLog()),
+    builder: () => _framed(const lists.BuildLog()),
   ),
   ExampleInfo(
     id: 'layout.responsive',
@@ -2843,7 +2806,7 @@ Text('\${summary.health.name}: \${summary.activeTaskCount} of \${summary.taskCou
     cols: 74,
     rows: 18,
     interactive: true,
-    builder: () => const _ResponsiveWorkspaceTour(),
+    builder: () => _framed(const _ResizableWorkspace()),
   ),
   ExampleInfo(
     id: 'navigation.basics',
@@ -3164,7 +3127,12 @@ FocusDetector(
     cols: 38,
     rows: 14,
     code: _customThemeSource,
-    builder: () => Theme(data: _customTheme, child: const _ThemePreview()),
+    builder: () => Theme(
+      // An app passes its theme to FleuryApp(theme: …); this preview themes
+      // one subtree.
+      data: _buildCustomTheme(),
+      child: const _ThemePreview(),
+    ),
   ),
   ExampleInfo(
     id: 'themes.gallery',
@@ -3192,7 +3160,7 @@ void main() =>
     rows: 4,
     interactive: true,
     code: _localStyleSource,
-    builder: () => const _LocalStyleTour(),
+    builder: () => const _StyledInput(),
   ),
   ExampleInfo(
     id: 'themes.cell_style',
@@ -3202,7 +3170,7 @@ void main() =>
     cols: 34,
     rows: 5,
     code: _cellStyleSource,
-    builder: () => const _CellStyleTour(),
+    builder: () => const _StyledText(),
   ),
   ExampleInfo(
     id: 'themes.local_interactive',
@@ -3213,7 +3181,7 @@ void main() =>
     rows: 8,
     interactive: true,
     code: _localInteractiveSource,
-    builder: () => const _LocalStateTour(),
+    builder: () => _framed(const _LocalFocusStyle()),
   ),
   ExampleInfo(
     id: 'themes.invalid_none',
@@ -3226,7 +3194,7 @@ void main() =>
     rows: 9,
     interactive: true,
     code: _invalidNoneSource,
-    builder: () => const _InvalidNoneTour(),
+    builder: () => _framed(const _NeutralInvalidField()),
   ),
   ExampleInfo(
     id: 'themes.interactive_styles',
@@ -4908,14 +4876,14 @@ TextInput(
   style: const CellStyle(foreground: Colors.cyan),
 )''';
 
-class _LocalStyleTour extends StatefulWidget {
-  const _LocalStyleTour();
+class _StyledInput extends StatefulWidget {
+  const _StyledInput();
 
   @override
-  State<_LocalStyleTour> createState() => _LocalStyleTourState();
+  State<_StyledInput> createState() => _StyledInputState();
 }
 
-class _LocalStyleTourState extends State<_LocalStyleTour> {
+class _StyledInputState extends State<_StyledInput> {
   final _query = TextEditingController(text: 'api-gateway');
 
   @override
@@ -4947,8 +4915,8 @@ Column(children: [
   ),
 ]);''';
 
-class _CellStyleTour extends StatelessWidget {
-  const _CellStyleTour();
+class _StyledText extends StatelessWidget {
+  const _StyledText();
 
   @override
   Widget build(BuildContext context) => const Column(
@@ -4985,8 +4953,8 @@ Row(
   ],
 )''';
 
-class _LocalStateTour extends StatelessWidget {
-  const _LocalStateTour();
+class _LocalFocusStyle extends StatelessWidget {
+  const _LocalFocusStyle();
 
   @override
   Widget build(BuildContext context) => Theme(
@@ -4997,28 +4965,25 @@ class _LocalStateTour extends StatelessWidget {
         focused: CellStyle(inverse: true, bold: true),
       ),
     ),
-    child: Padding(
-      padding: const EdgeInsets.all(1),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: <Widget>[
-          const Text('LOCAL INTERACTION STYLE', style: CellStyle(bold: true)),
-          const Text('Tab or click to compare focus cues'),
-          Row(
-            children: <Widget>[
-              Button(text: 'Theme focus', autofocus: true, onPressed: () {}),
-              const SizedBox(width: 2),
-              Button(
-                text: 'Local focus',
-                style: const CellStyle.interactive(
-                  focused: CellStyle(foreground: Colors.cyan, underline: true),
-                ),
-                onPressed: () {},
+    child: Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: <Widget>[
+        const Text('LOCAL INTERACTION STYLE', style: CellStyle(bold: true)),
+        const Text('Tab or click to compare focus cues'),
+        Row(
+          children: <Widget>[
+            Button(text: 'Theme focus', autofocus: true, onPressed: () {}),
+            const SizedBox(width: 2),
+            Button(
+              text: 'Local focus',
+              style: const CellStyle.interactive(
+                focused: CellStyle(foreground: Colors.cyan, underline: true),
               ),
-            ],
-          ),
-        ],
-      ),
+              onPressed: () {},
+            ),
+          ],
+        ),
+      ],
     ),
   );
 }
@@ -5034,14 +4999,14 @@ FormField(
   ),
 )''';
 
-class _InvalidNoneTour extends StatefulWidget {
-  const _InvalidNoneTour();
+class _NeutralInvalidField extends StatefulWidget {
+  const _NeutralInvalidField();
 
   @override
-  State<_InvalidNoneTour> createState() => _InvalidNoneTourState();
+  State<_NeutralInvalidField> createState() => _NeutralInvalidFieldState();
 }
 
-class _InvalidNoneTourState extends State<_InvalidNoneTour> {
+class _NeutralInvalidFieldState extends State<_NeutralInvalidField> {
   final _form = FormController();
   final _query = TextEditingController();
 
@@ -5053,32 +5018,29 @@ class _InvalidNoneTourState extends State<_InvalidNoneTour> {
   }
 
   @override
-  Widget build(BuildContext context) => Padding(
-    padding: const EdgeInsets.all(1),
-    child: Form(
-      controller: _form,
-      onSubmit: () {},
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: <Widget>[
-          const Text('NEUTRAL INVALID CHROME', style: CellStyle(bold: true)),
-          const Text('Submit empty: the message stays visible'),
-          FormField(
-            validator: () => _query.text.isEmpty ? 'Enter a query.' : null,
-            child: SizedBox(
-              width: 30,
-              child: TextInput(
-                controller: _query,
-                autofocus: true,
-                semanticLabel: 'Query',
-                placeholder: 'Query',
-                style: const CellStyle.interactive(invalid: CellStyle.none),
-              ),
+  Widget build(BuildContext context) => Form(
+    controller: _form,
+    onSubmit: () {},
+    child: Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: <Widget>[
+        const Text('NEUTRAL INVALID CHROME', style: CellStyle(bold: true)),
+        const Text('Submit empty: the message stays visible'),
+        FormField(
+          validator: () => _query.text.isEmpty ? 'Enter a query.' : null,
+          child: SizedBox(
+            width: 30,
+            child: TextInput(
+              controller: _query,
+              autofocus: true,
+              semanticLabel: 'Query',
+              placeholder: 'Query',
+              style: const CellStyle.interactive(invalid: CellStyle.none),
             ),
           ),
-          Button(text: 'Submit', onPressed: _form.submit),
-        ],
-      ),
+        ),
+        Button(text: 'Submit', onPressed: _form.submit),
+      ],
     ),
   );
 }
@@ -5259,32 +5221,16 @@ class _InteractiveStyleTour extends StatelessWidget {
   }
 }
 
-class _SnapshotLoadingTour extends StatelessWidget {
-  const _SnapshotLoadingTour();
+class _PhotoPreview extends StatefulWidget {
+  const _PhotoPreview();
 
   @override
-  Widget build(BuildContext context) => _framed(
-    const Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: <Widget>[
-        Text('PREVIEW ASYNC UI', style: CellStyle(bold: true)),
-        loading.SnapshotExplorer(),
-      ],
-    ),
-  );
-}
-
-class _NetworkImageLoadingTour extends StatefulWidget {
-  const _NetworkImageLoadingTour();
-
-  @override
-  State<_NetworkImageLoadingTour> createState() =>
-      _NetworkImageLoadingTourState();
+  State<_PhotoPreview> createState() => _PhotoPreviewState();
 }
 
 /// Mounts the photo viewer only after the reader asks for it, so opening a
 /// page that embeds this demo sends no request to the photo service.
-class _NetworkImageLoadingTourState extends State<_NetworkImageLoadingTour> {
+class _PhotoPreviewState extends State<_PhotoPreview> {
   var _seed = 0;
   var _started = false;
 
@@ -5301,21 +5247,6 @@ class _NetworkImageLoadingTourState extends State<_NetworkImageLoadingTour> {
             ),
           ],
         );
-}
-
-class _StreamLoadingTour extends StatelessWidget {
-  const _StreamLoadingTour();
-
-  @override
-  Widget build(BuildContext context) => _framed(
-    const Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: <Widget>[
-        Text('STAR MAP TRANSMISSION', style: CellStyle(bold: true)),
-        loading.TransmissionView(),
-      ],
-    ),
-  );
 }
 
 class _OrbitalCourier extends StatefulWidget {
@@ -5703,10 +5634,6 @@ class _ConnectionStatusState extends State<_ConnectionStatus> {
   );
 }
 
-enum _EntryEffectChoice { fade, slide, wipe, expand }
-
-enum _ExitEffectChoice { fade, slide, wipe, shrink }
-
 class _EffectPicker extends StatefulWidget {
   const _EffectPicker();
 
@@ -5715,149 +5642,122 @@ class _EffectPicker extends StatefulWidget {
 }
 
 class _EffectPickerState extends State<_EffectPicker> {
-  var _entry = _EntryEffectChoice.fade;
-  var _exit = _ExitEffectChoice.fade;
+  // Each choice pairs an effect with a duration that follows its distance:
+  // slides and wipes cross the 24-column sample, so they run longest.
+  static final _entrances = <String, (Effect, Duration)>{
+    'Fade in': (Effects.fadeIn(), const Duration(milliseconds: 400)),
+    'Slide in': (
+      Effects.slideIn(from: Edge.left),
+      const Duration(milliseconds: 800),
+    ),
+    'Wipe in': (
+      Effects.wipeIn(from: Edge.left),
+      const Duration(milliseconds: 800),
+    ),
+    'Expand': (Effects.expand(), const Duration(milliseconds: 300)),
+  };
+  static final _exits = <String, (Effect, Duration)>{
+    'Fade out': (Effects.fadeOut(), const Duration(milliseconds: 400)),
+    'Slide out': (
+      Effects.slideOut(to: Edge.right),
+      const Duration(milliseconds: 800),
+    ),
+    'Wipe out': (
+      Effects.wipeOut(to: Edge.right),
+      const Duration(milliseconds: 800),
+    ),
+    'Shrink': (Effects.shrink(), const Duration(milliseconds: 300)),
+  };
+
+  var _entry = 'Fade in';
+  var _exit = 'Fade out';
   var _visible = true;
 
-  Effect get _entryEffect => switch (_entry) {
-    _EntryEffectChoice.fade => Effects.fadeIn(),
-    _EntryEffectChoice.slide => Effects.slideIn(from: Edge.left),
-    _EntryEffectChoice.wipe => Effects.wipeIn(from: Edge.left),
-    _EntryEffectChoice.expand => Effects.expand(),
-  };
-
-  Effect get _exitEffect => switch (_exit) {
-    _ExitEffectChoice.fade => Effects.fadeOut(),
-    _ExitEffectChoice.slide => Effects.slideOut(to: Edge.right),
-    _ExitEffectChoice.wipe => Effects.wipeOut(to: Edge.right),
-    _ExitEffectChoice.shrink => Effects.shrink(),
-  };
-
-  Duration get _transitionDuration {
-    if (_visible) {
-      return switch (_entry) {
-        _EntryEffectChoice.fade => const Duration(milliseconds: 400),
-        _EntryEffectChoice.slide ||
-        _EntryEffectChoice.wipe => const Duration(milliseconds: 800),
-        _EntryEffectChoice.expand => const Duration(milliseconds: 300),
-      };
-    }
-    return switch (_exit) {
-      _ExitEffectChoice.fade => const Duration(milliseconds: 400),
-      _ExitEffectChoice.slide ||
-      _ExitEffectChoice.wipe => const Duration(milliseconds: 800),
-      _ExitEffectChoice.shrink => const Duration(milliseconds: 300),
-    };
-  }
-
   @override
-  Widget build(BuildContext context) => Column(
-    crossAxisAlignment: CrossAxisAlignment.start,
-    children: <Widget>[
-      const Text('ENTRANCE + EXIT LAB', style: CellStyle(bold: true)),
-      const Text('Choose a pair, then toggle the sample.'),
-      const SizedBox(height: 1),
-      Row(
-        children: <Widget>[
-          SizedBox(
-            width: 25,
-            child: Column(
+  Widget build(BuildContext context) {
+    final (enter, enterDuration) = _entrances[_entry]!;
+    final (exit, exitDuration) = _exits[_exit]!;
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: <Widget>[
+        const Text('ENTRANCE + EXIT LAB', style: CellStyle(bold: true)),
+        const Text('Choose a pair, then toggle the sample.'),
+        const SizedBox(height: 1),
+        Row(
+          children: <Widget>[
+            SizedBox(
+              width: 25,
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: <Widget>[
+                  const Text('ENTER'),
+                  Select<String>(
+                    semanticLabel: 'Entrance effect',
+                    autofocus: true,
+                    value: _entry,
+                    options: [
+                      for (final label in _entrances.keys)
+                        SelectOption(value: label, label: label),
+                    ],
+                    onChanged: (value) => setState(() => _entry = value),
+                  ),
+                ],
+              ),
+            ),
+            SizedBox(
+              width: 25,
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: <Widget>[
+                  const Text('EXIT'),
+                  Select<String>(
+                    semanticLabel: 'Exit effect',
+                    value: _exit,
+                    options: [
+                      for (final label in _exits.keys)
+                        SelectOption(value: label, label: label),
+                    ],
+                    onChanged: (value) => setState(() => _exit = value),
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
+        const SizedBox(height: 1),
+        Button(
+          text: _visible ? 'Hide sample' : 'Show sample',
+          onPressed: () => setState(() => _visible = !_visible),
+        ),
+        const SizedBox(height: 1),
+        AnimatedVisibility(
+          visible: _visible,
+          enter: enter,
+          exit: exit,
+          // The transition that is starting decides the duration.
+          duration: _visible ? enterDuration : exitDuration,
+          curve: Curves.linear,
+          child: Container(
+            width: 24,
+            border: BoxBorder(style: Theme.of(context).borderStyle),
+            padding: const EdgeInsets.symmetric(horizontal: 1),
+            child: const Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: <Widget>[
-                const Text('ENTER'),
-                Select<_EntryEffectChoice>(
-                  semanticLabel: 'Entrance effect',
-                  autofocus: true,
-                  value: _entry,
-                  options: const <SelectOption<_EntryEffectChoice>>[
-                    SelectOption(
-                      value: _EntryEffectChoice.fade,
-                      label: 'Fade in',
-                    ),
-                    SelectOption(
-                      value: _EntryEffectChoice.slide,
-                      label: 'Slide in',
-                    ),
-                    SelectOption(
-                      value: _EntryEffectChoice.wipe,
-                      label: 'Wipe in',
-                    ),
-                    SelectOption(
-                      value: _EntryEffectChoice.expand,
-                      label: 'Expand',
-                    ),
-                  ],
-                  onChanged: (value) => setState(() => _entry = value),
-                ),
+                Text('DEPLOY PREVIEW', style: CellStyle(bold: true)),
+                Text('✓ Resolve'),
+                Text('✓ Analyze'),
+                Text('✓ Test'),
+                Text('✓ Package'),
+                Text('✓ Sign'),
+                Text('✓ Publish'),
               ],
             ),
-          ),
-          SizedBox(
-            width: 25,
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: <Widget>[
-                const Text('EXIT'),
-                Select<_ExitEffectChoice>(
-                  semanticLabel: 'Exit effect',
-                  value: _exit,
-                  options: const <SelectOption<_ExitEffectChoice>>[
-                    SelectOption(
-                      value: _ExitEffectChoice.fade,
-                      label: 'Fade out',
-                    ),
-                    SelectOption(
-                      value: _ExitEffectChoice.slide,
-                      label: 'Slide out',
-                    ),
-                    SelectOption(
-                      value: _ExitEffectChoice.wipe,
-                      label: 'Wipe out',
-                    ),
-                    SelectOption(
-                      value: _ExitEffectChoice.shrink,
-                      label: 'Shrink',
-                    ),
-                  ],
-                  onChanged: (value) => setState(() => _exit = value),
-                ),
-              ],
-            ),
-          ),
-        ],
-      ),
-      const SizedBox(height: 1),
-      Button(
-        text: _visible ? 'Hide sample' : 'Show sample',
-        onPressed: () => setState(() => _visible = !_visible),
-      ),
-      const SizedBox(height: 1),
-      AnimatedVisibility(
-        visible: _visible,
-        enter: _entryEffect,
-        exit: _exitEffect,
-        duration: _transitionDuration,
-        curve: Curves.linear,
-        child: Container(
-          width: 24,
-          border: BoxBorder(style: Theme.of(context).borderStyle),
-          padding: const EdgeInsets.symmetric(horizontal: 1),
-          child: const Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: <Widget>[
-              Text('DEPLOY PREVIEW', style: CellStyle(bold: true)),
-              Text('✓ Resolve'),
-              Text('✓ Analyze'),
-              Text('✓ Test'),
-              Text('✓ Package'),
-              Text('✓ Sign'),
-              Text('✓ Publish'),
-            ],
           ),
         ),
-      ),
-    ],
-  );
+      ],
+    );
+  }
 }
 
 class _PilotValidation extends StatefulWidget {
@@ -6083,94 +5983,98 @@ class _TickerSimulationState extends State<_TickerSimulation>
   }
 }
 
+/// Two panes side by side when there is room, stacked when there is not.
+class _Workspace extends StatelessWidget {
+  const _Workspace();
+
+  @override
+  Widget build(BuildContext context) {
+    const files = Panel(
+      title: 'Files',
+      child: Padding(
+        padding: EdgeInsets.all(1),
+        child: Text('README.md\nlib/\ntest/'),
+      ),
+    );
+    const preview = Panel(
+      title: 'Preview',
+      child: Padding(
+        padding: EdgeInsets.all(1),
+        child: Text('# Fleury\n\nA framework for terminal apps.'),
+      ),
+    );
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final wide = (constraints.maxCols ?? 0) >= 60;
+        return Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            Text(
+              wide ? 'WIDE · TWO PANES' : 'NARROW · STACKED',
+              style: const CellStyle(bold: true),
+            ),
+            const SizedBox(height: 1),
+            Expanded(
+              child: wide
+                  ? const Row(
+                      crossAxisAlignment: CrossAxisAlignment.stretch,
+                      children: [
+                        Expanded(flex: 2, child: files),
+                        SizedBox(width: 1),
+                        Expanded(flex: 3, child: preview),
+                      ],
+                    )
+                  : const Column(
+                      crossAxisAlignment: CrossAxisAlignment.stretch,
+                      children: [
+                        Expanded(child: files),
+                        SizedBox(height: 1),
+                        Expanded(child: preview),
+                      ],
+                    ),
+            ),
+          ],
+        );
+      },
+    );
+  }
+}
+
 /// A local-breakpoint demo: its buttons change only the child envelope, so the
 /// LayoutBuilder proves that panes adapt to parent constraints rather than the
 /// global browser or terminal size.
-class _ResponsiveWorkspaceTour extends StatefulWidget {
-  const _ResponsiveWorkspaceTour();
+class _ResizableWorkspace extends StatefulWidget {
+  const _ResizableWorkspace();
 
   @override
-  State<_ResponsiveWorkspaceTour> createState() =>
-      _ResponsiveWorkspaceTourState();
+  State<_ResizableWorkspace> createState() => _ResizableWorkspaceState();
 }
 
-class _ResponsiveWorkspaceTourState extends State<_ResponsiveWorkspaceTour> {
+class _ResizableWorkspaceState extends State<_ResizableWorkspace> {
+  // The buttons stand in for a resize: in an app, the terminal or the
+  // surrounding layout decides how wide the workspace is.
   var _width = 68;
 
-  Widget _files() => const Panel(
-    title: 'Files',
-    child: Padding(
-      padding: EdgeInsets.all(1),
-      child: Text('README.md\nlib/\ntest/'),
-    ),
-  );
-
-  Widget _preview() => const Panel(
-    title: 'Preview',
-    child: Padding(
-      padding: EdgeInsets.all(1),
-      child: Text('# Fleury\n\nA framework for terminal apps.'),
-    ),
-  );
-
   @override
-  Widget build(BuildContext context) => _framed(
-    Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Row(
-          children: [
-            Button(
-              text: 'Narrow',
-              autofocus: true,
-              onPressed: () => setState(() => _width = 42),
-            ),
-            const SizedBox(width: 1),
-            Button(text: 'Wide', onPressed: () => setState(() => _width = 68)),
-          ],
-        ),
-        const SizedBox(height: 1),
-        Expanded(
-          child: SizedBox(
-            width: _width,
-            child: LayoutBuilder(
-              builder: (context, constraints) {
-                final wide = (constraints.maxCols ?? 0) >= 60;
-                return Column(
-                  crossAxisAlignment: CrossAxisAlignment.stretch,
-                  children: [
-                    Text(
-                      wide ? 'WIDE · TWO PANES' : 'NARROW · STACKED',
-                      style: const CellStyle(bold: true),
-                    ),
-                    const SizedBox(height: 1),
-                    Expanded(
-                      child: wide
-                          ? Row(
-                              crossAxisAlignment: CrossAxisAlignment.stretch,
-                              children: [
-                                Expanded(flex: 2, child: _files()),
-                                const SizedBox(width: 1),
-                                Expanded(flex: 3, child: _preview()),
-                              ],
-                            )
-                          : Column(
-                              crossAxisAlignment: CrossAxisAlignment.stretch,
-                              children: [
-                                Expanded(child: _files()),
-                                const SizedBox(height: 1),
-                                Expanded(child: _preview()),
-                              ],
-                            ),
-                    ),
-                  ],
-                );
-              },
-            ),
+  Widget build(BuildContext context) => Column(
+    crossAxisAlignment: CrossAxisAlignment.start,
+    children: [
+      Row(
+        children: [
+          Button(
+            text: 'Narrow',
+            autofocus: true,
+            onPressed: () => setState(() => _width = 42),
           ),
-        ),
-      ],
-    ),
+          const SizedBox(width: 1),
+          Button(text: 'Wide', onPressed: () => setState(() => _width = 68)),
+        ],
+      ),
+      const SizedBox(height: 1),
+      Expanded(
+        child: SizedBox(width: _width, child: const _Workspace()),
+      ),
+    ],
   );
 }
 

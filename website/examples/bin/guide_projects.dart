@@ -12,6 +12,7 @@ import 'dart:io';
 
 import 'package:analyzer/dart/analysis/utilities.dart';
 import 'package:analyzer/dart/ast/ast.dart';
+import 'package:analyzer/dart/ast/token.dart';
 import 'package:analyzer/dart/ast/visitor.dart';
 import 'package:path/path.dart' as p;
 
@@ -278,12 +279,11 @@ class Project {
     // The docs-only frame stays out of the code a reader edits: `example()`
     // is the demo, `buildExample()` frames it as the registry does.
     final demo = unframed(builder);
-    final text = source(root).text;
     files[logical(root)] =
         '${files[logical(root)]}\n'
         'Widget buildExample() => '
         '${identical(demo, builder) ? 'example()' : '_framed(example())'};\n\n'
-        'Widget example() => ${text.substring(demo.offset, demo.end)};\n';
+        'Widget example() => ${topLevel(source(root).text, demo)};\n';
     // The same theme and focus traversal as the prebuilt preview. The frame's
     // URL fragment names the docs page's theme (see experiments/fleury_pad).
     files['main.dart'] =
@@ -318,6 +318,54 @@ class Finder extends RecursiveAstVisitor<void> {
     if (n.constructorName.type.name2.lexeme == name) nodes.add(n);
     super.visitInstanceCreationExpression(n);
   }
+}
+
+/// The source ranges of the multi-line strings inside a node.
+class MultilineStrings extends RecursiveAstVisitor<void> {
+  final ranges = <Block>[];
+
+  void add(StringLiteral node) {
+    if (node.toSource().contains('\n')) {
+      ranges.add((start: node.offset, end: node.end));
+    }
+  }
+
+  @override
+  void visitSimpleStringLiteral(SimpleStringLiteral node) => add(node);
+
+  @override
+  void visitStringInterpolation(StringInterpolation node) => add(node);
+}
+
+/// [node]'s source in [text] as code that starts a top-level line, such as
+/// `Widget example() => …`: its continuation lines lose the indentation of
+/// the line [node] starts on, as `dart format` would write them. Lines that
+/// begin inside a multi-line string are its content and stay as written.
+String topLevel(String text, AstNode node) {
+  final lineStart = node.offset == 0
+      ? 0
+      : text.lastIndexOf('\n', node.offset - 1) + 1;
+  var indent = 0;
+  while (text.codeUnitAt(lineStart + indent) == 0x20) {
+    indent++;
+  }
+  final strings = MultilineStrings();
+  node.accept(strings);
+  final lines = text.substring(node.offset, node.end).split('\n');
+  var at = node.offset;
+  final out = <String>[];
+  for (final (i, line) in lines.indexed) {
+    final inString = strings.ranges.any((s) => s.start < at && at < s.end);
+    var cut = 0;
+    if (i > 0 && !inString) {
+      while (cut < indent && cut < line.length && line[cut] == ' ') {
+        cut++;
+      }
+    }
+    out.add(line.substring(cut));
+    at += line.length + 1;
+  }
+  return out.join('\n');
 }
 
 /// [builder] without the registry's docs-only `_framed(...)` wrapper.
@@ -459,20 +507,36 @@ void main() {
       stderr.writeln('Skipping the editable demo for $id: ${error.message}');
     }
   }
-  // A widget page's editable code must be the whole demo: a helper, sample
-  // data, or builder argument outside every view is code the reader can't
-  // see or change.
-  final hidden = [
-    for (final MapEntry(key: id, value: project) in out.entries)
-      if (!guideCategories.contains(visitor.categories[id]))
-        for (final code in hiddenCode(project as Map<String, Object>))
-          '  $id: $code',
-  ];
-  if (hidden.isNotEmpty) {
+  // A demo's editable code must be the whole demo: a helper, sample data, or
+  // builder argument outside every view is code the reader can't see or
+  // change. hiddenByDesign lists the few deliberate exceptions, each with its
+  // reason; one that no longer matches anything is reported too.
+  final problems = <String>[];
+  for (final MapEntry(key: id, value: project) in out.entries) {
+    final allowed = hiddenByDesign[id] ?? const <String, String>{};
+    final matched = <String>{};
+    for (final item in hiddenCode(project as Map<String, Object>)) {
+      final key = allowed.keys
+          .where((k) => item.name == k || item.name.startsWith('$k.'))
+          .firstOrNull;
+      if (key == null) {
+        problems.add('  $id: ${item.reason}');
+      } else {
+        matched.add(key);
+      }
+    }
+    for (final key in allowed.keys.toSet().difference(matched)) {
+      problems.add('  $id: hiddenByDesign lists $key, which is not hidden');
+    }
+  }
+  for (final id in hiddenByDesign.keys.where((id) => !out.containsKey(id))) {
+    problems.add('  $id: hiddenByDesign names a project that does not exist');
+  }
+  if (problems.isNotEmpty) {
     stderr.writeln(
-      'Widget demos that run code their editable views do not show:\n'
-      '${hidden.join('\n')}\n'
-      'Move the data or helper into the demo widget, or give the page a view '
+      'Demos that run code their editable views do not show:\n'
+      '${problems.join('\n')}\n'
+      'Move the data or helper into the demo widget, or give the demo a view '
       'of it in guide_projects.json (see GUIDE_PADS.md).',
     );
     exit(1);
@@ -482,6 +546,34 @@ void main() {
   ).writeAsStringSync('${const JsonEncoder.withIndent('  ').convert(out)}\n');
   stdout.writeln('Generated ${out.length} runnable guide projects.');
 }
+
+/// Why an input guide demo edits an excerpt: each section edits only the
+/// lines it teaches, and the page shows the whole file beside it, read-only,
+/// as the demo's "Full source".
+const _excerpt =
+    'an excerpt of the file the page shows in full as its Full source';
+
+/// Code a guide demo deliberately keeps out of its editable views, by example
+/// id: a declaration's name (a class's name also covers its members) and why
+/// showing it would be noise rather than lesson. Everything else a demo runs
+/// must appear in one of its views.
+const hiddenByDesign = <String, Map<String, String>>{
+  'commands.overview': {
+    'SampleScaffold':
+        "the samples' shared theme, toast host, and background fill, which "
+        'wrap every sample app and have nothing to do with commands',
+  },
+  'themes.interactive_styles': {
+    '_InteractiveStyleTour':
+        'draws each state as static text resolved with CellStyle.resolve, '
+        'which the guide reserves for authors of reusable widgets',
+  },
+  'input.actions': {'FileActions': _excerpt},
+  'input.nesting': {'NestedRow': _excerpt},
+  'input.press': {'PressTile': _excerpt, '_PressTileState': _excerpt},
+  'input.scrolling': {'ScrollPanes': _excerpt, '_ScrollPanesState': _excerpt},
+  'input.splitter': {'SplitPane': _excerpt, '_SplitPaneState': _excerpt},
+};
 
 /// Registry categories that are not widget reference pages.
 const guideCategories = {'Guide examples', 'Home', 'Showcases', 'Theming'};
@@ -518,7 +610,10 @@ Map<String, Object> generate(
     if (view['declaration'] == null) {
       project.includeWhole(file);
     } else {
-      project.include(file, {view['declaration'] as String});
+      project.include(file, {
+        view['declaration'] as String,
+        if (view['through'] case final String through) through,
+      });
     }
   }
   final files = project.render(root, builder);
@@ -561,6 +656,18 @@ Map<String, Object> generate(
         node = finder.nodes[occurrence];
       }
       range = (start: node.offset, end: node.end);
+      // A declaration view can run on through later top-level declarations
+      // that read with it, such as an app's constants and its root widget.
+      if (view['through'] case final String through) {
+        final last = unit.declarations.firstWhere(
+          (n) => declared(n).contains(through),
+          orElse: () => throw StateError('$where: no $through'),
+        );
+        if (node.parent is! CompilationUnit || last.end <= node.end) {
+          throw StateError('$where: `through` needs a later declaration');
+        }
+        range = (start: node.offset, end: last.end);
+      }
     } else {
       range = (start: 0, end: content.length);
     }
@@ -592,19 +699,44 @@ Map<String, Object> generate(
   return {'id': id, 'files': files, 'views': selections};
 }
 
-/// Collects the names referred to inside [ranges] of a unit.
+/// The names that code inside [ranges] of a unit refers to on its own, or
+/// through one of the unit's import [prefixes]: names a reader needs to see
+/// declared somewhere. A named argument's label, a member reached through an
+/// object such as `items.length`, and a name declared inside the ranges
+/// (a local, parameter, or pattern variable) are not references to it.
 class References extends RecursiveAstVisitor<void> {
-  References(this.ranges);
+  References(this.ranges, this.prefixes);
 
   final List<Block> ranges;
+  final Set<String> prefixes;
   final values = <String>{};
+  final locals = <String>{};
 
   bool inside(AstNode node) =>
       ranges.any((r) => r.start <= node.offset && node.end <= r.end);
 
+  bool isPrefix(Expression? target) =>
+      target is SimpleIdentifier && prefixes.contains(target.name);
+
+  Set<String> get external => values.difference(locals);
+
   @override
   void visitSimpleIdentifier(SimpleIdentifier node) {
-    if (inside(node)) values.add(node.name);
+    if (!inside(node)) return;
+    final reached = switch (node.parent) {
+      Label() => true,
+      PropertyAccess(:final propertyName, :final target) =>
+        identical(propertyName, node) && target is! ThisExpression,
+      PrefixedIdentifier(:final identifier, :final prefix) =>
+        identical(identifier, node) && !prefixes.contains(prefix.name),
+      MethodInvocation(:final methodName, :final target) =>
+        identical(methodName, node) &&
+            target != null &&
+            target is! ThisExpression &&
+            !isPrefix(target),
+      _ => false,
+    };
+    if (!reached) values.add(node.name);
   }
 
   @override
@@ -612,19 +744,73 @@ class References extends RecursiveAstVisitor<void> {
     if (inside(node)) values.add(node.name2.lexeme);
     super.visitNamedType(node);
   }
+
+  void local(Token? name, AstNode node) {
+    if (name != null && inside(node)) locals.add(name.lexeme);
+  }
+
+  @override
+  void visitVariableDeclaration(VariableDeclaration node) {
+    local(node.name, node);
+    super.visitVariableDeclaration(node);
+  }
+
+  @override
+  void visitSimpleFormalParameter(SimpleFormalParameter node) {
+    local(node.name, node);
+    super.visitSimpleFormalParameter(node);
+  }
+
+  @override
+  void visitFunctionTypedFormalParameter(FunctionTypedFormalParameter node) {
+    local(node.name, node);
+    super.visitFunctionTypedFormalParameter(node);
+  }
+
+  @override
+  void visitDeclaredIdentifier(DeclaredIdentifier node) {
+    local(node.name, node);
+    super.visitDeclaredIdentifier(node);
+  }
+
+  @override
+  void visitDeclaredVariablePattern(DeclaredVariablePattern node) {
+    local(node.name, node);
+    super.visitDeclaredVariablePattern(node);
+  }
+
+  @override
+  void visitFunctionDeclaration(FunctionDeclaration node) {
+    local(node.name, node);
+    super.visitFunctionDeclaration(node);
+  }
 }
 
+/// The names [member] declares: a method's, or each of a field's variables.
+Iterable<String> memberNames(ClassMember member) => switch (member) {
+  MethodDeclaration(:final name) => [name.lexeme],
+  FieldDeclaration(:final fields) => fields.variables.map((v) => v.name.lexeme),
+  _ => const [],
+};
+
+/// Something a demo runs that none of its views shows: [name] is the
+/// declaration (`Class.member` for a member), or `example` for the builder.
+typedef Hidden = ({String name, String reason});
+
 /// The demo code of [project] that none of its views shows: top-level
-/// declarations the views refer to, and the builder's `example()` expression
-/// when it does more than create the demo widget. A State class's view stands
+/// declarations the views refer to; the members a view of part of a class
+/// uses, such as a helper method a `build` excerpt calls; the builder's
+/// `example()` expression when it does more than create the demo widget; and
+/// the widget it creates, when no view shows it. A State class's view stands
 /// for its widget, whose declaration is only a constructor and createState.
-List<String> hiddenCode(Map<String, Object> project) {
+List<Hidden> hiddenCode(Map<String, Object> project) {
   final files = project['files'] as Map<String, String>;
   final views = (project['views'] as List).cast<Map<String, Object>>();
   final declaredNames = <String>{};
   final shown = <String>{};
   final used = <String>{};
-  final hidden = <String>[];
+  final hidden = <Hidden>[];
+  String? created;
   for (final MapEntry(key: file, value: text) in files.entries) {
     if (file == 'main.dart') continue;
     final ranges = <Block>[
@@ -633,9 +819,13 @@ List<String> hiddenCode(Map<String, Object> project) {
           (start: view['start'] as int, end: view['end'] as int),
     ];
     final unit = parseString(content: text, throwIfDiagnostics: false).unit;
-    final references = References(ranges);
+    final prefixes = {
+      for (final d in unit.directives.whereType<ImportDirective>())
+        if (d.prefix case final prefix?) prefix.name,
+    };
+    final references = References(ranges, prefixes);
     unit.accept(references);
-    used.addAll(references.values);
+    used.addAll(references.external);
     for (final node in unit.declarations) {
       declaredNames.addAll(declared(node));
       if (references.inside(node)) {
@@ -647,18 +837,62 @@ List<String> hiddenCode(Map<String, Object> project) {
             if (type is NamedType) shown.add(type.name2.lexeme);
           }
         }
-      } else if (node case FunctionDeclaration(
+        continue;
+      }
+      if (node case FunctionDeclaration(
         :final name,
         functionExpression: FunctionExpression(
           body: ExpressionFunctionBody(:final expression),
         ),
-      ) when name.lexeme == 'example' && !createsWithoutArguments(expression)) {
-        hidden.add('its builder runs `${expression.toSource()}`');
+      ) when name.lexeme == 'example') {
+        if (!createsWithoutArguments(expression)) {
+          hidden.add((
+            name: 'example',
+            reason: 'its builder runs `${expression.toSource()}`',
+          ));
+        } else {
+          created = switch (expression) {
+            InstanceCreationExpression(:final constructorName) =>
+              constructorName.type.name2.lexeme,
+            MethodInvocation(:final methodName) => methodName.name,
+            _ => null,
+          };
+        }
+      }
+      // A view of part of a class must show the class's members it uses.
+      final members = switch (node) {
+        ClassDeclaration(:final members) => members,
+        MixinDeclaration(:final members) => members,
+        _ => const <ClassMember>[],
+      };
+      final within = [
+        for (final r in ranges)
+          if (node.offset <= r.start && r.end <= node.end) r,
+      ];
+      if (within.isEmpty || members.isEmpty) continue;
+      final inner = References(within, prefixes);
+      node.accept(inner);
+      for (final member in members) {
+        if (inner.inside(member)) continue;
+        for (final name in memberNames(member)) {
+          if (inner.external.contains(name)) {
+            final qualified = '${declared(node).first}.$name';
+            hidden.add((name: qualified, reason: 'its view uses $qualified'));
+          }
+        }
       }
     }
   }
-  final names = used.intersection(declaredNames).difference(shown);
-  return [if (names.isNotEmpty) 'its view uses ${names.join(', ')}', ...hidden];
+  return [
+    for (final name in used.intersection(declaredNames).difference(shown))
+      (name: name, reason: 'its view uses $name'),
+    if (created case final created? when !shown.contains(created))
+      (
+        name: created,
+        reason: 'its builder creates $created, which no view shows',
+      ),
+    ...hidden,
+  ];
 }
 
 /// Whether [expression] only creates a widget, such as `const _Demo()`.
