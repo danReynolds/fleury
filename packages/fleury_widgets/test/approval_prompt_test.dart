@@ -180,6 +180,80 @@ void main() {
         expect(home.navigator.depth, 1);
       },
     );
+
+    group('presented', () {
+      ({
+        List<ApprovalDecision> decisions,
+        bool Function() closed,
+        NavigatorState navigator,
+      })
+      present(FleuryTester tester, {required bool barrierDismissible}) {
+        late BuildContext home;
+        tester.pumpWidget(Navigator(home: _Home((context) => home = context)));
+        final decisions = <ApprovalDecision>[];
+        var closed = false;
+        unawaited(
+          home
+              .present<ApprovalDecision>(
+                ApprovalPrompt(
+                  request: _request(),
+                  onDecision: (decision) {
+                    decisions.add(decision);
+                    home.pop(decision);
+                  },
+                ),
+                transition: RouteTransition.none,
+                barrierDismissible: barrierDismissible,
+              )
+              .then((_) => closed = true),
+        );
+        tester.pump();
+        return (
+          decisions: decisions,
+          closed: () => closed,
+          navigator: home.navigator,
+        );
+      }
+
+      testWidgets('by default, the route\'s semantic dismiss closes it '
+          'unanswered', (tester) async {
+        final prompt = present(tester, barrierDismissible: true);
+
+        final result = await tester.invokeSemanticAction(
+          SemanticAction.dismiss,
+          role: SemanticRole.route,
+          label: 'ApprovalPrompt',
+        );
+        await Future<void>.delayed(Duration.zero);
+        tester.pump();
+
+        expect(result.status, SemanticActionInvocationStatus.completed);
+        expect(prompt.closed(), isTrue);
+        expect(prompt.decisions, isEmpty);
+      });
+
+      testWidgets('with barrierDismissible false, only a decision closes it', (
+        tester,
+      ) async {
+        final prompt = present(tester, barrierDismissible: false);
+
+        final dismiss = await tester.invokeSemanticAction(
+          SemanticAction.dismiss,
+          role: SemanticRole.route,
+          label: 'ApprovalPrompt',
+          allowFailure: true,
+        );
+        expect(dismiss.status, isNot(SemanticActionInvocationStatus.completed));
+        expect(prompt.navigator.maybePop(), isFalse, reason: 'nor a Back');
+        expect(prompt.closed(), isFalse);
+        tester.sendKey(const KeyEvent(KeyCode.escape)); // denies
+        await Future<void>.delayed(Duration.zero);
+        tester.pump();
+
+        expect(prompt.decisions, [ApprovalDecision.denied]);
+        expect(prompt.closed(), isTrue);
+      });
+    });
   });
 }
 

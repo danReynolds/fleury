@@ -59,13 +59,19 @@ final class ApprovalRequest {
 /// Enter can't trigger an irreversible action.
 ///
 /// Esc denies, as the semantic cancel action does. In a dialog shown with
-/// `present`, that answers the request instead of closing the dialog around
-/// it, so every way out goes through [onDecision]. Close the prompt from
-/// there; popping with the decision makes it `present`'s result:
+/// `present`, Esc answers the request through [onDecision] instead of closing
+/// the dialog around it. The route `present` makes can still close it
+/// unanswered, with null as `present`'s result: through the route's semantic
+/// dismiss action, which an agent can invoke, or through
+/// [NavigatorState.maybePop], as a Back command does. Pass
+/// `barrierDismissible: false`, as below, to turn both off, so every way out
+/// goes through [onDecision]. Close the prompt from there; popping with the
+/// decision makes it `present`'s result:
 ///
 /// ```dart
 /// final decision = await context.present<ApprovalDecision>(
 ///   ApprovalPrompt(request: request, onDecision: context.pop),
+///   barrierDismissible: false,
 /// );
 /// ```
 class ApprovalPrompt extends StatelessWidget {
