@@ -273,8 +273,8 @@ def session_processes(app):
 
 
 def kernel_view(pids):
-    """TEMPORARY (Linux): each process's signal state and the syscall each
-    of its threads is stopped in, to tell an orderly stop from a tty stop."""
+    """Linux: each process's signal state and the syscall each of its threads
+    is stopped in, to tell the driver's own stop from a terminal stop."""
     lines = []
     for pid in pids:
         try:
@@ -437,9 +437,6 @@ if __name__ == "__main__":
     parser.add_argument("--dart", default="dart")
     parser.add_argument("--skip-supervisor", action="store_true")
     args = parser.parse_args()
-    for _ in range(6):  # TEMPORARY: reproduce the intermittent suspend failure.
-        lifecycle(args.dart)
-        supervised_suspend(args.dart)
     interactions(args.dart, 80, 18)
     interactions(args.dart, 40, 12)
     lifecycle(args.dart)
