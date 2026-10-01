@@ -278,12 +278,11 @@ class Project {
     // The docs-only frame stays out of the code a reader edits: `example()`
     // is the demo, `buildExample()` frames it as the registry does.
     final demo = unframed(builder);
-    final text = source(root).text;
     files[logical(root)] =
         '${files[logical(root)]}\n'
         'Widget buildExample() => '
         '${identical(demo, builder) ? 'example()' : '_framed(example())'};\n\n'
-        'Widget example() => ${text.substring(demo.offset, demo.end)};\n';
+        'Widget example() => ${topLevel(source(root).text, demo)};\n';
     // The same theme and focus traversal as the prebuilt preview. The frame's
     // URL fragment names the docs page's theme (see experiments/fleury_pad).
     files['main.dart'] =
@@ -318,6 +317,54 @@ class Finder extends RecursiveAstVisitor<void> {
     if (n.constructorName.type.name2.lexeme == name) nodes.add(n);
     super.visitInstanceCreationExpression(n);
   }
+}
+
+/// The source ranges of the multi-line strings inside a node.
+class MultilineStrings extends RecursiveAstVisitor<void> {
+  final ranges = <Block>[];
+
+  void add(StringLiteral node) {
+    if (node.toSource().contains('\n')) {
+      ranges.add((start: node.offset, end: node.end));
+    }
+  }
+
+  @override
+  void visitSimpleStringLiteral(SimpleStringLiteral node) => add(node);
+
+  @override
+  void visitStringInterpolation(StringInterpolation node) => add(node);
+}
+
+/// [node]'s source in [text] as code that starts a top-level line, such as
+/// `Widget example() => …`: its continuation lines lose the indentation of
+/// the line [node] starts on, as `dart format` would write them. Lines that
+/// begin inside a multi-line string are its content and stay as written.
+String topLevel(String text, AstNode node) {
+  final lineStart = node.offset == 0
+      ? 0
+      : text.lastIndexOf('\n', node.offset - 1) + 1;
+  var indent = 0;
+  while (text.codeUnitAt(lineStart + indent) == 0x20) {
+    indent++;
+  }
+  final strings = MultilineStrings();
+  node.accept(strings);
+  final lines = text.substring(node.offset, node.end).split('\n');
+  var at = node.offset;
+  final out = <String>[];
+  for (final (i, line) in lines.indexed) {
+    final inString = strings.ranges.any((s) => s.start < at && at < s.end);
+    var cut = 0;
+    if (i > 0 && !inString) {
+      while (cut < indent && cut < line.length && line[cut] == ' ') {
+        cut++;
+      }
+    }
+    out.add(line.substring(cut));
+    at += line.length + 1;
+  }
+  return out.join('\n');
 }
 
 /// [builder] without the registry's docs-only `_framed(...)` wrapper.
