@@ -378,27 +378,116 @@ void main() {
     expect(nav.depth, 2);
   });
 
-  testWidgets('a sequence begun on the page cannot finish inside a dialog '
-      'that opened before its last key', (tester) {
-    var quits = 0;
+  // ---------------------------------------------------------------------
+  // A prompt that opens while the user is partway through an app sequence.
+  // The keys the sequence holds were typed for the app, before the prompt
+  // existed, so they must never answer it; and the app's sequence can't
+  // finish from inside it. `_Prompt` records every input that reaches it and
+  // stays open, so each test sees exactly where each key went.
+  // ---------------------------------------------------------------------
+
+  /// Mounts [appSequence] above a Navigator, types [firstKey] on the page,
+  /// then presents a `_Prompt` with Approve or Deny focused.
+  List<String> promptMidSequence(
+    FleuryTester tester, {
+    required KeySequence appSequence,
+    required KeySequence firstKey,
+    required bool focusApprove,
+  }) {
+    final log = <String>[];
     tester.pumpWidget(
       KeyBindings(
-        bindings: [KeyBinding(KeySequence.space.q, onTrigger: (_) => quits++)],
+        bindings: [KeyBinding(appSequence, onTrigger: (_) => log.add('app'))],
+        child: Navigator(
+          home: const Focus(autofocus: true, child: Text('page')),
+        ),
+      ),
+    );
+    tester.press(firstKey);
+    expect(tester.dispatcher.hasPendingSequence, isTrue);
+    tester.binding.rootNavigator!.present<void>(
+      _Prompt(log: log, focusApprove: focusApprove),
+    );
+    tester.pump(const Duration(milliseconds: 300));
+    return log;
+  }
+
+  testWidgets('a held Space does not press the button a prompt opened with', (
+    tester,
+  ) {
+    final log = promptMidSequence(
+      tester,
+      appSequence: KeySequence.space.f,
+      firstKey: KeySequence.space,
+      focusApprove: true,
+    );
+    tester.press(KeySequence.f);
+    expect(log, isEmpty, reason: 'the Space was the app\'s; f is nothing here');
+  });
+
+  testWidgets('a held y does not answer a prompt; a y typed after it opened '
+      'does', (tester) {
+    final log = promptMidSequence(
+      tester,
+      appSequence: KeySequence.y.y,
+      firstKey: KeySequence.y,
+      focusApprove: false,
+    );
+    tester.press(KeySequence.y);
+    expect(log, [
+      'prompt: y',
+    ], reason: 'one y reached the prompt: the one typed while it had focus');
+  });
+
+  testWidgets('a key that ends the sequence behind a prompt does not bring '
+      'the held key with it', (tester) {
+    final log = promptMidSequence(
+      tester,
+      appSequence: KeySequence.y.y,
+      firstKey: KeySequence.y,
+      focusApprove: true,
+    );
+    tester.press(KeySequence.x);
+    expect(log, isEmpty);
+  });
+
+  testWidgets('the sequence timeout replays nothing into a prompt', (
+    tester,
+  ) async {
+    final log = promptMidSequence(
+      tester,
+      appSequence: KeySequence.y.y,
+      firstKey: KeySequence.y,
+      focusApprove: true,
+    );
+    // Past the tester dispatcher's default 500 ms sequence timeout.
+    await Future<void>.delayed(const Duration(milliseconds: 600));
+    expect(log, isEmpty);
+  });
+
+  testWidgets('a dialog that opens mid-sequence ends the sequence, so the '
+      'first Esc closes it', (tester) {
+    tester.pumpWidget(
+      KeyBindings(
+        bindings: [KeyBinding(KeySequence.space.f, onTrigger: (_) {})],
         child: Navigator(
           home: const Focus(autofocus: true, child: Text('page')),
         ),
       ),
     );
     final nav = tester.binding.rootNavigator!;
-
     tester.press(KeySequence.space);
-    expect(tester.dispatcher.hasPendingSequence, isTrue);
     nav.present<void>(const Focus(autofocus: true, child: Text('dialog')));
     tester.pump(const Duration(milliseconds: 300));
+    expect(
+      tester.dispatcher.hasPendingSequence,
+      isFalse,
+      reason: 'nothing behind the dialog can complete it, so which-key closes',
+    );
 
-    tester.press(KeySequence.q);
-    expect(quits, 0, reason: 'the app behind the dialog must not see the q');
-    expect(tester.dispatcher.hasPendingSequence, isFalse);
+    tester.sendKey(const KeyEvent(KeyCode.escape));
+    tester.pump(const Duration(milliseconds: 300));
+    expect(nav.depth, 1);
   });
 
   testWidgets('Esc aborts a sequence pending inside a dialog without '
@@ -428,4 +517,37 @@ void main() {
     expect(nav.depth, 1, reason: 'with nothing pending, Esc dismisses');
     expect(fired, 0);
   });
+}
+
+/// An approval prompt shaped like `ApprovalPrompt` in fleury_widgets: `y` and
+/// `n` shortcuts, Esc, and Approve and Deny buttons with one of them focused.
+/// It records every input that reaches it instead of closing.
+class _Prompt extends StatelessWidget {
+  const _Prompt({required this.log, required this.focusApprove});
+
+  final List<String> log;
+  final bool focusApprove;
+
+  @override
+  Widget build(BuildContext context) => KeyBindings(
+    bindings: [
+      KeyBinding(KeySequence.y, onTrigger: (_) => log.add('prompt: y')),
+      KeyBinding(KeySequence.n, onTrigger: (_) => log.add('prompt: n')),
+      KeyBinding(KeySequence.escape, onTrigger: (_) => log.add('prompt: esc')),
+    ],
+    child: Row(
+      children: [
+        Button(
+          text: 'Approve',
+          autofocus: focusApprove,
+          onPressed: () => log.add('prompt: Approve pressed'),
+        ),
+        Button(
+          text: 'Deny',
+          autofocus: !focusApprove,
+          onPressed: () => log.add('prompt: Deny pressed'),
+        ),
+      ],
+    ),
+  );
 }

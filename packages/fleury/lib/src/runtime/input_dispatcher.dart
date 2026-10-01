@@ -4,7 +4,8 @@
 // and global-bindings fallback. Per RFC 0008 §7, dispatch precedence is:
 //
 //   1. PENDING SEQUENCE: complete, advance, abort (Esc), or
-//      cancel-and-redispatch.
+//      cancel-and-redispatch — held keys only ever replay into the focus
+//      context they were typed in.
 //   2. FOCUS CHAIN, deepest first:
 //      a. Direct match on a KeyBindings binding (binding wins).
 //      b. Sequence-start match on a KeyBindings binding (begin pending).
@@ -629,12 +630,23 @@ class InputDispatcher {
     _ => false,
   };
 
-  /// Focus moved: an observer whose anchor just left the active chain must
-  /// close its open presses NOW, not whenever the next key happens to
-  /// arrive. Push-to-talk over a modal is the case that makes the
-  /// difference user-visible (§10, §14.5).
+  /// Focus moved, or the scopes around it changed.
+  ///
+  /// A pending sequence whose focus context just went out of reach ends here
+  /// (see [_reachable]): a dialog took focus in front of it, or focus moved
+  /// to another pane. Its held keys are dropped — they were typed for what
+  /// the user was looking at then, never for what has focus now — and a
+  /// which-key popup stops offering completions that can no longer fire.
+  ///
+  /// And an observer whose anchor just left the active chain must close its
+  /// open presses NOW, not whenever the next key happens to arrive.
+  /// Push-to-talk over a modal is the case that makes the difference
+  /// user-visible (§10, §14.5).
   void _onFocusChanged() {
-    if (_keyObservers.isEmpty || _disposed) return;
+    if (_disposed) return;
+    final pending = _pending;
+    if (pending != null && !_reachable(pending)) _clearPending();
+    if (_keyObservers.isEmpty) return;
     final chain = focusManager.activeChain();
     for (final registration in List.of(_keyObservers)) {
       if (registration._removed) continue;
@@ -679,19 +691,20 @@ class InputDispatcher {
         preserveOnMiss: preservePendingOnMiss,
       );
       if (result != null) return result;
-      // Sequence cancelled; the held events were replayed. The current
-      // event runs through full dispatch so it can start a fresh
-      // sequence if applicable.
+      // Sequence over; the held events were replayed, or dropped with their
+      // focus context. The current event runs through full dispatch so it
+      // can start a fresh sequence if applicable.
     }
     return _dispatchPlain(event, textOrigin: textOrigin, lane: lane);
   }
 
   /// Runs the pending-sequence machinery for [event]. A non-null result means
   /// the sequence completed, advanced, deliberately held its prefix for
-  /// another view of the same physical step, or was aborted by Esc. Otherwise
-  /// it cancels the sequence, replays every held event direct-only, and
-  /// returns null so the caller dispatches [event] through its own normal
-  /// path (see [_breakPending]).
+  /// another view of the same physical step, or was aborted by Esc — or that
+  /// [event] was dropped with it (see [_breakPending]). Otherwise the
+  /// sequence is over: its held events replayed where they were typed, or
+  /// were dropped because that focus context is gone, and null sends [event]
+  /// through the caller's normal path.
   KeyEventResult? _tryPendingSequence(
     KeyEvent event, {
     String? textOrigin,
@@ -712,6 +725,16 @@ class InputDispatcher {
     // should keep a pure prefix alive longer is a separate decision, and the
     // pure-prefix path already re-arms nothing.
     if (event.type == KeyEventType.repeat) return KeyEventResult.ignored;
+    if (!_reachable(pending)) {
+      // The focus context the held keys were typed in went out of reach — a
+      // dialog took focus in front of it, focus moved to another pane, an
+      // ErrorBoundary contained the focused subtree — without a focus change
+      // ending the sequence first (see [_onFocusChanged]). Those keys were
+      // typed for what the user was looking at then: drop them. [event]
+      // arrived after, so it belongs to what has focus now.
+      _clearPending();
+      return null;
+    }
     // Candidates are re-resolved against the LIVE tree on every step, by the
     // SCOPE they came from rather than by instance. A scope rebuilds whenever
     // anything above it calls setState — a clock, a stream, a hover state —
@@ -723,10 +746,8 @@ class InputDispatcher {
     // rebuild has since replaced.
     final live = _liveCandidates(pending);
     if (live.isEmpty) {
-      // Input topology changed while the prefix was held: the scope left the
-      // active chain (an ErrorBoundary contained the focused subtree, focus
-      // moved out or into a dialog in front of it), or its rebuild removed or
-      // disabled every binding that opened the sequence. Never fire a
+      // A rebuild removed or disabled every binding that opened the
+      // sequence; its scopes are still where they were. Never fire a
       // captured handler after that.
       return _breakPending(event);
     }
@@ -772,57 +793,71 @@ class InputDispatcher {
   ///
   /// Any other key cancels it, as in vim: every held event replays
   /// direct-only (see [_replayHeld]), and null hands [event] back to the
-  /// caller's normal path.
+  /// caller's normal path. Unless a replayed event moved focus out of the
+  /// context they were typed in — its binding opened a dialog, say: [event]
+  /// was typed before that dialog existed as well, so it's dropped (handled)
+  /// rather than delivered to it.
   KeyEventResult? _breakPending(KeyEvent event) {
     if (event.code == KeyCode.escape && event.modifiers.isEmpty) {
       _clearPending();
       return KeyEventResult.handled;
     }
-    _cancelPendingAndRedispatchHeld();
-    return null;
+    return _cancelPendingAndRedispatchHeld() ? null : KeyEventResult.handled;
+  }
+
+  /// Whether the focus context [pending] was typed in is still reachable:
+  /// every scope it was collected from is in the active chain, with no modal
+  /// scope in front of it that the opening key wasn't let through (§14.3).
+  ///
+  /// Held keys belong to that context. Once it's gone — a dialog took focus
+  /// in front of it, or focus moved to another pane — nothing typed there
+  /// may act on what has focus now: a held `y` must never answer a prompt
+  /// that appeared after it was typed.
+  bool _reachable(_PendingSequence pending) {
+    var found = 0;
+    for (final node in focusManager.activeChain()) {
+      final source = node.bindingSource;
+      if (source == null) continue;
+      if (pending.sources.any((s) => identical(s, source))) found++;
+      if (source.isModalScope &&
+          !pending.passedBoundaries.any((s) => identical(s, source))) {
+        break;
+      }
+    }
+    return found == pending.sources.length;
   }
 
   /// [pending]'s candidates as the live tree has them NOW: every enabled,
-  /// non-hold binding on a scope the sequence was collected from — still in
-  /// the active chain, deepest first, and not behind a modal scope the
-  /// opening key wasn't let through — whose multi-step sequence has the held
-  /// events as a strict prefix. Instances are read fresh from the scope, so a
-  /// scope that rebuilt since the last step contributes its current bindings
-  /// (and its current handlers). In a stable tree this is exactly the set the
-  /// step-by-step narrowing in [_PendingSequence.surviveOneMoreStep] leaves.
+  /// non-hold binding on a scope the sequence was collected from, deepest
+  /// first, whose multi-step sequence has the held events as a strict prefix.
+  /// Callers check [_reachable] first. Instances are read fresh from the
+  /// scope, so a scope that rebuilt since the last step contributes its
+  /// current bindings (and its current handlers). In a stable tree this is
+  /// exactly the set the step-by-step narrowing in
+  /// [_PendingSequence.surviveOneMoreStep] leaves.
   List<KeyBinding> _liveCandidates(_PendingSequence pending) {
     final out = <KeyBinding>[];
     for (final node in focusManager.activeChain()) {
       final source = node.bindingSource;
       if (source == null) continue;
-      if (pending.sources.any((s) => identical(s, source))) {
-        for (final binding in source.activeBindings) {
-          if (binding.isHold) continue;
-          for (final sequence in binding.sequences) {
-            if (!sequence.isSequence) continue;
-            if (sequence.stepCount <= pending.events.length) continue;
-            if (_prefixMatches(
-              sequence,
-              pending.events,
-              pending.lanes,
-              pending.texts,
-            )) {
-              // Asked only of a binding whose sequence is still in play: a
-              // live binding's predicate runs per match, not per binding per
-              // step.
-              if (binding.enabled) out.add(binding);
-              break;
-            }
+      if (!pending.sources.any((s) => identical(s, source))) continue;
+      for (final binding in source.activeBindings) {
+        if (binding.isHold) continue;
+        for (final sequence in binding.sequences) {
+          if (!sequence.isSequence) continue;
+          if (sequence.stepCount <= pending.events.length) continue;
+          if (_prefixMatches(
+            sequence,
+            pending.events,
+            pending.lanes,
+            pending.texts,
+          )) {
+            // Asked only of a binding whose sequence is still in play: a live
+            // binding's predicate runs per match, not per binding per step.
+            if (binding.enabled) out.add(binding);
+            break;
           }
         }
-      }
-      // The key boundary (§14.3) holds for every step, not just the first.
-      // Focus that moved into a dialog mid-sequence puts a modal scope
-      // between it and the app's scopes, which are then out of reach exactly
-      // as if they had left the chain.
-      if (source.isModalScope &&
-          !pending.passedBoundaries.any((s) => identical(s, source))) {
-        break;
       }
     }
     return out;
@@ -903,9 +938,11 @@ class InputDispatcher {
           lane: _BindingLane.text,
         );
         if (result != null) return result;
-      } else {
-        // Multi-grapheme text (an input burst) can't be a sequence step.
-        _cancelPendingAndRedispatchHeld();
+      } else if (!_cancelPendingAndRedispatchHeld()) {
+        // Multi-grapheme text (an input burst) can't be a sequence step. It
+        // is dropped if replaying the held keys moved focus away from where
+        // it was typed.
+        return KeyEventResult.handled;
       }
     }
 
@@ -938,8 +975,8 @@ class InputDispatcher {
   /// one paste transaction, while non-text controls that claim single typed
   /// trigger characters should ignore pasted blobs.
   KeyEventResult _dispatchPaste(PasteEvent event) {
-    if (_matchablePending != null) {
-      _cancelPendingAndRedispatchHeld();
+    if (_matchablePending != null && !_cancelPendingAndRedispatchHeld()) {
+      return KeyEventResult.handled;
     }
     return _deliverPaste(event);
   }
@@ -950,19 +987,30 @@ class InputDispatcher {
   /// events do not fall through to key bindings. Any pending leader sequence is
   /// canceled first because the user's text-editing interaction broke it.
   KeyEventResult _dispatchComposition(TextCompositionEvent event) {
-    if (_matchablePending != null) {
-      _cancelPendingAndRedispatchHeld();
+    if (_matchablePending != null && !_cancelPendingAndRedispatchHeld()) {
+      return KeyEventResult.handled;
     }
     return _deliverComposition(event);
   }
 
-  /// Cancels the pending sequence and replays its held events. The explicit
-  /// aborts — Esc and [cancelPending] — clear it without replaying instead.
-  void _cancelPendingAndRedispatchHeld() {
+  /// Cancels the pending sequence, replaying its held events into the focus
+  /// context they were typed in, and reports whether the input that cancelled
+  /// it may still be delivered.
+  ///
+  /// Held events only ever replay while that context is reachable (see
+  /// [_reachable]). If it was already gone, they're dropped and the input,
+  /// which arrived after, is for what has focus now (true). If a replayed
+  /// event moves focus out of it — its binding opens a dialog — the rest are
+  /// dropped, and so is the input (false): it was typed before that dialog
+  /// existed. The explicit aborts, Esc and [cancelPending], clear the
+  /// sequence without replaying at all.
+  bool _cancelPendingAndRedispatchHeld() {
     final pending = _pending;
-    if (pending == null) return;
+    if (pending == null) return true;
     _clearPending();
+    if (!_reachable(pending)) return true;
     _replayHeld(pending);
+    return _reachable(pending);
   }
 
   /// Replays events held by a cancelled/timed-out sequence, and reports
@@ -982,10 +1030,16 @@ class InputDispatcher {
   /// `ignored`, but its action already happened; treating that as "nothing
   /// committed" would hold the prefix open past an action the user already
   /// got, and let the next key fire the longer binding too.
+  ///
+  /// Callers check that [pending]'s focus context is reachable first (see
+  /// [_reachable]). A replayed event can take focus out of it — its binding
+  /// opens a dialog — and then the events after it are dropped: they were
+  /// typed before that dialog existed.
   bool _replayHeld(_PendingSequence pending) {
     final firedBefore = _firedCount;
     var delivered = false;
     for (var i = 0; i < pending.events.length; i++) {
+      if (i > 0 && !_reachable(pending)) break;
       final text = pending.texts[i];
       if (text != null && _deliverText(text) == KeyEventResult.handled) {
         delivered = true;
@@ -1319,12 +1373,19 @@ class InputDispatcher {
   /// The pending state is left untouched in that case (not cleared and
   /// restored), so the pending-sequence notifier never round-trips through
   /// null and the popup doesn't flicker.
+  ///
+  /// Nothing commits outside the focus context the prefix was typed in: if
+  /// that's out of reach by now (see [_reachable]), the sequence just ends.
   void _onTimeout() {
     final pending = _pending;
     if (pending == null) return;
     // The one-shot timer has fired; drop the handle before replaying so a
     // committing handler sees a clean timer slot.
     _timer = null;
+    if (!_reachable(pending)) {
+      _clearPending();
+      return;
+    }
     // Replay with the pending state still set — the replay path
     // (_deliverText / direct-only _dispatchPlain) never reads _pending, so a
     // pure prefix that commits nothing can stay held without a null blip.
