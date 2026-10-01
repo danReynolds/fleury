@@ -179,7 +179,7 @@ void main() {
     expect(terminal.log, ['acquire', 'input', 'release']);
   });
 
-  test('a protocol error from the app fails the session', () async {
+  test('a protocol error from an attached app fails the session', () async {
     final terminal = _FakeTerminal();
     final transport = _ErroringTransport();
     final run = ShellSession(
@@ -188,6 +188,10 @@ void main() {
       resizes: const Stream<Object?>.empty(),
       environment: _noProbe,
     ).run();
+    await pumpEventQueue();
+    // Before the answer, the same error is a handshake failure (see the
+    // handshake group).
+    transport.emit(_answer());
     await pumpEventQueue();
 
     transport.fail(const RemoteProtocolException('unknown frame type 0x7f'));
@@ -421,8 +425,8 @@ void main() {
       },
     );
 
-    test('an app that hangs up before answering — as one built before shell '
-        'protocol 2 does — is reported, not taken for a crash', () async {
+    test('an app that hangs up before answering — as one that cannot read the '
+        "shell's INIT does — is reported, not taken for a crash", () async {
       for (final hangUp in <Future<void> Function(_ErroringTransport)>[
         (transport) => transport.close(),
         (transport) async =>
@@ -453,6 +457,40 @@ void main() {
         expect(terminal.log, ['acquire', 'release']);
       }
     });
+
+    test(
+      'an answer the shell cannot decode is reported with the remedy',
+      () async {
+        // Decoding is strict, so a newer app's answer can fail to decode
+        // before its version is compared: say what to do, not just what broke.
+        const malformed = RemoteProtocolException(
+          'INIT frame has an invalid `keyboardProtocol`',
+        );
+        final terminal = _FakeTerminal();
+        final transport = _ErroringTransport();
+        final run = ShellSession(
+          transport,
+          terminal: terminal,
+          resizes: const Stream<Object?>.empty(),
+          environment: _noProbe,
+        ).run();
+        await pumpEventQueue();
+
+        transport.fail(malformed);
+        final end = await run;
+
+        expect(end.reason, ShellSessionEndReason.handshakeFailed);
+        expect(
+          '${end.error}',
+          allOf(
+            contains("answer to the shell's handshake could not be read"),
+            contains('invalid `keyboardProtocol`'),
+            contains('dart run fleury shell'),
+          ),
+        );
+        expect(terminal.log, ['acquire', 'release']);
+      },
+    );
 
     test('a goodbye before the answer is the app exiting', () async {
       final terminal = _FakeTerminal();

@@ -48,7 +48,10 @@
   Ctrl+Z suspends only when a job-control shell started the app, since only
   the shell's `fg` can bring it back. Run directly by a terminal profile, a
   tmux pane, or `ssh -t host app`, the app used to stop for good, leaving the
-  window frozen; the press is now an ordinary key there.
+  window frozen; the press is now an ordinary key there. A few launchers
+  still look like a shell's job without being one, such as fish's
+  `exec app` in a macOS terminal tab or `docker run --init`; there a
+  suspended app stays stopped until it gets SIGCONT.
   `PosixTerminalDriver(suspendOnCtrlZ: false)` keeps an unhandled Ctrl+Z an
   ordinary key. Browser, served, and `fleury shell` sessions never suspend.
 

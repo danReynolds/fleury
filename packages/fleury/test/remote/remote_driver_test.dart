@@ -479,7 +479,9 @@ void main() {
         TerminalMode.interactive,
       ]) {
         final transport = _FakeTransport();
-        final driver = RemoteTerminalDriver(transport);
+        // An empty environment: no FLEURY_KEYBOARD or multiplexer from the
+        // shell running the tests changes the tier.
+        final driver = RemoteTerminalDriver(transport, environment: const {});
         final entering = driver.enter(mode);
         transport.emit(_init(protocol: RemoteWireProtocol.shell));
         await entering;
@@ -492,6 +494,39 @@ void main() {
                 as InitFrame;
         expect(decoded.protocol, RemoteWireProtocol.shell);
         expect(decoded.terminalInput, TerminalInputModes.of(mode));
+        await driver.restore();
+      }
+    });
+
+    test('the answer applies FLEURY_KEYBOARD and a multiplexer to the tier, '
+        'as a native session would push it', () async {
+      for (final (environment, expected) in [
+        (const {'FLEURY_KEYBOARD': 'legacy'}, KeyboardProtocolMode.legacy),
+        (
+          const {'TMUX': '/tmp/tmux-501/default,1,0'},
+          KeyboardProtocolMode.disambiguated,
+        ),
+        (const <String, String>{}, KeyboardProtocolMode.lifecycle),
+      ]) {
+        final transport = _FakeTransport();
+        final driver = RemoteTerminalDriver(
+          transport,
+          environment: environment,
+        );
+        final entering = driver.enter(
+          const TerminalMode(keyboardProtocol: KeyboardProtocolMode.lifecycle),
+        );
+        transport.emit(_init(protocol: RemoteWireProtocol.shell));
+        await entering;
+        expect(
+          transport.sent
+              .whereType<InitFrame>()
+              .single
+              .terminalInput
+              ?.keyboardProtocol,
+          expected,
+          reason: '$environment',
+        );
         await driver.restore();
       }
     });
@@ -512,7 +547,7 @@ void main() {
           ),
         ]) {
           final transport = _FakeTransport();
-          final driver = RemoteTerminalDriver(transport);
+          final driver = RemoteTerminalDriver(transport, environment: const {});
           final entering = driver.enter(TerminalMode(keyboardProtocol: tier));
           transport.emit(
             _init(

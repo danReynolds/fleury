@@ -463,9 +463,18 @@ final class ShellSession {
       // A socket error is the app going away: Linux resets the connection
       // when a killed app leaves input unread, as an IDE's Stop often does.
       // Anything else (a malformed frame, an overflowing send) is a failure.
-      onError: (Object error) => error is SocketException
-          ? _appGone()
-          : _end(ShellSessionEnd(ShellSessionEndReason.failed, error: error)),
+      onError: (Object error) => switch (error) {
+        SocketException() => _appGone(),
+        // An answer this shell cannot decode most likely comes from another
+        // Fleury build: decoding is strict, so a newer app's INIT can fail
+        // here before its version is ever compared.
+        RemoteProtocolException(:final message) when !_attached => _turnAway(
+          'its answer to the shell\'s handshake could not be read '
+          '($message). If it was built with another Fleury than this shell, '
+          '$_matchingShell',
+        ),
+        _ => _end(ShellSessionEnd(ShellSessionEndReason.failed, error: error)),
+      },
       onDone: _appGone,
       cancelOnError: true,
     );

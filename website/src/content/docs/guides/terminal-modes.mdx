@@ -202,7 +202,10 @@ handles suspends the app through the same release-and-resume lifecycle, and
 `fg` brings it back. That happens only when a job-control shell, such as your
 interactive shell, started the app, since only the shell can bring it back. A
 terminal profile, tmux pane, or `ssh -t host app` that runs the app directly
-leaves `Ctrl+Z` an ordinary key.
+leaves `Ctrl+Z` an ordinary key. A few launchers look like a shell's job
+without being one, such as fish's `exec app` in a macOS terminal tab; there a
+suspended app stays stopped until `kill -CONT` continues it from another
+terminal.
 
 Your code can ask for the same suspension with `session.suspend()`: for
 example, from a key of its own when a focused text field takes every `Ctrl+Z`

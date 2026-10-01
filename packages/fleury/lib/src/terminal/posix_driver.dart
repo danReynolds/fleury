@@ -2377,12 +2377,19 @@ final class PosixJobControl {
   ///
   /// A job-control shell runs each job in a process group of its own and
   /// gives that group the terminal, and it continues the job after a stop
-  /// (as does a tool that stands in for one, such as `sudo` running a command
-  /// on a pty of its own). A command started with no shell stays in the
-  /// session leader's group — the leader being the command itself, its
-  /// supervisor, or a `sh -c` wrapper — and nothing above that group would
-  /// continue it. Without a controlling terminal, nothing does job control
-  /// at all.
+  /// (as `sudo`, itself run as such a job, does for a command on a pty of its
+  /// own). A command started with no shell stays in the session leader's
+  /// group — the leader being the command itself, its supervisor, or a
+  /// `sh -c` wrapper — and nothing above that group would continue it.
+  /// Without a controlling terminal, nothing does job control at all.
+  ///
+  /// The test reads process groups only, so a launcher that gives the app a
+  /// foreground group of its own without doing job control passes it too: a
+  /// shell that `exec`s the app after moving itself into its own group, under
+  /// a session leader that isn't a shell (fish does this beneath macOS's
+  /// `login`; bash and zsh move back first), or a wrapper with no shell above
+  /// it, such as `sudo` run directly by `ssh -t` or `docker run --init`.
+  /// There a stopped app stays stopped until something sends it SIGCONT.
   static bool isShellJob({int terminalFd = 0}) {
     final native = _native;
     if (native == null) return false;

@@ -67,6 +67,11 @@ final class TerminalSession {
   /// terminal; an app in the browser has no session at all. It doesn't
   /// change during the session, so a build can read it to decide whether to
   /// offer a suspend key.
+  ///
+  /// A few launchers look like a job-control shell without being one, such
+  /// as fish's `exec app` in a macOS terminal tab, or `docker run --init`.
+  /// There this is true, and a suspended app stays stopped until something
+  /// sends it SIGCONT (`kill -CONT <pid>` from another terminal).
   bool get supportsSuspend =>
       driver is TerminalSuspendDriver &&
       (driver as TerminalSuspendDriver).supportsSuspend;

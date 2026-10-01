@@ -77,10 +77,18 @@ final class RemoteTerminalDriver
     InlineImageCachePolicy imageCachePolicy = defaultInlineImageCachePolicy,
     bool? superviseHandshakeWait,
     SemanticsWireEncoder? semanticsEncoder,
+    Map<String, String>? environment,
   }) : _shippedImages = InlineImageCacheLedger(imageCachePolicy),
        _semanticsEncoder = semanticsEncoder ?? SemanticsWireEncoder(),
        _superviseHandshakeWait =
-           superviseHandshakeWait ?? _handshakeWaitSupervisedByDefault;
+           superviseHandshakeWait ?? _handshakeWaitSupervisedByDefault,
+       _environment = environment ?? Platform.environment;
+
+  /// The environment the session's operator overrides come from, the
+  /// process's unless given: `FLEURY_KEYBOARD` and multiplexer detection for
+  /// the keyboard tier a shell peer is asked for ([resolveKeyboardTier]), and
+  /// the synchronized-output override.
+  final Map<String, String> _environment;
 
   /// When true, [enter] waits UNBOUNDED for the peer's INIT instead of failing
   /// at [initTimeout]. A serve/bridge-supervised spawn (see `spawnFleuryApp`,
@@ -228,7 +236,7 @@ final class RemoteTerminalDriver
         mode,
         resolveKeyboardTier(
           requested: mode.keyboardProtocol,
-          environment: Platform.environment,
+          environment: _environment,
         ),
       ),
     );
@@ -304,9 +312,7 @@ final class RemoteTerminalDriver
             // peers do not use this presenter; ANSI stays conservative unless
             // the operator explicitly asserts mode-2026 support.
             synchronizedOutput:
-                synchronizedOutputOverrideFromEnvironment(
-                  Platform.environment,
-                ) ??
+                synchronizedOutputOverrideFromEnvironment(_environment) ??
                 false,
           )
         : TerminalSessionProfile.structured(
