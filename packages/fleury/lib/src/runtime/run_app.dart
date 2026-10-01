@@ -339,8 +339,10 @@ const _semanticActionQueueHold = Duration(milliseconds: 500);
 /// bindings first; if unhandled it exits before [onEvent] with an interrupt.
 /// Ctrl+Z follows the same rule in a native POSIX terminal: a focused text
 /// field undoes, an app binding fires, and only a press nothing handled
-/// suspends the process (before [onEvent]) until the shell's `fg` —
-/// see [PosixTerminalDriver.suspendOnCtrlZ].
+/// suspends (before [onEvent]). It stops the whole job the shell started —
+/// with the hot-reload supervisor of a plain `dart run`, or the `fleury run`
+/// launcher, that runs the app — until the shell's `fg`. See
+/// [PosixTerminalDriver.suspendOnCtrlZ].
 ///
 /// [onStrayOutput] takes ownership of captured output instead of replaying it
 /// after exit. A throwing hook is disabled and reported through the runtime
@@ -462,7 +464,7 @@ Future<AppExit> runApp(
 ///      [onEvent]; if it returns [ExitRequested], or the event is an
 ///      unhandled Ctrl+C, or it is a [SignalEvent] the handler did not
 ///      claim with [EventHandled], exit the loop. An unhandled Ctrl+Z
-///      suspends a native POSIX session instead. [exitApp] exits
+///      suspends a native POSIX session's job instead. [exitApp] exits
 ///      programmatically from anywhere in the app.
 ///   7. Schedule a render frame after every event and after every
 ///      `setState` (via [BuildOwner.onScheduleBuild]).
