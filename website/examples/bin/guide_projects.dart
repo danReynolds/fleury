@@ -384,6 +384,13 @@ String? prefixedImport(String file, String prefix) {
   return null;
 }
 
+/// The import prefixes [unit] declares, such as `lists` in
+/// `import 'lists_guide.dart' as lists;`.
+Set<String> importPrefixes(CompilationUnit unit) => {
+  for (final d in unit.directives.whereType<ImportDirective>())
+    if (d.prefix case final prefix?) prefix.name,
+};
+
 /// The State class a stateful widget declaration creates, if it names one.
 String? stateClassOf(ClassDeclaration widget) {
   for (final m in widget.members.whereType<MethodDeclaration>()) {
@@ -414,7 +421,16 @@ List<Map<String, dynamic>> widgetPageViews(
     prefix = demo.constructorName.type.importPrefix?.name.lexeme;
   } else if (demo is MethodInvocation) {
     type = demo.methodName.name;
-    prefix = (demo.target as SimpleIdentifier?)?.name;
+    prefix = switch (demo.target) {
+      SimpleIdentifier(:final name) => name,
+      _ => null,
+    };
+  }
+  // Without resolution, `_Demo.wide()` reads as type `wide` behind an import
+  // prefix `_Demo`. A prefix the registry doesn't import names the class.
+  if (prefix != null && !importPrefixes(source(root).unit).contains(prefix)) {
+    type = prefix;
+    prefix = null;
   }
   final label = '${id.split('.').first}_example.dart';
   final file = type == null
@@ -511,24 +527,14 @@ void main() {
   // builder argument outside every view is code the reader can't see or
   // change. hiddenByDesign lists the few deliberate exceptions, each with its
   // reason; one that no longer matches anything is reported too.
-  final problems = <String>[];
-  for (final MapEntry(key: id, value: project) in out.entries) {
-    final allowed = hiddenByDesign[id] ?? const <String, String>{};
-    final matched = <String>{};
-    for (final item in hiddenCode(project as Map<String, Object>)) {
-      final key = allowed.keys
-          .where((k) => item.name == k || item.name.startsWith('$k.'))
-          .firstOrNull;
-      if (key == null) {
-        problems.add('  $id: ${item.reason}');
-      } else {
-        matched.add(key);
-      }
-    }
-    for (final key in allowed.keys.toSet().difference(matched)) {
-      problems.add('  $id: hiddenByDesign lists $key, which is not hidden');
-    }
-  }
+  final problems = [
+    for (final MapEntry(key: id, value: project) in out.entries)
+      for (final problem in demoProblems(
+        project as Map<String, Object>,
+        hiddenByDesign[id] ?? const {},
+      ))
+        '  $id: $problem',
+  ];
   for (final id in hiddenByDesign.keys.where((id) => !out.containsKey(id))) {
     problems.add('  $id: hiddenByDesign names a project that does not exist');
   }
@@ -547,19 +553,21 @@ void main() {
   stdout.writeln('Generated ${out.length} runnable guide projects.');
 }
 
-/// Why an input guide demo edits an excerpt: each section edits only the
-/// lines it teaches, and the page shows the whole file beside it, read-only,
-/// as the demo's "Full source".
+/// Why an input guide demo's file runs hidden: each section edits only the
+/// lines it teaches, and the page shows the whole file beside the demo,
+/// read-only, as its "Full source".
 const _excerpt =
-    'an excerpt of the file the page shows in full as its Full source';
+    'the demo edits an excerpt of this file, and the page shows all of it '
+    'as the Full source';
 
-/// Code a guide demo deliberately keeps out of its editable views, by example
-/// id: a declaration's name (a class's name also covers its members) and why
-/// showing it would be noise rather than lesson. Everything else a demo runs
-/// must appear in one of its views.
+/// What a guide demo deliberately keeps out of its editable views, by example
+/// id, with why showing it would be noise rather than lesson. An excuse names
+/// a declaration (a class's name also covers its members) or a project file
+/// (covering everything declared in it). Everything else a demo runs must
+/// appear in one of its views, including what excused code uses.
 const hiddenByDesign = <String, Map<String, String>>{
   'commands.overview': {
-    'SampleScaffold':
+    'samples/src/scaffold.dart':
         "the samples' shared theme, toast host, and background fill, which "
         'wrap every sample app and have nothing to do with commands',
   },
@@ -568,11 +576,16 @@ const hiddenByDesign = <String, Map<String, String>>{
         'draws each state as static text resolved with CellStyle.resolve, '
         'which the guide reserves for authors of reusable widgets',
   },
-  'input.actions': {'FileActions': _excerpt},
-  'input.nesting': {'NestedRow': _excerpt},
-  'input.press': {'PressTile': _excerpt, '_PressTileState': _excerpt},
-  'input.scrolling': {'ScrollPanes': _excerpt, '_ScrollPanesState': _excerpt},
-  'input.splitter': {'SplitPane': _excerpt, '_SplitPaneState': _excerpt},
+  'input.actions': {'examples/input/file_actions.dart': _excerpt},
+  'input.nesting': {'examples/input/nested_row.dart': _excerpt},
+  'input.press': {
+    'examples/input/press_tile.dart': _excerpt,
+    'examples/input/note_preview.dart':
+        'the preview the excerpt opens; the page shows this file in full '
+        'beside press_tile.dart, under "Preview rendering"',
+  },
+  'input.scrolling': {'examples/input/scroll_panes.dart': _excerpt},
+  'input.splitter': {'examples/input/split_pane.dart': _excerpt},
 };
 
 /// Registry categories that are not widget reference pages.
@@ -699,90 +712,188 @@ Map<String, Object> generate(
   return {'id': id, 'files': files, 'views': selections};
 }
 
-/// The names that code inside [ranges] of a unit refers to on its own, or
-/// through one of the unit's import [prefixes]: names a reader needs to see
-/// declared somewhere. A named argument's label, a member reached through an
-/// object such as `items.length`, and a name declared inside the ranges
-/// (a local, parameter, or pattern variable) are not references to it.
+/// What code inside [ranges] of a unit needs a reader to see: the top-level
+/// names it refers to on its own or through one of the unit's import
+/// [prefixes], the members of an enclosing class it uses unqualified, and
+/// the names it reaches through an object, which an extension may declare
+/// (`shout` in `'hi'.shout()`).
+///
+/// Names a range declares itself (locals, parameters, pattern variables)
+/// shadow the rest within that range only; fields are members, not locals.
+/// A named argument's label, a dot shorthand such as `.center`, a cascade
+/// section such as `..start()`, and a doc comment's `[reference]` refer to
+/// nothing a reader has to find.
 class References extends RecursiveAstVisitor<void> {
   References(this.ranges, this.prefixes);
 
   final List<Block> ranges;
   final Set<String> prefixes;
-  final values = <String>{};
-  final locals = <String>{};
 
-  bool inside(AstNode node) =>
-      ranges.any((r) => r.start <= node.offset && node.end <= r.end);
+  final _names = <int, Set<String>>{};
+  final _locals = <int, Set<String>>{};
+  final _members = <int, Set<(ClassMember, String)>>{};
+  final _membersOf = <AstNode, Map<String, ClassMember>>{};
 
-  bool isPrefix(Expression? target) =>
+  /// Names reached through an object, such as `shout` in `'hi'.shout()`.
+  final reached = <String>{};
+
+  int? rangeOf(AstNode node) {
+    for (final (i, r) in ranges.indexed) {
+      if (r.start <= node.offset && node.end <= r.end) return i;
+    }
+    return null;
+  }
+
+  bool inside(AstNode node) => rangeOf(node) != null;
+
+  /// The top-level names the ranges refer to.
+  Set<String> get external => {
+    for (final MapEntry(key: i, value: names) in _names.entries)
+      ...names.difference(_locals[i] ?? const {}),
+  };
+
+  /// The members of enclosing classes the ranges use, with each one's name.
+  Set<(ClassMember, String)> get members => {
+    for (final MapEntry(key: i, value: uses) in _members.entries)
+      for (final use in uses)
+        if (!(_locals[i] ?? const {}).contains(use.$2)) use,
+  };
+
+  bool _isPrefix(Expression? target) =>
       target is SimpleIdentifier && prefixes.contains(target.name);
 
-  Set<String> get external => values.difference(locals);
+  /// The class, mixin, or extension around [node] that declares [name].
+  ClassMember? _member(AstNode node, String name) {
+    for (AstNode? n = node.parent; n != null; n = n.parent) {
+      final members = switch (n) {
+        ClassDeclaration(:final members) ||
+        MixinDeclaration(:final members) ||
+        ExtensionDeclaration(:final members) => members,
+        _ => null,
+      };
+      if (members == null) continue;
+      final byName = _membersOf.putIfAbsent(
+        n,
+        () => {
+          for (final member in members)
+            for (final name in memberNames(member)) name: member,
+        },
+      );
+      if (byName[name] case final member?) return member;
+    }
+    return null;
+  }
+
+  @override
+  void visitComment(Comment node) {}
 
   @override
   void visitSimpleIdentifier(SimpleIdentifier node) {
-    if (!inside(node)) return;
-    final reached = switch (node.parent) {
-      Label() => true,
+    final range = rangeOf(node);
+    if (range == null) return;
+    final throughObject = switch (node.parent) {
       PropertyAccess(:final propertyName, :final target) =>
         identical(propertyName, node) && target is! ThisExpression,
       PrefixedIdentifier(:final identifier, :final prefix) =>
         identical(identifier, node) && !prefixes.contains(prefix.name),
-      MethodInvocation(:final methodName, :final target) =>
+      MethodInvocation(:final methodName, :final target, :final isCascaded) =>
         identical(methodName, node) &&
-            target != null &&
-            target is! ThisExpression &&
-            !isPrefix(target),
+            (isCascaded ||
+                target != null &&
+                    target is! ThisExpression &&
+                    !_isPrefix(target)),
+      ConstructorName(:final name) => identical(name, node),
       _ => false,
     };
-    if (!reached) values.add(node.name);
+    if (throughObject) {
+      reached.add(node.name);
+      return;
+    }
+    // A label names a parameter. A dot shorthand (`.center`, `.ctrl`) names a
+    // member of the type the context expects: its expression starts with
+    // the period before the name.
+    final parent = node.parent;
+    if (parent is Label ||
+        parent?.beginToken.type == TokenType.PERIOD &&
+            identical(parent?.beginToken.next, node.token)) {
+      return;
+    }
+    if (_member(node, node.name) case final member?) {
+      _members.putIfAbsent(range, () => {}).add((member, node.name));
+      return;
+    }
+    _names.putIfAbsent(range, () => {}).add(node.name);
   }
 
   @override
   void visitNamedType(NamedType node) {
-    if (inside(node)) values.add(node.name2.lexeme);
+    final range = rangeOf(node);
+    if (range != null) {
+      // Without resolution, `_Demo.wide()` reads as type `wide` behind an
+      // import prefix `_Demo`: a prefix the unit doesn't import is the type.
+      final prefix = node.importPrefix?.name.lexeme;
+      _names
+          .putIfAbsent(range, () => {})
+          .add(
+            prefix != null && !prefixes.contains(prefix)
+                ? prefix
+                : node.name2.lexeme,
+          );
+    }
     super.visitNamedType(node);
   }
 
-  void local(Token? name, AstNode node) {
-    if (name != null && inside(node)) locals.add(name.lexeme);
+  void _local(Token? name, AstNode node) {
+    final range = rangeOf(node);
+    if (name != null && range != null) {
+      _locals.putIfAbsent(range, () => {}).add(name.lexeme);
+    }
   }
 
   @override
   void visitVariableDeclaration(VariableDeclaration node) {
-    local(node.name, node);
+    // Fields and top-level variables are declarations, not locals.
+    if (node.parent?.parent
+        case VariableDeclarationStatement() || ForPartsWithDeclarations()) {
+      _local(node.name, node);
+    }
     super.visitVariableDeclaration(node);
   }
 
   @override
   void visitSimpleFormalParameter(SimpleFormalParameter node) {
-    local(node.name, node);
+    _local(node.name, node);
     super.visitSimpleFormalParameter(node);
   }
 
   @override
   void visitFunctionTypedFormalParameter(FunctionTypedFormalParameter node) {
-    local(node.name, node);
+    _local(node.name, node);
     super.visitFunctionTypedFormalParameter(node);
   }
 
   @override
   void visitDeclaredIdentifier(DeclaredIdentifier node) {
-    local(node.name, node);
+    _local(node.name, node);
     super.visitDeclaredIdentifier(node);
   }
 
   @override
   void visitDeclaredVariablePattern(DeclaredVariablePattern node) {
-    local(node.name, node);
+    _local(node.name, node);
     super.visitDeclaredVariablePattern(node);
   }
 
   @override
-  void visitFunctionDeclaration(FunctionDeclaration node) {
-    local(node.name, node);
-    super.visitFunctionDeclaration(node);
+  void visitCatchClauseParameter(CatchClauseParameter node) {
+    _local(node.name, node);
+    super.visitCatchClauseParameter(node);
+  }
+
+  @override
+  void visitFunctionDeclarationStatement(FunctionDeclarationStatement node) {
+    _local(node.functionDeclaration.name, node);
+    super.visitFunctionDeclarationStatement(node);
   }
 }
 
@@ -793,22 +904,68 @@ Iterable<String> memberNames(ClassMember member) => switch (member) {
   _ => const [],
 };
 
-/// Something a demo runs that none of its views shows: [name] is the
-/// declaration (`Class.member` for a member), or `example` for the builder.
-typedef Hidden = ({String name, String reason});
+/// What [project] runs that none of its views shows and [allowed] doesn't
+/// excuse, and each [allowed] entry that excuses nothing. [allowed] maps an
+/// excuse to its reason: a declaration's name, which also covers a class's
+/// members, or a project file such as `examples/input/press_tile.dart`,
+/// which covers everything declared in it. What excused code uses needs its
+/// own excuse or a view.
+List<String> demoProblems(
+  Map<String, Object> project,
+  Map<String, String> allowed,
+) {
+  final problems = <String>[];
+  final matched = <String>{};
+  for (final item in hiddenCode(project, excused: allowed.keys.toSet())) {
+    final key = allowed.keys.where((k) => excuses(k, item)).firstOrNull;
+    if (key == null) {
+      problems.add(item.reason);
+    } else {
+      matched.add(key);
+    }
+  }
+  for (final key in allowed.keys.toSet().difference(matched)) {
+    problems.add('hiddenByDesign lists $key, which is not hidden');
+  }
+  return problems;
+}
 
-/// The demo code of [project] that none of its views shows: top-level
-/// declarations the views refer to; the members a view of part of a class
-/// uses, such as a helper method a `build` excerpt calls; the builder's
-/// `example()` expression when it does more than create the demo widget; and
-/// the widget it creates, when no view shows it. A State class's view stands
-/// for its widget, whose declaration is only a constructor and createState.
-List<Hidden> hiddenCode(Map<String, Object> project) {
+/// Whether the excuse [key] covers [item]: its name, its class, or its file.
+bool excuses(String key, Hidden item) =>
+    item.name == key || item.name.startsWith('$key.') || item.file == key;
+
+/// Something a demo runs that none of its views shows: [name] is the
+/// declaration (`Class.member` for a member), or `example` for the builder,
+/// and [file] the project file that declares it.
+typedef Hidden = ({String name, String file, String reason});
+
+/// The demo code of [project] that none of its views shows:
+///
+/// - top-level declarations the views use;
+/// - members of a class that a view of part of the class uses, such as a
+///   helper method a `build` excerpt calls;
+/// - extension members the views call, such as `'hi'.shout()`;
+/// - the builder's `example()` expression, when it does more than create the
+///   demo widget, and that widget, when no view shows it;
+/// - what a shown State's widget uses: the State's view stands for the
+///   widget's declaration, but not for constants its defaults read;
+/// - what [excused] code uses (excuses as [demoProblems] takes them), so
+///   nothing runs hidden behind an excused declaration without an excuse of
+///   its own.
+List<Hidden> hiddenCode(
+  Map<String, Object> project, {
+  Set<String> excused = const {},
+}) {
   final files = project['files'] as Map<String, String>;
   final views = (project['views'] as List).cast<Map<String, Object>>();
-  final declaredNames = <String>{};
+  final declarations = <String, CompilationUnitMember>{};
+  final fileOf = <AstNode, String>{};
+  final prefixesOf = <AstNode, Set<String>>{};
+  final extensions = <ExtensionDeclaration, Set<String>>{};
   final shown = <String>{};
+  final standIns = <String>{};
   final used = <String>{};
+  final reached = <String>{};
   final hidden = <Hidden>[];
   String? created;
   for (final MapEntry(key: file, value: text) in files.entries) {
@@ -819,22 +976,37 @@ List<Hidden> hiddenCode(Map<String, Object> project) {
           (start: view['start'] as int, end: view['end'] as int),
     ];
     final unit = parseString(content: text, throwIfDiagnostics: false).unit;
-    final prefixes = {
-      for (final d in unit.directives.whereType<ImportDirective>())
-        if (d.prefix case final prefix?) prefix.name,
-    };
+    final prefixes = importPrefixes(unit);
     final references = References(ranges, prefixes);
     unit.accept(references);
     used.addAll(references.external);
+    reached.addAll(references.reached);
+    for (final (member, name) in references.members) {
+      if (references.inside(member)) continue;
+      final qualified = '${ownerName(member)}.$name';
+      hidden.add((
+        name: qualified,
+        file: file,
+        reason: 'its view uses $qualified',
+      ));
+    }
     for (final node in unit.declarations) {
-      declaredNames.addAll(declared(node));
+      for (final name in declared(node)) {
+        declarations[name] = node;
+      }
+      fileOf[node] = file;
+      prefixesOf[node] = prefixes;
+      if (node is ExtensionDeclaration && !references.inside(node)) {
+        extensions[node] = {for (final m in node.members) ...memberNames(m)};
+      }
       if (references.inside(node)) {
         shown.addAll(declared(node));
+        // A State's view stands for its widget's boilerplate declaration.
         if (node case ClassDeclaration(
           extendsClause: ExtendsClause(:final superclass),
         ) when superclass.name2.lexeme == 'State') {
           for (final type in [...?superclass.typeArguments?.arguments]) {
-            if (type is NamedType) shown.add(type.name2.lexeme);
+            if (type is NamedType) standIns.add(type.name2.lexeme);
           }
         }
         continue;
@@ -848,52 +1020,105 @@ List<Hidden> hiddenCode(Map<String, Object> project) {
         if (!createsWithoutArguments(expression)) {
           hidden.add((
             name: 'example',
+            file: file,
             reason: 'its builder runs `${expression.toSource()}`',
           ));
         } else {
-          created = switch (expression) {
-            InstanceCreationExpression(:final constructorName) =>
-              constructorName.type.name2.lexeme,
-            MethodInvocation(:final methodName) => methodName.name,
-            _ => null,
-          };
-        }
-      }
-      // A view of part of a class must show the class's members it uses.
-      final members = switch (node) {
-        ClassDeclaration(:final members) => members,
-        MixinDeclaration(:final members) => members,
-        _ => const <ClassMember>[],
-      };
-      final within = [
-        for (final r in ranges)
-          if (node.offset <= r.start && r.end <= node.end) r,
-      ];
-      if (within.isEmpty || members.isEmpty) continue;
-      final inner = References(within, prefixes);
-      node.accept(inner);
-      for (final member in members) {
-        if (inner.inside(member)) continue;
-        for (final name in memberNames(member)) {
-          if (inner.external.contains(name)) {
-            final qualified = '${declared(node).first}.$name';
-            hidden.add((name: qualified, reason: 'its view uses $qualified'));
-          }
+          created = createdName(expression, prefixes);
         }
       }
     }
   }
-  return [
-    for (final name in used.intersection(declaredNames).difference(shown))
-      (name: name, reason: 'its view uses $name'),
+  shown.addAll(standIns);
+  String fileFor(String name) =>
+      declarations[name] == null ? '' : fileOf[declarations[name]]!;
+  // Code that runs although no view shows it: a stand-in widget's
+  // declaration, and excused code. What it uses must be shown or excused.
+  final sources = {
+    for (final name in standIns)
+      if (declarations[name] case final node?) name: node,
+    for (final MapEntry(key: name, value: node) in declarations.entries)
+      if (!shown.contains(name) &&
+          (excused.contains(name) || excused.contains(fileOf[node])))
+        name: node,
+  };
+  final through = <String, String>{};
+  for (final MapEntry(key: name, value: node) in sources.entries) {
+    final references = References([
+      (start: node.offset, end: node.end),
+    ], prefixesOf[node]!);
+    node.accept(references);
+    reached.addAll(references.reached);
+    for (final use in references.external) {
+      if (!declared(node).contains(use) && !shown.contains(use)) {
+        through[use] ??= name;
+      }
+    }
+  }
+  final found = <String, Hidden>{};
+  for (final item in <Hidden>[
+    for (final name in used)
+      if (declarations.containsKey(name) && !shown.contains(name))
+        (name: name, file: fileFor(name), reason: 'its view uses $name'),
+    for (final MapEntry(key: name, value: via) in through.entries)
+      if (declarations.containsKey(name))
+        (
+          name: name,
+          file: fileFor(name),
+          reason: '$via uses $name, which no view shows',
+        ),
+    for (final MapEntry(key: extension, value: members) in extensions.entries)
+      for (final member in members.intersection(reached))
+        (
+          name: '${extensionName(extension)}.$member',
+          file: fileOf[extension]!,
+          reason:
+              'its code calls $member from ${extensionName(extension)}, '
+              'which no view shows',
+        ),
     if (created case final created? when !shown.contains(created))
       (
         name: created,
+        file: fileFor(created),
         reason: 'its builder creates $created, which no view shows',
       ),
     ...hidden,
-  ];
+  ]) {
+    found.putIfAbsent(item.name, () => item);
+  }
+  return [...found.values];
 }
+
+/// The name of the class, mixin, or extension that declares [member].
+String ownerName(ClassMember member) => switch (member.thisOrAncestorMatching(
+  (n) => n is NamedCompilationUnitMember || n is ExtensionDeclaration,
+)) {
+  NamedCompilationUnitMember(:final name) => name.lexeme,
+  ExtensionDeclaration extension => extensionName(extension),
+  _ => '?',
+};
+
+/// [extension]'s name, or `extension on T` for an unnamed one.
+String extensionName(ExtensionDeclaration extension) =>
+    extension.name?.lexeme ??
+    'extension on ${extension.onClause?.extendedType.toSource()}';
+
+/// The widget or function [expression] creates or calls: `_Demo` for
+/// `const _Demo()` or `const _Demo.wide()`, `Demo` for `lists.Demo()`.
+String? createdName(Expression expression, Set<String> prefixes) =>
+    switch (expression) {
+      InstanceCreationExpression(constructorName: ConstructorName(:final type))
+          when type.importPrefix != null &&
+              !prefixes.contains(type.importPrefix!.name.lexeme) =>
+        type.importPrefix!.name.lexeme,
+      InstanceCreationExpression(:final constructorName) =>
+        constructorName.type.name2.lexeme,
+      MethodInvocation(target: SimpleIdentifier(:final name))
+          when !prefixes.contains(name) =>
+        name,
+      MethodInvocation(:final methodName) => methodName.name,
+      _ => null,
+    };
 
 /// Whether [expression] only creates a widget, such as `const _Demo()`.
 bool createsWithoutArguments(Expression expression) => switch (expression) {
