@@ -859,6 +859,61 @@ void main() {
     },
   );
 
+  test('an expanded debug shell keeps Ctrl+Z from the hidden app', () async {
+    final root = web.document.createElement('div');
+    final surface = DomGridSurface(root: root, size: const CellSize(80, 20));
+    final input = _FakeInputSource();
+    final flush = _FakeFlush();
+    final debug = DebugController(
+      const DebugConfig(enabled: true, startMode: DebugMode.fullscreen),
+    );
+    final controller = TextEditingController();
+    final host = await runTuiSurface(
+      () => TextInput(
+        controller: controller,
+        autofocus: true,
+        enableBlink: false,
+      ),
+      surface: surface,
+      inputSource: input,
+      flushScheduler: flush.schedule,
+      debugController: debug,
+    );
+    addTearDown(() async {
+      await host.dispose();
+      debug.dispose();
+      controller.dispose();
+    });
+    Future<void> pump() async {
+      for (var i = 0; i < 5; i++) {
+        if (flush.pending) flush.fire();
+        await Future<void>.delayed(Duration.zero);
+      }
+    }
+
+    const ctrlZ = KeyEvent(KeyCode.char('z'), modifiers: {KeyModifier.ctrl});
+    await pump();
+    input.emit(const TextInputEvent('x'));
+    await pump();
+    expect(controller.text, 'x', reason: 'the field beneath has focus');
+
+    input.emit(ctrlZ);
+    await pump();
+    expect(
+      controller.text,
+      'x',
+      reason: 'an undo of a field the user cannot see is no undo at all',
+    );
+
+    // Docked beside it, the app is visible again and keeps the key.
+    input.emit(const KeyEvent(KeyCode.f11));
+    await pump();
+    expect(debug.mode, DebugMode.docked);
+    input.emit(ctrlZ);
+    await pump();
+    expect(controller.text, isEmpty);
+  });
+
   test(
     'isolated debugger records real phases while hidden and survives errors',
     () async {

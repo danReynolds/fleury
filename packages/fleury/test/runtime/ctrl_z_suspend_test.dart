@@ -114,6 +114,7 @@ final class _Session {
   static Future<_Session> start(
     Widget root, {
     bool suspendOnCtrlZ = true,
+    DebugConfig debug = const DebugConfig(),
   }) async {
     final input = _TerminalStdin();
     final keyEvents = <KeyEvent>[];
@@ -136,6 +137,7 @@ final class _Session {
       driver: driver,
       enableHotReload: false,
       requireInteractiveTerminal: false,
+      debug: debug,
       onEvent: (event) {
         if (event is KeyEvent) keyEvents.add(event);
         return null;
@@ -346,6 +348,74 @@ void main() {
         exitApp();
         await app;
         await driver.dispose();
+      }
+    });
+  });
+
+  group('Ctrl+Z with the debug shell open', () {
+    // A focused field holding a typed x, so an undo that reached it shows.
+    Future<(_Session, TextEditingController)> start(DebugMode mode) async {
+      final controller = TextEditingController();
+      addTearDown(controller.dispose);
+      final session = await _Session.start(
+        TextInput(controller: controller, autofocus: true, enableBlink: false),
+        debug: DebugConfig(enabled: true, startMode: mode),
+      );
+      await session.type('x'.codeUnits);
+      expect(controller.text, 'x', reason: 'the field has focus');
+      return (session, controller);
+    }
+
+    test(
+      'expanded over the app, it skips the hidden field and suspends',
+      () async {
+        final (session, controller) = await start(DebugMode.fullscreen);
+        try {
+          await session.type(_ctrlZ);
+
+          expect(
+            controller.text,
+            'x',
+            reason: 'an undo of a field the user cannot see is no undo at all',
+          );
+          expect(
+            session.selfStops,
+            1,
+            reason: 'nothing on screen handles the press, so it suspends',
+          );
+        } finally {
+          await session.close();
+        }
+      },
+    );
+
+    test('with its Logs search open, the search takes it', () async {
+      final (session, controller) = await start(DebugMode.docked);
+      try {
+        await session.type('\x1b[24~'.codeUnits); // F12: the Logs tab
+        await session.type('/'.codeUnits); // open the search
+        await session.type(_ctrlZ);
+
+        expect(controller.text, 'x', reason: 'the app was not being typed in');
+        expect(
+          session.selfStops,
+          0,
+          reason: 'a key typed into a text field never suspends',
+        );
+      } finally {
+        await session.close();
+      }
+    });
+
+    test('docked beside the visible app, the app keeps it', () async {
+      final (session, controller) = await start(DebugMode.docked);
+      try {
+        await session.type(_ctrlZ);
+
+        expect(controller.text, isEmpty, reason: 'the visible field undid');
+        expect(session.selfStops, 0);
+      } finally {
+        await session.close();
       }
     });
   });

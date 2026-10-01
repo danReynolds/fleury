@@ -339,8 +339,11 @@ const _semanticActionQueueHold = Duration(milliseconds: 500);
 /// bindings first; if unhandled it exits before [onEvent] with an interrupt.
 /// Ctrl+Z follows the same rule in a native POSIX terminal: a focused text
 /// field undoes, an app binding fires, and only a press nothing handled
-/// suspends the process (before [onEvent]) until the shell's `fg` —
-/// see [PosixTerminalDriver.suspendOnCtrlZ].
+/// suspends (before [onEvent]). It stops the whole job the shell started —
+/// with the hot-reload supervisor of a plain `dart run`, or the `fleury run`
+/// launcher, that runs the app — until the shell's `fg`. While the debug
+/// shell is expanded over the app, the press skips the hidden app. See
+/// [PosixTerminalDriver.suspendOnCtrlZ].
 ///
 /// [onStrayOutput] takes ownership of captured output instead of replaying it
 /// after exit. A throwing hook is disabled and reported through the runtime
@@ -462,7 +465,7 @@ Future<AppExit> runApp(
 ///      [onEvent]; if it returns [ExitRequested], or the event is an
 ///      unhandled Ctrl+C, or it is a [SignalEvent] the handler did not
 ///      claim with [EventHandled], exit the loop. An unhandled Ctrl+Z
-///      suspends a native POSIX session instead. [exitApp] exits
+///      suspends a native POSIX session's job instead. [exitApp] exits
 ///      programmatically from anywhere in the app.
 ///   7. Schedule a render frame after every event and after every
 ///      `setState` (via [BuildOwner.onScheduleBuild]).
@@ -889,7 +892,12 @@ Future<AppExit> _runAppImpl(
           errorReporter.noteInput();
         }
         try {
-          dispatchResult = dispatcher.dispatch(event);
+          // A Ctrl+Z the expanded debug shell withholds skips the hidden app
+          // and takes its unhandled default below.
+          if (!(event is KeyEvent &&
+              debugShellWithholdsKey(debugController, event))) {
+            dispatchResult = dispatcher.dispatch(event);
+          }
         } catch (error, stack) {
           // A throwing handler is reported (the error overlay paints it) but
           // must not take the framework's own quit guard below down with it:
@@ -931,9 +939,7 @@ Future<AppExit> _runAppImpl(
       // redo wherever a terminal can tell them apart.
       if (event is KeyEvent &&
           event.type == KeyEventType.down &&
-          event.code.character == 'z' &&
-          event.hasCtrl &&
-          event.modifiers.length == 1 &&
+          isCtrlZChord(event) &&
           dispatchResult != KeyEventResult.handled &&
           requestCtrlZSuspend(usedDriver)) {
         return;

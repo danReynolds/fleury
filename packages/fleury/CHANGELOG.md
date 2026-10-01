@@ -34,10 +34,15 @@
 - **Ctrl+Z is dispatched first.** In a native POSIX terminal, Ctrl+Z now
   reaches the application like any key: a focused `TextInput` or `TextArea`
   undoes, and application bindings fire. Only a press nothing handles suspends
-  the process (restore, stop, resume after `fg`) — the rule Ctrl+C already
-  follows for exit. `PosixTerminalDriver(suspendOnCtrlZ: false)` keeps an
-  unhandled Ctrl+Z an ordinary key. Browser, served, and `fleury shell`
-  sessions never suspend.
+  — the rule Ctrl+C already follows for exit. Suspending restores the
+  terminal and stops the whole job the shell started, including the
+  hot-reload supervisor of a plain `dart run` and the `fleury run` launcher,
+  so one press returns the prompt and `fg` resumes the app; before, under
+  either, the app stopped alone and the shell never got the terminal back.
+  While the debug shell is expanded over the app, Ctrl+Z skips the hidden
+  app; its open Logs search takes the key.
+  `PosixTerminalDriver(suspendOnCtrlZ: false)` keeps an unhandled Ctrl+Z an
+  ordinary key. Browser, served, and `fleury shell` sessions never suspend.
 
 - **`fleury shell` relays every key.** The shell now puts its terminal in the
   same raw mode a native app uses, so Ctrl+C, Ctrl+Z, Ctrl+\\ and Ctrl+S reach
@@ -527,8 +532,10 @@
   disabled clipboard policy. Reveal/hide keeps the same editing controller;
   masked mouse selection does not disclose word boundaries.
 - **Application-owned suspension.** `PosixTerminalDriver(suspendOnCtrlZ: false)`
-  delivers Ctrl+Z to the application. Raw startup fails if native termios is
-  unavailable, rather than silently restoring kernel-owned suspension.
+  turns off the suspend fallback, so an unhandled Ctrl+Z is only a key (every
+  session delivers Ctrl+Z to the application first). Raw startup fails if
+  native termios is unavailable, rather than silently restoring kernel-owned
+  suspension.
   Terminal restoration uses an owned close-on-exec descriptor even after
   stdin closes.
 - **RichText spaces.** Ordinary spaces retain their source span's styling,
