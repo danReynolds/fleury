@@ -201,6 +201,13 @@ the alternate screen. On macOS and Linux, a `Ctrl+Z` that nothing in the app
 handles suspends the app through the same release-and-resume lifecycle, and
 `fg` brings it back.
 
+Your code can ask for the same suspension with `session.suspend()`: for
+example, from a key of its own when a focused text field takes every `Ctrl+Z`
+for undo (see [Key handling](/fleury/guides/key-handling/#keys-handled-by-the-host)).
+The returned future completes once `fg` has brought the app back. Where the app
+isn't a job the shell can suspend, under `fleury serve` or `fleury shell` and
+on Windows, `session.supportsSuspend` is false and `suspend()` does nothing.
+
 ## Try the native behavior
 
 The browser examples illustrate the buffers around a real shared Fleury form.

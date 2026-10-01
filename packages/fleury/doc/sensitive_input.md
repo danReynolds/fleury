@@ -104,6 +104,13 @@ and `fg` resumes it. `suspendOnCtrlZ: false` removes that fallback, so an
 unhandled Ctrl+Z is only an ordinary key. Bind the conceal/close action to a
 key the form's fields leave alone, such as Ctrl+Q, and have it perform the
 form's cleanup and request exit.
+
+To let users suspend the app, bind a key the fields leave alone to an action
+that conceals the form first and then calls `TerminalSession.suspend()`, read
+with `context.scope<TerminalSession>()`. It suspends the way an unhandled
+Ctrl+Z would; `suspendOnCtrlZ: false` doesn't refuse a suspension the
+application requests.
+
 With the option above, interactive raw startup requires native termios
 support; it fails if only Dart's line/echo fallback is available. External
 SIGTSTP, SIGSTOP and process termination are not converted into application

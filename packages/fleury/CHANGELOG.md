@@ -44,6 +44,17 @@
   `PosixTerminalDriver(suspendOnCtrlZ: false)` keeps an unhandled Ctrl+Z an
   ordinary key. Browser, served, and `fleury shell` sessions never suspend.
 
+- **`TerminalSession.suspend()` suspends on the app's request.** An app whose
+  text field always has focus, such as a chat composer, undoes on every
+  Ctrl+Z, so it had no keyboard route to the shell. Bind another key to
+  `context.scope<TerminalSession>().suspend()`: it suspends exactly as an
+  unhandled Ctrl+Z does, stopping the whole job until `fg`, and its future
+  completes with `true` once the app is back. `supportsSuspend` says whether
+  the session can: a native macOS or Linux terminal. Under `fleury serve` and
+  `fleury shell`, and on Windows, `suspend()` completes with `false` and does
+  nothing. `suspendOnCtrlZ: false` turns off only the unhandled press, so an
+  app that takes Ctrl+Z itself can close sensitive state and then suspend.
+
 - **`fleury shell` relays every key.** The shell now puts its terminal in the
   same raw mode a native app uses, so Ctrl+C, Ctrl+Z, Ctrl+\\ and Ctrl+S reach
   the attached app instead of signaling the shell. It restores the terminal
@@ -533,7 +544,8 @@
   masked mouse selection does not disclose word boundaries.
 - **Application-owned suspension.** `PosixTerminalDriver(suspendOnCtrlZ: false)`
   turns off the suspend fallback, so an unhandled Ctrl+Z is only a key (every
-  session delivers Ctrl+Z to the application first). Raw startup fails if
+  session delivers Ctrl+Z to the application first); the application suspends
+  when it chooses with `TerminalSession.suspend()`. Raw startup fails if
   native termios is unavailable, rather than silently restoring kernel-owned
   suspension.
   Terminal restoration uses an owned close-on-exec descriptor even after
