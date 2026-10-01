@@ -1,8 +1,5 @@
-# Local development: resolve fleury from the monorepo. Fleury catalog (a path
-# dep here) declares fleury as a hosted dep, so without this override pub can't
-# reconcile "fleury from path" (ours) with "fleury from hosted" (its). Forcing
-# fleury to path makes the whole graph path-consistent. pub ignores this file
-# when publishing — and profiling is never published (publish_to: none).
+# Keep the profiling dependency graph on the local Fleury checkout.
+# This development-only override is ignored when publishing.
 dependency_overrides:
   fleury:
     path: ../packages/fleury
