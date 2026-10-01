@@ -24,7 +24,6 @@ import 'forms/related_fields.dart';
 import 'forms/custom_field.dart';
 import 'concepts.dart' as concepts;
 import 'flutter_map.dart' as flutter_map;
-import 'live_previews.dart' as live;
 import 'home_pad.dart' as home_pad;
 import 'hot_reload_guide.dart';
 
@@ -1408,7 +1407,7 @@ Toaster(child: app)
 
 // …then from anywhere below it:
 Toaster.show(context, 'Saved', severity: ToastSeverity.success);''',
-    builder: () => _framed(const live.ToasterPreview()),
+    builder: () => _framed(const _ToasterExample()),
   ),
   ExampleInfo(
     id: 'container.filled',
@@ -4264,6 +4263,57 @@ class _FilePickerExampleState extends State<_FilePickerExample> {
         ),
       ),
       Text(_status, style: const CellStyle(dim: true)),
+    ],
+  );
+}
+
+/// Wraps the app once, so any widget below it can raise a toast.
+class _ToasterExample extends StatelessWidget {
+  const _ToasterExample();
+
+  @override
+  Widget build(BuildContext context) =>
+      const Toaster(duration: Duration(seconds: 3), child: _ToastButtons());
+}
+
+/// Raises toasts with [Toaster.show], from below the [Toaster].
+class _ToastButtons extends StatelessWidget {
+  const _ToastButtons();
+
+  @override
+  Widget build(BuildContext context) => Column(
+    crossAxisAlignment: CrossAxisAlignment.start,
+    children: [
+      const Text('Raise a toast:'),
+      const SizedBox(height: 1),
+      Row(
+        children: [
+          Button(
+            text: 'Save',
+            autofocus: true,
+            onPressed: () =>
+                Toaster.show(context, 'Saved', severity: ToastSeverity.success),
+          ),
+          const SizedBox(width: 1),
+          Button(
+            text: 'Retry',
+            onPressed: () => Toaster.show(
+              context,
+              'Connection slow, retrying',
+              severity: ToastSeverity.warning,
+            ),
+          ),
+          const SizedBox(width: 1),
+          Button(
+            text: 'Fail',
+            onPressed: () => Toaster.show(
+              context,
+              'Upload failed',
+              severity: ToastSeverity.error,
+            ),
+          ),
+        ],
+      ),
     ],
   );
 }

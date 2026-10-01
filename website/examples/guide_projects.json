@@ -44,6 +44,18 @@
       "declaration": "_FocusDetectorTourState"
     }
   ],
+  "toaster.basic": [
+    {
+      "label": "toaster_example.dart",
+      "source": "website/examples/lib/registry.dart",
+      "declaration": "_ToasterExample"
+    },
+    {
+      "label": "toast_buttons.dart",
+      "source": "website/examples/lib/registry.dart",
+      "declaration": "_ToastButtons"
+    }
+  ],
   "animation.progress": [
     {
       "label": "package_route.dart",

@@ -55,7 +55,10 @@ demo's own `build`, so the code a reader edits reads as app code.
 `guide_projects.json` lists each guide demo's views, keyed by example id.
 Widget reference pages need no entry: a registry example in a widget category
 edits its demo widget, that widget's State class, or else the builder's
-expression. Props-playground pages (`FleuryKnobs`) keep their knobs.
+expression. Keep the data and helpers a demo uses inside that view. When the
+demo genuinely spans declarations, such as a `Toaster` host and the widget
+below it that raises toasts, list a view for each here instead of hiding one.
+Props-playground pages (`FleuryKnobs`) keep their knobs.
 
 ## Adding an example
 

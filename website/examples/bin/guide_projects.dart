@@ -435,7 +435,8 @@ void main() {
           as Map<String, dynamic>;
   final out = <String, Object>{};
   // Every widget reference page's demo is editable too. Their views follow
-  // from each example's builder; guide_projects.json lists the rest.
+  // from each example's builder; guide_projects.json lists the rest, and the
+  // widget demos that span more than one declaration.
   final entries = <String, (List<Map<String, dynamic>>, bool)>{
     for (final item in config.entries)
       item.key: ((item.value as List).cast<Map<String, dynamic>>(), false),
