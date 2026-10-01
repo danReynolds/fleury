@@ -520,8 +520,7 @@ Canvas(
     cols: 30,
     rows: 13,
     interactive: true,
-    builder: () =>
-        const Padding(padding: EdgeInsets.all(1), child: TableRows()),
+    builder: () => _framed(const TableRows()),
   ),
   ExampleInfo(
     id: 'datatable.cells',
@@ -532,8 +531,7 @@ Canvas(
     cols: 30,
     rows: 13,
     interactive: true,
-    builder: () =>
-        const Padding(padding: EdgeInsets.all(1), child: TableCells()),
+    builder: () => _framed(const TableCells()),
   ),
   ExampleInfo(
     id: 'tree.basic',
@@ -2609,8 +2607,7 @@ Text('\${summary.health.name}: \${summary.activeTaskCount} of \${summary.taskCou
     cols: 38,
     rows: 10,
     interactive: true,
-    builder: () =>
-        const Padding(padding: EdgeInsets.all(1), child: input.ContactFields()),
+    builder: () => _framed(const input.ContactFields()),
   ),
   ExampleInfo(
     id: 'input.actions',
@@ -2620,8 +2617,7 @@ Text('\${summary.health.name}: \${summary.activeTaskCount} of \${summary.taskCou
     cols: 38,
     rows: 11,
     interactive: true,
-    builder: () =>
-        const Padding(padding: EdgeInsets.all(1), child: input.FileActions()),
+    builder: () => _framed(const input.FileActions()),
   ),
   ExampleInfo(
     id: 'input.press',
@@ -2632,8 +2628,7 @@ Text('\${summary.health.name}: \${summary.activeTaskCount} of \${summary.taskCou
     cols: 38,
     rows: 19,
     interactive: true,
-    builder: () =>
-        const Padding(padding: EdgeInsets.all(1), child: input.PressTile()),
+    builder: () => _framed(const input.PressTile()),
   ),
   ExampleInfo(
     id: 'input.selection',
@@ -2643,10 +2638,7 @@ Text('\${summary.health.name}: \${summary.activeTaskCount} of \${summary.taskCou
     cols: 38,
     rows: 12,
     interactive: true,
-    builder: () => const Padding(
-      padding: EdgeInsets.all(1),
-      child: input.SelectableNote(),
-    ),
+    builder: () => _framed(const input.SelectableNote()),
   ),
   ExampleInfo(
     id: 'input.splitter',
@@ -2656,8 +2648,7 @@ Text('\${summary.health.name}: \${summary.activeTaskCount} of \${summary.taskCou
     cols: 38,
     rows: 10,
     interactive: true,
-    builder: () =>
-        const Padding(padding: EdgeInsets.all(1), child: input.SplitPane()),
+    builder: () => _framed(const input.SplitPane()),
   ),
   ExampleInfo(
     id: 'input.nesting',
@@ -2667,8 +2658,7 @@ Text('\${summary.health.name}: \${summary.activeTaskCount} of \${summary.taskCou
     cols: 38,
     rows: 9,
     interactive: true,
-    builder: () =>
-        const Padding(padding: EdgeInsets.all(1), child: input.NestedRow()),
+    builder: () => _framed(const input.NestedRow()),
   ),
   ExampleInfo(
     id: 'input.scrolling',
@@ -2678,8 +2668,7 @@ Text('\${summary.health.name}: \${summary.activeTaskCount} of \${summary.taskCou
     cols: 38,
     rows: 14,
     interactive: true,
-    builder: () =>
-        const Padding(padding: EdgeInsets.all(1), child: input.ScrollPanes()),
+    builder: () => _framed(const input.ScrollPanes()),
   ),
   ExampleInfo(
     id: 'testing.counter',
@@ -2689,8 +2678,7 @@ Text('\${summary.health.name}: \${summary.activeTaskCount} of \${summary.taskCou
     cols: 32,
     rows: 5,
     interactive: true,
-    builder: () =>
-        const Padding(padding: EdgeInsets.all(1), child: testing.Counter()),
+    builder: () => _framed(const testing.Counter()),
   ),
   ExampleInfo(
     id: 'testing.preferences',
@@ -2700,10 +2688,7 @@ Text('\${summary.health.name}: \${summary.activeTaskCount} of \${summary.taskCou
     cols: 32,
     rows: 11,
     interactive: true,
-    builder: () => Padding(
-      padding: const EdgeInsets.all(1),
-      child: testing.preferencesPair(),
-    ),
+    builder: () => _framed(testing.preferencesPair()),
   ),
   ExampleInfo(
     id: 'testing.save',
@@ -2713,10 +2698,7 @@ Text('\${summary.health.name}: \${summary.activeTaskCount} of \${summary.taskCou
     cols: 32,
     rows: 5,
     interactive: true,
-    builder: () => const Padding(
-      padding: EdgeInsets.all(1),
-      child: testing.TestingSaveDemo(),
-    ),
+    builder: () => _framed(const testing.TestingSaveDemo()),
   ),
   ExampleInfo(
     id: 'testing.animation',
@@ -2726,10 +2708,7 @@ Text('\${summary.health.name}: \${summary.activeTaskCount} of \${summary.taskCou
     cols: 32,
     rows: 6,
     interactive: true,
-    builder: () => const Padding(
-      padding: EdgeInsets.all(1),
-      child: testing.AnimatedUpload(),
-    ),
+    builder: () => _framed(const testing.AnimatedUpload()),
   ),
   ExampleInfo(
     id: 'testing.editor',
@@ -2759,8 +2738,7 @@ Text('\${summary.health.name}: \${summary.activeTaskCount} of \${summary.taskCou
     cols: 34,
     rows: 9,
     interactive: true,
-    builder: () =>
-        const Padding(padding: EdgeInsets.all(1), child: lists.FileList()),
+    builder: () => _framed(const lists.FileList()),
   ),
   ExampleInfo(
     id: 'lists.tasks',
@@ -2770,8 +2748,7 @@ Text('\${summary.health.name}: \${summary.activeTaskCount} of \${summary.taskCou
     cols: 40,
     rows: 22,
     interactive: true,
-    builder: () =>
-        const Padding(padding: EdgeInsets.all(1), child: lists.TaskBrowser()),
+    builder: () => _framed(const lists.TaskBrowser()),
   ),
   ExampleInfo(
     id: 'lists.reorder',
@@ -2781,8 +2758,7 @@ Text('\${summary.health.name}: \${summary.activeTaskCount} of \${summary.taskCou
     cols: 38,
     rows: 11,
     interactive: true,
-    builder: () =>
-        const Padding(padding: EdgeInsets.all(1), child: lists.ReorderTasks()),
+    builder: () => _framed(const lists.ReorderTasks()),
   ),
   ExampleInfo(
     id: 'lists.document',
@@ -2793,8 +2769,7 @@ Text('\${summary.health.name}: \${summary.activeTaskCount} of \${summary.taskCou
     cols: 40,
     rows: 18,
     interactive: true,
-    builder: () =>
-        const Padding(padding: EdgeInsets.all(1), child: lists.ScrollEdges()),
+    builder: () => _framed(const lists.ScrollEdges()),
   ),
   ExampleInfo(
     id: 'lists.horizontal',
@@ -2804,10 +2779,7 @@ Text('\${summary.health.name}: \${summary.activeTaskCount} of \${summary.taskCou
     cols: 40,
     rows: 8,
     interactive: true,
-    builder: () => const Padding(
-      padding: EdgeInsets.all(1),
-      child: lists.HorizontalList(),
-    ),
+    builder: () => _framed(const lists.HorizontalList()),
   ),
   ExampleInfo(
     id: 'lists.wide-content',
@@ -2817,10 +2789,7 @@ Text('\${summary.health.name}: \${summary.activeTaskCount} of \${summary.taskCou
     cols: 40,
     rows: 10,
     interactive: true,
-    builder: () => const Padding(
-      padding: EdgeInsets.all(1),
-      child: lists.HorizontalContent(),
-    ),
+    builder: () => _framed(const lists.HorizontalContent()),
   ),
   ExampleInfo(
     id: 'lists.log',
@@ -2830,8 +2799,7 @@ Text('\${summary.health.name}: \${summary.activeTaskCount} of \${summary.taskCou
     cols: 46,
     rows: 14,
     interactive: true,
-    builder: () =>
-        const Padding(padding: EdgeInsets.all(1), child: lists.BuildLog()),
+    builder: () => _framed(const lists.BuildLog()),
   ),
   ExampleInfo(
     id: 'layout.responsive',
