@@ -6854,7 +6854,7 @@ class _KeyBindingsTourState extends State<_KeyBindingsTour> {
               child: Text(_last, style: const CellStyle(bold: true)),
             ),
             Expanded(
-              child: _ItemRows(row: _row, saved: _saved),
+              child: _ItemRows(count: _count, row: _row, saved: _saved),
             ),
             const KeyHintBar(),
           ],
@@ -6864,10 +6864,15 @@ class _KeyBindingsTourState extends State<_KeyBindingsTour> {
   }
 }
 
-/// Seven rows: one highlighted (the j/k cursor), any bookmarked (★, Ctrl+S).
+/// [count] rows: one highlighted (the j/k cursor), any bookmarked (★, Ctrl+S).
 class _ItemRows extends StatelessWidget {
-  const _ItemRows({required this.row, this.saved = const <int>{}});
+  const _ItemRows({
+    required this.count,
+    required this.row,
+    this.saved = const <int>{},
+  });
 
+  final int count;
   final int row;
   final Set<int> saved;
 
@@ -6876,7 +6881,7 @@ class _ItemRows extends StatelessWidget {
     final theme = Theme.of(context);
     return Column(
       children: [
-        for (var i = 0; i < 7; i++)
+        for (var i = 0; i < count; i++)
           Text(
             '${i == row ? '▸' : ' '} ${saved.contains(i) ? '★' : ' '} '
             'item ${i + 1}',
