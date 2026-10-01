@@ -325,3 +325,31 @@ class _DualSchemeControlsState extends State<DualSchemeControls> {
     );
   }
 }
+
+// ---------------------------------------------------------------------------
+// 9. A suspend key — for an app whose text field always takes Ctrl+Z.
+// ---------------------------------------------------------------------------
+
+class ComposerExample extends StatelessWidget {
+  const ComposerExample({super.key, required this.draft});
+
+  final TextEditingController draft;
+
+  @override
+  Widget build(BuildContext context) {
+    // #docregion suspend-key
+    final session = context.scope<TerminalSession>();
+    return KeyBindings(
+      bindings: [
+        KeyBinding(
+          .ctrl.t,
+          label: 'Suspend',
+          enabled: session.supportsSuspend,
+          onTrigger: (_) => session.suspend(),
+        ),
+      ],
+      child: TextArea(controller: draft, autofocus: true),
+    );
+    // #enddocregion suspend-key
+  }
+}

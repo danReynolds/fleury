@@ -533,6 +533,21 @@ abstract interface class InlineTerminalDriver {
   Future<void> resizeInline(int rows);
 }
 
+/// A driver whose session can stop for the shell's job control: restore the
+/// terminal, stop the job, and re-enter after `fg`.
+///
+/// `TerminalSession.supportsSuspend` and `TerminalSession.suspend` reach the
+/// native POSIX driver through this, so the session stays free of `dart:io`.
+/// Not exported: no other driver has job control.
+@internal
+abstract interface class TerminalSuspendDriver {
+  /// See `TerminalSession.supportsSuspend`.
+  bool get supportsSuspend;
+
+  /// See `TerminalSession.suspend`.
+  Future<bool> suspend();
+}
+
 /// Runs [operation] through [driver]'s handoff hook when supported.
 ///
 /// Drivers that do not own terminal modes, such as remote render targets, can
