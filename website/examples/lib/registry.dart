@@ -522,34 +522,7 @@ Canvas(
     cols: 48,
     rows: 8,
     interactive: true,
-    builder: () => _framed(
-      DataTable(
-        rowCount: _people.length,
-        controller: DataTableController(),
-        selectionMode: DataTableSelectionMode.row,
-        columns: const <DataTableColumn>[
-          DataTableColumn(
-            id: 'name',
-            title: 'NAME',
-            width: FixedColumnWidth(10),
-          ),
-          DataTableColumn(id: 'role', title: 'ROLE'),
-          DataTableColumn(
-            id: 'commits',
-            title: 'COMMITS',
-            width: FixedColumnWidth(9),
-          ),
-        ],
-        cellBuilder: (row, col) {
-          final p = _people[row];
-          return switch (col) {
-            'name' => p.$1,
-            'role' => p.$2,
-            _ => p.$3.toString(),
-          };
-        },
-      ),
-    ),
+    builder: () => _framed(const _DataTableExample()),
   ),
   ExampleInfo(
     id: 'datatable.rows',
@@ -3265,13 +3238,6 @@ final Map<String, ExampleBuilder> examples = <String, ExampleBuilder>{
   for (final e in exampleList) e.id: e.builder,
 };
 
-const List<(String, String, int)> _people = <(String, String, int)>[
-  ('dan', 'author', 1284),
-  ('ada', 'reviewer', 642),
-  ('lin', 'docs', 219),
-  ('rey', 'infra', 877),
-];
-
 // Compact docs themes so embedded examples read well against the site chrome.
 final ThemeData _theme = const ThemeData(
   brightness: Brightness.dark,
@@ -3362,6 +3328,41 @@ final class _DocsCanvasPainter extends CanvasPainter {
       previousY = y;
     }
   }
+}
+
+class _DataTableExample extends StatelessWidget {
+  const _DataTableExample();
+
+  static const _people = [
+    (name: 'dan', role: 'author', commits: 1284),
+    (name: 'ada', role: 'reviewer', commits: 642),
+    (name: 'lin', role: 'docs', commits: 219),
+    (name: 'rey', role: 'infra', commits: 877),
+  ];
+
+  @override
+  Widget build(BuildContext context) => DataTable(
+    rowCount: _people.length,
+    selectionMode: DataTableSelectionMode.row,
+    columns: const [
+      DataTableColumn(id: 'name', title: 'NAME', width: FixedColumnWidth(10)),
+      DataTableColumn(id: 'role', title: 'ROLE'),
+      DataTableColumn(
+        id: 'commits',
+        title: 'COMMITS',
+        width: FixedColumnWidth(9),
+      ),
+    ],
+    // Asked only for the rows on screen, so the list can be any length.
+    cellBuilder: (row, column) {
+      final person = _people[row];
+      return switch (column) {
+        'name' => person.name,
+        'role' => person.role,
+        _ => '${person.commits}',
+      };
+    },
+  );
 }
 
 class _ContainerFillExample extends StatefulWidget {
