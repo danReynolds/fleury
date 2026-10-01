@@ -361,6 +361,11 @@
       "label": "cart_readers.dart",
       "source": "website/examples/lib/state_management_guide.dart",
       "region": "shop-readers"
+    },
+    {
+      "label": "cart.dart",
+      "source": "website/examples/lib/state_management_guide.dart",
+      "region": "cart"
     }
   ],
   "state.cart-notifier": [
@@ -378,6 +383,11 @@
       "label": "Shared cart",
       "source": "website/examples/lib/state_management_guide.dart",
       "region": "cart-owner"
+    },
+    {
+      "label": "Cart",
+      "source": "website/examples/lib/state_management_guide.dart",
+      "region": "cart"
     }
   ],
   "navigation.basics": [
