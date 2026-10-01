@@ -184,29 +184,14 @@ Ordinary application code should not need to call it.
 
 ## Community themes
 
-[`fleury_themes`](https://github.com/danReynolds/fleury/tree/main/packages/fleury_themes)
-is Fleury's community theme collection. It currently includes Nord, Dracula,
-Gruvbox Dark, Tokyo Night, Catppuccin Mocha, One Dark, and Solarized (dark and
-light), and contributions can add more.
-
-A new project depends only on `fleury` and `fleury_widgets`, so add the package
-first. Until the packages are published, merge this entry into the existing
-`dependencies:` section of `pubspec.yaml`:
-
-```yaml
-dependencies:
-  fleury_themes:
-    git:
-      url: https://github.com/danReynolds/fleury.git
-      path: packages/fleury_themes
-```
-
-Then run `dart pub upgrade`, so every Fleury package resolves from the same
-commit. Import the package and pass a theme to `FleuryApp`:
+[`package:fleury/themes.dart`](https://github.com/danReynolds/fleury/blob/main/packages/fleury/lib/themes.dart)
+is Fleury's opt-in community theme collection, included in the core package. It currently includes Nord, Dracula,
+Gruvbox Dark, Tokyo Night, Catppuccin Mocha, One Dark, and Solarized in dark
+and light variants, and contributions can add more:
 
 ```dart
 import 'package:fleury/fleury.dart';
-import 'package:fleury_themes/fleury_themes.dart';
+import 'package:fleury/themes.dart';
 
 FleuryApp(title: 'Dashboard', theme: tokyoNight, home: const Dashboard());
 ```

@@ -1,0 +1,716 @@
+import '../primitives.dart';
+import 'package:fleury/fleury_widget_support.dart';
+
+/// A grid of color swatches: the arrow keys preview a color, and Enter,
+/// Space, or a click commits one.
+///
+/// The preview cursor is bracketed with the theme's focus style while the
+/// committed swatch stays marked. The arrow keys, Home, and End move the
+/// preview without changing [value]; Enter or Space commits it, and clicking
+/// a swatch commits that swatch. Escape restores the value the picker had
+/// when it gained focus. Typing `#` opens a field for entering any color as
+/// a hex code.
+///
+/// Defaults to the 16 base ANSI colors laid out in 2 rows × 8 cols.
+/// Pass [colors] for a custom palette (e.g. a 256-color picker, brand
+/// colors, theme variants) and [columns] to control the grid shape.
+///
+/// ```dart
+/// ColorPicker(
+///   value: const AnsiColor(4),
+///   onChanged: (c) => setState(() => accent = c),
+/// )
+/// ```
+///
+/// Passing null for [onChanged] disables the picker.
+class ColorPicker extends StatefulWidget {
+  const ColorPicker({
+    super.key,
+    required this.value,
+    required this.onChanged,
+    this.colors,
+    this.columns = 8,
+    this.swatchWidth = 3,
+    this.rowSpacing = 0,
+    this.showHelp = true,
+    this.semanticLabel = 'Colors',
+    this.semanticColorLabelBuilder,
+    this.focusNode,
+    this.autofocus = false,
+    this.style,
+  }) : assert(columns >= 1, 'columns must be >= 1'),
+       assert(swatchWidth >= 1, 'swatchWidth must be >= 1'),
+       assert(rowSpacing >= 0, 'rowSpacing must be >= 0');
+
+  /// Currently-selected color. The first matching entry in [colors] (or the
+  /// default palette) becomes the committed cell and initial preview cursor.
+  /// A color no entry matches, such as one entered as a hex code, marks no
+  /// cell: the preview cursor starts on the first cell, and the picker's
+  /// semantics report the color itself.
+  final Color value;
+
+  /// Called with the new color when the user commits a swatch (Enter, Space,
+  /// or a click), enters a hex code after `#`, or presses Escape to restore
+  /// the color the picker had when it gained focus.
+  final void Function(Color color)? onChanged;
+
+  /// Palette to pick from. `null` uses the 16 base ANSI colors.
+  final List<Color>? colors;
+
+  /// Grid width — palette cells wrap after this many. Default 8 (matches
+  /// the natural split of the 16-color ANSI palette into 2 × 8).
+  final int columns;
+
+  /// Cell width per swatch (≥ 1). Wider swatches read more clearly at
+  /// the cost of horizontal space.
+  final int swatchWidth;
+
+  /// Blank cell rows between palette rows. Defaults to zero.
+  final int rowSpacing;
+
+  /// Show keyboard instructions when focused. Disable when the surrounding
+  /// panel supplies persistent help and should keep a stable height on focus.
+  final bool showHelp;
+
+  /// Label exposed through the semantic app graph for the picker.
+  final String semanticLabel;
+
+  /// Optional semantic label builder for custom palette entries.
+  final String Function(Color color, int index)? semanticColorLabelBuilder;
+
+  /// Focus node used for keyboard navigation.
+  final FocusNode? focusNode;
+
+  /// Whether the picker requests focus when mounted.
+  final bool autofocus;
+
+  /// Base styling for markers, plus optional hover, focus, selected, disabled,
+  /// and invalid state entries from [CellStyle.interactive].
+  final CellStyle? style;
+
+  @override
+  State<ColorPicker> createState() => _ColorPickerState();
+}
+
+class _ColorPickerState extends State<ColorPicker>
+    implements TextInputClaimant {
+  late FocusNode _node;
+  bool _owns = false;
+  bool _hovered = false;
+  FormControlRegistration? _formRegistration;
+
+  /// The highlighted candidate — where the keyboard cursor sits. Arrows move
+  /// this *without* committing; Enter / Space / a click commit it to
+  /// [ColorPicker.value]. Separating preview from commit lets you browse the
+  /// palette and Tab away without changing the value.
+  int _cursor = 0;
+
+  /// The committed color when focus was gained, so Esc can cancel back to it.
+  Color? _initial;
+
+  /// Tracks focus transitions in [build] (FocusNode has no listener API) so we
+  /// can snapshot [_initial] the moment the picker gains focus.
+  bool _wasFocused = false;
+
+  /// Anchor + overlay for the `#` hex-entry popover.
+  final BoundsNotifier _bounds = BoundsNotifier();
+  OverlayEntry? _hexEntry;
+
+  bool get _enabled => widget.onChanged != null;
+
+  // The 16 standard ANSI colors. Indices 0..15 match the terminal's
+  // base palette: 0-7 normal, 8-15 bright.
+  static const _ansi16 = <Color>[
+    AnsiColor(0),
+    AnsiColor(1),
+    AnsiColor(2),
+    AnsiColor(3),
+    AnsiColor(4),
+    AnsiColor(5),
+    AnsiColor(6),
+    AnsiColor(7),
+    AnsiColor(8),
+    AnsiColor(9),
+    AnsiColor(10),
+    AnsiColor(11),
+    AnsiColor(12),
+    AnsiColor(13),
+    AnsiColor(14),
+    AnsiColor(15),
+  ];
+
+  List<Color> get _palette => widget.colors ?? _ansi16;
+
+  @override
+  void initState() {
+    super.initState();
+    _node = widget.focusNode ?? FocusNode(debugLabel: 'color-picker');
+    _node.textInputClaimant = this;
+    _owns = widget.focusNode == null;
+    _cursor = _cursorFor(widget.value);
+  }
+
+  @override
+  void didUpdateWidget(ColorPicker oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (widget.focusNode != oldWidget.focusNode) {
+      _node.textInputClaimant = null;
+      if (_owns) _node.dispose();
+      _node = widget.focusNode ?? FocusNode(debugLabel: 'color-picker');
+      _node.textInputClaimant = this;
+      _owns = widget.focusNode == null;
+    }
+    // Follow an externally-driven value change while not actively browsing.
+    if (widget.value != oldWidget.value && !_node.hasFocus) {
+      _cursor = _cursorFor(widget.value);
+    }
+    _syncFormClaim();
+  }
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    final registration = FormControlScope.maybeOf(context);
+    if (!identical(registration, _formRegistration)) {
+      _formRegistration?.release(this);
+      _formRegistration = registration;
+      registration?.claim(this, focusNode: _node, enabled: _enabled);
+    } else {
+      _syncFormClaim();
+    }
+  }
+
+  void _syncFormClaim() =>
+      _formRegistration?.updateClaim(this, focusNode: _node, enabled: _enabled);
+
+  void _emit(Color color) {
+    widget.onChanged?.call(color);
+    _formRegistration?.controlValueChanged(this);
+  }
+
+  @override
+  void dispose() {
+    _hexEntry?.remove();
+    _node.textInputClaimant = null;
+    _formRegistration?.release(this);
+    if (_owns) _node.dispose();
+    super.dispose();
+  }
+
+  /// The palette cell holding [ColorPicker.value], or null when no cell
+  /// does.
+  int? get _committedIndex {
+    final i = _palette.indexOf(widget.value);
+    return i >= 0 ? i : null;
+  }
+
+  /// Where the preview cursor rests for [color]: its cell, else the first.
+  int _cursorFor(Color color) {
+    final i = _palette.indexOf(color);
+    return i >= 0 ? i : 0;
+  }
+
+  /// Moves the preview cursor to [index] without committing.
+  void _moveCursor(int index) {
+    if (!_enabled || index < 0 || index >= _palette.length) return;
+    setState(() => _cursor = index);
+  }
+
+  /// Commits the cursor's color — the "lock in" Enter / Space / a click do.
+  void _commit() {
+    if (!_enabled || _cursor < 0 || _cursor >= _palette.length) return;
+    final color = _palette[_cursor];
+    if (color != widget.value) _emit(color);
+  }
+
+  /// Esc: abandon the in-progress browse, restoring the color (and cursor)
+  /// from when focus was gained.
+  void _cancel() {
+    final initial = _initial ?? widget.value;
+    setState(() => _cursor = _cursorFor(initial));
+    if (_enabled && initial != widget.value) _emit(initial);
+  }
+
+  void _selectIndex(int index) {
+    if (!_enabled || index < 0 || index >= _palette.length) return;
+    _node.requestFocus();
+    setState(() => _cursor = index);
+    _commit();
+  }
+
+  void _handlePickerAction(SemanticAction action) {
+    switch (action) {
+      case SemanticAction.focus:
+      case SemanticAction.navigate:
+        _node.requestFocus();
+        setState(() {});
+        return;
+      case _:
+        return;
+    }
+  }
+
+  KeyEventResult _onKey(KeyEvent event) {
+    if (!_enabled) return KeyEventResult.ignored;
+    final idx = _cursor;
+    final cols = widget.columns;
+    final n = _palette.length;
+    switch (event.code) {
+      // Arrows move the preview cursor; at the grid edge they bubble so
+      // directional focus traversal carries you out of the picker (the same
+      // moveOrEscape convention RangeSlider/DatePicker use).
+      case KeyCode.arrowLeft:
+        return moveOrEscape(
+          atEdge: idx % cols == 0,
+          move: () => _moveCursor(idx - 1),
+        );
+      case KeyCode.arrowRight:
+        return moveOrEscape(
+          atEdge: idx + 1 >= n || (idx + 1) % cols == 0,
+          move: () => _moveCursor(idx + 1),
+        );
+      case KeyCode.arrowUp:
+        return moveOrEscape(
+          atEdge: idx - cols < 0,
+          move: () => _moveCursor(idx - cols),
+        );
+      case KeyCode.arrowDown:
+        return moveOrEscape(
+          atEdge: idx + cols >= n,
+          move: () => _moveCursor(idx + cols),
+        );
+      case KeyCode.home:
+        _moveCursor(0);
+        return KeyEventResult.handled;
+      case KeyCode.end:
+        _moveCursor(n - 1);
+        return KeyEventResult.handled;
+      case KeyCode.enter:
+        _commit(); // lock in the highlighted colour
+        return KeyEventResult.handled;
+      case KeyCode.escape:
+        _cancel();
+        return KeyEventResult.handled;
+      default:
+        return KeyEventResult.ignored;
+    }
+  }
+
+  @override
+  KeyEventResult onTextInput(String text) {
+    if (!_enabled) return KeyEventResult.ignored;
+    if (text == ' ') {
+      _commit(); // Space also locks in the highlighted colour
+      return KeyEventResult.handled;
+    }
+    if (text == '#') {
+      _openHex();
+      return KeyEventResult.handled;
+    }
+    return KeyEventResult.ignored;
+  }
+
+  @override
+  KeyEventResult onPaste(String text) => KeyEventResult.ignored;
+
+  /// Opens a small popover anchored to the picker for typing a hex code.
+  void _openHex() {
+    if (_hexEntry != null) return;
+    final manager = FocusManager.of(context);
+    final overlay = Overlay.of(context);
+    final entry = OverlayEntry(
+      owner: context,
+      builder: (context) => AnchoredFloat(
+        notifier: _bounds,
+        onTapOutside: _closeHex,
+        child: _HexEntry(
+          initial: widget.value.toRgb(),
+          borderStyle: Theme.of(context).borderStyle,
+          onSubmit: (color) {
+            _closeHex();
+            if (_enabled && color != widget.value) _emit(color);
+          },
+          onDismiss: _closeHex,
+        ),
+      ),
+    );
+    _hexEntry = entry;
+    manager.requestFocus(null); // hand focus to the popover's autofocus field
+    overlay.insert(entry);
+  }
+
+  void _closeHex() {
+    _hexEntry?.remove();
+    _hexEntry = null;
+    if (mounted) _node.requestFocus();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final enabled = _enabled;
+    final focused = enabled && context.listen(_node).hasFocus;
+    // Snapshot the committed colour at focus-in (so Esc can restore it) and
+    // drop it on blur — tracked here since FocusNode exposes no listener.
+    if (focused && !_wasFocused) _initial = widget.value;
+    if (!focused) _initial = null;
+    _wasFocused = focused;
+    final disabledStyle = theme.mutedStyle;
+    final selectedIdx = _committedIndex;
+    final cols = widget.columns;
+    final palette = _palette;
+    final validationError = _formRegistration?.error;
+
+    final rows = <Widget>[];
+    for (var r = 0; r * cols < palette.length; r++) {
+      final cells = <Widget>[];
+      for (var c = 0; c < cols && r * cols + c < palette.length; c++) {
+        final idx = r * cols + c;
+        final color = palette[idx];
+        // The cursor (candidate) gets bright `[ ]` brackets; the committed
+        // colour, when the cursor has moved off it, gets dim `‹ ›` markers so
+        // you can see your locked-in pick while browsing. Plain swatches get a
+        // one-cell gap so the grid breathes.
+        final isCursor = idx == _cursor;
+        final isCommitted = idx == selectedIdx;
+        final swatch = Text(
+          '█' * widget.swatchWidth,
+          style: CellStyle(
+            foreground: color,
+          ).merge(enabled ? CellStyle.none : disabledStyle),
+        );
+        final markStyle = resolveCellStyle(
+          cascade: [
+            CellStyle.interactive(
+              base: isCursor ? theme.selectionStyle : theme.mutedStyle,
+              focused: theme.focusedStyle,
+              disabled: theme.mutedStyle,
+              invalid: theme.errorStyle,
+            ),
+            theme.interactiveStyle,
+            widget.style,
+          ],
+          states: {
+            if (_hovered && isCursor) CellStyleState.hovered,
+            if (isCursor && focused) CellStyleState.focused,
+            if (isCommitted) CellStyleState.selected,
+            if (!enabled) CellStyleState.disabled,
+            if (isCursor && validationError != null) CellStyleState.invalid,
+          },
+        );
+        final swatchParts = <Widget>[];
+        if (isCursor || isCommitted) {
+          swatchParts.add(Text(isCursor ? '[' : '‹', style: markStyle));
+          swatchParts.add(swatch);
+          swatchParts.add(Text(isCursor ? ']' : '›', style: markStyle));
+        } else {
+          swatchParts.add(const Text(' '));
+          swatchParts.add(swatch);
+          swatchParts.add(const Text(' '));
+        }
+        cells.add(
+          Semantics(
+            role: SemanticRole.radio,
+            label: _colorLabel(color, idx),
+            value: _colorValue(color),
+            selected: isCommitted,
+            checked: isCommitted,
+            enabled: enabled,
+            actions: enabled
+                ? const {SemanticAction.select, SemanticAction.activate}
+                : const <SemanticAction>{},
+            onAction: enabled
+                ? (action) {
+                    switch (action) {
+                      case SemanticAction.select:
+                      case SemanticAction.activate:
+                        _selectIndex(idx);
+                        return;
+                      case _:
+                        return;
+                    }
+                  }
+                : null,
+            state: SemanticState({
+              'colorIndex': idx,
+              'colorPosition': idx + 1,
+              'colorCount': palette.length,
+              'colorKind': _colorKind(color),
+              ..._colorComponents(color),
+            }),
+            // Click a swatch to select it (focus first, so the arrow keys keep
+            // working afterward). The whole-body tap below only grabs focus.
+            child: enabled
+                ? GestureDetector(
+                    onTap: () {
+                      _node.requestFocus();
+                      _selectIndex(idx);
+                    },
+                    child: Row(children: swatchParts),
+                  )
+                : Row(children: swatchParts),
+          ),
+        );
+      }
+      if (r > 0 && widget.rowSpacing > 0) {
+        rows.add(SizedBox(height: widget.rowSpacing));
+      }
+      rows.add(Row(children: cells));
+    }
+
+    final rowCount = (palette.length + cols - 1) ~/ cols;
+    final visibleColumns = palette.length < cols ? palette.length : cols;
+    // The committed color, described by its cell when it has one.
+    final value = widget.value;
+    final valueLabel = selectedIdx == null
+        ? _defaultColorLabel(value)
+        : _colorLabel(value, selectedIdx);
+    final valueState = <String, Object?>{
+      'selectedIndex': ?selectedIdx,
+      'selectedKey': _colorValue(value),
+      'selectedColorLabel': valueLabel,
+      'selectedColorKind': _colorKind(value),
+    };
+    final body = Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        ...rows,
+        // Spell out the model while focused: navigating only previews; you
+        // commit with Enter/Space (or a click) and back out with Esc.
+        if (focused && widget.showHelp)
+          Text(
+            '↑↓←→ preview · Enter/Space lock in · Esc cancel · # hex',
+            style: theme.mutedStyle,
+          ),
+      ],
+    );
+    if (!enabled) {
+      final Widget picker = Semantics(
+        role: SemanticRole.list,
+        label: widget.semanticLabel,
+        value: valueLabel,
+        enabled: false,
+        validationError: validationError,
+        state: SemanticState({
+          'collectionRowCount': rowCount,
+          'collectionColumnCount': visibleColumns,
+          'colorCount': palette.length,
+          ...valueState,
+        }),
+        child: body,
+      );
+      // styled component, not selectable text
+      return _withHover(SelectionArea.disabled(child: picker));
+    }
+    final Widget picker = Semantics(
+      role: SemanticRole.list,
+      label: widget.semanticLabel,
+      value: valueLabel,
+      focused: focused,
+      validationError: validationError,
+      actions: const {SemanticAction.focus, SemanticAction.navigate},
+      onAction: _handlePickerAction,
+      state: SemanticState({
+        'collectionRowCount': rowCount,
+        'collectionColumnCount': visibleColumns,
+        'colorCount': palette.length,
+        ...valueState,
+      }),
+      child: KeyDetector(
+        onKey: (event) {
+          if ((_onKey)(event) == KeyEventResult.handled) event.consume();
+        },
+        child: Focus(
+          focusNode: _node,
+          autofocus: widget.autofocus,
+          child: BoundsObserver(
+            notifier: _bounds,
+            child: GestureDetector(
+              onTap: () => _node.requestFocus(),
+              child: body,
+            ),
+          ),
+        ),
+      ),
+    );
+    // styled component, not selectable text
+    return _withHover(SelectionArea.disabled(child: picker));
+  }
+
+  Widget _withHover(Widget child) => MouseRegion(
+    onEnter: () {
+      if (!_hovered) setState(() => _hovered = true);
+    },
+    onExit: () {
+      if (_hovered) setState(() => _hovered = false);
+    },
+    child: child,
+  );
+
+  String _colorLabel(Color color, int index) {
+    final builder = widget.semanticColorLabelBuilder;
+    if (builder != null) return sanitizeForDisplay(builder(color, index));
+    return _defaultColorLabel(color);
+  }
+}
+
+String _defaultColorLabel(Color color) {
+  return switch (color) {
+    AnsiColor(:final index) => 'ANSI color $index ${_ansiColorNames[index]}',
+    IndexedColor(:final index) => 'Indexed color $index',
+    RgbColor(:final r, :final g, :final b) => 'RGB color $r $g $b',
+  };
+}
+
+String _colorValue(Color color) {
+  return switch (color) {
+    AnsiColor(:final index) => 'ansi:$index',
+    IndexedColor(:final index) => 'indexed:$index',
+    RgbColor(:final r, :final g, :final b) => 'rgb:$r,$g,$b',
+  };
+}
+
+String _colorKind(Color color) {
+  return switch (color) {
+    AnsiColor() => 'ansi',
+    IndexedColor() => 'indexed',
+    RgbColor() => 'rgb',
+  };
+}
+
+Map<String, Object?> _colorComponents(Color color) {
+  return switch (color) {
+    AnsiColor(:final index) => <String, Object?>{'ansiColorIndex': index},
+    IndexedColor(:final index) => <String, Object?>{'indexedColorIndex': index},
+    RgbColor(:final r, :final g, :final b) => <String, Object?>{
+      'red': r,
+      'green': g,
+      'blue': b,
+    },
+  };
+}
+
+/// A small popover, anchored under the picker, for typing a hex color code.
+/// Enter applies it as an [RgbColor]; Esc dismisses without changing anything.
+class _HexEntry extends StatefulWidget {
+  const _HexEntry({
+    required this.initial,
+    required this.borderStyle,
+    required this.onSubmit,
+    required this.onDismiss,
+  });
+
+  final RgbColor initial;
+  final BorderStyle borderStyle;
+  final void Function(Color color) onSubmit;
+  final void Function() onDismiss;
+
+  @override
+  State<_HexEntry> createState() => _HexEntryState();
+}
+
+class _HexEntryState extends State<_HexEntry> {
+  late final TextEditingController _controller;
+  bool _invalid = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _controller = TextEditingController(text: _hexOf(widget.initial));
+  }
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  void _submit(String text) {
+    final color = _parseHex(text);
+    if (color == null) {
+      setState(() => _invalid = true);
+      return;
+    }
+    widget.onSubmit(color);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    // A float: `framed` carries both halves of the contract — the opaque fill
+    // (so the app underneath can't bleed through) and the frame. The Column
+    // hugs its rows; `max` would stretch the popover down the whole terminal,
+    // because `RenderBoundsAnchor` lays a float out with loosened (screen-tall)
+    // constraints.
+    return Container.framed(
+      border: BoxBorder(style: widget.borderStyle),
+      padding: const EdgeInsets.symmetric(horizontal: 1),
+      child: SizedBox(
+        width: 12,
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Text(
+              _invalid ? 'Use RRGGBB' : 'Hex code',
+              style: _invalid
+                  ? CellStyle(foreground: theme.colorScheme.error)
+                  : theme.mutedStyle,
+            ),
+            Row(
+              children: [
+                Text('#', style: theme.mutedStyle),
+                Expanded(
+                  child: TextInput(
+                    controller: _controller,
+                    autofocus: true,
+                    placeholder: 'RRGGBB',
+                    onSubmit: _submit,
+                    onEscape: widget.onDismiss,
+                  ),
+                ),
+              ],
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+String _hexOf(RgbColor c) =>
+    c.r.toRadixString(16).padLeft(2, '0') +
+    c.g.toRadixString(16).padLeft(2, '0') +
+    c.b.toRadixString(16).padLeft(2, '0');
+
+/// Parses `#RRGGBB`, `RRGGBB`, or 3-digit shorthand into an [RgbColor].
+Color? _parseHex(String text) {
+  var s = text.trim();
+  if (s.startsWith('#')) s = s.substring(1);
+  if (s.length == 3) {
+    s = s.split('').map((ch) => '$ch$ch').join();
+  }
+  if (s.length != 6) return null;
+  final v = int.tryParse(s, radix: 16);
+  if (v == null) return null;
+  return RgbColor((v >> 16) & 0xFF, (v >> 8) & 0xFF, v & 0xFF);
+}
+
+const _ansiColorNames = <String>[
+  'black',
+  'red',
+  'green',
+  'yellow',
+  'blue',
+  'magenta',
+  'cyan',
+  'white',
+  'bright black',
+  'bright red',
+  'bright green',
+  'bright yellow',
+  'bright blue',
+  'bright magenta',
+  'bright cyan',
+  'bright white',
+];

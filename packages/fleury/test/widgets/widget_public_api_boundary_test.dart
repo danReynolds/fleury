@@ -6,7 +6,11 @@ void main() {
   test(
     'widget implementation render objects stay out of production barrels',
     () {
-      final coreLibrary = File('lib/fleury_core.dart').readAsStringSync();
+      final coreLibrary = [
+        File('lib/fleury_core.dart'),
+        File('lib/src/primitives.dart'),
+        File('lib/src/catalog/catalog.dart'),
+      ].map((file) => file.readAsStringSync()).join('\n');
 
       expect(
         coreLibrary,

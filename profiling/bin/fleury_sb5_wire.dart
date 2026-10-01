@@ -4,7 +4,6 @@ import 'dart:io';
 import 'package:fleury/fleury.dart';
 import 'package:fleury/src/terminal/terminal_sequences.dart'
     show buildTerminalEnterSequences, buildTerminalExitSequences;
-import 'package:fleury_widgets/fleury_widgets.dart';
 
 Future<void> main(List<String> args) async {
   final options = _WireOptions.parse(args);

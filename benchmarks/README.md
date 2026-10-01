@@ -10,7 +10,7 @@ samples, and provides a separate CPU/heap diagnostic mode.
 | Area | Source | Run through |
 | --- | --- | --- |
 | Core Fleury scenarios | `packages/fleury/benchmark` | `fleury benchmark local SB.1` / `SB.2` / `SB.12` |
-| Fleury widget scenarios | `packages/fleury_widgets/benchmark` | `fleury benchmark local SB.3` / `SB.4` / `SB.5` / `SB.6` / `SB.7` / `SB.8` / `SB.9` / `SB.11` |
+| Fleury widget scenarios | `packages/fleury/benchmark/catalog` | `fleury benchmark local SB.3` / `SB.4` / `SB.5` / `SB.6` / `SB.7` / `SB.8` / `SB.9` / `SB.11` |
 | Demo app scenario | `packages/fleury_example_console/benchmark` | `fleury benchmark local SB.10` |
 | Peer fixtures | `peer-fixtures` | peer-specific commands plus manifest tooling |
 | PTY wire profiling | `profiling` | `fleury benchmark wire ...` |

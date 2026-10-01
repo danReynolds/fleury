@@ -143,7 +143,7 @@ void _runSnapshot(_StorybookCliOptions options) {
 
 void _runCoverage(_StorybookCliOptions options) {
   final exportedLibrary = File(
-    options.widgetsExportPath ?? '../fleury_widgets/lib/fleury_widgets.dart',
+    options.widgetsExportPath ?? '../fleury/lib/src/catalog/catalog.dart',
   );
   if (!exportedLibrary.existsSync()) {
     throw StorybookToolException(

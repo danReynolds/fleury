@@ -527,7 +527,7 @@ List<ActiveKeyBinding> resolveActiveKeyBindings(FocusManager manager) {
 /// A multi-key sequence (`.g.g`, `.ctrl.x.ctrl.s`, or a `.space` leader) fires
 /// when its keys arrive in order. While the user is partway through one,
 /// [pendingOf] reports the keys typed so far and the keys that can follow,
-/// which the `WhichKey` widget in `fleury_widgets` shows as a popup. A key that
+/// which the bundled `WhichKey` widget shows as a popup. A key that
 /// doesn't continue the sequence ends it. Esc backs out and does nothing else:
 /// the keys typed so far are dropped, and the Esc doesn't also close a dialog
 /// or go back a page. Any other key cancels the sequence and is then handled

@@ -88,7 +88,6 @@ void main() {
     expect(pubspec, contains('name: my_app'));
     for (final package in const <String>[
       'fleury',
-      'fleury_widgets',
       'fleury_test',
     ]) {
       final packagePubspec = File(
@@ -195,7 +194,7 @@ void main() {
     expect(result.exitCode, 0, reason: result.stderr.toString());
     final pubspec = File('${target.path}/pubspec.yaml').readAsStringSync();
     expect(pubspec, contains('url: https://github.com/danReynolds/fleury.git'));
-    expect(pubspec, contains('path: packages/fleury_widgets'));
+    expect(pubspec, isNot(contains('fleury_widgets')));
     expect(pubspec, contains('path: packages/fleury_test'));
     expect(pubspec, contains('dependency_overrides:'));
   });
@@ -203,7 +202,6 @@ void main() {
   test('rejects names that would make the app depend on itself', () async {
     for (final name in const <String>{
       'fleury',
-      'fleury_widgets',
       'fleury_test',
       'lints',
       'test',

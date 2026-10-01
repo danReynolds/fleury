@@ -1,0 +1,311 @@
+import '../primitives.dart';
+
+/// A numeric variant of [TextInput] — accepts digits, an optional
+/// leading `-`, and (when [allowDecimal] is true) one `.`. Anything
+/// else is silently rejected so the field's text always parses, and
+/// [onChanged] fires with the parsed [num] (or `null` for empty /
+/// in-progress edits like `"-"` or `"1."`).
+///
+/// Wraps [TextInput] under the hood — its placeholder, focus, cursor, and
+/// Enter-to-submit behavior carry over. There is no Escape callback, so
+/// Escape passes on to enclosing widgets. Use this when you'd otherwise pair
+/// a [TextInput] with `int.tryParse` everywhere.
+///
+/// ```dart
+/// NumberInput(
+///   initialValue: 42,
+///   min: 0,
+///   max: 100,
+///   onChanged: (v) => setState(() => count = v),
+/// )
+/// ```
+class NumberInput extends StatefulWidget {
+  const NumberInput({
+    super.key,
+    this.initialValue,
+    this.controller,
+    this.onChanged,
+    this.onSubmit,
+    this.min,
+    this.max,
+    this.allowNegative = true,
+    this.allowDecimal = false,
+    this.placeholder = '',
+    this.placeholderStyle = const CellStyle(dim: true),
+    this.style = CellStyle.none,
+    this.cursorStyle = const CellStyle(inverse: true),
+    this.semanticLabel,
+    this.focusNode,
+    this.autofocus = false,
+    this.enabled = true,
+    this.readOnly = false,
+  }) : assert(
+         controller == null || initialValue == null,
+         'Supply either initialValue or controller, not both.',
+       ),
+       assert(
+         allowDecimal ||
+             controller != null ||
+             initialValue == null ||
+             initialValue is int,
+         'initialValue must be an int when allowDecimal is false.',
+       ),
+       assert(
+         allowDecimal || min == null || min is int,
+         'min must be an int when allowDecimal is false.',
+       ),
+       assert(
+         allowDecimal || max == null || max is int,
+         'max must be an int when allowDecimal is false.',
+       ),
+       assert(
+         min == null || max == null || min <= max,
+         'min must be less than or equal to max.',
+       );
+
+  /// Initial parsed value to seed the field with. `null` starts empty.
+  ///
+  /// Used once when the internal controller is created; rebuilds do not reset
+  /// edits. Supply either this seed or [controller]. This must be an [int]
+  /// when [allowDecimal] is false.
+  final num? initialValue;
+
+  /// Optional text controller for embedding this field in a larger form.
+  final TextEditingController? controller;
+
+  /// Called with the parsed value after user or semantic edits.
+  /// Programmatic controller writes notify controller listeners instead.
+  /// `null` is passed when the field is empty or holds an in-progress token like `"-"`
+  /// or `"1."` that doesn't yet parse to a [num].
+  final void Function(num? value)? onChanged;
+
+  /// Called with the final parsed value when the user presses Enter.
+  /// Same `null` semantics as [onChanged].
+  final void Function(num? value)? onSubmit;
+
+  /// Clamps the parsed value (after the user finishes editing) to this
+  /// lower bound. Per-keystroke values *below* the bound are still
+  /// accepted while the user is typing — the clamp applies on submit.
+  /// Set to enforce a non-negative budget, percentage, etc.
+  ///
+  /// Must be an [int] when [allowDecimal] is false.
+  final num? min;
+
+  /// Upper-bound mirror of [min]. Must be an [int] when [allowDecimal] is
+  /// false.
+  final num? max;
+
+  /// When false, the field rejects `-` entirely.
+  final bool allowNegative;
+
+  /// When true, the field accepts one `.` for decimal entry. When false,
+  /// only integer digits are accepted.
+  final bool allowDecimal;
+
+  /// Forwarded to the inner [TextInput] verbatim.
+  final String placeholder;
+
+  /// Style used for [placeholder].
+  final CellStyle placeholderStyle;
+
+  /// Entered-text base styling, plus optional hover, focus, disabled, and
+  /// invalid state entries from [CellStyle.interactive].
+  final CellStyle style;
+
+  /// Style applied to the cursor cell.
+  final CellStyle cursorStyle;
+
+  /// Label exposed through the semantic app graph.
+  ///
+  /// When omitted, [placeholder] still labels the underlying text field.
+  final String? semanticLabel;
+
+  /// Focus node used by the underlying text input.
+  final FocusNode? focusNode;
+
+  /// Whether the field should request focus when mounted.
+  final bool autofocus;
+
+  /// Whether the field accepts focus and user input.
+  final bool enabled;
+
+  /// Whether the field can receive focus but not edit text.
+  final bool readOnly;
+
+  @override
+  State<NumberInput> createState() => _NumberInputState();
+}
+
+class _NumberInputState extends State<NumberInput> {
+  late TextEditingController _controller;
+  bool _ownsController = false;
+  String _lastAccepted = '';
+  // Suppresses the listener when we programmatically revert the
+  // controller — otherwise the revert would fire onChanged a second
+  // time with the previous value, looking like a phantom edit.
+  bool _suppress = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _attachController(
+      widget.controller ??
+          TextEditingController(
+            text: widget.initialValue == null
+                ? ''
+                : _stringify(widget.initialValue!),
+          ),
+      ownsController: widget.controller == null,
+    );
+  }
+
+  @override
+  void didUpdateWidget(covariant NumberInput oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (widget.controller != oldWidget.controller) {
+      _controller.removeListener(_onChanged);
+      if (_ownsController) _controller.dispose();
+      _attachController(
+        widget.controller ??
+            TextEditingController(
+              text: widget.initialValue == null
+                  ? ''
+                  : _stringify(widget.initialValue!),
+            ),
+        ownsController: widget.controller == null,
+      );
+      return;
+    }
+  }
+
+  void _attachController(
+    TextEditingController controller, {
+    required bool ownsController,
+  }) {
+    _controller = controller;
+    _ownsController = ownsController;
+    _lastAccepted = controller.text;
+    _controller.addListener(_onChanged);
+  }
+
+  @override
+  void dispose() {
+    _controller.removeListener(_onChanged);
+    if (_ownsController) _controller.dispose();
+    super.dispose();
+  }
+
+  String _stringify(num v) {
+    if (widget.allowDecimal) return v.toString();
+    return v.toInt().toString();
+  }
+
+  bool _isValid(String s) {
+    if (s.isEmpty) return true;
+    var i = 0;
+    if (s[0] == '-') {
+      if (!widget.allowNegative) return false;
+      i = 1;
+      if (s.length == 1) return true; // "-" alone is a valid in-progress token
+    }
+    var sawDot = false;
+    for (; i < s.length; i++) {
+      final c = s[i];
+      if (c == '.') {
+        if (!widget.allowDecimal || sawDot) return false;
+        sawDot = true;
+        continue;
+      }
+      if (c.codeUnitAt(0) < 0x30 || c.codeUnitAt(0) > 0x39) return false;
+    }
+    return true;
+  }
+
+  num? _parse(String s) {
+    if (s.isEmpty || s == '-' || s == '.' || s == '-.') return null;
+    if (s.endsWith('.')) return null; // "1." — in-progress, not yet a number
+    return widget.allowDecimal ? num.tryParse(s) : int.tryParse(s);
+  }
+
+  void _onChanged() {
+    if (_suppress) return;
+    final text = _controller.text;
+    if (text == _lastAccepted) return;
+    if (!_isValid(text)) {
+      // Revert to the last accepted value without firing onChanged, keeping the
+      // caret where the rejected character would have landed rather than
+      // jumping it to the end (readline / every peer field leaves it in place).
+      final priorOffset = _controller.caretOffset;
+      final added = text.length - _lastAccepted.length;
+      final keepAt = (priorOffset - (added > 0 ? added : 0)).clamp(
+        0,
+        _lastAccepted.length,
+      );
+      _suppress = true;
+      _controller
+        ..text = _lastAccepted
+        ..caretOffset = keepAt;
+      _suppress = false;
+      return;
+    }
+    _lastAccepted = text;
+    setState(() {});
+  }
+
+  num? _clampedSubmit(num? v) {
+    if (v == null) return null;
+    if (widget.min != null && v < widget.min!) return widget.min!;
+    if (widget.max != null && v > widget.max!) return widget.max!;
+    return v;
+  }
+
+  SemanticState _semanticState() {
+    final parsed = _parse(_controller.text);
+    final state = <String, Object?>{
+      'fieldType': 'number',
+      if (widget.min != null) 'min': widget.min,
+      if (widget.max != null) 'max': widget.max,
+      'allowNegative': widget.allowNegative,
+      'allowDecimal': widget.allowDecimal,
+      'numberFormat': widget.allowDecimal ? 'decimal' : 'integer',
+      'clampOnSubmit': widget.min != null || widget.max != null,
+    };
+    if (parsed != null) state['numericValue'] = parsed;
+    return SemanticState(state);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return TextInput(
+      controller: _controller,
+      focusNode: widget.focusNode,
+      autofocus: widget.autofocus,
+      placeholder: widget.placeholder,
+      placeholderStyle: widget.placeholderStyle,
+      style: widget.style,
+      cursorStyle: widget.cursorStyle,
+      enabled: widget.enabled,
+      readOnly: widget.readOnly,
+      semanticLabel: widget.semanticLabel,
+      semanticState: _semanticState(),
+      onChanged: (text) => widget.onChanged?.call(_parse(text)),
+      onSubmit: (text) {
+        final parsed = _parse(text);
+        final clamped = _clampedSubmit(parsed);
+        // If clamping changed the value, update the field to reflect it.
+        if (clamped != null && clamped != parsed) {
+          final s = _stringify(clamped);
+          _lastAccepted = s;
+          _suppress = true;
+          _controller
+            ..text = s
+            ..caretOffset = s.length;
+          _suppress = false;
+          setState(() {});
+          widget.onChanged?.call(clamped);
+        }
+        widget.onSubmit?.call(clamped);
+      },
+    );
+  }
+}

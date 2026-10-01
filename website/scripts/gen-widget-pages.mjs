@@ -24,7 +24,7 @@ const TYPES = join(here, '..', 'src', 'types.json');
 // Read by astro.config.mjs to build the grouped Widgets sidebar.
 const WIDGET_SIDEBAR = join(here, '..', 'src', 'widget-sidebar.json');
 const DOCS = join(here, '..', 'src', 'content', 'docs');
-const WIDGET_BARREL = join(ROOT, 'packages', 'fleury_widgets', 'lib', 'fleury_widgets.dart');
+const WIDGET_BARREL = join(ROOT, 'packages', 'fleury', 'lib', 'src', 'catalog', 'catalog.dart');
 // From src/content/docs/<section>/*.mdx up to src/components/.
 const COMPONENT = '../../../components/FleuryExample.astro';
 const KNOBS_COMPONENT = '../../../components/FleuryKnobs.astro';
@@ -336,7 +336,7 @@ function assertExportedWidgetCoverage(entries) {
   }
 
   const exported = exportedClassNames(readFileSync(WIDGET_BARREL, 'utf8'), {
-    barrelRepoDirectory: 'packages/fleury_widgets/lib',
+    barrelRepoDirectory: 'packages/fleury/lib/src/catalog',
     api,
   });
   const widgetBases = new Set([
@@ -405,7 +405,6 @@ function sourceSection(widget) {
 // browser build imports instead (see architecture/core-and-targets).
 const LIBRARIES = {
   fleury: { app: 'fleury.dart', browser: 'fleury_core.dart' },
-  fleury_widgets: { app: 'fleury_widgets.dart', browser: 'fleury_widgets_web.dart' },
 };
 const libraryExportCache = new Map();
 // Class names a library exports, following `export 'other_barrel.dart';` hops
@@ -417,8 +416,10 @@ function libraryExports(repoPath, seen = new Set()) {
   const text = readFileSync(join(ROOT, repoPath), 'utf8');
   const directory = posix.dirname(repoPath);
   const names = exportedClassNames(text, { barrelRepoDirectory: directory, api });
-  for (const [, uri] of text.matchAll(/^export\s+'([^':]+)'/gm)) {
-    if (uri.startsWith('src/')) continue;
+  for (const [, uri, combinators] of text.matchAll(/^export\s+'([^':]+)'([^;]*);/gm)) {
+    // Explicit show/hide clauses are handled by exportedClassNames; following
+    // those files wholesale would expose private implementation classes.
+    if (combinators.trim()) continue;
     for (const name of libraryExports(posix.join(directory, uri), seen)) names.add(name);
   }
   libraryExportCache.set(repoPath, names);
@@ -1139,7 +1140,7 @@ for (const d of DOC_PAGES) {
 // ── Catalog ─────────────────────────────────────────────────────────────────
 // Within a category the framework primitives from package:fleury lead (Text
 // before MarkdownView, ListView before DataTable), in the reading order below;
-// fleury_widgets pages follow in registry order, then its doc-only pages.
+// Catalog pages follow in registry order, then its doc-only pages.
 // Primitive-ness comes from the widget's source, not from which list names it.
 const PRIMITIVE_ORDER = [
   // Text & content
@@ -1191,13 +1192,13 @@ for (const { entry } of catalogEntries) {
 }
 let widgetIndex =
   `---\ntitle: Widget reference\ndescription: Every exported Fleury higher-level widget, plus the most-used core primitives — live where useful and source-backed throughout.\neditUrl: false\n---\n\n` +
-  `This reference covers every widget exported by \`fleury_widgets\`, plus ` +
+  `This reference covers every widget exported by the bundled catalog, plus ` +
   `the core layout, text, async, and input primitives most apps reach for. ` +
   `Most pages embed the real widget running live in your browser; every ` +
   `page's API tables are generated from the current Dart source.\n\n`;
 // Deliberate reading order: the control families a first visit scans for come
 // first; the framework primitives close the page. Categories group widgets by
-// what they are for, not by package, so core and fleury_widgets pages mix.
+// what they are for, not by package, so core and the Fleury catalog pages mix.
 // Unlisted categories (if a new one appears in the registry) fall in last.
 const CATEGORY_ORDER = [
   'Inputs & controls',

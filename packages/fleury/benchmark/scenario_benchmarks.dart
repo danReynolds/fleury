@@ -304,7 +304,7 @@ final class _TextEditingComposerScenario implements _ScenarioBenchmark {
       notes: const <String>[
         'Candidate thresholds are informational until stable baselines exist.',
         'Run mode is test-style harness execution, not a full terminal process.',
-        'Completion popup rendering lives in fleury_widgets; this core scenario measures the shared editing state and TextInput acceptance path.',
+        'Completion popup rendering lives in the bundled catalog; this core scenario measures the shared editing state and TextInput acceptance path.',
       ],
     );
   }

@@ -519,7 +519,7 @@ void main() {
   });
 }
 
-/// An approval prompt shaped like `ApprovalPrompt` in fleury_widgets: `y` and
+/// An approval prompt shaped like the bundled `ApprovalPrompt`: `y` and
 /// `n` shortcuts, Esc, and Approve and Deny buttons with one of them focused.
 /// It records every input that reaches it instead of closing.
 class _Prompt extends StatelessWidget {

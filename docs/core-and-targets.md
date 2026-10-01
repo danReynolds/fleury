@@ -75,7 +75,7 @@ That gives a simple rule for any code that might run in the browser:
 > a serve bridge — not for application UI; what it adds beyond the core is
 > host machinery whose API is versioned for targets, not apps.
 
-`fleury_widgets` follows exactly this split:
+`fleury_core.dart` includes the complete widget catalog:
 
 - **Every widget is web-safe** — charts, lists, inputs, layout, document
   viewers, log views, and agent surfaces all compile to JS and run in a browser.
@@ -91,14 +91,15 @@ That gives a simple rule for any code that might run in the browser:
   - `Image` loads bytes or decoded pixels anywhere; only `Image.file` needs the
     native filesystem, so browser apps load bytes asynchronously and use
     `Image.bytes` or `Image.decoded`.
-- **`LocalFileSource` is the one native-only export.** It is in
-  `fleury_widgets.dart` but not `fleury_widgets_web.dart`, and a test walks the
-  web barrel's imports to keep `dart:io` out of it.
+- **`LocalFileSource` is native-only.** Import `fleury.dart` to construct one.
+  The shared `fleury_core.dart` import exports every widget without native I/O;
+  a test walks the browser-selected imports to keep that guarantee.
 
 ## Package map
 
-Keyed by the import you write. The first five are libraries of the one `fleury`
-package; the rest are separate packages.
+Keyed by the import you write. Core, native hosting, widget support, and themes
+are libraries of the one `fleury` package, which also contains the full widget
+catalog. Browser hosting, testing, and MCP are optional companion packages.
 
 | Import | What it adds | Web-safe? |
 |--------|--------------|-----------|
@@ -107,11 +108,64 @@ package; the rest are separate packages.
 | `fleury/fleury_host_io.dart` | the host SPI plus the supported contracts a native process host uses to spawn and supervise a Fleury app (`spawnFleuryApp`) | ❌ — pulls in `dart:io` |
 | `fleury/fleury_wire.dart` | explicitly unstable remote frames/codecs/transports for matching first-party peers | ✅ |
 | `fleury/fleury.dart` | core + stable host SPI + the native runtime: `runApp`, terminal drivers, file/process/log | ❌ — pulls in `dart:io` |
-| `fleury_widgets` | the widget library | ✅ via `fleury_widgets_web.dart`; only `LocalFileSource` is native-only |
-| `fleury_themes` | ready-made themes (Nord, Dracula, Tokyo Night, …) as `const ThemeData` values | ✅ |
+| `fleury/fleury_widget_support.dart` | supported contracts for custom widget libraries | ✅ |
+| `fleury/themes.dart` | optional community palette presets | ✅ |
 | `fleury_web` | the web/DOM target and the served browser client | ✅ — compiled with dart2js |
 | `fleury_test` | `testWidgets`, the headless `FleuryTester`, semantic matchers, and golden files | ❌ — a dev dependency for VM tests; goldens use `dart:io` |
 | `fleury_mcp` | the `fleury_mcp` MCP server executable and its library (`FleuryAppBridge`, `McpServer`) | ❌ — a native process that spawns your app |
+
+## Primitives and the bundled catalog
+
+Core owns the primitives needed to implement a widget library: layout, text,
+editing, focus, input, selection, scrolling, overlays, navigation, animation,
+semantics, and theme roles. `Button`, `TextInput`, `TextArea`, and `Spinner` also
+provide small terminal defaults so a useful app can depend on core alone.
+`FleuryApp`, its status row, and output-capture views remain optional helpers;
+a custom tree does not need to adopt an application shell.
+
+The same package bundles forms, checkboxes and selectors, pickers, menus,
+dialogs, tables, charts, document views, and workflow UI. Both `fleury.dart`
+and `fleury_core.dart` export this catalog, so adding a richer control does not
+require another dependency or import.
+
+Catalog implementations live in `packages/fleury/lib/src/catalog`, examples in
+`example/catalog`, and benchmarks in `benchmark/catalog`. Consumer tests live
+in `packages/fleury_test/test/catalog`; this avoids making the first core
+publication depend on its own test companion. Keep catalog files grouped and
+compose them from the framework contracts so a future extraction stays practical.
+The private `src/primitives.dart` export list stays independent of the catalog;
+`fleury_core.dart` combines both for app authors.
+
+The catalog's component theme and `FleuryApp` are optional. Community palettes
+live in the opt-in `package:fleury/themes.dart` library; bundling controls does
+not select an application's appearance.
+
+### Implementing a widget library
+
+Import `package:fleury/fleury_widget_support.dart` alongside `fleury_core.dart`
+for the supported widget-authoring contracts:
+
+- `FocusableControl` supplies focus, hover/pressed state, keyboard/pointer and
+  semantic activation. Its builder owns the entire appearance; it adds no
+  button border, padding, or application shell.
+- `FormControlRegistration` and `FormControlScope` connect custom value controls
+  to form validation. `FocusableControl(participatesInForm: true)` handles this
+  for activation controls.
+- `CellStyleState` and `resolveCellStyle` resolve the same interactive style
+  cascade as core controls. `revealInScrollViews` reveals a laid-out target.
+- `dependOnScope` supports subscribing widget accessors such as `Form.of`;
+  `readScope` performs an imperative lookup without a rebuild subscription.
+  Ordinary application builds use `context.scope<T>()`.
+- `projectDisplayText` gives custom painters the spelling to measure and paint
+  for a surface's text policy. Preserve the original text for semantics/copy,
+  and sanitize untrusted text before display projection.
+
+These APIs follow the package's version compatibility contract, including for
+third-party widget libraries. Consumer tests use these imports to exercise
+custom-control focus, semantics, and form behavior.
+`fleury_internal.dart` remains for repository tests/profiling, with no external
+compatibility promise. Browser and MCP wire peers remain exact-pinned because
+`fleury_wire.dart` is a separate, explicitly unstable protocol surface.
 
 ## Why this matters
 

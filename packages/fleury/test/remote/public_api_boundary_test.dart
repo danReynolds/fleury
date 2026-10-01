@@ -7,6 +7,8 @@ void main() {
     final publicLibraries = <String>[
       'lib/fleury.dart',
       'lib/fleury_core.dart',
+      'lib/src/primitives.dart',
+      'lib/src/catalog/catalog.dart',
       'lib/fleury_test_support.dart',
     ];
 
@@ -21,7 +23,7 @@ void main() {
 
       expect(
         exportLines,
-        isNot(contains('src/remote/')),
+        isNot(contains('remote/')),
         reason:
             '$path must not export remote protocol, transport, or driver '
             'internals before the remote API is intentionally stabilized.',
@@ -48,7 +50,11 @@ void main() {
     expect(nativeUmbrella, contains('runApp'));
     expect(nativeUmbrella, isNot(contains(retiredNativeEntry)));
 
-    final core = File('lib/fleury_core.dart').readAsStringSync();
+    final core = [
+      File('lib/fleury_core.dart'),
+      File('lib/src/primitives.dart'),
+      File('lib/src/catalog/catalog.dart'),
+    ].map((file) => file.readAsStringSync()).join('\n');
     expect(core, contains('TerminalDriver'));
 
     final host = File('lib/fleury_host.dart').readAsStringSync();

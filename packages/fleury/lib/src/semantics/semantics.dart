@@ -76,7 +76,7 @@ final class SemanticNodeId {
 /// `json`, `diff`, `log`, `chart`, …) — vocabulary any terminal app may
 /// produce, whether or not a surface projects it like another core role. What
 /// moves out: roles that name one catalog widget. The roles that describe the
-/// `fleury_widgets` catalog live in that package (`WidgetRoles`), not here.
+/// bundled catalog live in `WidgetRoles`.
 final class SemanticRole {
   /// Declares a role outside the core vocabulary.
   ///

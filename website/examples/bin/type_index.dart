@@ -14,7 +14,6 @@ void main(List<String> args) {
   // (scan root, repo-relative prefix)
   const roots = <(String, String)>[
     ('../../packages/fleury/lib', 'packages/fleury/lib'),
-    ('../../packages/fleury_widgets/lib', 'packages/fleury_widgets/lib'),
   ];
   final index = <String, String>{};
 

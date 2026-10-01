@@ -2,6 +2,8 @@ import 'dart:convert';
 import 'dart:io';
 import 'dart:math' as math;
 
+import '../profiling/bin/allocation_trace_config.dart';
+
 Future<void> main(List<String> rawArgs) async {
   final parsed = _ParsedArgs.parse(rawArgs);
   if (parsed.help || parsed.command == null) {
@@ -191,7 +193,7 @@ void _printUsage() {
     '  core-demo <name>              Run a packages/fleury example',
   );
   stdout.writeln(
-    '  widget-demo <name>            Run a packages/fleury_widgets example',
+    '  widget-demo <name>            Run a packages/fleury/example/catalog example',
   );
   stdout.writeln(
     '  cli <args...>                 Run packages/fleury/bin/fleury.dart',
@@ -290,10 +292,10 @@ final _coreDemos = <String, String>{
 };
 
 final _widgetDemos = <String, String>{
-  'app-shell': 'example/app_shell_demo.dart',
-  'dashboard': 'example/dashboard_demo.dart',
-  'dashboard-snapshot': 'example/dashboard_snapshot.dart',
-  'image': 'example/image_demo.dart',
+  'app-shell': 'example/catalog/app_shell_demo.dart',
+  'dashboard': 'example/catalog/dashboard_demo.dart',
+  'dashboard-snapshot': 'example/catalog/dashboard_snapshot.dart',
+  'image': 'example/catalog/image_demo.dart',
 };
 
 class _ParsedArgs {
@@ -339,8 +341,6 @@ class _Runner {
 
   String get fleury => '$root/packages/fleury';
   String get fleuryTest => '$root/packages/fleury_test';
-  String get widgets => '$root/packages/fleury_widgets';
-  String get themes => '$root/packages/fleury_themes';
   String get web => '$root/packages/fleury_web';
   String get git => '$root/packages/fleury_git';
   String get demo => '$root/packages/fleury_example_console';
@@ -354,8 +354,6 @@ class _Runner {
     for (final dir in [
       fleury,
       fleuryTest,
-      widgets,
-      themes,
       web,
       git,
       demo,
@@ -394,8 +392,6 @@ class _Runner {
     for (final dir in [
       fleury,
       fleuryTest,
-      widgets,
-      themes,
       git,
       demo,
       storybook,
@@ -422,25 +418,15 @@ class _Runner {
         'integration',
       ], workingDirectory: fleury);
     }
-    await _run('dart', ['test'], workingDirectory: fleuryTest);
+    // Catalog regressions live with their public test helpers, avoiding a
+    // core -> fleury_test dev dependency cycle during the initial release.
+    // Pin a DST-observing zone for CalendarHeatmap's date regressions.
     await _run(
       'dart',
-      quick
-          ? [
-              'test',
-              'test/dashboard_demo_test.dart',
-              'test/app_shell_demo_test.dart',
-            ]
-          : ['test'],
-      workingDirectory: widgets,
-      // CalendarHeatmap's DST regression tests can only reproduce the bug in a
-      // DST-observing zone (Dart's DateTime models local+UTC only), so they
-      // self-skip under a fixed-offset zone. CI runners default to UTC — pin a
-      // DST zone here so those guards actually execute. Scoped to widgets so no
-      // other package's tests inherit a non-UTC clock.
+      ['test'],
+      workingDirectory: fleuryTest,
       environment: const {'TZ': 'America/New_York'},
     );
-    await _run('dart', ['test'], workingDirectory: themes);
     await _run('dart', ['test'], workingDirectory: git);
     await _run('dart', [
       'test',
@@ -493,7 +479,7 @@ class _Runner {
       ], workingDirectory: webExamples);
 
       // dart2js smoke: the doc-examples entrypoint pulls in fleury_core,
-      // fleury_widgets_web, fleury_web, and the samples — the whole
+      // the bundled catalog, fleury_web, and the samples — the whole
       // browser-safe surface compiles or this fails.
       await _run('dart', [
         'compile',
@@ -521,8 +507,6 @@ class _Runner {
     final requiredPackages = <String>[
       fleury,
       fleuryTest,
-      widgets,
-      themes,
       git,
       demo,
       storybook,
@@ -679,11 +663,14 @@ Uint8List remoteClientJs() => base64.decode(_remoteClientJsBase64);
         floorPercent: options.coreMinPercent,
         excludeIntegration: !options.includeIntegration,
         excludeCoverageIncompatible: true,
+        excludeSource: '/lib/src/catalog/',
       ),
       _CoveragePackageTarget(
         label: 'widgets',
-        packageName: 'fleury_widgets',
-        packagePath: widgets,
+        packageName: 'fleury',
+        packagePath: fleuryTest,
+        testPath: 'test/catalog',
+        includeSource: '/lib/src/catalog/',
         floorPercent: options.widgetsMinPercent,
         excludeIntegration: false,
         excludeCoverageIncompatible: false,
@@ -725,6 +712,7 @@ Uint8List remoteClientJs() => base64.decode(_remoteClientJsBase64);
   List<String> _coverageTestArgs(_CoveragePackageTarget target) {
     return <String>[
       'test',
+      if (target.testPath != null) target.testPath!,
       if (target.excludeIntegration) ...['-x', 'integration'],
       if (target.excludeCoverageIncompatible) ...[
         '-x',
@@ -779,7 +767,11 @@ Uint8List remoteClientJs() => base64.decode(_remoteClientJsBase64);
       exit(1);
     }
 
-    final lcov = _parseLcov(lcovFile.readAsStringSync());
+    final lcov = _parseLcov(
+      lcovFile.readAsStringSync(),
+      includeSource: target.includeSource,
+      excludeSource: target.excludeSource,
+    );
     if (lcov.linesFound == 0) {
       stderr.writeln(
         'Coverage sanity check failed for ${target.label}: '
@@ -840,7 +832,7 @@ Uint8List remoteClientJs() => base64.decode(_remoteClientJsBase64);
       _printCatalog();
       exit(2);
     }
-    return _run('dart', ['run', path], workingDirectory: widgets);
+    return _run('dart', ['run', path], workingDirectory: fleury);
   }
 
   Future<void> fleuryCli(List<String> args) {
@@ -1702,12 +1694,7 @@ Uint8List remoteClientJs() => base64.decode(_remoteClientJsBase64);
       // --deterministic pins JIT compilation order: otherwise a background
       // allocation-sinking tier can land mid-window at a nondeterministic
       // frame and collapse the measured churn (see bin/alloc_gate.dart).
-      '--deterministic',
-      '--profiler',
-      '--max-profile-depth=2',
-      '--profile-startup',
-      '--enable-vm-service=0',
-      '--disable-service-auth-codes',
+      ...allocationTraceVmFlags,
       'bin/alloc_gate.dart',
       ...args,
     ], workingDirectory: profiling);
@@ -1732,12 +1719,7 @@ Uint8List remoteClientJs() => base64.decode(_remoteClientJsBase64);
     await _run('dart', [
       // Same reason as alloc-gate: without --deterministic a background JIT
       // tier can land mid-window and collapse the measured churn.
-      '--deterministic',
-      '--profiler',
-      '--max-profile-depth=2',
-      '--profile-startup',
-      '--enable-vm-service=0',
-      '--disable-service-auth-codes',
+      ...allocationTraceVmFlags,
       'bin/input_alloc_gate.dart',
       ...args,
     ], workingDirectory: profiling);
@@ -1801,22 +1783,26 @@ Uint8List remoteClientJs() => base64.decode(_remoteClientJsBase64);
   /// Timings are printed but not gated. Every runner is run, even after a
   /// failure, so one command reports the whole board.
   Future<void> benchmarkScenarioGate(List<String> args) async {
-    final runs = <({String package, List<String> args})>[
-      (package: fleury, args: const ['--warmup=1', '--iterations=1']),
+    final runs = <({String package, String runner, List<String> args})>[
       (
-        package: widgets,
+        package: fleury,
+        runner: 'benchmark/scenario_benchmarks.dart',
+        args: const ['--warmup=1', '--iterations=1'],
+      ),
+      (
+        package: fleury,
+        runner: 'benchmark/catalog/scenario_benchmarks.dart',
         args: const ['--warmup=1', '--iterations=1', '--rows=2000'],
       ),
-      (package: demo, args: const ['--warmup=1', '--iterations=1']),
+      (
+        package: demo,
+        runner: 'benchmark/scenario_benchmarks.dart',
+        args: const ['--warmup=1', '--iterations=1'],
+      ),
     ];
     final failed = <String>[];
     for (final run in runs) {
-      final command = [
-        'run',
-        'benchmark/scenario_benchmarks.dart',
-        ...run.args,
-        ...args,
-      ];
+      final command = ['run', run.runner, ...run.args, ...args];
       stdout.writeln('\n─── ${_relative(run.package)} ───');
       if (dryRun) {
         stdout.writeln('(${_relative(run.package)}) dart ${command.join(' ')}');
@@ -1854,22 +1840,12 @@ Uint8List remoteClientJs() => base64.decode(_remoteClientJsBase64);
       (name: 'image-bench', cmd: ['run', 'bin/image_bench.dart', '--gate']),
       (name: 'bundle-size', cmd: ['run', 'bin/bundle_size_gate.dart', '--gate']),
       (name: 'alloc-gate', cmd: [
-        '--deterministic',
-        '--profiler',
-        '--max-profile-depth=2',
-        '--profile-startup',
-        '--enable-vm-service=0',
-        '--disable-service-auth-codes',
+        ...allocationTraceVmFlags,
         'bin/alloc_gate.dart',
         '--gate',
       ]),
       (name: 'input-alloc-gate', cmd: [
-        '--deterministic',
-        '--profiler',
-        '--max-profile-depth=2',
-        '--profile-startup',
-        '--enable-vm-service=0',
-        '--disable-service-auth-codes',
+        ...allocationTraceVmFlags,
         'bin/input_alloc_gate.dart',
         '--gate',
       ]),
@@ -2699,7 +2675,7 @@ Uint8List remoteClientJs() => base64.decode(_remoteClientJsBase64);
       stdout.writeln('${target.label}:');
       await _run('dart', [
         'run',
-        'benchmark/scenario_benchmarks.dart',
+        target.runner,
         '--list',
       ], workingDirectory: '$root/${target.packagePath}');
     }
@@ -2712,7 +2688,7 @@ Uint8List remoteClientJs() => base64.decode(_remoteClientJsBase64);
     final forwarded = args.map(_normalizeLocalBenchmarkArg).toList();
     return _run('dart', [
       'run',
-      'benchmark/scenario_benchmarks.dart',
+      target.runner,
       ...forwarded,
     ], workingDirectory: '$root/${target.packagePath}');
   }
@@ -2806,7 +2782,7 @@ void _printCoverageUsage() {
   );
   stdout.writeln('  --core-min=PERCENT       Core package floor, default 80');
   stdout.writeln(
-    '  --widgets-min=PERCENT    Widgets package floor, default 85',
+    '  --widgets-min=PERCENT    Bundled widget catalog floor, default 85',
   );
 }
 
@@ -2818,6 +2794,9 @@ final class _CoveragePackageTarget {
     required this.floorPercent,
     required this.excludeIntegration,
     required this.excludeCoverageIncompatible,
+    this.testPath,
+    this.includeSource,
+    this.excludeSource,
   });
 
   final String label;
@@ -2826,6 +2805,9 @@ final class _CoveragePackageTarget {
   final double floorPercent;
   final bool excludeIntegration;
   final bool excludeCoverageIncompatible;
+  final String? testPath;
+  final String? includeSource;
+  final String? excludeSource;
 }
 
 final class _CoveragePackageResult {
@@ -2887,7 +2869,11 @@ final class _CoveragePackageResult {
   return (start: start, done: done);
 }
 
-({int linesHit, int linesFound}) _parseLcov(String text) {
+({int linesHit, int linesFound}) _parseLcov(
+  String text, {
+  String? includeSource,
+  String? excludeSource,
+}) {
   var totalHit = 0;
   var totalFound = 0;
   var recordHit = 0;
@@ -2896,11 +2882,14 @@ final class _CoveragePackageResult {
   var daFound = 0;
   var hasSummary = false;
   var hasRecord = false;
+  var includeRecord = true;
 
   void finishRecord() {
     if (!hasRecord) return;
-    totalHit += hasSummary ? recordHit : daHit;
-    totalFound += hasSummary ? recordFound : daFound;
+    if (includeRecord) {
+      totalHit += hasSummary ? recordHit : daHit;
+      totalFound += hasSummary ? recordFound : daFound;
+    }
     recordHit = 0;
     recordFound = 0;
     daHit = 0;
@@ -2912,6 +2901,10 @@ final class _CoveragePackageResult {
   for (final line in const LineSplitter().convert(text)) {
     if (line.startsWith('SF:')) {
       finishRecord();
+      final source = '/${line.substring(3).replaceAll(r'\', '/')}';
+      includeRecord =
+          (includeSource == null || source.contains(includeSource)) &&
+          (excludeSource == null || !source.contains(excludeSource));
       hasRecord = true;
     } else if (line.startsWith('DA:')) {
       hasRecord = true;
@@ -2976,11 +2969,13 @@ final class _LocalBenchmarkTarget {
     required this.label,
     required this.packagePath,
     required this.scenarios,
+    this.runner = 'benchmark/scenario_benchmarks.dart',
   });
 
   final String label;
   final String packagePath;
   final List<String> scenarios;
+  final String runner;
 }
 
 const _coreBenchmarkTarget = _LocalBenchmarkTarget(
@@ -2990,8 +2985,9 @@ const _coreBenchmarkTarget = _LocalBenchmarkTarget(
 );
 
 const _widgetBenchmarkTarget = _LocalBenchmarkTarget(
-  label: 'Widget package',
-  packagePath: 'packages/fleury_widgets',
+  label: 'Widget catalog',
+  packagePath: 'packages/fleury',
+  runner: 'benchmark/catalog/scenario_benchmarks.dart',
   scenarios: <String>[
     'SB.3',
     'SB.4',

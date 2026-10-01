@@ -29,7 +29,7 @@ structured terminal/browser surfaces.
 | `runApp(const MyApp())` | Same name for terminal/native apps. |
 | `MaterialApp` / `WidgetsApp` | `FleuryApp(title:, home:, theme:)` is the lightweight app shell. |
 | logical pixels | integer cells (`EdgeInsets.all(1)`, not `8.0`). |
-| Material controls | Fleury core widgets plus `fleury_widgets` for tables, charts, forms, agent surfaces, and controls. |
+| Material controls | Fleury includes primitives, controls, tables, charts, forms, and agent surfaces in one package. |
 | Flutter web build | `mountApp(() => const FleuryApp(title: 'My app', home: MyHomeScreen()), into: host)` in a client-side dart2js bundle. (`fleury serve` previews a native app in a browser during development, on macOS and Linux; it isn't a web build.) |
 | `flutter run`, then `r` / `R` | `fleury run` hot reloads when you save a file (macOS and Linux). For a hot restart, press `Ctrl+G` to open the debug shell, then `F5`; see [Hot reload](/fleury/guides/hot-reload/). |
 
@@ -110,8 +110,7 @@ the same widget tree, but different host entrypoints:
 | Use case | Import | Entrypoint |
 |---|---|---|
 | Native terminal app | `package:fleury/fleury.dart` | `runApp(const FleuryApp(title: 'My app', home: MyHomeScreen()))` |
-| Higher-level widgets in a terminal app | `package:fleury_widgets/fleury_widgets.dart` | still `runApp` |
-| Client-side browser embed | `package:fleury/fleury_core.dart`, `package:fleury_web/fleury_web.dart`, plus web-safe widgets | `mountApp(() => const FleuryApp(title: 'My app', home: MyHomeScreen()), into: host)` |
+| Client-side browser embed | `package:fleury/fleury_core.dart`, `package:fleury_web/fleury_web.dart` | `mountApp(() => const FleuryApp(title: 'My app', home: MyHomeScreen()), into: host)` |
 | Local browser preview of a native app, during development (macOS and Linux) | terminal app imports | `fleury serve --spawn dart --enable-vm-service=0 run bin/run_app.dart` |
 
 `MyHomeScreen` below is the first screen inside the shell. In a project made
@@ -137,8 +136,8 @@ Future<void> main() async {
 
 Client-side browser bundles can only use web-safe code: dart2js compiles
 `dart:io` imports, but that code throws when it runs in the browser. Import
-`package:fleury_widgets/fleury_widgets_web.dart` instead of the full
-`fleury_widgets.dart` barrel when compiling with dart2js. `FileBrowser` and
+`package:fleury/fleury_core.dart` for shared UI, including every widget.
+Explicit local filesystem access uses `package:fleury/fleury.dart`. `FileBrowser` and
 `FilePicker` work with a browser-safe `FileSource`, such as `MemoryFileSource`;
 `LogRegion` displays log entries supplied by your app. `LocalFileSource` and
 code that reads host files or launches processes need a native app. With

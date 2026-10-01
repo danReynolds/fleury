@@ -1,7 +1,6 @@
 import 'dart:async' show FutureOr;
 
 import 'package:fleury/fleury.dart';
-import 'package:fleury_widgets/fleury_widgets.dart';
 
 const gitRefreshCommandId = CommandId('git.refresh');
 const gitOpenChangesCommandId = CommandId('git.open-changes');
