@@ -56,7 +56,16 @@ final class ApprovalRequest {
 /// A yes/no decision dialog for one [ApprovalRequest]: title, explanation,
 /// optional subject and detail lines, and Approve/Deny buttons with `y`/`n`
 /// key shortcuts. Destructive requests focus Deny by default, so a stray
-/// Enter can't trigger an irreversible action.
+/// Enter can't trigger an irreversible action. For half a second after the
+/// prompt appears, or shows a request with a different [ApprovalRequest.id],
+/// it ignores the keys and clicks that approve (`y`, and Enter, Space, or a
+/// click on Approve), so typing or a click meant for what was there before
+/// can't approve it. Denying works at once.
+///
+/// The prompt's semantic submit action approves at once, since an agent or
+/// assistive technology addresses it on purpose. A semantic press of the
+/// Approve button in that half second reports `unsupported` instead: the
+/// button can't tell it from a key or a click.
 ///
 /// Esc denies, as the semantic cancel action does. In a dialog shown with
 /// `present`, Esc answers the request through [onDecision] instead of closing
@@ -74,7 +83,7 @@ final class ApprovalRequest {
 ///   barrierDismissible: false,
 /// );
 /// ```
-class ApprovalPrompt extends StatelessWidget {
+class ApprovalPrompt extends StatefulWidget {
   const ApprovalPrompt({
     super.key,
     required this.request,
@@ -103,13 +112,64 @@ class ApprovalPrompt extends StatelessWidget {
   bool get _autofocusApprove =>
       autofocusApprove ?? request.severity != ApprovalSeverity.destructive;
 
-  void _approve() => onDecision(ApprovalDecision.approved);
-  void _deny() => onDecision(ApprovalDecision.denied);
+  @override
+  State<ApprovalPrompt> createState() => _ApprovalPromptState();
+}
+
+class _ApprovalPromptState extends State<ApprovalPrompt> {
+  /// How long after the prompt appears it ignores approving keys and clicks.
+  static const _approvalDelay = Duration(milliseconds: 500);
+
+  /// The runtime's clock, which tests drive.
+  Clock _clock = const SystemClock();
+
+  /// When the prompt first built with its current request; null until then.
+  Duration? _shownAt;
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    _clock =
+        TuiBinding.maybeOf(context)?.tickerScheduler.clock ??
+        const SystemClock();
+  }
+
+  @override
+  void didUpdateWidget(ApprovalPrompt oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    // A different request is a new question: keys meant for the last one
+    // must not answer it.
+    if (widget.request.id != oldWidget.request.id) _shownAt = null;
+  }
+
+  /// Whether a key or click may approve yet: true once the prompt has been
+  /// showing its request for [_approvalDelay].
+  bool get _approvable {
+    final shownAt = _shownAt;
+    return shownAt != null && _clock.now - shownAt >= _approvalDelay;
+  }
+
+  void _approve() => widget.onDecision(ApprovalDecision.approved);
+  void _deny() => widget.onDecision(ApprovalDecision.denied);
+
+  /// `y`: does nothing (and still consumes the key) until [_approvable].
+  void _approveFromKey() {
+    if (_approvable) _approve();
+  }
+
+  /// Approve's Enter, Space, click, or semantic press. A decline is ignored
+  /// by a key or click and reported by a semantic press.
+  void _pressApprove() {
+    if (!_approvable) throw const SemanticActionDeclined();
+    _approve();
+  }
 
   @override
   Widget build(BuildContext context) {
+    _shownAt ??= _clock.now;
     final theme = Theme.of(context);
-    final approveFocused = _autofocusApprove;
+    final request = widget.request;
+    final approveFocused = widget._autofocusApprove;
     return Semantics(
       role: WidgetRoles.approval,
       label: request.title,
@@ -125,6 +185,8 @@ class ApprovalPrompt extends StatelessWidget {
       }),
       onAction: (action) {
         switch (action) {
+          // Not held back like a key or click: a semantic action is aimed at
+          // this prompt, so it can't be typing meant for the screen behind.
           case SemanticAction.submit:
             _approve();
             return;
@@ -141,7 +203,7 @@ class ApprovalPrompt extends StatelessWidget {
         bindings: <KeyBinding>[
           KeyBinding(
             KeyCode.char('y'),
-            onTrigger: (_) => _approve(),
+            onTrigger: (_) => _approveFromKey(),
             hideFromHintBar: true,
           ),
           KeyBinding(
@@ -160,7 +222,7 @@ class ApprovalPrompt extends StatelessWidget {
         ],
         child: Dialog(
           title: request.title,
-          width: width,
+          width: widget.width,
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.stretch,
             mainAxisSize: MainAxisSize.min,
@@ -189,7 +251,7 @@ class ApprovalPrompt extends StatelessWidget {
                     text: request.confirmLabel,
                     variant: _confirmVariant(request.severity),
                     autofocus: approveFocused,
-                    onPressed: _approve,
+                    onPressed: _pressApprove,
                   ),
                   const SizedBox(width: 1),
                   Button(

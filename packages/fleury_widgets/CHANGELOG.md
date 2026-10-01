@@ -4,6 +4,12 @@
   dialog without calling `onDecision`; it now makes the deny decision, the same
   as the prompt's semantic cancel. An inline prompt also denies on Esc instead
   of passing the key on.
+- **An `ApprovalPrompt` ignores the keys and clicks that approve for half a
+  second** after it appears or shows a request with a new id: `y`, and Enter,
+  Space or a click on Approve, do nothing, so typing or a click meant for the
+  screen it covered can't approve it. Denying works at once, as does the
+  prompt's semantic submit; a semantic press of the Approve button in that
+  half second reports `unsupported`.
 - `KeyHintBar` inside a dialog shows only the bindings that can fire there: key
   hint resolution stops at a modal `KeyBindings` scope, as dispatch does.
 - `FilePicker` keeps its cursor and listing when a parent rebuild passes a new
