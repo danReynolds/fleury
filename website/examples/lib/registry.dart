@@ -443,18 +443,7 @@ Canvas(
   semanticRole: SemanticRole.chart,
   semanticLabel: 'Sine wave',
 )''',
-    builder: () => _framed(
-      SizedBox(
-        width: 48,
-        height: 9,
-        child: Canvas(
-          painter: _DocsCanvasPainter(),
-          bounds: const CanvasBounds(minX: 0, maxX: 6.28, minY: -1, maxY: 1),
-          semanticRole: SemanticRole.chart,
-          semanticLabel: 'Sine wave',
-        ),
-      ),
-    ),
+    builder: () => _framed(const _CanvasExample()),
   ),
   ExampleInfo(
     id: 'panel.basic',
@@ -3322,18 +3311,32 @@ final class _DocsExampleTheme {
 // ── Stateful wrappers ───────────────────────────────────────────────────────
 // Controlled widgets (value + onChanged) need a holder so interacting with the
 // live example actually moves them; self-managing widgets are used directly.
-final class _DocsCanvasPainter extends CanvasPainter {
+class _CanvasExample extends StatelessWidget {
+  const _CanvasExample();
+
+  @override
+  Widget build(BuildContext context) => SizedBox(
+    width: 48,
+    height: 9,
+    child: Canvas(
+      painter: _SineWavePainter(),
+      // The painter draws in these logical coordinates: one period of sin(x).
+      bounds: const CanvasBounds(minX: 0, maxX: 6.28, minY: -1, maxY: 1),
+      semanticRole: SemanticRole.chart,
+      semanticLabel: 'Sine wave',
+    ),
+  );
+}
+
+/// Draws one period of sin(x) as short line segments.
+class _SineWavePainter extends CanvasPainter {
   @override
   void paint(CanvasContext ctx) {
     const segments = 96;
-    var previousX = 0.0;
-    var previousY = 0.0;
-    for (var i = 1; i <= segments; i++) {
-      final x = 6.28 * i / segments;
-      final y = sin(x);
-      ctx.drawLine(previousX, previousY, x, y);
-      previousX = x;
-      previousY = y;
+    for (var i = 0; i < segments; i++) {
+      final x1 = 6.28 * i / segments;
+      final x2 = 6.28 * (i + 1) / segments;
+      ctx.drawLine(x1, sin(x1), x2, sin(x2));
     }
   }
 }

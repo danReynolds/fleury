@@ -44,6 +44,18 @@
       "declaration": "_FocusDetectorTourState"
     }
   ],
+  "canvas.basic": [
+    {
+      "label": "canvas_example.dart",
+      "source": "website/examples/lib/registry.dart",
+      "declaration": "_CanvasExample"
+    },
+    {
+      "label": "sine_wave_painter.dart",
+      "source": "website/examples/lib/registry.dart",
+      "declaration": "_SineWavePainter"
+    }
+  ],
   "toaster.basic": [
     {
       "label": "toaster_example.dart",
