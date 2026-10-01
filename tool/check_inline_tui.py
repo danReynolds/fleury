@@ -144,7 +144,11 @@ class Session:
             self.pump(0.05)
         assert self.child.returncode == expected, (self.child.returncode, self.text())
         assert b"\x1b[2J" not in self.raw, "cleared the whole main screen"
-        assert b"1049" not in self.raw, "switched alternate-screen state"
+        # The mode sequence, not the bare digits: the app prints its pid, and a
+        # pid containing "1049" is not an alternate-screen switch.
+        assert not re.search(
+            rb"\x1b\[\?[\d;]*1049[\d;]*[hl]", self.raw
+        ), "switched alternate-screen state"
         assert not re.search(rb"\x1b\[\d*S", self.raw), "scrolled the entire terminal"
         assert b"\x1b[?7h" in self.raw, "autowrap was not restored"
         assert b"\x1b[?1006l" in self.raw, "mouse capture was not released"

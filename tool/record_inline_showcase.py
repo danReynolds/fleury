@@ -12,6 +12,7 @@ import fcntl
 import json
 import os
 from pathlib import Path
+import re
 import select
 import signal
 import struct
@@ -212,7 +213,7 @@ def record(binary, destination, handoff=False, full_screen=False, repeat=False):
             assert raw.count(b'\x1b[?1049h') == expected_entries, 'unexpected alternate-screen entries'
             assert raw.count(b'\x1b[?1049l') == expected_entries, 'unbalanced alternate-screen exit'
         else:
-            assert b"1049" not in raw and b"\x1b[2J" not in raw, "used fullscreen rendering"
+            assert not re.search(rb"\x1b\[\?[\d;]*1049[\d;]*[hl]", raw) and b"\x1b[2J" not in raw, "used fullscreen rendering"
         # A final no-op output event holds the result long enough to read it.
         pause(1.8)
         events.append([round(time.monotonic() - start, 4), "o", ""])
