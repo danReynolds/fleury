@@ -89,13 +89,10 @@ accepting the update as successful.
 
 Browser entry points cannot import libraries backed by `dart:io`. Use:
 
-- `package:fleury/fleury_core.dart` for the shared framework;
+- `package:fleury/fleury_core.dart` for the framework and full widget catalog;
 - `package:fleury_web/fleury_web.dart` for the browser host;
-- `package:fleury_widgets/fleury_widgets.dart` when an app also depends on
-  `fleury_widgets`.
 
-The native `package:fleury/fleury.dart` and
-`package:fleury_widgets/fleury_widgets_io.dart` libraries include terminal-only
+The native `package:fleury/fleury.dart` library includes terminal-only
 APIs. Keep those imports in native entry points.
 
 ## Embed or serve

@@ -2,7 +2,6 @@
 import 'dart:io';
 import 'package:fleury/fleury.dart';
 import 'package:fleury/fleury_test_support.dart';
-import 'package:fleury_widgets/fleury_widgets.dart';
 
 void main() {
   for (final history in [0, 20, 200]) {

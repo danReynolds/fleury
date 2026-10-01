@@ -1,4 +1,4 @@
-# Local development: resolve fleury from the monorepo. fleury_widgets (a path
+# Local development: resolve fleury from the monorepo. Fleury catalog (a path
 # dep here) declares fleury as a hosted dep, so without this override pub can't
 # reconcile "fleury from path" (ours) with "fleury from hosted" (its). Forcing
 # fleury to path makes the whole graph path-consistent. pub ignores this file

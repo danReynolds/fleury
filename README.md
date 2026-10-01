@@ -41,7 +41,7 @@ AI agents can inspect and operate by meaning instead of terminal coordinates.
 - **Terminal and browser targets.** Share application UI while choosing a
   native terminal host, a client-side web mount, or a served browser session.
 - **A real widget library.** Forms, tables, trees, charts, document views, and
-  agent-oriented surfaces live in `fleury_widgets`.
+  agent-oriented surfaces are bundled in `fleury`.
 - **Semantics from the start.** The same semantic model supports testing,
   browser accessibility, inspection, and agent actions.
 

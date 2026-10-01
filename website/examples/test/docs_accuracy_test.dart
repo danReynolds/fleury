@@ -191,12 +191,12 @@ void main() {
       expect(sharedTree, isNot(contains("package:fleury/fleury.dart")));
       expect(
         '$snippet\n$sharedTree',
-        contains("package:fleury_widgets/fleury_widgets.dart"),
+        contains("package:fleury/fleury_core.dart"),
       );
       expect(snippet, isNot(contains("package:fleury/fleury.dart")));
       expect(
         '$snippet\n$sharedTree',
-        isNot(contains("package:fleury_widgets/fleury_widgets_io.dart")),
+        isNot(contains("package:fleury/fleury.dart")),
       );
     });
 
@@ -323,7 +323,7 @@ void main() {
       expect(guide, contains("import 'package:fleury/fleury_core.dart';"));
       expect(
         guide,
-        contains("import 'package:fleury_widgets/fleury_widgets.dart';"),
+        contains("import 'package:fleury/fleury_core.dart';"),
       );
       expect(guide, contains('() => const MyApp()'));
       expect(guide, contains('title="web/index.html"'));
@@ -443,7 +443,6 @@ void main() {
     test('every publishable changelog leads with its pubspec version', () {
       for (final package in const <String>[
         'fleury',
-        'fleury_widgets',
         'fleury_test',
         'fleury_web',
         'fleury_mcp',
@@ -537,7 +536,7 @@ List<File> _publicDocs(Directory repo) {
   final files = <File>[
     File(p.join(repo.path, 'README.md')),
     File(p.join(repo.path, 'packages/fleury/README.md')),
-    File(p.join(repo.path, 'packages/fleury_widgets/README.md')),
+    File(p.join(repo.path, 'packages/fleury/doc/catalog.md')),
     File(p.join(repo.path, 'packages/fleury_web/README.md')),
     File(p.join(repo.path, 'packages/fleury_mcp/README.md')),
     File(p.join(repo.path, 'packages/fleury_test/README.md')),
@@ -559,7 +558,6 @@ List<File> _publicDocs(Directory repo) {
     // scan optional libraries as well as each primary package entry point.
     for (final package in const <String>[
       'fleury',
-      'fleury_widgets',
       'fleury_test',
       'fleury_web',
       'fleury_mcp',

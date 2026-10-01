@@ -2,7 +2,6 @@
 // SourceExcerpt, so the code a reader compares against Flutter is the code
 // running beside it.
 import 'package:fleury/fleury_core.dart';
-import 'package:fleury_widgets/fleury_widgets.dart';
 
 // #docregion counter
 class Counter extends StatefulWidget {

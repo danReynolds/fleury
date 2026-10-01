@@ -51,12 +51,11 @@ packages don't exist yet, so `dart pub get` fails without it.
 settings, then runs `dart pub get`. To use an existing empty directory, run
 `fleury create . --dependency-source=git` from inside it.
 
-The project depends on two packages:
-`fleury`, the framework and its core widgets (layout, text and text editing,
-focus, buttons, lists, navigation, theming), and `fleury_widgets`, the larger
-control library on top (checkboxes and selects, tables, charts and meters,
-tabs, dialogs, and more). [Core and targets](/fleury/architecture/core-and-targets/)
-explains the split.
+The app has one UI dependency: `fleury`. It includes layout, text editing,
+focus, navigation, theming, and the full catalog of controls, tables, charts,
+tabs, and dialogs. `fleury_test` is a development dependency for the generated
+tests. [Core and targets](/fleury/architecture/core-and-targets/) explains the
+optional browser and tooling companions.
 
 ## 2. Run the app
 
@@ -102,7 +101,6 @@ Replace `lib/app.dart` with:
 import 'dart:async';
 
 import 'package:fleury/fleury.dart';
-import 'package:fleury_widgets/fleury_widgets.dart';
 
 class MyApp extends StatelessWidget {
   const MyApp({super.key});
@@ -193,7 +191,6 @@ timer and its `dart:async` import go:
 
 ```dart title="lib/app.dart"
 import 'package:fleury/fleury.dart';
-import 'package:fleury_widgets/fleury_widgets.dart';
 
 class MyApp extends StatelessWidget {
   const MyApp({super.key});
@@ -280,7 +277,6 @@ Nothing else in the file changes, and
 
 ```dart title="lib/app.dart"
 import 'package:fleury/fleury_core.dart';
-import 'package:fleury_widgets/fleury_widgets.dart';
 ```
 
 The browser entrypoint mounts the same `MyApp` into a page element:

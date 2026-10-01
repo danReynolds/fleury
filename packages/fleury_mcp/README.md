@@ -62,7 +62,6 @@ dependency, write no server code, and call no `enableMcp()`. You write a normal
 
 ```dart
 import 'package:fleury/fleury.dart';
-import 'package:fleury_widgets/fleury_widgets.dart';
 
 void main() => runApp(const CounterApp());
 

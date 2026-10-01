@@ -3,7 +3,7 @@ import 'dart:async';
 import 'package:fleury/fleury_core.dart' show CellSize, SizedBox;
 import 'package:fleury_doc_examples/registry.dart';
 import 'package:fleury_test/fleury_test.dart';
-import 'package:fleury_widgets/fleury_widgets.dart' show Select;
+import 'package:fleury/fleury_core.dart' show Select;
 import 'package:test/test.dart';
 
 Future<List<Object>> captureUnhandledErrors(Future<void> Function() body) {

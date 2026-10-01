@@ -17,11 +17,3 @@ publish = ["pub.dev"]
 path = "packages/fleury_web"
 tag = "fleury_web-v{version}"
 publish = ["pub.dev", "git-tag"]
-
-[release.fleury_widgets]                 # tag fleury_widgets-v{version}
-path = "packages/fleury_widgets"
-publish = ["pub.dev"]
-
-# A package here declares an executable. To ship signed binaries
-# too, add "github-release" (and "homebrew") to its publish list,
-# with binary_platforms from: linux-x64, linux-arm64, macos-arm64.

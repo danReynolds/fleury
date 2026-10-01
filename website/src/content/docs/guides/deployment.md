@@ -50,7 +50,7 @@ to disable the debug shell, its shortcuts, and event recording.
 
 The *same* widget tree compiles to JavaScript and runs client-side — no server.
 First make the library that holds your app web-safe: it imports
-`package:fleury/fleury_core.dart` and `package:fleury_widgets/fleury_widgets.dart`,
+`package:fleury/fleury_core.dart` and `package:fleury/fleury_core.dart`,
 never `dart:io`, as shown in
 [Getting started](/fleury/getting-started/#6-optional-ship-a-browser-bundle).
 Then write a tiny web entry point that mounts your app with
@@ -98,7 +98,7 @@ cells misalign. A minimal `web/index.html`:
 The output is a static `.js` file — host it on any CDN or static site, ship it
 offline, and scale it like a normal web asset. The one constraint: a
 client-side bundle runs in the browser sandbox, with no local disk, processes,
-or environment. The default `package:fleury_widgets/fleury_widgets.dart`
+or environment. The default `package:fleury/fleury_core.dart`
 import is browser-safe: every widget runs in a browser, and `FileBrowser`
 and `FilePicker` read a `FileSource` you pass (such as a `MemoryFileSource`)
 instead of the disk. Code that reaches `dart:io` still compiles with dart2js,

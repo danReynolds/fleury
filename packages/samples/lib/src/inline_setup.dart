@@ -1,5 +1,4 @@
 import 'package:fleury/fleury_core.dart';
-import 'package:fleury_widgets/fleury_widgets.dart';
 
 /// The host decides how to provide the space requested by each page.
 enum InlineSetupStep {

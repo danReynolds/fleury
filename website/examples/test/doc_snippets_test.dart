@@ -15,7 +15,7 @@ import 'package:fleury/fleury_core.dart'
         SemanticRole,
         Widget;
 import 'package:fleury_test/fleury_test.dart';
-import 'package:fleury_widgets/fleury_widgets.dart';
+import 'package:fleury/fleury_core.dart';
 import 'package:image/image.dart' as img;
 import 'package:test/test.dart';
 

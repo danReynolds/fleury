@@ -2,6 +2,9 @@
 
 ## 0.1.0
 
+- Bundle the full widget catalog in `fleury.dart` and `fleury_core.dart`. Apps
+  need one UI dependency; catalog sources remain grouped under `src/catalog`.
+
 - Community presets are available from `package:fleury/themes.dart`. Widget authors can use the supported, browser-safe `fleury_widget_support.dart` contracts to build their own controls.
 
 - The CLI reports its package version through `--version` and `diagnose`.

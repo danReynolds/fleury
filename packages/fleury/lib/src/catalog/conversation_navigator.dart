@@ -1,0 +1,981 @@
+import 'dart:async' show scheduleMicrotask, unawaited;
+
+import 'package:characters/characters.dart';
+import '../primitives.dart';
+
+import 'internal/collection_notifications.dart';
+import 'semantic_roles.dart';
+
+/// Protocol-neutral lifecycle for a conversation/session row.
+enum ConversationStatus {
+  active,
+  idle,
+  waiting,
+  streaming,
+  complete,
+  failed,
+  archived,
+}
+
+/// One conversation, thread, or session exposed by [ConversationNavigator].
+final class ConversationEntry {
+  const ConversationEntry({
+    required this.id,
+    required this.title,
+    this.subtitle,
+    this.status = ConversationStatus.idle,
+    this.latestMessage,
+    this.author,
+    this.timestamp,
+    this.unreadCount = 0,
+    this.messageCount = 0,
+    this.pinned = false,
+    this.enabled = true,
+    this.metadata = const <String, Object?>{},
+  }) : assert(unreadCount >= 0),
+       assert(messageCount >= 0);
+
+  /// Stable identity used by semantics, selection, and callbacks.
+  final Object id;
+
+  /// Primary row text.
+  final String title;
+
+  /// Secondary row text displayed under or beside [title].
+  final String? subtitle;
+
+  /// Current lifecycle status for the conversation.
+  final ConversationStatus status;
+
+  /// Latest message preview text.
+  final String? latestMessage;
+
+  /// Optional author/source label for the latest activity.
+  final String? author;
+
+  /// Optional latest-activity timestamp.
+  final DateTime? timestamp;
+
+  /// Number of unread messages in the conversation.
+  final int unreadCount;
+
+  /// Total known message count.
+  final int messageCount;
+
+  /// Whether this conversation should be visually marked as pinned.
+  final bool pinned;
+
+  /// Whether this row can be selected and activated.
+  final bool enabled;
+
+  /// App-specific semantic state carried by the row.
+  final Map<String, Object?> metadata;
+
+  String get displayId => id.toString();
+}
+
+/// Predicate used by [buildConversationOrder].
+typedef ConversationMatcher =
+    bool Function(ConversationEntry entry, String query);
+
+/// Controller for [ConversationNavigator] browsing and viewport state.
+class ConversationNavigatorController extends Notifier {
+  ConversationNavigatorController({int? initialIndex = 0})
+    : _list = ListController(initialIndex: initialIndex) {
+    _notifications = CollectionNotifications(
+      _list,
+      dispatch: notify,
+      publish: super.notify,
+    );
+  }
+
+  final ListController _list;
+  late final CollectionNotifications _notifications;
+
+  @override
+  void notify() => _notifications.publish();
+  bool _disposed = false;
+
+  ListController get _listController => _list;
+
+  int? get currentIndex => _list.currentIndex;
+  set currentIndex(int? value) {
+    _checkNotDisposed();
+    _list.currentIndex = value;
+  }
+
+  ({int first, int last})? get visibleRange => _list.visibleRange;
+
+  void jumpToIndex(int index) {
+    _checkNotDisposed();
+    _list.jumpToIndex(index);
+  }
+
+  void _checkNotDisposed() {
+    if (_disposed) {
+      throw StateError('ConversationNavigatorController has been disposed.');
+    }
+  }
+
+  @override
+  void dispose() {
+    if (_disposed) return;
+    _disposed = true;
+    _notifications.dispose();
+    _list.dispose();
+    super.dispose();
+  }
+}
+
+/// Clipboard/export behavior for [ConversationNavigator] selected-row copy.
+final class ConversationNavigatorCopyOptions {
+  const ConversationNavigatorCopyOptions({
+    this.includeStatus = true,
+    this.includeLatestMessage = true,
+    this.maxLatestLength = 1000,
+    this.clipboardPolicy = ClipboardWritePolicy.standard,
+  }) : assert(maxLatestLength == null || maxLatestLength >= 0);
+
+  /// Whether copied row text includes [ConversationEntry.status].
+  final bool includeStatus;
+
+  /// Whether copied row text includes [ConversationEntry.latestMessage].
+  final bool includeLatestMessage;
+
+  /// Maximum copied latest-message length.
+  final int? maxLatestLength;
+
+  /// Clipboard write behavior for copied conversation text.
+  final ClipboardWritePolicy clipboardPolicy;
+}
+
+/// Result delivered after [ConversationNavigator] copies the selected row.
+final class ConversationNavigatorCopyResult {
+  const ConversationNavigatorCopyResult({
+    required this.entryIndex,
+    required this.viewIndex,
+    required this.entry,
+    required this.text,
+    required this.report,
+  });
+
+  final int entryIndex;
+  final int viewIndex;
+  final ConversationEntry entry;
+  final String text;
+  final ClipboardWriteReport report;
+}
+
+/// Result delivered after [ConversationNavigator] activates a row.
+final class ConversationNavigatorSelectResult {
+  const ConversationNavigatorSelectResult({
+    required this.entryIndex,
+    required this.viewIndex,
+    required this.entry,
+  });
+
+  final int entryIndex;
+  final int viewIndex;
+  final ConversationEntry entry;
+}
+
+/// Returns source entry indexes in display order after applying [query].
+List<int> buildConversationOrder(
+  List<ConversationEntry> entries, {
+  String query = '',
+  ConversationMatcher? matcher,
+}) {
+  final trimmed = _sanitizeConversationText(query).trim();
+  if (trimmed.isEmpty) {
+    return List<int>.unmodifiable(
+      List<int>.generate(entries.length, (index) => index),
+    );
+  }
+  if (matcher != null) {
+    return List<int>.unmodifiable([
+      for (var index = 0; index < entries.length; index++)
+        if (matcher(entries[index], trimmed)) index,
+    ]);
+  }
+
+  final q = trimmed.toLowerCase();
+  final exact = <int>[];
+  final prefix = <int>[];
+  final contains = <int>[];
+  final fuzzy = <int>[];
+  for (var index = 0; index < entries.length; index++) {
+    switch (_conversationRank(entries[index], q)) {
+      case _ConversationRank.exact:
+        exact.add(index);
+      case _ConversationRank.prefix:
+        prefix.add(index);
+      case _ConversationRank.contains:
+        contains.add(index);
+      case _ConversationRank.fuzzy:
+        fuzzy.add(index);
+      case null:
+        break;
+    }
+  }
+  return List<int>.unmodifiable([...exact, ...prefix, ...contains, ...fuzzy]);
+}
+
+/// Exports one [ConversationEntry] as sanitized clipboard/debug text.
+String exportConversation(
+  ConversationEntry entry, {
+  ConversationNavigatorCopyOptions options =
+      const ConversationNavigatorCopyOptions(),
+}) {
+  final parts = <String>[
+    _sanitizeConversationText(entry.title),
+    if (options.includeStatus) entry.status.name,
+    if (entry.unreadCount > 0) '${entry.unreadCount} unread',
+    if (entry.messageCount > 0) '${entry.messageCount} messages',
+    if (entry.pinned) 'pinned',
+    if (options.includeLatestMessage && entry.latestMessage != null)
+      _truncateGraphemes(
+        _sanitizeConversationText(entry.latestMessage!),
+        options.maxLatestLength,
+      ),
+  ];
+  return parts.where((part) => part.trim().isNotEmpty).join(' | ');
+}
+
+/// Queryable conversation/session list for agent and developer-tool surfaces.
+class ConversationNavigator extends StatefulWidget {
+  const ConversationNavigator({
+    super.key,
+    required this.conversations,
+    this.queryController,
+    this.controller,
+    this.matcher,
+    this.semanticLabel = 'Conversations',
+    this.placeholder = 'Search conversations...',
+    this.width = 60,
+    this.maxVisible = 6,
+    this.showTimestamp = false,
+    this.queryFocusNode,
+    this.listFocusNode,
+    this.autofocus = false,
+    this.copySelection = true,
+    this.copyOptions = const ConversationNavigatorCopyOptions(),
+    this.onSelect,
+    this.onCopy,
+  }) : assert(width > 0),
+       assert(maxVisible > 0);
+
+  /// Source conversations to search, display, activate, and copy.
+  final List<ConversationEntry> conversations;
+
+  /// External controller for the query input.
+  final TextEditingController? queryController;
+
+  /// External controller for list selection and visible range.
+  final ConversationNavigatorController? controller;
+
+  /// Optional app-owned matcher used instead of default ranked search.
+  final ConversationMatcher? matcher;
+
+  /// Semantic label (the accessibility name; not rendered) for the navigator.
+  final String semanticLabel;
+
+  /// Placeholder shown in the query input.
+  final String placeholder;
+
+  /// Width, in terminal cells, reserved for query and rows.
+  final int width;
+
+  /// Maximum visible rows before the list scrolls.
+  final int maxVisible;
+
+  /// Prefix each row with the conversation's [ConversationEntry.timestamp]
+  /// as a local `HH:mm:ss` clock, when one is set. Off by default.
+  final bool showTimestamp;
+
+  /// Focus node used by the query input.
+  final FocusNode? queryFocusNode;
+
+  /// Focus node used by the conversation list.
+  final FocusNode? listFocusNode;
+
+  /// Whether the query input should request focus when mounted.
+  final bool autofocus;
+
+  /// Whether Ctrl+C and semantic copy export the selected row.
+  final bool copySelection;
+
+  /// Clipboard/export options for selected-row copy.
+  final ConversationNavigatorCopyOptions copyOptions;
+
+  /// Called when a conversation row is activated.
+  final void Function(ConversationNavigatorSelectResult result)? onSelect;
+
+  /// Called after a copy attempt completes.
+  final void Function(ConversationNavigatorCopyResult result)? onCopy;
+
+  @override
+  State<ConversationNavigator> createState() => _ConversationNavigatorState();
+}
+
+class _ConversationNavigatorState extends State<ConversationNavigator> {
+  late TextEditingController _query;
+  late ConversationNavigatorController _controller;
+  late FocusNode _queryFocusNode;
+  late FocusNode _listFocusNode;
+  bool _ownsQuery = false;
+  bool _ownsController = false;
+  bool _ownsQueryFocusNode = false;
+  bool _ownsListFocusNode = false;
+  Object? _pendingSelectedConversationId;
+  int _selectionSyncGeneration = 0;
+
+  @override
+  void initState() {
+    super.initState();
+    _query = widget.queryController ?? TextEditingController();
+    _ownsQuery = widget.queryController == null;
+    _query.addListener(_onQueryChange);
+    _controller = widget.controller ?? ConversationNavigatorController();
+    _ownsController = widget.controller == null;
+    _controller._notifications.viewChanges.addListener(_onControllerChange);
+    _queryFocusNode =
+        widget.queryFocusNode ??
+        FocusNode(debugLabel: 'ConversationNavigator query');
+    _ownsQueryFocusNode = widget.queryFocusNode == null;
+    _listFocusNode =
+        widget.listFocusNode ??
+        FocusNode(debugLabel: 'ConversationNavigator list');
+    _ownsListFocusNode = widget.listFocusNode == null;
+    _resetSelection(_currentOrder, preserveCurrent: true);
+  }
+
+  @override
+  void didUpdateWidget(covariant ConversationNavigator oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (widget.queryController != oldWidget.queryController) {
+      _query.removeListener(_onQueryChange);
+      if (_ownsQuery) _query.dispose();
+      _query = widget.queryController ?? TextEditingController();
+      _ownsQuery = widget.queryController == null;
+      _query.addListener(_onQueryChange);
+    }
+    if (widget.controller != oldWidget.controller) {
+      _controller._notifications.viewChanges.removeListener(
+        _onControllerChange,
+      );
+      if (_ownsController) _controller.dispose();
+      _controller = widget.controller ?? ConversationNavigatorController();
+      _ownsController = widget.controller == null;
+      _controller._notifications.viewChanges.addListener(_onControllerChange);
+    }
+    if (widget.queryFocusNode != oldWidget.queryFocusNode) {
+      if (_ownsQueryFocusNode) _queryFocusNode.dispose();
+      _queryFocusNode =
+          widget.queryFocusNode ??
+          FocusNode(debugLabel: 'ConversationNavigator query');
+      _ownsQueryFocusNode = widget.queryFocusNode == null;
+    }
+    if (widget.listFocusNode != oldWidget.listFocusNode) {
+      if (_ownsListFocusNode) _listFocusNode.dispose();
+      _listFocusNode =
+          widget.listFocusNode ??
+          FocusNode(debugLabel: 'ConversationNavigator list');
+      _ownsListFocusNode = widget.listFocusNode == null;
+    }
+    if (widget.controller != oldWidget.controller) {
+      _resetSelection(_currentOrder, preserveCurrent: true);
+    } else if (widget.conversations != oldWidget.conversations ||
+        widget.matcher != oldWidget.matcher) {
+      final oldOrder = buildConversationOrder(
+        oldWidget.conversations,
+        query: _query.text,
+        matcher: oldWidget.matcher,
+      );
+      _syncSelectionAfterOrderUpdate(oldOrder, oldWidget.conversations);
+    }
+  }
+
+  List<int> get _currentOrder => buildConversationOrder(
+    widget.conversations,
+    query: _query.text,
+    matcher: widget.matcher,
+  );
+
+  void _onQueryChange() {
+    final previous = _controller.currentIndex;
+    _resetSelection(_currentOrder);
+    if (_controller.currentIndex == previous) setState(() {});
+  }
+
+  void _onControllerChange() => setState(() {});
+
+  void _resetSelection(List<int> order, {bool preserveCurrent = false}) {
+    _selectionSyncGeneration++;
+    _pendingSelectedConversationId = null;
+    if (order.isEmpty) {
+      _controller.currentIndex = null;
+      return;
+    }
+    final currentIndex = _controller.currentIndex;
+    if (preserveCurrent) {
+      _controller.currentIndex = currentIndex?.clamp(0, order.length - 1);
+      return;
+    }
+    _controller.currentIndex = 0;
+  }
+
+  void _syncSelectionAfterOrderUpdate(
+    List<int> oldOrder,
+    List<ConversationEntry> oldEntries,
+  ) {
+    _selectionSyncGeneration++;
+    _pendingSelectedConversationId = null;
+    final order = _currentOrder;
+    if (order.isEmpty) {
+      _controller.currentIndex = null;
+      return;
+    }
+    final currentIndex = _controller.currentIndex;
+    if (currentIndex == null) return;
+    if (currentIndex >= 0 && currentIndex < oldOrder.length) {
+      final selectedId = oldEntries[oldOrder[currentIndex]].id;
+      final nextIndex = order.indexWhere(
+        (entryIndex) => widget.conversations[entryIndex].id == selectedId,
+      );
+      if (nextIndex != -1) {
+        _selectIndexAfterListCountRefresh(selectedId, nextIndex);
+        return;
+      }
+    }
+    _controller.currentIndex = currentIndex.clamp(0, order.length - 1);
+  }
+
+  void _selectIndexAfterListCountRefresh(Object selectedId, int nextIndex) {
+    final knownItemCount = _controller._listController.itemCount;
+    if (knownItemCount == 0 || nextIndex < knownItemCount) {
+      _controller.currentIndex = nextIndex;
+      return;
+    }
+
+    _pendingSelectedConversationId = selectedId;
+    final generation = _selectionSyncGeneration;
+    final binding = TuiBinding.maybeOf(context);
+    if (binding == null) {
+      scheduleMicrotask(() {
+        _applyPendingSelection(generation, selectedId);
+      });
+      return;
+    }
+    binding.addPostFrameCallback((_) {
+      _applyPendingSelection(generation, selectedId);
+    });
+  }
+
+  void _applyPendingSelection(int generation, Object selectedId) {
+    if (!mounted || generation != _selectionSyncGeneration) return;
+    if (_pendingSelectedConversationId != selectedId) return;
+    final order = _currentOrder;
+    final nextIndex = order.indexWhere(
+      (entryIndex) => widget.conversations[entryIndex].id == selectedId,
+    );
+    if (nextIndex == -1) {
+      _pendingSelectedConversationId = null;
+      return;
+    }
+    _pendingSelectedConversationId = null;
+    _controller.currentIndex = nextIndex;
+  }
+
+  void _focusQuery() {
+    _queryFocusNode.requestFocus();
+    setState(() {});
+  }
+
+  void _focusListOrQuery() {
+    if (_currentOrder.isEmpty) {
+      _focusQuery();
+      return;
+    }
+    _listFocusNode.requestFocus();
+    setState(() {});
+  }
+
+  void _move(int delta) {
+    final order = _currentOrder;
+    if (order.isEmpty) return;
+    final current = _controller.currentIndex ?? 0;
+    _controller.currentIndex = (current + delta).clamp(0, order.length - 1);
+  }
+
+  _SelectedConversation? _selectedConversation(List<int> order) {
+    if (order.isEmpty) return null;
+    final currentIndex = _controller.currentIndex;
+    if (currentIndex == null) return null;
+    final viewIndex = currentIndex.clamp(0, order.length - 1);
+    final entryIndex = order[viewIndex];
+    return _SelectedConversation(
+      viewIndex: viewIndex,
+      entryIndex: entryIndex,
+      entry: widget.conversations[entryIndex],
+    );
+  }
+
+  void _selectCurrent() {
+    final selected = _selectedConversation(_currentOrder);
+    if (selected == null || !selected.entry.enabled) return;
+    widget.onSelect?.call(
+      ConversationNavigatorSelectResult(
+        entryIndex: selected.entryIndex,
+        viewIndex: selected.viewIndex,
+        entry: selected.entry,
+      ),
+    );
+  }
+
+  Future<void> _copySelection() async {
+    if (!widget.copySelection) return;
+    final selected = _selectedConversation(_currentOrder);
+    if (selected == null) return;
+    final text = exportConversation(
+      selected.entry,
+      options: widget.copyOptions,
+    );
+    final report = await ClipboardScope.of(
+      context,
+    ).writeWithReport(text, policy: widget.copyOptions.clipboardPolicy);
+    if (!mounted) return;
+    widget.onCopy?.call(
+      ConversationNavigatorCopyResult(
+        entryIndex: selected.entryIndex,
+        viewIndex: selected.viewIndex,
+        entry: selected.entry,
+        text: text,
+        report: report,
+      ),
+    );
+  }
+
+  Future<void> _handleNavigatorAction(SemanticAction action) async {
+    switch (action) {
+      case SemanticAction.focus:
+        _focusQuery();
+        return;
+      case SemanticAction.navigate:
+        _focusListOrQuery();
+        return;
+      case SemanticAction.submit:
+        _selectCurrent();
+        return;
+      case SemanticAction.copy:
+        _focusListOrQuery();
+        await _copySelection();
+        return;
+      case _:
+        return;
+    }
+  }
+
+  Future<void> _selectAt(int viewIndex) async {
+    final order = _currentOrder;
+    if (viewIndex < 0 || viewIndex >= order.length) return;
+    _focusListOrQuery();
+    _controller.currentIndex = viewIndex;
+    _selectCurrent();
+  }
+
+  Future<void> _copyAt(int viewIndex) async {
+    final order = _currentOrder;
+    if (viewIndex < 0 || viewIndex >= order.length) return;
+    _focusListOrQuery();
+    _controller.currentIndex = viewIndex;
+    await _copySelection();
+  }
+
+  @override
+  void dispose() {
+    _query.removeListener(_onQueryChange);
+    if (_ownsQuery) _query.dispose();
+    _controller._notifications.viewChanges.removeListener(_onControllerChange);
+    if (_ownsController) _controller.dispose();
+    if (_ownsQueryFocusNode) _queryFocusNode.dispose();
+    if (_ownsListFocusNode) _listFocusNode.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final order = _currentOrder;
+    final visible = order.isEmpty
+        ? 1
+        : (order.length > widget.maxVisible ? widget.maxVisible : order.length);
+    final selected = _selectedConversation(order);
+    final unreadCount = widget.conversations.fold<int>(
+      0,
+      (total, entry) => total + (entry.unreadCount > 0 ? 1 : 0),
+    );
+    final pinnedCount = widget.conversations.fold<int>(
+      0,
+      (total, entry) => total + (entry.pinned ? 1 : 0),
+    );
+    final copyEnabled = widget.copySelection && selected != null;
+    final canSelect = widget.onSelect != null;
+
+    Widget panel = Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        TextInput(
+          controller: _query,
+          focusNode: _queryFocusNode,
+          placeholder: widget.placeholder,
+          autofocus: widget.autofocus,
+          onSubmit: (_) => _selectCurrent(),
+        ),
+        const SizedBox(height: 1),
+        SizedBox(
+          height: visible,
+          child: order.isEmpty
+              ? Text(
+                  _query.text.trim().isEmpty
+                      ? widget.placeholder
+                      : 'No matching conversations',
+                )
+              : Semantics(
+                  // ARIA needs list items inside a list: the rows are
+                  // `conversation` (a list item) and the navigator itself is
+                  // a navigation landmark, so this node is their container.
+                  role: SemanticRole.list,
+                  child: ListView.builder(
+                    controller: _controller._listController,
+                    focusNode: _listFocusNode,
+
+                    itemCount: order.length,
+                    onSelect: (_) => _selectCurrent(),
+                    itemBuilder: (context, viewIndex, activeSelected) {
+                      final entryIndex = order[viewIndex];
+                      final selected = viewIndex == _controller.currentIndex;
+                      return _ConversationRow(
+                        entry: widget.conversations[entryIndex],
+                        entryIndex: entryIndex,
+                        viewIndex: viewIndex,
+                        selected: selected,
+                        activeSelection: activeSelected,
+                        canSelect: canSelect,
+                        copyEnabled: copyEnabled,
+                        showTimestamp: widget.showTimestamp,
+                        onSelect: () => _selectAt(viewIndex),
+                        onCopy: () => _copyAt(viewIndex),
+                      );
+                    },
+                  ),
+                ),
+        ),
+      ],
+    );
+
+    panel = SizedBox(width: widget.width, child: panel);
+
+    if (copyEnabled) {
+      panel = KeyBindings(
+        bindings: [
+          KeyBinding(
+            KeySequence.ctrl.c,
+            label: 'Copy conversation',
+            onTrigger: (_) => unawaited(_copySelection()),
+          ),
+        ],
+        child: panel,
+      );
+    }
+
+    return KeyBindings(
+      bindings: [
+        KeyBinding(
+          KeyCode.arrowUp,
+          onTrigger: (_) => _move(-1),
+          hideFromHintBar: true,
+        ),
+        KeyBinding(
+          KeyCode.arrowDown,
+          onTrigger: (_) => _move(1),
+          hideFromHintBar: true,
+        ),
+      ],
+      child: Semantics(
+        role: WidgetRoles.conversationNavigator,
+        label: widget.semanticLabel,
+        value: _query.text,
+        // `|`, not `||`: each read subscribes to its node.
+        focused:
+            context.listen(_queryFocusNode).hasFocus |
+            context.listen(_listFocusNode).hasFocus,
+        actions: {
+          SemanticAction.focus,
+          SemanticAction.navigate,
+          if (canSelect) SemanticAction.submit,
+          if (copyEnabled) SemanticAction.copy,
+        },
+        onAction: _handleNavigatorAction,
+        stateListenable: _controller,
+        stateBuilder: () {
+          final visibleRange = _controller.visibleRange;
+          return SemanticState({
+            'filterText': _query.text,
+            'collectionRowCount': order.length,
+            'totalConversationCount': widget.conversations.length,
+            'filteredConversationCount': order.length,
+            'unreadConversationCount': unreadCount,
+            'pinnedConversationCount': pinnedCount,
+            'copyEnabled': copyEnabled,
+            'clipboardPolicy': widget.copyOptions.clipboardPolicy.name,
+            if (visibleRange != null && order.isNotEmpty) ...{
+              'visibleRangeStart': visibleRange.first,
+              'visibleRangeEnd': visibleRange.last,
+            },
+            'currentIndex': ?_controller.currentIndex,
+            if (selected != null) ..._selectedConversationState(selected.entry),
+          });
+        },
+        child: panel,
+      ),
+    );
+  }
+}
+
+final class _SelectedConversation {
+  const _SelectedConversation({
+    required this.viewIndex,
+    required this.entryIndex,
+    required this.entry,
+  });
+
+  final int viewIndex;
+  final int entryIndex;
+  final ConversationEntry entry;
+}
+
+class _ConversationRow extends StatelessWidget {
+  const _ConversationRow({
+    required this.entry,
+    required this.entryIndex,
+    required this.viewIndex,
+    required this.selected,
+    required this.activeSelection,
+    required this.canSelect,
+    required this.copyEnabled,
+    required this.showTimestamp,
+    required this.onSelect,
+    required this.onCopy,
+  });
+
+  final ConversationEntry entry;
+  final int entryIndex;
+  final int viewIndex;
+  final bool selected;
+  final bool activeSelection;
+  final bool canSelect;
+  final bool copyEnabled;
+  final bool showTimestamp;
+  final Future<void> Function() onSelect;
+  final Future<void> Function() onCopy;
+
+  @override
+  Widget build(BuildContext context) {
+    final title = _sanitizeConversationText(entry.title);
+    final subtitle = entry.subtitle == null
+        ? null
+        : _sanitizeConversationText(entry.subtitle!);
+    final latest = entry.latestMessage == null
+        ? null
+        : _sanitizeConversationText(entry.latestMessage!);
+    final author = entry.author == null
+        ? null
+        : _sanitizeConversationText(entry.author!);
+    final id = _sanitizeConversationText(entry.displayId);
+    final rowText = _rowText(
+      title: title,
+      status: entry.status,
+      unreadCount: entry.unreadCount,
+      pinned: entry.pinned,
+      latestMessage: latest,
+      activeSelection: activeSelection,
+      timestamp: showTimestamp ? entry.timestamp : null,
+    );
+
+    return Semantics(
+      role: WidgetRoles.conversation,
+      label: title,
+      value: latest,
+      hint: subtitle,
+      selected: selected,
+      enabled: entry.enabled,
+      busy: entry.status == ConversationStatus.streaming,
+      actions: {
+        if (entry.enabled && canSelect) SemanticAction.activate,
+        if (selected && copyEnabled) SemanticAction.copy,
+      },
+      onAction: (action) async {
+        switch (action) {
+          case SemanticAction.activate:
+            if (entry.enabled && canSelect) await onSelect();
+            return;
+          case SemanticAction.copy:
+            if (selected && copyEnabled) await onCopy();
+            return;
+          case _:
+            return;
+        }
+      },
+      state: SemanticState({
+        ...entry.metadata,
+        'rowIndex': entryIndex,
+        'viewIndex': viewIndex,
+        'rowKey': id,
+        'conversationId': id,
+        'conversationStatus': entry.status.name,
+        'conversationUnreadCount': entry.unreadCount,
+        'conversationMessageCount': entry.messageCount,
+        'pinned': entry.pinned,
+        'author': ?author,
+        if (entry.timestamp != null)
+          'timestamp': entry.timestamp!.toIso8601String(),
+        'outputSanitized': _entryWasSanitized(entry),
+      }),
+      child: Text(
+        rowText,
+        style: _rowStyle(
+          Theme.of(context),
+          selected: selected,
+          activeSelection: activeSelection,
+          entry: entry,
+        ),
+      ),
+    );
+  }
+}
+
+String _rowText({
+  required String title,
+  required ConversationStatus status,
+  required int unreadCount,
+  required bool pinned,
+  required String? latestMessage,
+  required bool activeSelection,
+  DateTime? timestamp,
+}) {
+  final prefix = activeSelection ? '> ' : '  ';
+  final clock = timestamp == null ? '' : '${_formatClock(timestamp)} ';
+  final meta = <String>[
+    status.name,
+    if (unreadCount > 0) '$unreadCount unread',
+    if (pinned) 'pinned',
+  ];
+  final latest = latestMessage == null || latestMessage.isEmpty
+      ? ''
+      : '  ${_truncateGraphemes(latestMessage, 80)}';
+  return '$prefix$clock$title  ${meta.join('  ')}$latest';
+}
+
+/// Local `HH:mm:ss` clock for the optional per-row timestamp.
+String _formatClock(DateTime time) {
+  String two(int n) => n.toString().padLeft(2, '0');
+  return '${two(time.hour)}:${two(time.minute)}:${two(time.second)}';
+}
+
+Map<String, Object?> _selectedConversationState(ConversationEntry entry) {
+  final id = _sanitizeConversationText(entry.displayId);
+  return <String, Object?>{
+    'selectedKey': id,
+    'selectedConversationId': id,
+    'selectedConversationStatus': entry.status.name,
+    'selectedConversationUnreadCount': entry.unreadCount,
+  };
+}
+
+enum _ConversationRank { exact, prefix, contains, fuzzy }
+
+_ConversationRank? _conversationRank(ConversationEntry entry, String query) {
+  final fields = _conversationFields(entry);
+  for (final field in fields) {
+    if (field == query) return _ConversationRank.exact;
+  }
+  for (final field in fields) {
+    if (field.startsWith(query)) return _ConversationRank.prefix;
+  }
+  final searchText = fields.join(' ');
+  if (searchText.contains(query)) return _ConversationRank.contains;
+  if (_isSubsequence(query, searchText)) return _ConversationRank.fuzzy;
+  return null;
+}
+
+List<String> _conversationFields(ConversationEntry entry) {
+  return [
+        entry.displayId,
+        entry.title,
+        entry.status.name,
+        if (entry.subtitle != null) entry.subtitle!,
+        if (entry.latestMessage != null) entry.latestMessage!,
+        if (entry.author != null) entry.author!,
+        if (entry.timestamp != null) entry.timestamp!.toIso8601String(),
+        if (entry.unreadCount > 0) '${entry.unreadCount} unread',
+        if (entry.messageCount > 0) '${entry.messageCount} messages',
+        if (entry.pinned) 'pinned',
+        for (final value in entry.metadata.values)
+          if (value != null) value.toString(),
+      ]
+      .map(_sanitizeConversationText)
+      .map((value) => value.toLowerCase())
+      .where((value) => value.trim().isNotEmpty)
+      .toList(growable: false);
+}
+
+bool _isSubsequence(String needle, String hay) {
+  var i = 0;
+  for (var j = 0; j < hay.length && i < needle.length; j++) {
+    if (hay[j] == needle[i]) i++;
+  }
+  return i == needle.length;
+}
+
+bool _entryWasSanitized(ConversationEntry entry) {
+  return _sanitizeConversationText(entry.displayId) != entry.displayId ||
+      _sanitizeConversationText(entry.title) != entry.title ||
+      (entry.subtitle != null &&
+          _sanitizeConversationText(entry.subtitle!) != entry.subtitle) ||
+      (entry.latestMessage != null &&
+          _sanitizeConversationText(entry.latestMessage!) !=
+              entry.latestMessage) ||
+      (entry.author != null &&
+          _sanitizeConversationText(entry.author!) != entry.author);
+}
+
+String _sanitizeConversationText(String text) {
+  return sanitizeSingleLine(text).replaceAll(RegExp(' +'), ' ').trim();
+}
+
+String _truncateGraphemes(String text, int? maxLength) {
+  if (maxLength == null) return text;
+  if (maxLength == 0) return '';
+  final characters = text.characters;
+  if (characters.length <= maxLength) return text;
+  return characters.take(maxLength).toString();
+}
+
+CellStyle _rowStyle(
+  ThemeData theme, {
+  required bool selected,
+  required bool activeSelection,
+  required ConversationEntry entry,
+}) {
+  if (!entry.enabled) return theme.mutedStyle;
+  if (activeSelection) return theme.selectionStyle;
+  if (selected) return theme.mutedStyle;
+  return switch (entry.status) {
+    ConversationStatus.waiting => const CellStyle(foreground: AnsiColor(11)),
+    ConversationStatus.streaming => const CellStyle(foreground: AnsiColor(14)),
+    ConversationStatus.failed => const CellStyle(foreground: AnsiColor(9)),
+    ConversationStatus.archived => theme.mutedStyle,
+    ConversationStatus.active ||
+    ConversationStatus.idle ||
+    ConversationStatus.complete => CellStyle.none,
+  };
+}

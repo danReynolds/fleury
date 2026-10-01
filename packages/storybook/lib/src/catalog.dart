@@ -3,7 +3,6 @@ import 'dart:io' as io;
 import 'dart:math' as math;
 
 import 'package:fleury/fleury.dart';
-import 'package:fleury_widgets/fleury_widgets.dart';
 
 import 'sample_image.dart';
 import 'state_stories.dart';
@@ -2236,7 +2235,7 @@ class _TreesStory extends StatelessWidget {
           ],
         ),
         TreeNode<String>(
-          'fleury_widgets',
+          'Fleury catalog',
           children: <TreeNode<String>>[
             TreeNode<String>('forms'),
             TreeNode<String>('tables'),
@@ -3135,7 +3134,7 @@ class _FilesStory extends StatelessWidget {
             language: 'dart',
           ),
           FileMentionEntry(
-            path: 'packages/fleury_widgets/lib/fleury_widgets.dart',
+            path: 'packages/fleury/lib/src/catalog/catalog.dart',
             language: 'dart',
           ),
           FileMentionEntry(
@@ -3580,7 +3579,7 @@ const _sampleConversations = <ConversationEntry>[
 const _sampleContext = <ContextItem>[
   ContextItem(
     id: 'ctx1',
-    label: 'packages/fleury_widgets/lib/fleury_widgets.dart',
+    label: 'packages/fleury/lib/src/catalog/catalog.dart',
     kind: ContextItemKind.file,
     priority: ContextItemPriority.high,
     tokenCount: 1200,

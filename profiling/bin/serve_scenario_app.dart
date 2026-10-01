@@ -20,7 +20,6 @@
 import 'dart:async';
 
 import 'package:fleury/fleury.dart';
-import 'package:fleury_widgets/fleury_widgets.dart';
 
 Future<void> main(List<String> args) async {
   final scenario = args.isNotEmpty && !args.first.startsWith('--')

@@ -127,7 +127,6 @@ written this:
 import 'dart:async';
 
 import 'package:fleury/fleury.dart';
-import 'package:fleury_widgets/fleury_widgets.dart';
 
 Future<void> main() => runApp(const StatusApp());
 

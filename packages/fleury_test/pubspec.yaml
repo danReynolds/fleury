@@ -18,4 +18,5 @@ dependencies:
   test: ^1.26.3
 
 dev_dependencies:
+  image: ^4.5.4
   lints: ^6.0.0

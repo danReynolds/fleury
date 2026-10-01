@@ -11,7 +11,6 @@ import 'package:test/test.dart';
 
 void main() {
   const packages = [
-    'fleury_widgets',
     'fleury_test',
     'fleury_web',
     'fleury_mcp',

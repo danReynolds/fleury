@@ -4,7 +4,6 @@ import 'package:test/test.dart';
 
 const _companions = [
   'fleury_test',
-  'fleury_widgets',
   'fleury_web',
   'fleury_mcp',
 ];

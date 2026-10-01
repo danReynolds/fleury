@@ -1,0 +1,525 @@
+import 'dart:collection';
+
+import 'package:fleury/fleury.dart';
+import 'package:fleury_test/fleury_test.dart';
+import 'package:test/test.dart';
+
+Matcher _stateError(String message) {
+  return throwsA(
+    isA<StateError>().having((error) => error.message, 'message', message),
+  );
+}
+
+void main() {
+  testWidgets('a parent rebuild shows data changed in place', (tester) {
+    // JsonView(value:) hands a new document on every parent build; only the
+    // view's own rebuilds (a cursor move, a focus change) reuse the old one.
+    final state = <String, Object?>{'status': 'idle', 'count': 1};
+    Widget view() => JsonView(value: state, defaultExpandedDepth: 1);
+    tester.pumpWidget(view());
+    expect(
+      tester.renderToString(size: const CellSize(40, 6)),
+      contains('idle'),
+    );
+
+    state['status'] = 'running';
+    state['count'] = 2;
+    tester.pumpWidget(view());
+
+    final text = tester.renderToString(size: const CellSize(40, 6));
+    expect(text, contains('running'));
+    expect(text, isNot(contains('idle')));
+  });
+
+  group('JsonViewController lifecycle', () {
+    test('dispose is idempotent and keeps final readable state', () {
+      final controller = JsonViewController(
+        expandedPointers: const {'/meta'},
+        collapsedPointers: const {'/flags'},
+        initialIndex: 2,
+      );
+
+      controller.dispose();
+      controller.dispose();
+
+      expect(controller.currentIndex, 2);
+      expect(controller.visibleRange, isNull);
+      expect(controller.expandedPointers, {'/meta'});
+      expect(controller.collapsedPointers, {'/flags'});
+      expect(
+        controller.isExpanded('/meta', depth: 1, defaultExpandedDepth: 0),
+        isTrue,
+      );
+      expect(
+        controller.isExpanded('/flags', depth: 1, defaultExpandedDepth: 2),
+        isFalse,
+      );
+    });
+
+    test('mutating after dispose throws a lifecycle error', () {
+      final controller = JsonViewController()..dispose();
+
+      const message = 'JsonViewController has been disposed.';
+      expect(() => controller.currentIndex = 1, _stateError(message));
+      expect(() => controller.jumpToIndex(1), _stateError(message));
+      expect(() => controller.expand('/meta'), _stateError(message));
+      expect(() => controller.collapse('/meta'), _stateError(message));
+      expect(
+        () => controller.toggle('/meta', expanded: true),
+        _stateError(message),
+      );
+    });
+  });
+
+  testWidgets('renders collapsed JSON structure with path semantics', (tester) {
+    tester.pumpWidget(
+      JsonView(
+        semanticLabel: 'Run payload',
+        value: const {
+          'name': 'fleury',
+          'meta': {'version': 1, 'status': 'active'},
+          'flags': [true, null],
+        },
+      ),
+    );
+
+    final output = tester.renderToString(
+      size: const CellSize(80, 8),
+      emptyMark: ' ',
+    );
+
+    expect(output, contains(r'▾ $ {object 3}'));
+    expect(output, contains('name: "fleury"'));
+    expect(output, contains('▸ meta {object 2}'));
+    expect(output, contains('▸ flags [array 2]'));
+
+    final json = tester.semantics().single(
+      role: SemanticRole.json,
+      label: 'Run payload',
+      action: SemanticAction.copy,
+    );
+    expect(json.state['valid'], isTrue);
+    expect(json.state.collectionRowCount, 4);
+    expect(json.state['rootType'], 'object');
+    expect(json.state.selectedKey, '');
+    expect(json.state['selectedPath'], r'$');
+
+    final meta = tester.semantics().single(
+      role: SemanticRole.jsonNode,
+      label: 'meta',
+    );
+    expect(meta.expanded, isFalse);
+    expect(meta.actions, contains(SemanticAction.open));
+    expect(meta.state['jsonPointer'], '/meta');
+    expect(meta.state['jsonPath'], r'$.meta');
+    expect(meta.state['jsonType'], 'object');
+    expect(meta.state['childCount'], 2);
+    expect(meta.state['depth'], 1);
+  });
+
+  testWidgets('colors a value by type, distinct from its label', (tester) {
+    tester.pumpWidget(JsonView(value: const {'name': 'fleury'}));
+    final buffer = tester.render(size: const CellSize(40, 4));
+    // Row 0 is the root object; row 1 is `    name: "fleury"`, indented
+    // under it. The label 'n' sits at col 4; the string value's opening quote
+    // at col 10.
+    final label = buffer.atColRow(4, 1);
+    final value = buffer.atColRow(10, 1);
+    expect(label.grapheme, 'n');
+    expect(value.grapheme, '"');
+    expect(value.style.foreground, isNotNull);
+    expect(value.style.foreground, isNot(label.style.foreground));
+  });
+
+  testWidgets('nested rows are indented under their parent', (tester) {
+    // Rows other than the selected one are RichText; a wrap that dropped
+    // their leading spaces rendered the whole tree flush left.
+    tester.pumpWidget(
+      JsonView(
+        value: const {
+          'user': {
+            'name': 'ada',
+            'tags': ['x', 'y'],
+          },
+          'id': 7,
+        },
+        defaultExpandedDepth: 3,
+      ),
+    );
+    final rows = tester
+        .renderToString(size: const CellSize(40, 8), emptyMark: ' ')
+        .split('\n')
+        .map((row) => row.trimRight())
+        .where((row) => row.isNotEmpty)
+        .toList();
+    expect(rows, [
+      '▾ \$ {object 2}',
+      '  ▾ user {object 2}',
+      '      name: "ada"',
+      '    ▾ tags [array 2]',
+      '        [0]: "x"',
+      '        [1]: "y"',
+      '    id: 7',
+    ]);
+  });
+
+  testWidgets('Right expands a branch and Left collapses it', (tester) {
+    tester.pumpWidget(
+      JsonView(
+        autofocus: true,
+        value: const {
+          'name': 'fleury',
+          'meta': {'version': 1, 'status': 'active'},
+          'flags': [true, null],
+        },
+      ),
+    );
+
+    tester.render(size: const CellSize(80, 8));
+    tester.sendKey(const KeyEvent(KeyCode.arrowDown)); // name
+    tester.sendKey(const KeyEvent(KeyCode.arrowDown)); // meta
+    tester.sendKey(const KeyEvent(KeyCode.arrowRight));
+    tester.render(size: const CellSize(80, 8));
+
+    var json = tester.semantics().single(role: SemanticRole.json);
+    expect(json.state.collectionRowCount, 6);
+    expect(json.state['expandedCount'], 2);
+
+    final version = tester.semantics().single(
+      role: SemanticRole.jsonNode,
+      label: 'version',
+    );
+    expect(version.state['jsonPointer'], '/meta/version');
+    expect(version.state['jsonPath'], r'$.meta.version');
+    expect(version.value, '1');
+
+    tester.sendKey(const KeyEvent(KeyCode.arrowLeft));
+    tester.render(size: const CellSize(80, 8));
+
+    json = tester.semantics().single(role: SemanticRole.json);
+    expect(json.state.collectionRowCount, 4);
+    final meta = tester.semantics().single(
+      role: SemanticRole.jsonNode,
+      label: 'meta',
+    );
+    expect(meta.expanded, isFalse);
+  });
+
+  testWidgets('semantic open expands a JSON branch', (tester) async {
+    tester.pumpWidget(
+      JsonView(
+        value: const {
+          'name': 'fleury',
+          'meta': {'version': 1, 'status': 'active'},
+        },
+      ),
+    );
+
+    tester.render(size: const CellSize(80, 8));
+    await tester.target(role: SemanticRole.jsonNode, label: 'meta').open();
+
+    tester.render(size: const CellSize(80, 8));
+    final version = tester.semantics().single(
+      role: SemanticRole.jsonNode,
+      label: 'version',
+    );
+    expect(version.state['jsonPointer'], '/meta/version');
+  });
+
+  testWidgets('semantic close collapses an expanded JSON branch', (
+    tester,
+  ) async {
+    tester.pumpWidget(
+      JsonView(
+        value: const {
+          'name': 'fleury',
+          'meta': {'version': 1, 'status': 'active'},
+        },
+      ),
+    );
+    tester.render(size: const CellSize(80, 8));
+    await tester.target(role: SemanticRole.jsonNode, label: 'meta').open();
+    tester.render(size: const CellSize(80, 8));
+    expect(
+      tester.semantics().where(role: SemanticRole.jsonNode, label: 'version'),
+      isNotEmpty,
+    );
+
+    // Expanded ⇒ meta offers close, not open.
+    final meta = tester.semantics().single(
+      role: SemanticRole.jsonNode,
+      label: 'meta',
+    );
+    expect(meta.actions, contains(SemanticAction.close));
+    expect(meta.actions, isNot(contains(SemanticAction.open)));
+
+    await tester.target(role: SemanticRole.jsonNode, label: 'meta').close();
+    tester.render(size: const CellSize(80, 8));
+    expect(
+      tester.target(role: SemanticRole.jsonNode, label: 'version'),
+      hasCount(0),
+      reason: 'collapsing meta hides its children',
+    );
+  });
+
+  group('copy/export', () {
+    testWidgets('Ctrl+C copies the selected JSON subtree', (tester) async {
+      final controller = JsonViewController(initialIndex: 2);
+      JsonViewCopyResult? copied;
+      tester.pumpWidget(
+        JsonView(
+          autofocus: true,
+          controller: controller,
+          copyOptions: const JsonViewCopyOptions(
+            clipboardPolicy: ClipboardWritePolicy.inProcessOnly,
+          ),
+          value: const {
+            'name': 'fleury',
+            'meta': {'version': 1, 'status': 'active'},
+          },
+          onCopy: (result) => copied = result,
+        ),
+      );
+
+      tester.render(size: const CellSize(80, 8));
+      tester.sendKey(
+        const KeyEvent(KeyCode.char('c'), modifiers: {KeyModifier.ctrl}),
+      );
+      await Future<void>.delayed(Duration.zero);
+
+      expect(
+        tester.clipboard.readInProcess(),
+        '{\n'
+        '  "version": 1,\n'
+        '  "status": "active"\n'
+        '}',
+      );
+      expect(copied, isNotNull);
+      expect(copied!.rowIndex, 2);
+      expect(copied!.row.path, r'$.meta');
+      expect(copied!.report.policy.name, 'inProcessOnly');
+
+      final selected = tester.semantics().single(
+        role: SemanticRole.jsonNode,
+        label: 'meta',
+        selected: true,
+        action: SemanticAction.copy,
+      );
+      expect(selected.state['jsonPointer'], '/meta');
+    });
+
+    testWidgets('semantic copy copies the selected JSON subtree', (
+      tester,
+    ) async {
+      final controller = JsonViewController(initialIndex: 2);
+      JsonViewCopyResult? copied;
+      tester.pumpWidget(
+        JsonView(
+          controller: controller,
+          copyOptions: const JsonViewCopyOptions(
+            clipboardPolicy: ClipboardWritePolicy.inProcessOnly,
+          ),
+          value: const {
+            'name': 'fleury',
+            'meta': {'version': 1, 'status': 'active'},
+          },
+          onCopy: (result) => copied = result,
+        ),
+      );
+
+      tester.render(size: const CellSize(80, 8));
+      await tester.target(role: SemanticRole.jsonNode, label: 'meta').copy();
+
+      expect(tester.clipboard.readInProcess(), contains('"version": 1'));
+      expect(copied?.row.path, r'$.meta');
+      expect(copied?.report.result, ClipboardWriteResult.inProcessOnly);
+    });
+
+    test('exportJsonViewRow supports line copy mode', () {
+      final rows = buildJsonViewRows(const {
+        'name': 'fleury',
+        'meta': {'version': 1},
+      });
+      final meta = rows.singleWhere((row) => row.path == r'$.meta');
+
+      expect(
+        exportJsonViewRow(
+          meta,
+          options: const JsonViewCopyOptions(mode: JsonViewCopyMode.line),
+        ),
+        contains('meta {object 1}'),
+      );
+    });
+
+    testWidgets('a collapsed container reports an unsafe string inside it', (
+      tester,
+    ) {
+      tester.pumpWidget(
+        JsonView(
+          value: const {
+            'outer': {'inner': 'bad\x1b]52;c;secret\x07'},
+          },
+        ),
+      );
+
+      final outer = tester.semantics().single(
+        role: SemanticRole.jsonNode,
+        label: 'outer',
+      );
+      expect(outer.state['expanded'], isFalse);
+      expect(outer.state.outputSanitized, isTrue);
+    });
+
+    testWidgets('moving the cursor does not walk the document again', (tester) {
+      // Rows used to be rebuilt from the whole document on every cursor
+      // move: normalized, and every container's subtree rescanned.
+      final value = _CountingMap({
+        'a': 1,
+        'b': [2, 3],
+        'c': {'d': 4},
+      });
+      tester.pumpWidget(JsonView(value: value, autofocus: true));
+      tester.render(size: const CellSize(40, 8));
+      final reads = value.entryReads;
+
+      for (var i = 0; i < 5; i++) {
+        tester.sendKey(const KeyEvent(KeyCode.arrowDown));
+        tester.render(size: const CellSize(40, 8));
+      }
+
+      expect(value.entryReads, reads);
+    });
+
+    testWidgets('display and copy collapse unsafe terminal payloads', (
+      tester,
+    ) async {
+      final controller = JsonViewController(initialIndex: 0);
+      tester.pumpWidget(
+        JsonView(
+          autofocus: true,
+          controller: controller,
+          copyOptions: const JsonViewCopyOptions(
+            clipboardPolicy: ClipboardWritePolicy.inProcessOnly,
+          ),
+          value: const {'unsafe': 'bad\x1b]52;c;secret\x07 payload'},
+        ),
+      );
+
+      final output = tester.renderToString(
+        size: const CellSize(80, 4),
+        emptyMark: ' ',
+      );
+      expect(output, contains('unsafe: "bad'));
+      expect(output, isNot(contains('secret')));
+      expect(output, isNot(contains('\x1b]52')));
+
+      final unsafe = tester.semantics().single(
+        role: SemanticRole.jsonNode,
+        label: 'unsafe',
+      );
+      expect(unsafe.value, isNot(contains('secret')));
+      expect(unsafe.state.outputSanitized, isTrue);
+
+      tester.sendKey(
+        const KeyEvent(KeyCode.char('c'), modifiers: {KeyModifier.ctrl}),
+      );
+      await Future<void>.delayed(Duration.zero);
+
+      expect(tester.clipboard.readInProcess(), isNot(contains('secret')));
+      expect(tester.clipboard.readInProcess(), isNot(contains('\x1b]52')));
+      expect(tester.clipboard.readInProcess(), contains('"unsafe"'));
+    });
+  });
+
+  testWidgets('invalid JSON string exposes parse error semantics', (tester) {
+    tester.pumpWidget(JsonView.string('{bad', semanticLabel: 'Broken payload'));
+
+    final output = tester.renderToString(
+      size: const CellSize(80, 2),
+      emptyMark: ' ',
+    );
+    expect(output, contains('Invalid JSON:'));
+
+    final json = tester.semantics().single(
+      role: SemanticRole.json,
+      label: 'Broken payload',
+    );
+    expect(json.validationError, isNotNull);
+    expect(json.state['valid'], isFalse);
+    expect(json.state['sourceLength'], 4);
+  });
+
+  // JsonView's internal ListView needs a bounded height. In a Column the cross
+  // child gets an unbounded one, and the list threw a StateError naming a
+  // widget the caller never wrote. `maxVisible` bounds it the same way
+  // TreeTable and FileBrowser do.
+  group('vertical bound', () {
+    testWidgets('renders inside a Column without throwing', (tester) {
+      tester.pumpWidget(
+        Column(
+          children: [
+            const Text('Payload'),
+            JsonView(value: const {'name': 'fleury', 'stars': 3}),
+          ],
+        ),
+      );
+      final out = tester.renderToString(
+        size: const CellSize(60, 24),
+        emptyMark: ' ',
+      );
+      expect(out, contains('Payload'));
+      expect(out, contains('name'));
+    });
+
+    testWidgets('maxVisible caps the rendered body rows', (tester) {
+      tester.pumpWidget(
+        Column(
+          children: [
+            const Text('Payload'),
+            JsonView(
+              value: const {'a': 1, 'b': 2, 'c': 3, 'd': 4, 'e': 5},
+              maxVisible: 3,
+            ),
+          ],
+        ),
+      );
+      final out = tester
+          .renderToString(size: const CellSize(60, 24), emptyMark: ' ')
+          .split('\n')
+          .where((line) => line.trim().isNotEmpty)
+          .toList();
+      // The header row plus exactly three JSON rows.
+      expect(out.length, 4);
+      expect(out.first, contains('Payload'));
+    });
+  });
+}
+
+/// A map that counts how often its entries are walked.
+final class _CountingMap extends MapBase<String, Object?> {
+  _CountingMap(this._inner);
+
+  final Map<String, Object?> _inner;
+  var entryReads = 0;
+
+  @override
+  Iterable<MapEntry<String, Object?>> get entries {
+    entryReads++;
+    return _inner.entries;
+  }
+
+  @override
+  Object? operator [](Object? key) => _inner[key];
+
+  @override
+  void operator []=(String key, Object? value) => _inner[key] = value;
+
+  @override
+  void clear() => _inner.clear();
+
+  @override
+  Iterable<String> get keys => _inner.keys;
+
+  @override
+  Object? remove(Object? key) => _inner.remove(key);
+}

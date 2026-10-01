@@ -4,7 +4,6 @@
 // run; this file covers the short fragments, verbatim, in page order.
 
 import 'package:fleury/fleury.dart';
-import 'package:fleury_widgets/fleury_widgets.dart';
 
 // `FleuryApp` is deliberately smaller than `MaterialApp`.
 void main(List<String> args) => runApp(

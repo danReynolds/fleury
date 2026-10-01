@@ -5,7 +5,6 @@
 import 'dart:async';
 
 import 'package:fleury/fleury.dart';
-import 'package:fleury_widgets/fleury_widgets.dart';
 
 void main() => runApp(navigationDemoApp());
 

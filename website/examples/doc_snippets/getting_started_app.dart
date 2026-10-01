@@ -2,7 +2,6 @@
 // web-safe libraries, so both the native entrypoint (status_app_terminal.dart)
 // and the browser entrypoint (status_app_web.dart) run this same MyApp.
 import 'package:fleury/fleury_core.dart';
-import 'package:fleury_widgets/fleury_widgets.dart';
 
 class MyApp extends StatelessWidget {
   const MyApp({super.key});

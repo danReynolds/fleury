@@ -1,6 +1,5 @@
 // dart format width=60
 import 'package:fleury/fleury_core.dart';
-import 'package:fleury_widgets/fleury_widgets.dart';
 
 class ScrollEdges extends StatefulWidget {
   const ScrollEdges({super.key});

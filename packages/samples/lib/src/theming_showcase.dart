@@ -1,6 +1,5 @@
 import 'package:fleury/fleury_core.dart';
 import 'package:fleury/themes.dart';
-import 'package:fleury_widgets/fleury_widgets.dart';
 
 /// A live theme studio: compare every bundled community theme against one
 /// consistent UI, or edit a small custom theme and watch it update in place.

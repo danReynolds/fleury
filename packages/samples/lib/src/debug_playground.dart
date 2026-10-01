@@ -1,7 +1,6 @@
 import 'dart:math' as math;
 
 import 'package:fleury/fleury_core.dart';
-import 'package:fleury_widgets/fleury_widgets.dart';
 
 import 'scaffold.dart';
 

@@ -1,5 +1,4 @@
 import 'package:fleury/fleury.dart';
-import 'package:fleury_widgets/fleury_widgets.dart';
 
 import 'catalog.dart';
 import 'story.dart';

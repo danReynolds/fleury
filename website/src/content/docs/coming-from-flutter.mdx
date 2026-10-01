@@ -29,7 +29,7 @@ structured terminal/browser surfaces.
 | `runApp(const MyApp())` | Same name for terminal/native apps. |
 | `MaterialApp` / `WidgetsApp` | `FleuryApp(title:, home:, theme:)` is the lightweight app shell. |
 | logical pixels | integer cells (`EdgeInsets.all(1)`, not `8.0`). |
-| Material controls | Fleury core widgets plus `fleury_widgets` for tables, charts, forms, agent surfaces, and controls. |
+| Material controls | Fleury includes primitives, controls, tables, charts, forms, and agent surfaces in one package. |
 | Flutter web build | `mountApp(() => const FleuryApp(title: 'My app', home: MyHomeScreen()), into: host)` for client-side browser embeds, or `fleury serve` for a native app streamed to the browser. |
 
 ## The same counter, twice
@@ -109,7 +109,7 @@ the same widget tree, but different host entrypoints:
 | Use case | Import | Entrypoint |
 |---|---|---|
 | Native terminal app | `package:fleury/fleury.dart` | `runApp(const FleuryApp(title: 'My app', home: MyHomeScreen()))` |
-| Higher-level widgets in a terminal app | `package:fleury_widgets/fleury_widgets.dart` | still `runApp` |
+| Higher-level widgets in a terminal app | `package:fleury/fleury_core.dart` | still `runApp` |
 | Client-side browser embed | `package:fleury/fleury_core.dart`, `package:fleury_web/fleury_web.dart`, plus web-safe widgets | `mountApp(() => const FleuryApp(title: 'My app', home: MyHomeScreen()), into: host)` |
 | Browser session backed by a native process | terminal app imports | `fleury serve --spawn dart --enable-vm-service=0 run bin/run_app.dart` |
 
@@ -135,8 +135,8 @@ Future<void> main() async {
 ```
 
 Client-side browser bundles can only use web-safe code. Import
-`package:fleury_widgets/fleury_widgets.dart` for shared UI. Explicit local
-filesystem access lives in `fleury_widgets_io.dart`. `FileBrowser` and
+`package:fleury/fleury_core.dart` for shared UI. Explicit local
+filesystem access lives in `package:fleury/fleury.dart`. `FileBrowser` and
 `FilePicker` work with a browser-safe `FileSource`, such as `MemoryFileSource`;
 `LogRegion` displays log entries supplied by your app. `LocalFileSource` and
 code that reads host files or launches processes need a native app. With

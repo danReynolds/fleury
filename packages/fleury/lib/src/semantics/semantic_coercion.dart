@@ -6,7 +6,7 @@
 /// leniently and return `null` when it can't be read as the wanted type.
 ///
 /// One canonical home so every consumer agrees on the accepted domain: the
-/// widgets that APPLY a setValue (fleury_widgets) and the MCP layer that
+/// catalog widgets that APPLY a setValue and the MCP layer that
 /// VALIDATES one before dispatch (fleury_mcp) both read these, instead of each
 /// restating the rules and risking drift.
 library;

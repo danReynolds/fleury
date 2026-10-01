@@ -4,7 +4,6 @@
 // a browser-side source: an in-memory project tree, or log lines a ticker
 // appends the way a running build would.
 import 'package:fleury/fleury_core.dart';
-import 'package:fleury_widgets/fleury_widgets.dart';
 
 /// A small Fleury project, as a terminal app would see it on disk.
 final projectFiles = MemoryFileSource(

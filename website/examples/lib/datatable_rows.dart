@@ -1,5 +1,4 @@
 import 'package:fleury/fleury_core.dart';
-import 'package:fleury_widgets/fleury_widgets.dart';
 
 class TableRows extends StatefulWidget {
   const TableRows({super.key});

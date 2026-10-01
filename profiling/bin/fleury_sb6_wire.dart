@@ -5,7 +5,6 @@ import 'dart:math' as math;
 
 import 'package:fleury/fleury.dart';
 import 'package:fleury/src/debug/debug_capture.dart';
-import 'package:fleury_widgets/fleury_widgets.dart';
 
 import 'fleury_wire_support.dart';
 

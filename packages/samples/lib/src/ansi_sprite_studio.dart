@@ -4,7 +4,6 @@
 import 'dart:async' show unawaited;
 
 import 'package:fleury/fleury_core.dart';
-import 'package:fleury_widgets/fleury_widgets.dart';
 
 import 'ansi_sprite_model.dart';
 import 'scaffold.dart';

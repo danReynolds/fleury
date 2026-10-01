@@ -144,8 +144,7 @@ Existing `Button(label: ...)` calls migrate to `Button(text: ...)`.
   sharing one per-runtime scheduler. See below.
 - **Hot reload**: state-preserving reload wired for VS Code — see
   [the hot-reload guide](https://github.com/danReynolds/fleury/blob/main/packages/fleury/doc/hot_reload.md).
-- **Widgets**: a deep catalog lives in the companion `fleury_widgets`
-  package — inputs, selects, tables, trees, charts, an image widget
+- **Widgets**: the bundled catalog includes inputs, selects, tables, trees, charts, an image widget
   with Kitty/iTerm2 progressive enhancement, experimental Sixel, and portable
   glyph rendering, and more.
 

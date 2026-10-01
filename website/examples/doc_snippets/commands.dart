@@ -3,7 +3,6 @@
 import 'dart:async' show unawaited;
 
 import 'package:fleury/fleury.dart';
-import 'package:fleury_widgets/fleury_widgets.dart';
 
 const saveFile = CommandId('editor.save');
 const openCommands = CommandId('commands.open');

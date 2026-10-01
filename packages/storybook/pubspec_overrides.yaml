@@ -1,4 +1,4 @@
-# Local development: resolve fleury from the monorepo (fleury_widgets/fleury_web
+# Local development: resolve fleury from the monorepo (Fleury catalog/fleury_web
 # declare it as a hosted dep). pub ignores this file when publishing.
 dependency_overrides:
   fleury:

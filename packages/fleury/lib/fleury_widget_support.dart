@@ -3,7 +3,7 @@
 /// Application UI normally imports `fleury_core.dart`. Import this library
 /// alongside it when implementing controls, forms, or custom cell painting.
 /// These contracts follow Fleury's package compatibility guarantees, including
-/// when consumed by `fleury_widgets`; they are not lockstep implementation hooks.
+/// for third-party widget libraries; they are not lockstep implementation hooks.
 /// Implementation render classes and source/display mappings stay private.
 library;
 

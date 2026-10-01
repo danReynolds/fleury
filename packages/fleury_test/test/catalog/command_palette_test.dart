@@ -1,0 +1,1290 @@
+import 'dart:async' show Completer, runZonedGuarded, unawaited;
+
+import 'package:fleury/fleury.dart';
+import 'package:fleury_test/fleury_test.dart';
+import 'package:test/test.dart';
+
+/// Captures a BuildContext under a Navigator so we can present the
+/// palette from it.
+class _Capture extends StatelessWidget {
+  const _Capture(this.sink);
+  final void Function(BuildContext) sink;
+  @override
+  Widget build(BuildContext context) {
+    sink(context);
+    return const Text('home');
+  }
+}
+
+/// Presents the palette and lets the entrance settle (its TextInput
+/// autofocuses on build — no focus hack needed under present).
+void _open(
+  FleuryTester tester,
+  BuildContext ctx,
+  List<CommandPaletteItem> cmds,
+) {
+  Navigator.of(ctx).present<void>(CommandPalette(commands: cmds));
+  tester.pump(const Duration(milliseconds: 300));
+  tester.render();
+}
+
+void _openRegistryPalette(FleuryTester tester, BuildContext ctx) {
+  unawaited(CommandPalette.open(ctx));
+  tester.pump(const Duration(milliseconds: 300));
+  tester.render();
+}
+
+AppCommand _openPaletteCommand() {
+  return AppCommand(
+    id: const CommandId('app.openPalette'),
+    title: 'Open Command Palette',
+    shortcuts: [KeySequence.ctrl.k],
+    showInPalette: false,
+    semanticAction: SemanticAction.open,
+    run: (context) {
+      final buildContext = context.buildContext;
+      if (buildContext == null) return;
+      unawaited(CommandPalette.open(buildContext));
+    },
+  );
+}
+
+List<SemanticNode> _paletteCommandRows(FleuryTester tester) {
+  return tester
+      .semantics()
+      .byRole(SemanticRole.command)
+      .where((node) => node.state['rowIndex'] != null)
+      .toList();
+}
+
+/// Pumps out a dismissal transition so the route is fully removed.
+/// The errors [body] leaves uncaught. A throw from the body itself fails the
+/// test instead of hanging it.
+Future<List<Object>> _uncaught(Future<void> Function() body) {
+  final errors = <Object>[];
+  final done = Completer<List<Object>>();
+  runZonedGuarded(() {
+    body().then((_) => done.complete(errors), onError: done.completeError);
+  }, (error, _) => errors.add(error));
+  return done.future;
+}
+
+Future<void> _settleClose(FleuryTester tester) async {
+  tester.pump(const Duration(milliseconds: 300));
+  await Future<void>.delayed(Duration.zero);
+  tester.pump();
+}
+
+void main() {
+  late BuildContext ctx;
+  List<CommandPaletteItem> commands(void Function(String) onRun) => [
+    CommandPaletteItem(label: 'Open File', onInvoke: () => onRun('open')),
+    CommandPaletteItem(label: 'Save File', onInvoke: () => onRun('save')),
+    CommandPaletteItem(label: 'Close Window', onInvoke: () => onRun('close')),
+  ];
+
+  testWidgets('palette is bounded to its content, not the full viewport', (
+    tester,
+  ) {
+    tester.pumpWidget(Navigator(home: _Capture((c) => ctx = c)));
+    _open(tester, ctx, commands((_) {})); // 3 commands
+    final lines = tester
+        .renderToString(size: const CellSize(50, 30), emptyMark: ' ')
+        .split('\n');
+    final top = lines.indexWhere((l) => l.contains('╭') || l.contains('┌'));
+    final bottom = lines.lastIndexWhere(
+      (l) => l.contains('╰') || l.contains('└'),
+    );
+    expect(top, greaterThanOrEqualTo(0), reason: 'palette border rendered');
+    // Box = border(2) + input(1) + gap(1) + 3 result rows = 7, far short of
+    // the 30-row viewport the centering Align offers.
+    expect(
+      bottom - top + 1,
+      lessThan(12),
+      reason: 'palette fits its content, not the whole viewport',
+    );
+  });
+
+  testWidgets('filters by fuzzy query and invokes on Enter', (tester) async {
+    String? ran;
+    tester.pumpWidget(Navigator(home: _Capture((c) => ctx = c)));
+    _open(tester, ctx, commands((v) => ran = v));
+    expect(Navigator.of(ctx).depth, 2, reason: 'palette is open');
+
+    tester.type('save'); // matches only "Save File"
+    tester.pump();
+    tester.sendKey(const KeyEvent(KeyCode.enter));
+    expect(ran, 'save');
+
+    await _settleClose(tester);
+    expect(Navigator.of(ctx).depth, 1, reason: 'palette closed on invoke');
+  });
+
+  testWidgets('Up/Down move the selection before invoking', (tester) async {
+    String? ran;
+    tester.pumpWidget(Navigator(home: _Capture((c) => ctx = c)));
+    _open(tester, ctx, commands((v) => ran = v));
+
+    // No query → all three; selection starts at 0 (Open File).
+    tester.sendKey(const KeyEvent(KeyCode.arrowDown)); // → Save File
+    tester.sendKey(const KeyEvent(KeyCode.arrowDown)); // → Close Window
+    tester.pump();
+    tester.sendKey(const KeyEvent(KeyCode.enter));
+    expect(ran, 'close');
+  });
+
+  testWidgets('Esc dismisses without invoking', (tester) async {
+    var ran = false;
+    tester.pumpWidget(Navigator(home: _Capture((c) => ctx = c)));
+    _open(tester, ctx, [
+      CommandPaletteItem(label: 'Dangerous', onInvoke: () => ran = true),
+    ]);
+
+    tester.sendKey(const KeyEvent(KeyCode.escape));
+    await _settleClose(tester);
+
+    expect(ran, isFalse);
+    expect(Navigator.of(ctx).depth, 1, reason: 'palette dismissed');
+  });
+
+  testWidgets('dismissed palette does not leave stale semantic actions', (
+    tester,
+  ) async {
+    tester.pumpWidget(Navigator(home: _Capture((c) => ctx = c)));
+    _open(tester, ctx, commands((_) {}));
+    expect(tester.semantics().byRole(WidgetRoles.commandPalette), isNotEmpty);
+
+    tester.sendKey(const KeyEvent(KeyCode.escape));
+    await _settleClose(tester);
+
+    expect(tester.semantics().byRole(WidgetRoles.commandPalette), isEmpty);
+    final result = await tester.invokeSemanticAction(
+      SemanticAction.submit,
+      role: WidgetRoles.commandPalette,
+      allowFailure: true,
+    );
+    expect(result.status, SemanticActionInvocationStatus.notFound);
+  });
+
+  testWidgets('submit with no command to run is declined', (tester) async {
+    tester.pumpWidget(Navigator(home: _Capture((c) => ctx = c)));
+    _open(tester, ctx, commands((_) {}));
+    tester.type('zzz'); // matches nothing
+    tester.pump();
+
+    final result = await tester.invokeSemanticAction(
+      SemanticAction.submit,
+      role: WidgetRoles.commandPalette,
+      allowFailure: true,
+    );
+
+    expect(result.status, SemanticActionInvocationStatus.unsupported);
+    expect(Navigator.of(ctx).depth, 2, reason: 'the palette stays open');
+  });
+
+  testWidgets('repeated palette cycles do not retain stale modal semantics', (
+    tester,
+  ) async {
+    var calls = 0;
+    tester.pumpWidget(Navigator(home: _Capture((c) => ctx = c)));
+
+    for (var i = 0; i < 4; i++) {
+      _open(tester, ctx, [
+        CommandPaletteItem(label: 'Run Cycle $i', onInvoke: () => calls += 1),
+      ]);
+      tester.type('Run Cycle $i');
+      tester.pump();
+      expect(
+        tester.semantics().byRole(WidgetRoles.commandPalette),
+        hasLength(1),
+      );
+      tester.sendKey(const KeyEvent(KeyCode.enter));
+      await _settleClose(tester);
+      expect(Navigator.of(ctx).depth, 1);
+      expect(tester.semantics().byRole(WidgetRoles.commandPalette), isEmpty);
+    }
+
+    expect(calls, 4);
+  });
+
+  testWidgets('exposes palette and command semantics', (tester) {
+    tester.pumpWidget(Navigator(home: _Capture((c) => ctx = c)));
+    _open(tester, ctx, commands((_) {}));
+
+    var tree = tester.semantics();
+    var palette = tree.single(role: WidgetRoles.commandPalette);
+    expect(palette.label, 'Command palette');
+    expect(palette.value, '');
+    expect(palette.actions, contains(SemanticAction.submit));
+    // Dismissal belongs to the route that presents the palette.
+    expect(palette.actions, isNot(contains(SemanticAction.dismiss)));
+    expect(
+      tree.single(role: SemanticRole.route, label: 'CommandPalette').actions,
+      contains(SemanticAction.dismiss),
+    );
+    expect(palette.state.collectionRowCount, 3);
+    expect(palette.state.selectedKey, 0);
+
+    final open = tree.single(role: SemanticRole.command, label: 'Open File');
+    expect(open.selected, isTrue);
+    expect(open.actions, contains(SemanticAction.activate));
+    expect(open.state.commandId, 'Open File');
+
+    tester.type('save');
+    tester.pump();
+
+    tree = tester.semantics();
+    palette = tree.single(role: WidgetRoles.commandPalette);
+    expect(palette.value, 'save');
+    expect(palette.state.filterText, 'save');
+    expect(palette.state.collectionRowCount, 1);
+    final save = tree.single(role: SemanticRole.command, label: 'Save File');
+    expect(save.selected, isTrue);
+  });
+
+  testWidgets('large palettes expose bounded visible row semantics', (tester) {
+    tester.pumpWidget(Navigator(home: _Capture((c) => ctx = c)));
+    _open(tester, ctx, [
+      for (var i = 0; i < 200; i++)
+        CommandPaletteItem(label: 'Command $i', onInvoke: () {}),
+    ]);
+
+    final tree = tester.semantics();
+    final palette = tree.single(role: WidgetRoles.commandPalette);
+    final rows = _paletteCommandRows(tester);
+    expect(palette.state.collectionRowCount, 200);
+    expect(rows.length, lessThan(200));
+    expect(rows, isNotEmpty);
+    expect(palette.state.values['visibleRangeStart'], 0);
+    expect(palette.state.values['visibleRangeEnd'], rows.length - 1);
+  });
+
+  testWidgets('semantic submit invokes selected command and closes', (
+    tester,
+  ) async {
+    String? ran;
+    tester.pumpWidget(Navigator(home: _Capture((c) => ctx = c)));
+    _open(tester, ctx, commands((v) => ran = v));
+    tester.type('save');
+    tester.pump();
+
+    await tester.target(role: WidgetRoles.commandPalette).submit();
+
+    expect(ran, 'save');
+    await _settleClose(tester);
+    expect(Navigator.of(ctx).depth, 1);
+  });
+
+  testWidgets('semantic command activate invokes that row and closes', (
+    tester,
+  ) async {
+    String? ran;
+    tester.pumpWidget(Navigator(home: _Capture((c) => ctx = c)));
+    _open(tester, ctx, commands((v) => ran = v));
+
+    await tester
+        .target(role: SemanticRole.command, label: 'Close Window')
+        .press();
+
+    expect(ran, 'close');
+    await _settleClose(tester);
+    expect(Navigator.of(ctx).depth, 1);
+  });
+
+  testWidgets('semantic dismiss closes without invoking', (tester) async {
+    var ran = false;
+    tester.pumpWidget(Navigator(home: _Capture((c) => ctx = c)));
+    _open(tester, ctx, [
+      CommandPaletteItem(label: 'Dangerous', onInvoke: () => ran = true),
+    ]);
+
+    await tester
+        .target(role: SemanticRole.route, label: 'CommandPalette')
+        .perform(SemanticAction.dismiss);
+
+    await _settleClose(tester);
+    expect(ran, isFalse);
+    expect(Navigator.of(ctx).depth, 1);
+  });
+
+  group('shown inline on a page', () {
+    Future<(List<String>, NavigatorState)> openInline(
+      FleuryTester tester,
+    ) async {
+      final ran = <String>[];
+      tester.pumpWidget(Navigator(home: _Capture((c) => ctx = c)));
+      unawaited(
+        Navigator.of(ctx).push<void>(
+          Column(
+            children: [
+              const Text('settings'),
+              CommandPalette(commands: commands(ran.add)),
+            ],
+          ),
+        ),
+      );
+      tester.pump(const Duration(milliseconds: 300));
+      tester.render();
+      return (ran, Navigator.of(ctx));
+    }
+
+    testWidgets('running a row leaves the page open', (tester) async {
+      final (ran, navigator) = await openInline(tester);
+      expect(navigator.depth, 2);
+
+      tester.type('save');
+      tester.pump();
+      tester.sendKey(const KeyEvent(KeyCode.enter));
+      await _settleClose(tester);
+
+      expect(ran, ['save']);
+      expect(navigator.depth, 2, reason: 'the settings page is still open');
+    });
+
+    testWidgets('the palette offers no dismiss of the page', (tester) async {
+      await openInline(tester);
+
+      final palette = tester.semantics().single(
+        role: WidgetRoles.commandPalette,
+      );
+
+      expect(palette.actions, isNot(contains(SemanticAction.dismiss)));
+    });
+  });
+
+  group('edges', () {
+    testWidgets('shows a no-match message when nothing matches', (
+      tester,
+    ) async {
+      tester.pumpWidget(Navigator(home: _Capture((c) => ctx = c)));
+      _open(tester, ctx, commands((_) {}));
+      tester.type('zzzz');
+      tester.pump();
+      expect(tester.exists(text('No matching commands')), isTrue);
+    });
+
+    testWidgets('selection resets to the top when the query changes', (
+      tester,
+    ) async {
+      String? ran;
+      tester.pumpWidget(Navigator(home: _Capture((c) => ctx = c)));
+      _open(tester, ctx, commands((v) => ran = v));
+
+      // Move off the top, then type — 's' matches Save + Close, and the
+      // selection should snap back to the first match (Save), not stay at 1.
+      tester.sendKey(const KeyEvent(KeyCode.arrowDown));
+      tester.type('s');
+      tester.pump();
+      tester.sendKey(const KeyEvent(KeyCode.enter));
+      expect(ran, 'save', reason: 'selection reset to the first match');
+    });
+
+    testWidgets('an empty command list is inert, not a crash', (tester) async {
+      tester.pumpWidget(Navigator(home: _Capture((c) => ctx = c)));
+      _open(tester, ctx, const []);
+      tester.sendKey(const KeyEvent(KeyCode.enter));
+      tester.pump();
+      expect(
+        Navigator.of(ctx).depth,
+        2,
+        reason: 'still open; Enter was a no-op',
+      );
+    });
+  });
+
+  group('CommandPalette registry mode', () {
+    testWidgets(
+      'palette visibility does not disable registry lookup or shortcuts',
+      (tester) async {
+        var shortcutCalls = 0;
+        tester.pumpWidget(
+          FleuryApp(
+            title: 'App',
+            commands: [
+              AppCommand(
+                id: const CommandId('app.openPalette'),
+                title: 'Open Command Palette',
+                shortcuts: [KeySequence.ctrl.k],
+                showInPalette: false,
+                run: (_) {
+                  shortcutCalls += 1;
+                },
+              ),
+              AppCommand(
+                id: const CommandId('workspace.refresh'),
+                title: 'Refresh Workspace',
+                run: (_) {},
+              ),
+            ],
+            child: Navigator(
+              home: Focus(autofocus: true, child: _Capture((c) => ctx = c)),
+            ),
+          ),
+        );
+
+        tester.sendKey(
+          const KeyEvent(KeyCode.char('k'), modifiers: {KeyModifier.ctrl}),
+        );
+        await Future<void>.delayed(Duration.zero);
+        tester.pump();
+
+        expect(shortcutCalls, 1);
+        expect(
+          CommandRegistryScope.of(ctx)
+              .activeCommands(buildContext: ctx)
+              .map((command) => command.id.value),
+          ['app.openPalette', 'workspace.refresh'],
+        );
+
+        _openRegistryPalette(tester, ctx);
+
+        expect(_paletteCommandRows(tester).map((node) => node.label), [
+          'Refresh Workspace',
+        ]);
+
+        tester.sendKey(const KeyEvent(KeyCode.escape));
+        await _settleClose(tester);
+      },
+    );
+
+    testWidgets('invokes active registry commands through the registry', (
+      tester,
+    ) async {
+      final calls = <String>[];
+      tester.pumpWidget(
+        FleuryApp(
+          title: 'App',
+          commands: [
+            AppCommand(
+              id: const CommandId('file.open'),
+              title: 'Open File',
+              shortcuts: [KeySequence.ctrl.o],
+              run: (_) {
+                calls.add('open');
+              },
+            ),
+            AppCommand(
+              id: const CommandId('file.save'),
+              title: 'Save File',
+              description: 'Write changes',
+              category: 'File',
+              shortcuts: [KeySequence.ctrl.s],
+              run: (_) {
+                calls.add('save');
+              },
+            ),
+          ],
+          child: Navigator(home: _Capture((c) => ctx = c)),
+        ),
+      );
+
+      _openRegistryPalette(tester, ctx);
+      tester.type('save');
+      tester.pump();
+      tester.sendKey(const KeyEvent(KeyCode.enter));
+
+      expect(calls, ['save']);
+      await _settleClose(tester);
+      expect(Navigator.of(ctx).depth, 1);
+    });
+
+    // The app's Save command, with the palette open over its page.
+    void openSave(FleuryTester tester, AppCommand save) {
+      tester.pumpWidget(
+        FleuryApp(
+          title: 'App',
+          commands: [save],
+          child: Navigator(home: _Capture((c) => ctx = c)),
+        ),
+      );
+      _openRegistryPalette(tester, ctx);
+    }
+
+    AppCommand save(
+      void Function() run, {
+      bool Function()? enabled,
+      bool fails = false,
+    }) => AppCommand(
+      id: const CommandId('file.save'),
+      title: 'Save File',
+      enabled: (_) => enabled?.call() ?? true,
+      run: (_) {
+        run();
+        return fails ? Future<void>.error(StateError('disk full')) : null;
+      },
+    );
+
+    // The app lists the same command; act on the palette's row.
+    SemanticNode paletteRow(FleuryTester tester, String label) => tester
+        .semantics()
+        .single(role: WidgetRoles.commandPalette)
+        .selfAndDescendants
+        .firstWhere(
+          (node) => node.role == SemanticRole.command && node.label == label,
+        );
+
+    Future<SemanticActionInvocationResult> pressRow(FleuryTester tester) =>
+        tester.invokeSemanticAction(
+          SemanticAction.activate,
+          id: paletteRow(tester, 'Save File').id,
+          allowFailure: true,
+        );
+
+    testWidgets('Enter on a row whose command throws throws there', (
+      tester,
+    ) async {
+      openSave(tester, save(() => throw StateError('disk full')));
+      tester.type('save');
+      tester.pump();
+
+      // As any throwing key handler does; runApp shows it in its overlay.
+      expect(
+        () => tester.sendKey(const KeyEvent(KeyCode.enter)),
+        throwsStateError,
+      );
+    });
+
+    testWidgets('a row whose command fails later is reported', (tester) async {
+      final errors = await _uncaught(() async {
+        openSave(tester, save(() {}, fails: true));
+        tester.type('save');
+        tester.pump();
+        tester.sendKey(const KeyEvent(KeyCode.enter));
+        await Future<void>.delayed(Duration.zero);
+        await _settleClose(tester);
+      });
+
+      expect(errors, [isA<StateError>()]);
+      expect(Navigator.of(ctx).depth, 1);
+    });
+
+    testWidgets('a semantic press on a row whose command throws fails', (
+      tester,
+    ) async {
+      openSave(tester, save(() => throw StateError('disk full')));
+
+      final result = await pressRow(tester);
+
+      expect(result.status, SemanticActionInvocationStatus.failed);
+      expect(result.error, isA<StateError>());
+    });
+
+    testWidgets('a semantic press on a row does not wait on its command', (
+      tester,
+    ) async {
+      SemanticActionInvocationResult? result;
+      final errors = await _uncaught(() async {
+        openSave(tester, save(() {}, fails: true));
+        result = await pressRow(tester);
+        await Future<void>.delayed(Duration.zero);
+        await _settleClose(tester);
+      });
+
+      // As with Enter, its later failure reaches the zone (runApp's error
+      // overlay).
+      expect(result?.status, SemanticActionInvocationStatus.completed);
+      expect(errors, [isA<StateError>()]);
+      expect(Navigator.of(ctx).depth, 1);
+    });
+
+    testWidgets('a semantic press on a row whose command turned disabled is '
+        'declined, and the palette stays open', (tester) async {
+      var allowed = true;
+      var runs = 0;
+      openSave(tester, save(() => runs++, enabled: () => allowed));
+      allowed = false; // nothing rebuilds the palette
+
+      final result = await pressRow(tester);
+      await _settleClose(tester);
+
+      expect(result.status, SemanticActionInvocationStatus.unsupported);
+      expect(runs, 0);
+      expect(Navigator.of(ctx).depth, 2);
+    });
+
+    testWidgets('registry decline after closing the palette is reported', (
+      tester,
+    ) async {
+      var runs = 0;
+      var checkRoute = false;
+      openSave(
+        tester,
+        save(
+          () => runs++,
+          enabled: () => !checkRoute || Navigator.of(ctx).depth == 2,
+        ),
+      );
+      checkRoute = true;
+      final result = await pressRow(tester);
+      await _settleClose(tester);
+      expect(result.status, SemanticActionInvocationStatus.unsupported);
+      expect(runs, 0);
+      expect(Navigator.of(ctx).depth, 1);
+    });
+
+    testWidgets('Enter on a row whose command turned disabled does nothing, '
+        'and the palette stays open', (tester) async {
+      var allowed = true;
+      var runs = 0;
+      final errors = await _uncaught(() async {
+        openSave(tester, save(() => runs++, enabled: () => allowed));
+        allowed = false; // nothing rebuilds the palette
+        tester.type('save');
+        tester.pump();
+        tester.sendKey(const KeyEvent(KeyCode.enter));
+        await Future<void>.delayed(Duration.zero);
+        await _settleClose(tester);
+      });
+
+      expect(runs, 0);
+      expect(errors, isEmpty);
+      expect(Navigator.of(ctx).depth, 2);
+    });
+
+    testWidgets('opening the palette does not subscribe the opener to focus', (
+      tester,
+    ) async {
+      var openerBuilds = 0;
+      final first = FocusNode(debugLabel: 'first');
+      final second = FocusNode(debugLabel: 'second');
+      tester.pumpWidget(
+        FleuryApp(
+          title: 'App',
+          commands: [
+            AppCommand(
+              id: const CommandId('file.save'),
+              title: 'Save File',
+              run: (_) {},
+            ),
+          ],
+          child: Navigator(
+            home: Column(
+              children: [
+                _Capture((c) {
+                  openerBuilds++;
+                  ctx = c;
+                }),
+                Focus(focusNode: first, child: const Text('first')),
+                Focus(focusNode: second, child: const Text('second')),
+              ],
+            ),
+          ),
+        ),
+      );
+      _openRegistryPalette(tester, ctx);
+      tester.sendKey(const KeyEvent(KeyCode.escape));
+      await _settleClose(tester);
+      final before = openerBuilds;
+
+      first.requestFocus();
+      tester.pump();
+      second.requestFocus();
+      tester.pump();
+
+      expect(openerBuilds, before);
+    });
+
+    testWidgets('filters by stable command id', (tester) async {
+      final calls = <String>[];
+      tester.pumpWidget(
+        FleuryApp(
+          title: 'App',
+          commands: [
+            AppCommand(
+              id: const CommandId('workspace.reload'),
+              title: 'Reload Workspace',
+              run: (_) {
+                calls.add('reload');
+              },
+            ),
+            AppCommand(
+              id: const CommandId('workspace.reset'),
+              title: 'Reset Workspace',
+              run: (_) {
+                calls.add('reset');
+              },
+            ),
+          ],
+          child: Navigator(home: _Capture((c) => ctx = c)),
+        ),
+      );
+
+      _openRegistryPalette(tester, ctx);
+      tester.type('workspace.reload');
+      tester.pump();
+
+      final row = _paletteCommandRows(tester).single;
+      expect(row.label, 'Reload Workspace');
+      expect(row.state.commandId, 'workspace.reload');
+
+      tester.sendKey(const KeyEvent(KeyCode.enter));
+      await _settleClose(tester);
+      expect(calls, ['reload']);
+    });
+
+    testWidgets('open captures an unfocused caller command scope', (
+      tester,
+    ) async {
+      final calls = <String>[];
+      tester.pumpWidget(
+        FleuryApp(
+          title: 'App',
+          commands: [
+            AppCommand(
+              id: const CommandId('app.global'),
+              title: 'Global Command',
+              run: (_) {
+                calls.add('global');
+              },
+            ),
+          ],
+          child: Navigator(
+            home: CommandScope(
+              commands: [
+                AppCommand(
+                  id: const CommandId('screen.refresh'),
+                  title: 'Refresh Active Screen',
+                  run: (_) {
+                    calls.add('screen');
+                  },
+                ),
+              ],
+              child: _Capture((c) => ctx = c),
+            ),
+          ),
+        ),
+      );
+
+      _openRegistryPalette(tester, ctx);
+      tester.type('screen.refresh');
+      tester.pump();
+
+      final row = _paletteCommandRows(tester).single;
+      expect(row.label, 'Refresh Active Screen');
+      expect(row.state.commandId, 'screen.refresh');
+
+      tester.sendKey(const KeyEvent(KeyCode.enter));
+      await _settleClose(tester);
+
+      expect(calls, ['screen']);
+      expect(Navigator.of(ctx).depth, 1);
+      expect(tester.semantics().byRole(WidgetRoles.commandPalette), isEmpty);
+    });
+
+    testWidgets(
+      'repeated registry palette cycles do not retain stale semantics',
+      (tester) async {
+        final calls = <String>[];
+        tester.pumpWidget(
+          FleuryApp(
+            title: 'App',
+            commands: [
+              AppCommand(
+                id: const CommandId('cycle.one'),
+                title: 'Cycle One',
+                run: (_) {
+                  calls.add('one');
+                },
+              ),
+              AppCommand(
+                id: const CommandId('cycle.two'),
+                title: 'Cycle Two',
+                run: (_) {
+                  calls.add('two');
+                },
+              ),
+            ],
+            child: Navigator(home: _Capture((c) => ctx = c)),
+          ),
+        );
+
+        for (final title in ['Cycle One', 'Cycle Two', 'Cycle One']) {
+          _openRegistryPalette(tester, ctx);
+          tester.type(title);
+          tester.pump();
+          expect(
+            tester.semantics().byRole(WidgetRoles.commandPalette),
+            hasLength(1),
+          );
+          tester.sendKey(const KeyEvent(KeyCode.enter));
+          await _settleClose(tester);
+          expect(Navigator.of(ctx).depth, 1);
+          expect(
+            tester.semantics().byRole(WidgetRoles.commandPalette),
+            isEmpty,
+          );
+        }
+
+        expect(calls, ['one', 'two', 'one']);
+      },
+    );
+
+    testWidgets('registry palette handles large repeated exact-query cycles', (
+      tester,
+    ) async {
+      final calls = <String>[];
+      String id(int index) =>
+          'scenario.command.${index.toString().padLeft(5, '0')}';
+      String title(int index) =>
+          'Scenario Command ${index.toString().padLeft(5, '0')}';
+      tester.pumpWidget(
+        FleuryApp(
+          title: 'App',
+          commands: [
+            for (var i = 0; i < 128; i++)
+              AppCommand(
+                id: CommandId(id(i)),
+                title: title(i),
+                enabled: (_) => i % 17 != 0,
+                run: (_) {
+                  calls.add(id(i));
+                },
+              ),
+          ],
+          child: Navigator(home: _Capture((c) => ctx = c)),
+        ),
+      );
+
+      for (final target in [1, 38, 75, 112]) {
+        _openRegistryPalette(tester, ctx);
+        tester.type(title(target));
+        tester.pump();
+        final row = _paletteCommandRows(tester).single;
+        expect(row.state.commandId, id(target));
+        tester.sendKey(const KeyEvent(KeyCode.enter));
+        await _settleClose(tester);
+        expect(Navigator.of(ctx).depth, 1);
+        expect(tester.semantics().byRole(WidgetRoles.commandPalette), isEmpty);
+      }
+
+      expect(calls, [id(1), id(38), id(75), id(112)]);
+    });
+
+    testWidgets(
+      'registry palette mixed repeated semantic and keyboard cycles',
+      (tester) async {
+        final calls = <String>[];
+        tester.pumpWidget(
+          FleuryApp(
+            title: 'App',
+            commands: [
+              AppCommand(
+                id: const CommandId('cycle.alpha'),
+                title: 'Cycle Alpha',
+                run: (_) {
+                  calls.add('alpha');
+                },
+              ),
+              AppCommand(
+                id: const CommandId('cycle.beta'),
+                title: 'Cycle Beta',
+                run: (_) {
+                  calls.add('beta');
+                },
+              ),
+            ],
+            child: Navigator(home: _Capture((c) => ctx = c)),
+          ),
+        );
+
+        for (var i = 0; i < 5; i++) {
+          final title = i.isEven ? 'Cycle Alpha' : 'Cycle Beta';
+          _openRegistryPalette(tester, ctx);
+          tester.type(title);
+          tester.pump();
+          if (i == 0) {
+            tester.sendKey(const KeyEvent(KeyCode.enter));
+          } else if (i == 1) {
+            await tester.target(role: WidgetRoles.commandPalette).submit();
+          } else if (i == 2) {
+            await tester
+                .target(role: WidgetRoles.commandPalette)
+                .target(role: SemanticRole.command, label: title)
+                .press();
+          } else if (i == 3) {
+            tester.sendKey(const KeyEvent(KeyCode.escape));
+          } else {
+            await tester
+                .target(role: SemanticRole.route, label: 'CommandPalette')
+                .perform(SemanticAction.dismiss);
+          }
+          await _settleClose(tester);
+          expect(Navigator.of(ctx).depth, 1, reason: 'cycle $i closed');
+          expect(tester.target(role: WidgetRoles.commandPalette), hasCount(0));
+        }
+
+        expect(calls, ['alpha', 'beta', 'alpha']);
+      },
+    );
+
+    testWidgets('exposes app command metadata in palette semantics', (tester) {
+      tester.pumpWidget(
+        FleuryApp(
+          title: 'App',
+          commands: [
+            AppCommand(
+              id: const CommandId('file.save'),
+              title: 'Save File',
+              description: 'Write changes',
+              category: 'File',
+              shortcuts: [KeySequence.ctrl.s],
+              run: (_) {},
+            ),
+          ],
+          child: Navigator(home: _Capture((c) => ctx = c)),
+        ),
+      );
+
+      _openRegistryPalette(tester, ctx);
+
+      final command = _paletteCommandRows(tester).single;
+      expect(command.label, 'Save File');
+      expect(command.state.commandId, 'file.save');
+      expect(command.state.shortcut, 'Ctrl+S');
+      expect(command.state.commandCategory, 'File');
+      expect(command.value, 'Write changes');
+    });
+
+    testWidgets('disabled app commands are visible but inert', (tester) async {
+      var calls = 0;
+      tester.pumpWidget(
+        FleuryApp(
+          title: 'App',
+          commands: [
+            AppCommand(
+              id: const CommandId('danger.delete'),
+              title: 'Delete Everything',
+              enabled: (_) => false,
+              run: (_) {
+                calls += 1;
+              },
+            ),
+          ],
+          child: Navigator(home: _Capture((c) => ctx = c)),
+        ),
+      );
+
+      _openRegistryPalette(tester, ctx);
+      tester.sendKey(const KeyEvent(KeyCode.enter));
+      await Future<void>.delayed(Duration.zero);
+      tester.pump();
+
+      expect(calls, 0);
+      expect(Navigator.of(ctx).depth, 2, reason: 'disabled command stays open');
+      final command = _paletteCommandRows(tester).single;
+      expect(command.label, 'Delete Everything');
+      expect(command.enabled, isFalse);
+    });
+
+    testWidgets('registry refresh preserves selection by command id', (
+      tester,
+    ) async {
+      const inspect = CommandId('packages.inspect');
+      final phase = ValueNotifier<int>(0);
+      addTearDown(phase.dispose);
+      tester.pumpWidget(
+        FleuryApp(
+          title: 'App',
+          child: Navigator(
+            home: NotifierBuilder(
+              notifier: phase,
+              builder: (context, _) {
+                final current = phase.value;
+                final openCommand = AppCommand(
+                  id: const CommandId('packages.open'),
+                  title: 'Open Package',
+                  run: (_) {},
+                );
+                final newCommand = AppCommand(
+                  id: const CommandId('packages.new'),
+                  title: 'New Package',
+                  run: (_) {},
+                );
+                final inspectCommand = AppCommand(
+                  id: inspect,
+                  title: current > 0
+                      ? 'Inspect Package Now'
+                      : 'Inspect Package',
+                  enabled: (_) => current > 0,
+                  visible: (_) => current < 2,
+                  run: (_) {},
+                );
+                return CommandScope(
+                  commands: [
+                    openCommand,
+                    if (current == 0) inspectCommand,
+                    newCommand,
+                    if (current > 0) inspectCommand,
+                  ],
+                  child: _Capture((c) => ctx = c),
+                );
+              },
+            ),
+          ),
+        ),
+      );
+
+      _openRegistryPalette(tester, ctx);
+      tester.sendKey(const KeyEvent(KeyCode.arrowDown));
+      tester.pump();
+
+      var selected = _paletteCommandRows(
+        tester,
+      ).singleWhere((node) => node.selected);
+      expect(selected.state.commandId, inspect.value);
+      expect(selected.label, 'Inspect Package');
+      expect(selected.enabled, isFalse);
+
+      // Rebuilding CommandScope replaces the registry's local command list.
+      // The same command moves to row three and changes presentation, but
+      // remains selected because its stable ID did not change.
+      phase.value = 1;
+      tester.pump();
+
+      final refreshedRows = _paletteCommandRows(tester);
+      expect(
+        refreshedRows.where((node) => node.selected),
+        hasLength(1),
+        reason: refreshedRows
+            .map(
+              (node) =>
+                  '${node.state.commandId}:${node.selected}:${node.state.values}',
+            )
+            .join(', '),
+      );
+      selected = refreshedRows.singleWhere((node) => node.selected);
+      expect(selected.state.commandId, inspect.value);
+      expect(selected.label, 'Inspect Package Now');
+      expect(selected.enabled, isTrue);
+      expect(
+        tester
+            .semantics()
+            .single(role: WidgetRoles.commandPalette)
+            .state
+            .selectedKey,
+        2,
+      );
+
+      // If the selected command disappears, keep the nearest surviving row
+      // selected instead of jumping unexpectedly to the top.
+      phase.value = 2;
+      tester.pump();
+
+      selected = _paletteCommandRows(
+        tester,
+      ).singleWhere((node) => node.selected);
+      expect(selected.state.commandId, 'packages.new');
+      expect(
+        tester
+            .semantics()
+            .single(role: WidgetRoles.commandPalette)
+            .state
+            .selectedKey,
+        1,
+      );
+
+      tester.sendKey(const KeyEvent(KeyCode.escape));
+      await _settleClose(tester);
+    });
+
+    testWidgets('uses focused source context for scoped commands', (
+      tester,
+    ) async {
+      final focus = FocusNode(debugLabel: 'workspace-tabs');
+      addTearDown(focus.dispose);
+      final calls = <String>[];
+      tester.pumpWidget(
+        FleuryApp(
+          title: 'App',
+          commands: [_openPaletteCommand()],
+          child: Navigator(
+            home: CommandScope(
+              commands: [
+                AppCommand(
+                  id: const CommandId('tabs.runs'),
+                  title: 'Go to Runs',
+                  category: 'Navigation',
+                  semanticAction: SemanticAction.navigate,
+                  visible: (context) =>
+                      identical(context.buildContext, focus.context),
+                  run: (context) {
+                    calls.add(
+                      identical(context.buildContext, focus.context)
+                          ? 'source'
+                          : 'other',
+                    );
+                  },
+                ),
+              ],
+              child: Focus(
+                focusNode: focus,
+                autofocus: true,
+                child: const Text('Workspace tabs'),
+              ),
+            ),
+          ),
+        ),
+      );
+      tester.render();
+      focus.requestFocus();
+      tester.pump();
+      expect(focus.hasFocus, isTrue);
+
+      tester.sendKey(
+        const KeyEvent(KeyCode.char('k'), modifiers: {KeyModifier.ctrl}),
+      );
+      tester.pump(const Duration(milliseconds: 300));
+      tester.render();
+      expect(Navigator.of(focus.context!).depth, 2);
+      tester.type('Go to Runs');
+      tester.pump();
+
+      final paletteCommands = _paletteCommandRows(tester);
+      expect(paletteCommands.map((node) => node.label), ['Go to Runs']);
+      expect(paletteCommands.single.state.commandId, 'tabs.runs');
+      expect(paletteCommands.single.state.commandCategory, 'Navigation');
+
+      tester.sendKey(const KeyEvent(KeyCode.enter));
+      await _settleClose(tester);
+
+      expect(calls, ['source']);
+      expect(Navigator.of(focus.context!).depth, 1);
+    });
+
+    testWidgets('focused scoped commands shadow app commands with same id', (
+      tester,
+    ) async {
+      const refresh = CommandId('refresh');
+      final focus = FocusNode(debugLabel: 'local-refresh');
+      addTearDown(focus.dispose);
+      final calls = <String>[];
+      tester.pumpWidget(
+        FleuryApp(
+          title: 'App',
+          commands: [
+            AppCommand(
+              id: refresh,
+              title: 'Global Refresh',
+              run: (_) {
+                calls.add('global');
+              },
+            ),
+          ],
+          child: Navigator(
+            home: CommandScope(
+              commands: [
+                AppCommand(
+                  id: refresh,
+                  title: 'Refresh Local',
+                  run: (_) {
+                    calls.add('local');
+                  },
+                ),
+              ],
+              child: Focus(
+                focusNode: focus,
+                autofocus: true,
+                child: _Capture((c) => ctx = c),
+              ),
+            ),
+          ),
+        ),
+      );
+      tester.render();
+      focus.requestFocus();
+      tester.pump();
+      expect(focus.hasFocus, isTrue);
+
+      _openRegistryPalette(tester, ctx);
+
+      final paletteCommands = _paletteCommandRows(tester);
+      expect(paletteCommands.map((node) => node.label), ['Refresh Local']);
+      expect(paletteCommands.single.state.commandId, 'refresh');
+
+      tester.sendKey(const KeyEvent(KeyCode.enter));
+      await Future<void>.delayed(Duration.zero);
+
+      expect(calls, ['local']);
+      await _settleClose(tester);
+      expect(Navigator.of(ctx).depth, 1);
+    });
+
+    testWidgets('global opener follows the currently focused command scope', (
+      tester,
+    ) async {
+      final leftFocus = FocusNode(debugLabel: 'left-pane');
+      final rightFocus = FocusNode(debugLabel: 'right-pane');
+      addTearDown(leftFocus.dispose);
+      addTearDown(rightFocus.dispose);
+      tester.pumpWidget(
+        FleuryApp(
+          title: 'App',
+          commands: [_openPaletteCommand()],
+          child: Navigator(
+            home: Row(
+              children: [
+                CommandScope(
+                  commands: [
+                    AppCommand(
+                      id: const CommandId('left.action'),
+                      title: 'Left Action',
+                      run: (_) {},
+                    ),
+                  ],
+                  child: Focus(
+                    focusNode: leftFocus,
+                    autofocus: true,
+                    child: const Text('Left pane'),
+                  ),
+                ),
+                CommandScope(
+                  commands: [
+                    AppCommand(
+                      id: const CommandId('right.action'),
+                      title: 'Right Action',
+                      run: (_) {},
+                    ),
+                  ],
+                  child: Focus(
+                    focusNode: rightFocus,
+                    child: const Text('Right pane'),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+      );
+      tester.render();
+      leftFocus.requestFocus();
+      tester.pump();
+
+      tester.sendKey(
+        const KeyEvent(KeyCode.char('k'), modifiers: {KeyModifier.ctrl}),
+      );
+      tester.pump(const Duration(milliseconds: 300));
+      tester.render();
+      tester.type('Action');
+      tester.pump();
+      expect(_paletteCommandRows(tester).map((node) => node.label), [
+        'Left Action',
+      ]);
+
+      tester.sendKey(const KeyEvent(KeyCode.escape));
+      await _settleClose(tester);
+      rightFocus.requestFocus();
+      tester.pump();
+
+      tester.sendKey(
+        const KeyEvent(KeyCode.char('k'), modifiers: {KeyModifier.ctrl}),
+      );
+      tester.pump(const Duration(milliseconds: 300));
+      tester.render();
+      tester.type('Action');
+      tester.pump();
+      expect(_paletteCommandRows(tester).map((node) => node.label), [
+        'Right Action',
+      ]);
+    });
+  });
+}

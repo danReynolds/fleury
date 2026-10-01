@@ -101,9 +101,8 @@ class _HotReloadDemoState extends State<HotReloadDemo> {
               // a different widget tree, etc.
               Text('count: $_count', style: const CellStyle(bold: true)),
               const SizedBox(height: 1),
-              // A handmade bar so this example needs only fleury — no
-              // fleury_widgets dependency. Real apps would just drop in
-              // `ProgressBar(value: _count / _max)`.
+              // A handmade bar to demonstrate editing the rendering on reload.
+              // Apps can also use `ProgressBar(value: _count / _max)`.
               Text(_renderBar(_count / _max, 30)),
               const SizedBox(height: 1),
               Text(

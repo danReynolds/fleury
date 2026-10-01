@@ -3,7 +3,6 @@
 // Guarded by ../test/doc_snippets_test.dart and theme_source_parity_test.dart.
 
 import 'package:fleury/fleury.dart';
-import 'package:fleury_widgets/fleury_widgets.dart';
 
 void main() => runApp(themingDemoApp());
 

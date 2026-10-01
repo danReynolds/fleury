@@ -27,9 +27,11 @@ const WIDGET_BARREL = join(
   '..',
   '..',
   'packages',
-  'fleury_widgets',
+  'fleury',
   'lib',
-  'fleury_widgets.dart'
+  'src',
+  'catalog',
+  'catalog.dart'
 );
 // From src/content/docs/<section>/*.mdx up to src/components/.
 const COMPONENT = '../../../components/FleuryExample.astro';
@@ -298,7 +300,7 @@ function assertExportedWidgetCoverage(entries) {
   }
 
   const exported = exportedClassNames(readFileSync(WIDGET_BARREL, 'utf8'), {
-    barrelRepoDirectory: 'packages/fleury_widgets/lib',
+    barrelRepoDirectory: 'packages/fleury/lib/src/catalog',
     api,
   });
   const widgetBases = new Set([
@@ -915,13 +917,13 @@ for (const e of widgets) addToCategory(e.category, e);
 for (const d of DOC_ONLY) addToCategory(d.category, catalogEntry(d));
 let widgetIndex =
   `---\ntitle: Widget reference\ndescription: Every exported Fleury higher-level widget, plus the most-used core primitives — live where useful and source-backed throughout.\n---\n\n` +
-  `This reference covers every widget exported by \`fleury_widgets\`, plus ` +
+  `This reference covers every widget exported by \`the Fleury catalog\`, plus ` +
   `the core layout, text, async, and input primitives most apps reach for. ` +
   `Most pages embed the real widget running live in your browser; every ` +
   `page's API tables are generated from the current Dart source.\n\n`;
 // Deliberate reading order: the control families a first visit scans for come
 // first; the framework primitives close the page. Categories group widgets by
-// what they are for, not by package, so core and fleury_widgets pages mix.
+// what they are for, not by package, so core and the Fleury catalog pages mix.
 // Unlisted categories (if a new one appears in the registry) fall in last.
 const CATEGORY_ORDER = [
   'Inputs & controls',
