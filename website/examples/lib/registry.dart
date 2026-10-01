@@ -215,18 +215,7 @@ final List<ExampleInfo> exampleList = <ExampleInfo>[
   color: theme.colorScheme.success,
   showValue: true,
 )''',
-    builder: () => _framed(
-      _LiveSeries(
-        length: 28,
-        min: 0,
-        max: 20,
-        builder: (data) => Sparkline(
-          data: data,
-          color: _theme.colorScheme.success,
-          showValue: true,
-        ),
-      ),
-    ),
+    builder: () => _framed(const _SparklineExample()),
   ),
   ExampleInfo(
     id: 'linechart.basic',
@@ -246,25 +235,7 @@ final List<ExampleInfo> exampleList = <ExampleInfo>[
   showLegend: true,
   yRange: const (0, 100),
 )''',
-    builder: () => _framed(
-      _LiveSeries(
-        length: 40,
-        min: 0,
-        max: 100,
-        builder: (data) => LineChart(
-          series: <LineSeries>[
-            LineSeries(
-              <(num, num)>[for (var i = 0; i < data.length; i++) (i, data[i])],
-              label: 'load',
-              color: _theme.colorScheme.primary,
-            ),
-          ],
-          showAxes: true,
-          showLegend: true,
-          yRange: const (0, 100),
-        ),
-      ),
-    ),
+    builder: () => _framed(const _LineChartExample()),
   ),
   // --- LineChart rendering-option lab: compare line weights + markers ------
   ExampleInfo(
@@ -373,29 +344,7 @@ final List<ExampleInfo> exampleList = <ExampleInfo>[
   showLegend: true,
   yRange: const (0, 100),
 )''',
-    builder: () => _framed(
-      _LiveSeries(
-        length: 40,
-        min: 0,
-        max: 100,
-        builder: (data) => AreaChart(
-          series: <AreaSeries>[
-            AreaSeries(
-              <(num, num)>[for (var i = 0; i < data.length; i++) (i, data[i])],
-              label: 'load',
-              gradient: <Color>[
-                _theme.colorScheme.success,
-                _theme.colorScheme.warning,
-                _theme.colorScheme.error,
-              ],
-            ),
-          ],
-          showAxes: true,
-          showLegend: true,
-          yRange: const (0, 100),
-        ),
-      ),
-    ),
+    builder: () => _framed(const _AreaChartExample()),
   ),
   ExampleInfo(
     id: 'barchart.basic',
@@ -408,19 +357,7 @@ final List<ExampleInfo> exampleList = <ExampleInfo>[
   bars: <Bar>[Bar('q1', 12), Bar('q2', 19), Bar('q3', 9), Bar('q4', 22)],
   showYAxis: true,
 )''',
-    builder: () => _framed(
-      _LiveSeries(
-        length: 5,
-        min: 2,
-        max: 24,
-        builder: (data) => BarChart(
-          bars: <Bar>[
-            for (var i = 0; i < data.length; i++) Bar('q${i + 1}', data[i]),
-          ],
-          showYAxis: true,
-        ),
-      ),
-    ),
+    builder: () => _framed(const _BarChartExample()),
   ),
   ExampleInfo(
     id: 'histogram.basic',
@@ -4447,9 +4384,189 @@ class _WorldClockState extends State<_WorldClock>
   }
 }
 
-/// Streams a bounded random-walk series into [builder] on a ticker, so chart
-/// examples animate in the docs. The shown code stays the plain static widget
-/// (see each example's `code` override).
+// Chart demos stream like a live dashboard: a timer updates their simulated
+// readings every 160 ms.
+
+class _SparklineExample extends StatefulWidget {
+  const _SparklineExample();
+
+  @override
+  State<_SparklineExample> createState() => _SparklineExampleState();
+}
+
+class _SparklineExampleState extends State<_SparklineExample> {
+  final _random = Random(5);
+  late final Timer _timer;
+  late List<num> _requests;
+  var _tick = 0;
+
+  // Simulated requests per second: a slow swing around 10, plus some noise.
+  num _read() => (10 + 6 * sin(_tick++ / 4)).round() + _random.nextInt(5) - 2;
+
+  @override
+  void initState() {
+    super.initState();
+    _requests = [for (var i = 0; i < 28; i++) _read()];
+    // Every 160 ms, drop the oldest reading and add a new one.
+    _timer = Timer.periodic(const Duration(milliseconds: 160), (_) {
+      setState(() => _requests = [..._requests.skip(1), _read()]);
+    });
+  }
+
+  @override
+  void dispose() {
+    _timer.cancel();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) => Sparkline(
+    data: _requests,
+    color: Theme.of(context).colorScheme.success,
+    showValue: true,
+  );
+}
+
+class _LineChartExample extends StatefulWidget {
+  const _LineChartExample();
+
+  @override
+  State<_LineChartExample> createState() => _LineChartExampleState();
+}
+
+class _LineChartExampleState extends State<_LineChartExample> {
+  final _random = Random(5);
+  late final Timer _timer;
+  late List<num> _load;
+  var _tick = 0;
+
+  // Simulated CPU load: a slow swing around 50%, plus some noise.
+  num _read() => 50 + 30 * sin(_tick++ / 6) + _random.nextInt(11) - 5;
+
+  @override
+  void initState() {
+    super.initState();
+    _load = [for (var i = 0; i < 40; i++) _read()];
+    // Every 160 ms, drop the oldest reading and add a new one.
+    _timer = Timer.periodic(const Duration(milliseconds: 160), (_) {
+      setState(() => _load = [..._load.skip(1), _read()]);
+    });
+  }
+
+  @override
+  void dispose() {
+    _timer.cancel();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) => LineChart(
+    series: [
+      LineSeries(
+        [for (final (i, load) in _load.indexed) (i, load)],
+        label: 'load',
+        color: Theme.of(context).colorScheme.primary,
+      ),
+    ],
+    showAxes: true,
+    showLegend: true,
+    yRange: const (0, 100),
+  );
+}
+
+class _AreaChartExample extends StatefulWidget {
+  const _AreaChartExample();
+
+  @override
+  State<_AreaChartExample> createState() => _AreaChartExampleState();
+}
+
+class _AreaChartExampleState extends State<_AreaChartExample> {
+  final _random = Random(5);
+  late final Timer _timer;
+  late List<num> _load;
+  var _tick = 0;
+
+  // Simulated CPU load: a slow swing around 50%, plus some noise.
+  num _read() => 50 + 30 * sin(_tick++ / 6) + _random.nextInt(11) - 5;
+
+  @override
+  void initState() {
+    super.initState();
+    _load = [for (var i = 0; i < 40; i++) _read()];
+    // Every 160 ms, drop the oldest reading and add a new one.
+    _timer = Timer.periodic(const Duration(milliseconds: 160), (_) {
+      setState(() => _load = [..._load.skip(1), _read()]);
+    });
+  }
+
+  @override
+  void dispose() {
+    _timer.cancel();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final colors = Theme.of(context).colorScheme;
+    return AreaChart(
+      series: [
+        AreaSeries(
+          [for (final (i, load) in _load.indexed) (i, load)],
+          label: 'load',
+          // Stops run bottom to top: green at low load, red near the top.
+          gradient: [colors.success, colors.warning, colors.error],
+        ),
+      ],
+      showAxes: true,
+      showLegend: true,
+      yRange: const (0, 100),
+    );
+  }
+}
+
+class _BarChartExample extends StatefulWidget {
+  const _BarChartExample();
+
+  @override
+  State<_BarChartExample> createState() => _BarChartExampleState();
+}
+
+class _BarChartExampleState extends State<_BarChartExample> {
+  final _random = Random(5);
+  late final Timer _timer;
+  // Jobs waiting in each queue.
+  List<num> _waiting = [12, 19, 9, 22];
+
+  @override
+  void initState() {
+    super.initState();
+    // Every 160 ms, each queue gains or loses up to 2 jobs.
+    _timer = Timer.periodic(const Duration(milliseconds: 160), (_) {
+      setState(() {
+        _waiting = [
+          for (final jobs in _waiting)
+            (jobs + _random.nextInt(5) - 2).clamp(0, 30),
+        ];
+      });
+    });
+  }
+
+  @override
+  void dispose() {
+    _timer.cancel();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) => BarChart(
+    bars: [for (final (i, jobs) in _waiting.indexed) Bar('q${i + 1}', jobs)],
+    showYAxis: true,
+  );
+}
+
+/// Streams a bounded random-walk series into [builder] on a ticker, for the
+/// LineChart lab's side-by-side rendering comparisons.
 class _LiveSeries extends StatefulWidget {
   const _LiveSeries({
     required this.length,

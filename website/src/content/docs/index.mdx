@@ -63,11 +63,11 @@ DataTable(
 
 <Fragment slot="code-2">
 ```dart
-// Streamed on a ticker: setState with fresh values each
-// frame, and Fleury sends only changed cells to the target.
+// Streamed: a timer calls setState with fresh values,
+// and Fleury sends only changed cells to the target.
 BarChart(
   bars: [
-    for (final (i, v) in load.indexed) Bar('q${i + 1}', v),
+    for (final (i, jobs) in waiting.indexed) Bar('q${i + 1}', jobs),
   ],
   showYAxis: true,
 )
