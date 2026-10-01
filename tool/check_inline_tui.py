@@ -328,7 +328,8 @@ def suspend_and_resume(app, job):
     assert restored_modes == expected_modes, (
         f"suspend left terminal modes changed: "
         f"{termios_diff(expected_modes, restored_modes)}\n"
-        f"processes:\n{session_processes(app)}")
+        f"processes:\n{session_processes(app)}\n"
+        f"output tail: {bytes(app.raw[-600:])!r}")
     # fg continues the job's whole process group, not only the app.
     os.killpg(os.getpgid(job[0]), signal.SIGCONT)
     app.wait(lambda: "INLINE-READY" in app.text(), "resume frame")
@@ -416,6 +417,9 @@ if __name__ == "__main__":
     parser.add_argument("--dart", default="dart")
     parser.add_argument("--skip-supervisor", action="store_true")
     args = parser.parse_args()
+    for _ in range(6):  # TEMPORARY: reproduce the intermittent suspend failure.
+        lifecycle(args.dart)
+        supervised_suspend(args.dart)
     interactions(args.dart, 80, 18)
     interactions(args.dart, 40, 12)
     lifecycle(args.dart)
