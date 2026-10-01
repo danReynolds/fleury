@@ -138,8 +138,8 @@ an explicit duration. Calls without an ID create distinct toasts, and omitting
 `maxToasts` retains unrestricted stacking. Severity remains `info`, `success`,
 `warning` or `error`; there is no separate notice type.
 
-Try the runnable [toast lifecycle example](example/toast_lifecycle.dart) with
-`dart run example/toast_lifecycle.dart` from this package. Tab to a button and
+Try the runnable [toast lifecycle example](../example/catalog/toast_lifecycle.dart) with
+`dart run example/catalog/toast_lifecycle.dart` from this package. Tab to a button and
 press Enter, or click it. Repeated success stays one toast; failure persists
 until dismissal or the related retry succeeds. The app owns that relationship;
 the framework owns presentation and expiry.
@@ -152,4 +152,4 @@ Every widget here is exercised with `FleuryTester` from
 out of production applications.
 Use `renderToString()` for inline assertions or `matchesGolden(...)`
 for whole-screen snapshot regression — see the
-[`fleury` README](../fleury/README.md#testing).
+[`fleury` README](../README.md#testing).
