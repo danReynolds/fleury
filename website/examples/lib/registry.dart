@@ -6950,7 +6950,7 @@ class _KeyBindingsTourState extends State<_KeyBindingsTour> {
               child: Text(_last, style: const CellStyle(bold: true)),
             ),
             Expanded(
-              child: ListViewSelectionDemoRows(row: _row, saved: _saved),
+              child: _ItemRows(row: _row, saved: _saved),
             ),
             const KeyHintBar(),
           ],
@@ -6961,14 +6961,12 @@ class _KeyBindingsTourState extends State<_KeyBindingsTour> {
 }
 
 /// Seven rows: one highlighted (the j/k cursor), any bookmarked (★, Ctrl+S).
-class ListViewSelectionDemoRows extends StatelessWidget {
-  const ListViewSelectionDemoRows({
-    super.key,
-    required this.row,
-    this.saved = const <int>{},
-  });
+class _ItemRows extends StatelessWidget {
+  const _ItemRows({required this.row, this.saved = const <int>{}});
+
   final int row;
   final Set<int> saved;
+
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);

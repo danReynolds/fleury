@@ -21,6 +21,11 @@
       "label": "key_bindings.dart",
       "source": "website/examples/lib/registry.dart",
       "declaration": "_KeyBindingsTourState"
+    },
+    {
+      "label": "item_rows.dart",
+      "source": "website/examples/lib/registry.dart",
+      "declaration": "_ItemRows"
     }
   ],
   "keydetector.basic": [
@@ -54,6 +59,24 @@
       "label": "track_row.dart",
       "source": "website/examples/lib/registry.dart",
       "declaration": "_TrackRow"
+    }
+  ],
+  "form.basic": [
+    {
+      "label": "project_form.dart",
+      "source": "website/examples/lib/forms/project_form.dart"
+    }
+  ],
+  "formfield.basic": [
+    {
+      "label": "custom_field.dart",
+      "source": "website/examples/lib/forms/custom_field.dart"
+    }
+  ],
+  "formcontroller.basic": [
+    {
+      "label": "save_project.dart",
+      "source": "website/examples/lib/forms/save_project.dart"
     }
   ],
   "canvas.basic": [
@@ -343,6 +366,11 @@
     }
   ],
   "navigation.basics": [
+    {
+      "label": "app.dart",
+      "source": "website/examples/lib/registry.dart",
+      "declaration": "example"
+    },
     {
       "label": "home_screen.dart",
       "source": "website/examples/lib/registry.dart",
