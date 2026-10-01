@@ -48,13 +48,21 @@
   `PosixTerminalDriver(suspendOnCtrlZ: false)` keeps an unhandled Ctrl+Z an
   ordinary key. Browser, served, and `fleury shell` sessions never suspend.
 
-- **`fleury shell` relays every key.** The shell now puts its terminal in the
-  same raw mode a native app uses, so Ctrl+C, Ctrl+Z, Ctrl+\\ and Ctrl+S reach
-  the attached app instead of signaling the shell. It restores the terminal
-  exactly on every exit path (the app exits or is killed, SIGINT, SIGTERM,
-  SIGHUP, or a hangup, which now exits 129), keeps serving later runs until
-  you press Ctrl+C with no app attached, and discards keys typed while no app
-  was attached.
+- **`fleury shell` relays every key, and the mouse.** The shell now puts its
+  terminal in the same raw mode a native app uses, so Ctrl+C, Ctrl+Z, Ctrl+\\
+  and Ctrl+S reach the attached app instead of signaling the shell. The app's
+  `TerminalMode` now takes effect in the shell's terminal too: `mouse: true`
+  brings clicks, drags, and the wheel (the `fleury create` counter's button
+  can be clicked), `mouseMotion: true` adds hover, and bracketed paste, focus
+  reports, and a legacy keyboard tier follow the app's choice, where the shell
+  used to force paste and focus on and never turn the mouse on. The shell
+  restores the terminal exactly on every exit path (the app exits or is
+  killed, SIGINT, SIGTERM, SIGHUP, or a hangup, which now exits 129), keeps
+  serving later runs until you press Ctrl+C with no app attached, and discards
+  keys typed while no app was attached. It speaks a wire protocol of its own
+  now, versioned apart from the browser's: an app and a shell from different
+  Fleury versions are turned away with the reason, and `dart run fleury shell`
+  in the app's package runs the matching shell.
 
 - **Key sequences work in dialogs, and Esc aborts them cleanly.** A
   multi-key sequence bound inside a `KeyBindings(modal: true)` scope, such as

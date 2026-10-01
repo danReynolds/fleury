@@ -97,7 +97,7 @@ void main() {
             colorMode: ColorMode.truecolor,
             imageProtocol: ImageProtocol.halfBlock,
             tmuxPassthrough: false,
-            protocolVersion: 1,
+            protocol: RemoteWireProtocol.shell,
           ),
         ),
       );
@@ -179,7 +179,7 @@ void main() {
             colorMode: ColorMode.truecolor,
             imageProtocol: ImageProtocol.halfBlock,
             tmuxPassthrough: false,
-            protocolVersion: 1,
+            protocol: RemoteWireProtocol.shell,
           ),
         ),
       );
@@ -313,7 +313,7 @@ void main() {
             colorMode: ColorMode.truecolor,
             imageProtocol: ImageProtocol.halfBlock,
             tmuxPassthrough: false,
-            protocolVersion: 1,
+            protocol: RemoteWireProtocol.shell,
           ),
         ),
       );
@@ -394,7 +394,7 @@ void main() {
               colorMode: ColorMode.truecolor,
               imageProtocol: ImageProtocol.halfBlock,
               tmuxPassthrough: false,
-              protocolVersion: 1,
+              protocol: RemoteWireProtocol.shell,
             ),
           ),
         );

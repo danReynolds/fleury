@@ -116,7 +116,7 @@ void main() {
     });
 
     test(
-      'a v1 (ANSI) peer after the greeting negotiates a v1 session',
+      'a shell peer after the greeting negotiates a shell session',
       () async {
         // Bridge mode pumps whatever browser arrives; the greeting fixes
         // nothing about the protocol version.
@@ -130,7 +130,7 @@ void main() {
             colorMode: ColorMode.truecolor,
             imageProtocol: ImageProtocol.halfBlock,
             tmuxPassthrough: false,
-            protocolVersion: 1,
+            protocol: RemoteWireProtocol.shell,
           ),
         );
         await entering;

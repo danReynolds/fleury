@@ -29,6 +29,7 @@ export 'src/remote/remote_protocol.dart'
         PlanFrame,
         RemoteFrame,
         RemoteProtocolException,
+        RemoteWireProtocol,
         ResizeFrame,
         SemanticActionFrame,
         SemanticActionResultFrame,
@@ -43,7 +44,9 @@ export 'src/remote/remote_protocol.dart'
         remoteFramePayloadLimit,
         remoteProtocolVersion,
         serveSessionBusyCloseCode,
-        serveSessionLimitCloseCode;
+        serveSessionLimitCloseCode,
+        shellProtocolVersion;
+export 'src/terminal/terminal_driver.dart' show TerminalInputModes;
 export 'src/remote/inline_image_cache.dart'
     show
         InlineImageCacheLedger,

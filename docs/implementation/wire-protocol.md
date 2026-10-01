@@ -53,16 +53,34 @@ The Unix-socket sender separately caps pending output at 64 MiB and 4096
 frames; crossing either bound fails the session closed without dropping an
 individual diff-bearing frame.
 
-## Protocol version
+## Protocols and versions
 
-The structured protocol version is **7** (`remoteProtocolVersion`). It is
-carried in the INIT handshake as `v=<n>`; `fleury shell` negotiates
-`remoteAnsiProtocolVersion` (**1**) because it is the ANSI terminal host, which
-receives raw OUTPUT bytes instead of structured frames.
+The wire carries two protocols (`RemoteWireProtocol`). They share the frame
+envelope and the INIT handshake, and version independently:
+
+- **structured** — `fleury serve`'s browser client and agent peers such as
+  `fleury_mcp`: presentation plans, semantics, and structured input. Version
+  **7** (`remoteProtocolVersion`), declared in INIT as `v=<n>`.
+- **shell** — `fleury shell`, a real terminal relayed byte for byte: raw INPUT
+  in, raw ANSI OUTPUT back. Version **2** (`shellProtocolVersion`), declared in
+  INIT as `shell=<n>`.
+
+An INIT declares exactly one; both, or neither, is a malformed frame. A change
+to a frame only one protocol uses bumps that protocol's version; a change to a
+shared frame (INIT, RESIZE, BYE) or to the envelope bumps both.
+
+Why two spaces: the shell protocol used to declare itself `v=1`, inside the
+structured space, where the number doubled as the mode switch. It could not
+change without colliding with structured history (v2 is an old structured
+version that the app must reject), so shell protocol 2 moved to its own key.
+`v=1` is now simply an unsupported structured version; the app rejects it with
+a message that names `fleury shell`, since only an older shell sends it.
+
+### Structured protocol
 
 | Version | Introduced |
 | --- | --- |
-| v1 | The ANSI host: INIT / INPUT / RESIZE / OUTPUT / BYE. |
+| v1 | The ANSI host, before it had a version space of its own (shell protocol 1, below). |
 | v2 | The structured host: PLAN, SEMANTICS, INPUT_EVENT (and the frames that support them). |
 | v3 | SEMANTIC_ACTION_RESULT, and the app-side INIT echo (app → peer). |
 | v4 | OSC 8 links in the PLAN cell-style entry: set-mask bit 6 flags a link, and a varint-prefixed UTF-8 URI follows the two mask bytes, before the colors. |
@@ -70,8 +88,32 @@ receives raw OUTPUT bytes instead of structured frames.
 | v6 | The app-issued target token on SEMANTIC_ACTION for positional ids. |
 | v7 | Fixed-shape frames: no optional trailing extensions. INPUT_EVENT keys always carry the position/synthesized pair, a paste always carries its phase byte (a segment then its id), SEMANTIC_ACTION always carries the token-presence byte, and every PLAN placement carries its window (flag bit 2 is gone). INIT requires `v`, `color`, `glyph`, `image`, and `tmux`; the optional params are validated rather than defaulted. |
 
-The table is history, not a support matrix: an app and a structured peer speak
-exactly the current version.
+### Shell protocol
+
+| Version | Introduced |
+| --- | --- |
+| 1 | The ANSI host: INIT / INPUT / RESIZE / OUTPUT / BYE, declared as `v=1`. The app sent no answer, so the shell could not learn the app's input modes: it never turned on mouse reporting, and turned on bracketed paste, focus reports, and the disambiguated keyboard tier whatever the app asked for. |
+| 2 | Declared as `shell=<n>`. The app answers the shell's INIT with its own, at its shell version, declaring the terminal input it reads (`mouse`, `motion`, `paste`, `focus`, `keyboardProtocol`: its `TerminalMode`'s input half, after `FLEURY_KEYBOARD`). The shell turns exactly that on in its terminal, caps the keyboard at the disambiguated tier it negotiated, and drops its keyboard flags for an app that reads legacy keys. |
+
+The tables are history, not a support matrix: an app and a peer speak exactly
+the current version of the peer's protocol.
+
+### The app's answer
+
+The app answers every INIT with its own before it sends anything else: the
+peer's fields restated, the peer's protocol at the app's version of it, and —
+to a shell — the app's terminal input. A peer reads the version to confirm the
+lockstep or to report the skew; on a mismatch the app still answers, then
+fails the session closed. `fleury shell` relays no app output until the answer
+arrives, rejects an answer at another shell version, as the structured
+protocol, or without the terminal input, and reports an app that disconnects
+before answering. An app built before shell protocol 2 does exactly that: it
+reads the shell's INIT as missing `v`, rejects it, and disconnects.
+
+The app's mode is fixed for the session — `runApp` takes one `TerminalMode`,
+and its native driver never changes it after startup either — so the answer
+declares it once. A change to the app's mode takes effect on its next run,
+which attaches anew.
 
 ## Frame types
 
@@ -81,7 +123,7 @@ frame, so test harnesses can inject either side. "Peer" is `serve` / `shell`;
 
 | Code | Frame | Direction | Purpose |
 | --- | --- | --- | --- |
-| `0x01` | INIT | Peer → App | Handshake: display size, color mode, glyph tier, image protocol, tmux passthrough, protocol version. Sent once before any input; the app echoes its own to a structured peer. |
+| `0x01` | INIT | Peer → App, then App → Peer | Handshake: display size, color mode, glyph tier, image protocol, tmux passthrough, and the protocol spoken (`v=<n>` or `shell=<n>`). The peer sends it once before any input; the app answers with its own (see [The app's answer](#the-apps-answer)), which to `fleury shell` also declares the terminal input the app reads. |
 | `0x02` | INPUT | Peer → App | Raw stdin bytes (escape sequences, key chords, paste) — the ANSI host's input path. |
 | `0x03` | RESIZE | Peer → App | Remote display resized (`cols`, `rows`). |
 | `0x10` | OUTPUT | App → Peer | Raw ANSI render bytes for the `fleury shell` ANSI host; structured hosts emit PLAN/SEMANTICS instead. |
@@ -100,19 +142,22 @@ frame, so test harnesses can inject either side. "Peer" is `serve` / `shell`;
 
 ## Lockstep rule
 
-1. **One version.** A structured peer and the app speak exactly
-   `remoteProtocolVersion`. The app echoes its INIT to a structured peer; for
-   any other structured version it sends that echo — so the peer can report
-   the skew — and then fails the session closed. First-party peers reject an
-   echo that does not match their own and send nothing but INIT until it does.
+1. **One version per protocol.** A peer and the app speak exactly this
+   build's version of the protocol the peer declares. The app answers every
+   INIT with its own; for any other version it still sends that answer — so
+   the peer can report the skew — and then fails the session closed.
+   First-party peers reject an answer that does not match their own and send
+   nothing but INIT (and, from `fleury shell`, typed input) until it does.
 2. **Every encoding change bumps the version.** A new frame type, a new field,
-   or a changed cell/enum encoding is a new version. There are no emission
-   gates, no down-shifted shapes for an older peer, and no tolerance for a
-   newer one.
+   or a changed cell/enum encoding is a new version of every protocol that
+   uses the frame. There are no emission gates, no down-shifted shapes for an
+   older peer, and no tolerance for a newer one.
 3. **Decoders are strict.** An unknown frame type, an unknown enum value, an
    unknown flag bit, a missing required field, or trailing bytes are a
    protocol error. Every binary frame is fixed-shape: an optional field is a
    presence byte (or, for a paste, its phase) followed by its value, never an
    absent trailing extension. INIT's optional params (`images`, `hyperlinks`,
    `keyboard`, `provisional`, `debug`) mean "not declared" when absent and are
-   validated when present.
+   validated when present. The terminal input (`mouse`, `motion`, `paste`,
+   `focus`, `keyboardProtocol`) is all present or all absent, and only under
+   `shell=<n>`.
