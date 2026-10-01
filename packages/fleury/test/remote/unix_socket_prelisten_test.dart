@@ -91,7 +91,7 @@ void main() {
         colorMode: ColorMode.truecolor,
         imageProtocol: ImageProtocol.halfBlock,
         tmuxPassthrough: false,
-        protocolVersion: 1,
+        protocol: RemoteWireProtocol.shell,
       ),
     );
     await Future<void>.delayed(const Duration(milliseconds: 50));

@@ -259,6 +259,103 @@ final class TerminalMode {
   final bool mouseMotion;
 }
 
+/// The input half of a [TerminalMode]: which reports the terminal sends
+/// (mouse, pastes, focus changes) and how much of the Kitty keyboard protocol
+/// encodes keys.
+///
+/// It is what a terminal the app does not own needs in order to stand in for
+/// the app's own: an app attached to `fleury shell` declares it in the
+/// handshake, and the shell's terminal then reports exactly that. Like the
+/// mode it comes from, it is fixed for the session. The other half (the
+/// screen, the cursor, raw input) belongs to whoever owns the terminal.
+@immutable
+final class TerminalInputModes {
+  const TerminalInputModes({
+    required this.mouse,
+    required this.mouseMotion,
+    required this.bracketedPaste,
+    required this.focusReporting,
+    required this.keyboardProtocol,
+  });
+
+  /// [mode]'s input half.
+  TerminalInputModes.of(TerminalMode mode)
+    : mouse = mode.mouse,
+      mouseMotion = mode.mouseMotion,
+      bracketedPaste = mode.bracketedPaste,
+      focusReporting = mode.focusReporting,
+      keyboardProtocol = mode.keyboardProtocol;
+
+  /// [TerminalMode.mouse].
+  final bool mouse;
+
+  /// [TerminalMode.mouseMotion]; implies [mouse].
+  final bool mouseMotion;
+
+  /// [TerminalMode.bracketedPaste].
+  final bool bracketedPaste;
+
+  /// [TerminalMode.focusReporting].
+  final bool focusReporting;
+
+  /// [TerminalMode.keyboardProtocol].
+  final KeyboardProtocolMode keyboardProtocol;
+
+  @override
+  bool operator ==(Object other) =>
+      other is TerminalInputModes &&
+      other.mouse == mouse &&
+      other.mouseMotion == mouseMotion &&
+      other.bracketedPaste == bracketedPaste &&
+      other.focusReporting == focusReporting &&
+      other.keyboardProtocol == keyboardProtocol;
+
+  @override
+  int get hashCode => Object.hash(
+    mouse,
+    mouseMotion,
+    bracketedPaste,
+    focusReporting,
+    keyboardProtocol,
+  );
+
+  @override
+  String toString() =>
+      'TerminalInputModes(mouse: $mouse, mouseMotion: $mouseMotion, '
+      'bracketedPaste: $bracketedPaste, focusReporting: $focusReporting, '
+      'keyboardProtocol: ${keyboardProtocol.name})';
+}
+
+/// Returns [mode] with its input half replaced by [input]; its screen half
+/// (full screen or inline, the cursor, raw input) is kept.
+///
+/// Kept out of the public barrel API, like
+/// [terminalModeWithKeyboardProtocol].
+TerminalMode terminalModeWithInput(
+  TerminalMode mode,
+  TerminalInputModes input,
+) => mode.inlineRows != null
+    ? TerminalMode.inline(
+        rows: mode.inlineRows!,
+        hideCursor: mode.hideCursor,
+        resetStyleOnExit: mode.resetStyleOnExit,
+        bracketedPaste: input.bracketedPaste,
+        keyboardProtocol: input.keyboardProtocol,
+        focusReporting: input.focusReporting,
+        mouse: input.mouse,
+        mouseMotion: input.mouseMotion,
+      )
+    : TerminalMode.fullScreen(
+        rawInput: mode.rawInput,
+        hideCursor: mode.hideCursor,
+        resetStyleOnExit: mode.resetStyleOnExit,
+        bracketedPaste: input.bracketedPaste,
+        keyboardProtocol: input.keyboardProtocol,
+        focusReporting: input.focusReporting,
+        mouse: input.mouse,
+        mouseMotion: input.mouseMotion,
+      );
+
 /// Returns [mode] with only its keyboard protocol request changed.
 ///
 /// Kept out of the public barrel API: native drivers use this when policy or
@@ -266,27 +363,55 @@ final class TerminalMode {
 TerminalMode terminalModeWithKeyboardProtocol(
   TerminalMode mode,
   KeyboardProtocolMode keyboardProtocol,
-) => mode.inlineRows != null
-    ? TerminalMode.inline(
-        rows: mode.inlineRows!,
-        hideCursor: mode.hideCursor,
-        resetStyleOnExit: mode.resetStyleOnExit,
-        bracketedPaste: mode.bracketedPaste,
-        keyboardProtocol: keyboardProtocol,
-        focusReporting: mode.focusReporting,
-        mouse: mode.mouse,
-        mouseMotion: mode.mouseMotion,
-      )
-    : TerminalMode.fullScreen(
-        rawInput: mode.rawInput,
-        hideCursor: mode.hideCursor,
-        resetStyleOnExit: mode.resetStyleOnExit,
-        bracketedPaste: mode.bracketedPaste,
-        keyboardProtocol: keyboardProtocol,
-        focusReporting: mode.focusReporting,
-        mouse: mode.mouse,
-        mouseMotion: mode.mouseMotion,
-      );
+) => terminalModeWithInput(
+  mode,
+  TerminalInputModes(
+    mouse: mode.mouse,
+    mouseMotion: mode.mouseMotion,
+    bracketedPaste: mode.bracketedPaste,
+    focusReporting: mode.focusReporting,
+    keyboardProtocol: keyboardProtocol,
+  ),
+);
+
+/// The keyboard tier this session actually pushes, from what the app asked for
+/// and what the environment says.
+///
+/// Two rules, both about *pushing* rather than about the verdict — the flags
+/// have to be capped before they go out, not after:
+///
+///  * `FLEURY_KEYBOARD=legacy|disambiguated|lifecycle` wins outright. It is the
+///    lever a support channel can pull on a deployed binary, and the one a bug
+///    report can be asked to set.
+///  * Otherwise the default (`lifecycle`) is capped to the safe tier inside a
+///    MULTIPLEXER. A raw query is not a reliable statement about the host
+///    terminal there — the same reasoning the image probe uses — and tmux may
+///    answer for itself, forward to a host that answers differently, or accept
+///    the flags and fail to translate the enhanced input back. Lifecycle is the
+///    one tier where being wrong costs the user their ability to type, so the
+///    automatic upgrade holds back. An app that knows its deployment handles
+///    the protocol can still force it through the env var.
+///
+/// An app attached to `fleury shell` applies it too, before it declares its
+/// input to the shell, so it asks the shell for what its own native driver
+/// would push in the same environment.
+KeyboardProtocolMode resolveKeyboardTier({
+  required KeyboardProtocolMode requested,
+  required Map<String, String> environment,
+}) {
+  final override = switch (environment['FLEURY_KEYBOARD']?.toLowerCase()) {
+    'legacy' || 'off' || 'none' => KeyboardProtocolMode.legacy,
+    'disambiguated' || 'default' => KeyboardProtocolMode.disambiguated,
+    'lifecycle' || 'full' => KeyboardProtocolMode.lifecycle,
+    _ => null,
+  };
+  if (override != null) return override;
+  if (requested == KeyboardProtocolMode.lifecycle &&
+      detectTerminalMultiplexerFromEnvironment(environment)) {
+    return KeyboardProtocolMode.disambiguated;
+  }
+  return requested;
+}
 
 /// Typed record of the terminal state a native driver actually owns.
 ///
@@ -406,6 +531,21 @@ abstract interface class InlineTerminalDriver {
   /// While suspended or handed to a subprocess, stores the request instead;
   /// the new height takes effect when this session regains the terminal.
   Future<void> resizeInline(int rows);
+}
+
+/// A driver whose session can stop for the shell's job control: restore the
+/// terminal, stop the job, and re-enter after `fg`.
+///
+/// `TerminalSession.supportsSuspend` and `TerminalSession.suspend` reach the
+/// native POSIX driver through this, so the session stays free of `dart:io`.
+/// Not exported: no other driver has job control.
+@internal
+abstract interface class TerminalSuspendDriver {
+  /// See `TerminalSession.supportsSuspend`.
+  bool get supportsSuspend;
+
+  /// See `TerminalSession.suspend`.
+  Future<bool> suspend();
 }
 
 /// Runs [operation] through [driver]'s handoff hook when supported.

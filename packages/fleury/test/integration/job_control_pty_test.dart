@@ -14,6 +14,14 @@ library;
 // launcher) is the process the shell started and waits on. Stopping only the
 // app left that parent running in the foreground, so the shell never got the
 // terminal back — no prompt, and a typed command never ran.
+//
+// An app whose text field always has focus never sees Ctrl+Z reach job
+// control — the field undoes — so it binds its own suspend key to
+// TerminalSession.suspend, which must suspend the same way.
+//
+// Only a job-control shell can continue a stopped job. A terminal emulator, a
+// tmux pane, or `ssh -t host app` runs the command directly, as the session
+// leader: a stop there is permanent. The app must never suspend then.
 
 import 'dart:convert';
 import 'dart:io';
@@ -81,11 +89,73 @@ void main() {
       reason: 'the launcher stops with the app\n${run.describe()}',
     );
   });
+
+  test("a composer's own suspend key stops the whole job while Ctrl+Z "
+      'undoes in its field', () async {
+    // The composer's field always has focus, so Ctrl+Z is undo, never job
+    // control. Ctrl+T calls TerminalSession.suspend. Supervised, as a plain
+    // `dart run bin/app.dart` runs it: the supervisor has to stop too.
+    final run = await _runHarness(
+      [dart, packages, fixture, '--supervised', '--suspend-key'],
+      supervised: true,
+      suspendKey: true,
+    );
+
+    run.expectCtrlZUndid('undoBeforeSuspend');
+    run.expectSuspendedAndResumed();
+    expect(
+      run.stateWhileStopped('parent'),
+      startsWith('T'),
+      reason: 'the supervisor stops with the app\n${run.describe()}',
+    );
+    expect(run.appPidAfterFg, run.appPid, reason: run.describe());
+    expect(
+      run.report['suspendResultsWhileStopped'],
+      isEmpty,
+      reason:
+          'the request completes after fg, not when the app stops\n'
+          '${run.describe()}',
+    );
+    expect(run.report['suspendResults'], ['true'], reason: run.describe());
+    run.expectCtrlZUndid('undoAfterFg');
+  });
+
+  // The terminal runs the command itself: it is the session leader and the
+  // PTY's controlling process, with no shell anywhere.
+  test('an app no shell started never stops: Ctrl+Z is an ordinary key and '
+      'suspend() completes with false', () async {
+    final run = await _runHarness([dart, packages, fixture], noShell: true);
+
+    expect(run.leaderPid, run.appPid, reason: 'the app leads the session');
+    run.expectNeverSuspended();
+  });
+
+  test('a supervised app no shell started never stops either', () async {
+    final run = await _runHarness(
+      [dart, packages, fixture, '--supervised'],
+      supervised: true,
+      noShell: true,
+    );
+
+    expect(
+      run.appParentPid,
+      run.leaderPid,
+      reason: 'the supervisor leads the session\n${run.describe()}',
+    );
+    run.expectNeverSuspended();
+    expect(
+      run.leaderStateAfter('ctrlZ'),
+      isNot(startsWith('T')),
+      reason: 'the supervisor keeps running\n${run.describe()}',
+    );
+  });
 }
 
 Future<_HarnessRun> _runHarness(
   List<String> command, {
   bool supervised = false,
+  bool suspendKey = false,
+  bool noShell = false,
 }) async {
   final packageRoot = Directory.current.absolute.path;
   final workDir = Directory.systemTemp.createTempSync('fleury_job_control_');
@@ -93,7 +163,10 @@ Future<_HarnessRun> _runHarness(
   final result = await Process.run('python3', <String>[
     '$packageRoot/test/fixtures/job_control_pty_harness.py',
     workDir.path,
-    supervised ? 'supervised' : 'direct',
+    if (supervised) '--supervised',
+    if (suspendKey) '--suspend-key',
+    if (noShell) '--no-shell',
+    '--',
     ...command,
   ]);
   final reportFile = File('${workDir.path}/report.json');
@@ -124,16 +197,34 @@ final class _HarnessRun {
 
   int? get appPid => _facts('app')['pid'] as int?;
 
+  int? get appParentPid => _facts('app')['ppid'] as int?;
+
+  int? get leaderPid => report['leaderPid'] as int?;
+
   int? get appPidAfterFg => _facts('afterFg')['appPid'] as int?;
 
   String? stateWhileStopped(String who) =>
       (report['whileStopped'] as Map<String, Object?>?)?[who] as String?;
 
+  String? leaderStateAfter(String step) =>
+      _facts(step)['leaderState'] as String?;
+
+  /// The terminal output between two recorded steps (to the end without
+  /// [to]).
+  String _between(String from, [String? to]) {
+    final offsets = report['offsets'] as Map<String, Object?>? ?? const {};
+    final start = offsets[from] as int?;
+    final end = to == null ? output.length : offsets[to] as int?;
+    expect(start, isNotNull, reason: 'no $from step\n${describe()}');
+    expect(end, isNotNull, reason: 'no $to step\n${describe()}');
+    return output.substring(start!, end);
+  }
+
   void expectSuspendedAndResumed() {
     expect(
-      report['promptAfterCtrlZ'],
+      report['promptAfterSuspend'],
       isTrue,
-      reason: 'one Ctrl+Z must give the shell its prompt back\n${describe()}',
+      reason: 'one press must give the shell its prompt back\n${describe()}',
     );
     expect(report['failure'], isNull, reason: describe());
     expect(report['stoppedNotice'], isTrue, reason: describe());
@@ -141,10 +232,66 @@ final class _HarnessRun {
     expect(report['shellRanCommand'], isTrue, reason: describe());
     expect(report['resumedAfterFg'], isTrue, reason: describe());
     expect(report['jobExit'], 0, reason: describe());
+
+    // The app handed the shell a restored terminal before its prompt — mouse
+    // reporting off, cursor shown, alternate screen left — and `fg` entered
+    // the app's modes again.
+    final suspended = _between('suspend', 'fg');
+    final prompt = suspended.indexOf('FLEURY-JOB-PROMPT\$ ');
+    for (final restore in ['\x1B[?1000l', '\x1B[?25h', '\x1B[?1049l']) {
+      final at = suspended.indexOf(restore);
+      expect(at, greaterThanOrEqualTo(0), reason: '$restore\n${describe()}');
+      expect(at, lessThan(prompt), reason: '$restore\n${describe()}');
+    }
+    final resumed = _between('fg', 'quit');
+    for (final enter in ['\x1B[?1049h', '\x1B[?25l']) {
+      expect(resumed, contains(enter), reason: '$enter\n${describe()}');
+    }
+  }
+
+  /// No job-control shell started the app, so nothing suspended it: Ctrl+Z
+  /// reached it as an ordinary key, its own suspend key's request completed
+  /// with false, neither left a process stopped or the terminal restored for
+  /// a shell, and the next key — Ctrl+Q — still ended it normally.
+  void expectNeverSuspended() {
+    expect(report['failure'], isNull, reason: describe());
+    expect(
+      report['supportsSuspend'],
+      ['false'],
+      reason: 'TerminalSession.supportsSuspend\n${describe()}',
+    );
+    expect(
+      _facts('app')['pgid'],
+      leaderPid,
+      reason: "the app runs in the session leader's group\n${describe()}",
+    );
+    for (final (step, event) in [
+      ('ctrlZ', 'key:ctrl+z'),
+      ('suspendKey', 'suspended:false'),
+    ]) {
+      final facts = _facts(step);
+      expect(facts['events'], contains(event), reason: describe());
+      expect(facts['appState'], isNot(startsWith('T')), reason: describe());
+      expect(facts['leaderState'], isNot(startsWith('T')), reason: describe());
+      expect(facts['terminalReleased'], isFalse, reason: describe());
+    }
+    expect(report['exit'], 0, reason: describe());
+    expect(report['restoredOnExit'], isTrue, reason: describe());
+  }
+
+  /// The composer's field undid a Ctrl+Z, and the job kept running: no
+  /// prompt, and the app not stopped.
+  void expectCtrlZUndid(String step) {
+    final facts = report[step] as Map<String, Object?>?;
+    expect(facts, isNotNull, reason: '$step never ran\n${describe()}');
+    expect(facts!['undone'], isTrue, reason: describe());
+    expect(facts['prompt'], isFalse, reason: describe());
+    expect(facts['appState'], isNot(startsWith('T')), reason: describe());
   }
 
   String describe() {
     final bootstrap = File('${workDir.path}/bootstrap.log');
+    final events = File('${workDir.path}/app-events.log');
     final tail = output.length > 3000
         ? output.substring(output.length - 3000)
         : output;
@@ -152,6 +299,7 @@ final class _HarnessRun {
       'report: ${const JsonEncoder.withIndent('  ').convert(report)}',
       if (bootstrap.existsSync())
         'bootstrap log:\n${bootstrap.readAsStringSync()}',
+      if (events.existsSync()) 'app events:\n${events.readAsStringSync()}',
       'pty tail: ${jsonEncode(tail)}',
     ].join('\n');
   }

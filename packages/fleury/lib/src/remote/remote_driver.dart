@@ -41,17 +41,19 @@ const int maxRemoteGridCells = maxRemotePlanGridCells;
 
 /// The remote-rendering driver for `fleury shell` and `fleury serve`.
 ///
-/// One driver covers both ANSI and structured (presentation-plan) peers. The
-/// handshake's protocol version decides: the ANSI host (a real terminal, e.g.
-/// `fleury shell`) receives ANSI via [write]; a structured peer at exactly
-/// [remoteProtocolVersion] (the browser surface client) receives [PlanFrame]s
-/// via [presentPlan] and sends structured input. Any other version is rejected
-/// at INIT. [wantsPresentationPlans] reflects the negotiated version and is
-/// read by [runApp] after [enter] completes.
+/// One driver covers both protocols the wire carries; the one the peer's INIT
+/// declares decides. A `fleury shell` peer ([RemoteWireProtocol.shell]) is a
+/// real terminal: it receives ANSI via [write], and this app's answer to its
+/// INIT declares the input that terminal must report, from the [TerminalMode]
+/// passed to [enter]. A structured peer ([RemoteWireProtocol.structured], the
+/// browser surface client) receives [PlanFrame]s via [presentPlan] and sends
+/// structured input. Each must speak exactly this build's version of its
+/// protocol; any other is rejected at INIT. [wantsPresentationPlans] reflects
+/// the negotiated protocol and is read by [runApp] after [enter] completes.
 final class RemoteTerminalDriver
     implements TerminalDriver, RemoteSurfaceSink, OutputFlowControl {
   /// What the peer DECLARED in its INIT (RFC 0020 §11) — never an inference
-  /// from [_protocolVersion].
+  /// from the protocol version.
   ///
   /// The version says the codecs match; it says nothing about the keyboard on
   /// the far end. Two `fleury shell` relays at the identical wire version, one
@@ -60,6 +62,12 @@ final class RemoteTerminalDriver
   /// that declares nothing gets the conservative press-only reading — which
   /// is exactly right, because a peer that cannot say what it supports has
   /// not confirmed anything.
+  ///
+  /// The one exception follows from this app's own request: an app that reads
+  /// legacy keys ([KeyboardProtocolMode.legacy]) asks the shell for no
+  /// keyboard flags, and the shell drops the ones it probed with, so its
+  /// declaration no longer holds — as a native driver at that tier pushes
+  /// nothing and claims nothing.
   KeyboardCapabilities get keyboardCapabilities =>
       _peerKeyboard ?? KeyboardCapabilities.legacy;
 
@@ -69,10 +77,18 @@ final class RemoteTerminalDriver
     InlineImageCachePolicy imageCachePolicy = defaultInlineImageCachePolicy,
     bool? superviseHandshakeWait,
     SemanticsWireEncoder? semanticsEncoder,
+    Map<String, String>? environment,
   }) : _shippedImages = InlineImageCacheLedger(imageCachePolicy),
        _semanticsEncoder = semanticsEncoder ?? SemanticsWireEncoder(),
        _superviseHandshakeWait =
-           superviseHandshakeWait ?? _handshakeWaitSupervisedByDefault;
+           superviseHandshakeWait ?? _handshakeWaitSupervisedByDefault,
+       _environment = environment ?? Platform.environment;
+
+  /// The environment the session's operator overrides come from, the
+  /// process's unless given: `FLEURY_KEYBOARD` and multiplexer detection for
+  /// the keyboard tier a shell peer is asked for ([resolveKeyboardTier]), and
+  /// the synchronized-output override.
+  final Map<String, String> _environment;
 
   /// When true, [enter] waits UNBOUNDED for the peer's INIT instead of failing
   /// at [initTimeout]. A serve/bridge-supervised spawn (see `spawnFleuryApp`,
@@ -119,8 +135,8 @@ final class RemoteTerminalDriver
   TerminalCapabilities _capabilities = TerminalCapabilities.defaultCapabilities;
   SurfaceCapabilities? _peerSurfaceCapabilities;
 
-  /// What the PEER's surface can do: from the v3 `images=` INIT param when
-  /// present, else the terminal projection (a v1 `fleury shell` peer is a
+  /// What the PEER's surface can do: from the `images=` INIT param when
+  /// present, else the terminal projection (a `fleury shell` peer is a
   /// real terminal). A structured browser peer gets sub-cell pointer
   /// fidelity — its input source reports real mouse geometry.
   SurfaceCapabilities get surfaceCapabilities =>
@@ -146,13 +162,20 @@ final class RemoteTerminalDriver
   /// provisional INIT from `fleury serve`); null when the peer handshook
   /// directly, in which case the runtime keeps its environment rule.
   bool? get supervisorDebugWire => _supervisorDebugWire;
-  int _protocolVersion = 1;
+
+  /// The protocol the peer's INIT negotiated; null until then, and after a
+  /// rejected INIT.
+  RemoteWireProtocol? _protocol;
+
+  /// The input half of the mode [enter] was given, as this app's native
+  /// driver would request it: what a shell peer's terminal must report.
+  TerminalInputModes? _terminalInput;
   Completer<void>? _handshake;
   ({Object error, StackTrace stack})? _handshakeFailure;
   Future<void>? _restoreFuture;
 
   @override
-  bool get wantsPresentationPlans => _protocolVersion == remoteProtocolVersion;
+  bool get wantsPresentationPlans => _protocol == RemoteWireProtocol.structured;
 
   @override
   CellSize get size => _size;
@@ -202,9 +225,21 @@ final class RemoteTerminalDriver
     // tree for the whole session).
     _semanticsEncoder.reset();
 
-    // The peer is responsible for the actual terminal-mode bookkeeping
-    // on its end (raw input, alt screen, hidden cursor). We just pass
-    // bytes; the peer applies them.
+    // The peer owns the terminal on its end: the screen, the cursor, raw
+    // input. What it cannot know is the input this app reads, so a shell
+    // peer is told in the answer to its INIT: the input half of [mode], at
+    // the keyboard tier this app's native driver would push in the same
+    // environment (FLEURY_KEYBOARD applies here too). Like a native session's
+    // mode, it is fixed until restore.
+    _terminalInput = TerminalInputModes.of(
+      terminalModeWithKeyboardProtocol(
+        mode,
+        resolveKeyboardTier(
+          requested: mode.keyboardProtocol,
+          environment: _environment,
+        ),
+      ),
+    );
     _handshake = Completer<void>();
     _frameSub = _transport.incoming.listen(
       _onFrame,
@@ -277,9 +312,7 @@ final class RemoteTerminalDriver
             // peers do not use this presenter; ANSI stays conservative unless
             // the operator explicitly asserts mode-2026 support.
             synchronizedOutput:
-                synchronizedOutputOverrideFromEnvironment(
-                  Platform.environment,
-                ) ??
+                synchronizedOutputOverrideFromEnvironment(_environment) ??
                 false,
           )
         : TerminalSessionProfile.structured(
@@ -592,28 +625,22 @@ final class RemoteTerminalDriver
         // size channel after the handshake is ResizeFrame. Ignore repeats.
         if (_handshakeReceived) break;
         _handshakeReceived = true;
-        final version = f.protocolVersion;
-        if (version != remoteAnsiProtocolVersion &&
-            version != remoteProtocolVersion) {
-          // The wire is lockstep: a structured peer of any other version can
-          // neither decode this app's frames nor be decoded safely. Echo this
-          // app's version so the peer can report the skew, then fail the
+        // Every peer gets this app's answer first, in the protocol it
+        // declared and at this app's version of it: the peer confirms the
+        // lockstep from it, or reports the skew instead of seeing a bare
+        // disconnect. A shell peer also learns the input to turn on.
+        _transport.send(_initAnswer(f));
+        if (f.protocolVersion != f.protocol.version) {
+          // Each protocol is lockstep: a peer at any other version can
+          // neither decode this app's frames nor be decoded safely. Fail the
           // session closed instead of speaking a shape it may misread.
-          _transport.send(_initEcho(f));
           _onTransportError(
-            RemoteProtocolException(
-              'the peer speaks wire protocol v$version but this app speaks '
-              'v$remoteProtocolVersion; use matching Fleury builds.',
-              recoverable: false,
-            ),
+            RemoteProtocolException(_versionSkew(f), recoverable: false),
             StackTrace.current,
           );
           break;
         }
         _adoptInit(f);
-        // A structured peer gets the app's version back so it can confirm the
-        // lockstep before speaking anything else. The ANSI host takes no echo.
-        if (version == remoteProtocolVersion) _transport.send(_initEcho(f));
         _handshake?.complete();
       case ResizeFrame f:
         _size = _clampSize(f.size);
@@ -645,7 +672,8 @@ final class RemoteTerminalDriver
         if (_active) _onClipboardResult?.call(f.seq, f.status);
       case SemanticActionFrame f:
         // The peer activated a node in its accessible DOM; invoke it on the
-        // live tree (only on the structured path, like the other v2 input).
+        // live tree (only on the structured path, like the other
+        // structured input).
         if (_active && wantsPresentationPlans) {
           _onSemanticAction?.call(
             f.id,
@@ -657,7 +685,7 @@ final class RemoteTerminalDriver
       case DebugRequestFrame f:
         if (_active) _onDebugRequest?.call(f.seq, f.kind, f.limit);
       case InputEventFrame f:
-        // Structured input from a v2 peer: surface the event directly
+        // Structured input from a structured peer: surface the event directly
         // instead of parsing ANSI. A resize event also updates the cached
         // size so the next plan is built at the new viewport.
         if (_active && wantsPresentationPlans) {
@@ -693,11 +721,13 @@ final class RemoteTerminalDriver
     return CellSize(cols, rows);
   }
 
-  /// This app's INIT reply to [peer]. It restates the peer's own fields; only
-  /// `v` carries new information (the peer reads it to confirm the lockstep),
-  /// and restating what the peer sent keeps a link-free echo byte-flat (false
-  /// emits no `hyperlinks=`).
-  InitFrame _initEcho(InitFrame peer) => InitFrame(
+  /// This app's answer to [peer]'s INIT: the same protocol, at this app's
+  /// version of it, which the peer reads to confirm the lockstep. It restates
+  /// the peer's own fields, and restating what the peer sent keeps a
+  /// link-free answer byte-flat (false emits no `hyperlinks=`). To a shell
+  /// peer it also declares the input this app reads, which is new
+  /// information: the shell's terminal reports exactly that.
+  InitFrame _initAnswer(InitFrame peer) => InitFrame(
     size: _clampSize(peer.size),
     colorMode: peer.colorMode,
     glyphTier: peer.glyphTier,
@@ -705,14 +735,40 @@ final class RemoteTerminalDriver
     tmuxPassthrough: peer.tmuxPassthrough,
     hyperlinks: peer.hyperlinks,
     keyboard: peer.keyboard,
+    protocol: peer.protocol,
+    terminalInput: peer.protocol == RemoteWireProtocol.shell
+        ? _terminalInput
+        : null,
   );
 
-  /// Takes a peer's negotiated size, protocol version, keyboard and
-  /// capabilities on record.
+  /// Why [peer]'s INIT, at another version of its protocol, ends the session,
+  /// and what to run instead.
+  static String _versionSkew(InitFrame peer) {
+    final version = peer.protocolVersion;
+    return switch (peer.protocol) {
+      RemoteWireProtocol.shell =>
+        'the attached `fleury shell` speaks shell protocol v$version but this '
+            'app speaks v$shellProtocolVersion: run the shell from this '
+            'app\'s package (`dart run fleury shell`) so both use the same '
+            'Fleury.',
+      RemoteWireProtocol.structured =>
+        'the peer speaks wire protocol v$version but this app speaks '
+            'v$remoteProtocolVersion; use matching Fleury builds.',
+    };
+  }
+
+  /// Takes a peer's negotiated size, protocol, keyboard and capabilities on
+  /// record.
   void _adoptInit(InitFrame f) {
     _size = _clampSize(f.size);
-    _protocolVersion = f.protocolVersion;
-    _peerKeyboard = f.keyboard;
+    _protocol = f.protocol;
+    // A shell answered with legacy input drops its keyboard flags, so its
+    // probe no longer describes the session (see [keyboardCapabilities]).
+    _peerKeyboard =
+        f.protocol == RemoteWireProtocol.shell &&
+            _terminalInput?.keyboardProtocol == KeyboardProtocolMode.legacy
+        ? null
+        : f.keyboard;
     _capabilities = TerminalCapabilities(
       colorMode: f.colorMode,
       glyphTier: f.glyphTier,
@@ -741,7 +797,7 @@ final class RemoteTerminalDriver
             // MediaQuery.capabilitiesOf(context).hyperlinks == false and
             // never produces a linkUri (underlined-but-not-clickable).
             hyperlinks: f.hyperlinks,
-            pointer: f.protocolVersion == remoteProtocolVersion
+            pointer: f.protocol == RemoteWireProtocol.structured
                 ? PointerPrecision.subCell
                 : PointerPrecision.cell,
           );

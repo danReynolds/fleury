@@ -1410,8 +1410,8 @@ const SHOWCASE_TRY = {
     'Ctrl+Z to undo the entire stroke. Copy JSON exports exactly what plays.*\n\n' +
     'In a native POSIX terminal, the app sees Ctrl+Z first, and Fleury ' +
     'suspends it only when nothing handles the key. The undo binding is off ' +
-    'while there is nothing to undo, so an extra Ctrl+Z suspends the studio; ' +
-    '`fg` resumes it. See ' +
+    'while there is nothing to undo, so an extra Ctrl+Z suspends the studio ' +
+    'when your shell started it; `fg` resumes it. See ' +
     '[keys handled by the host](/fleury/guides/key-handling/#keys-handled-by-the-host).',
 };
 

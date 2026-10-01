@@ -20,7 +20,6 @@ import 'forms/related_fields.dart';
 import 'forms/custom_field.dart';
 import 'concepts.dart' as concepts;
 import 'flutter_map.dart' as flutter_map;
-import 'live_previews.dart' as live;
 import 'home_pad.dart' as home_pad;
 import 'hot_reload_guide.dart';
 
@@ -211,18 +210,7 @@ final List<ExampleInfo> exampleList = <ExampleInfo>[
   color: theme.colorScheme.success,
   showValue: true,
 )''',
-    builder: () => _framed(
-      _LiveSeries(
-        length: 28,
-        min: 0,
-        max: 20,
-        builder: (data) => Sparkline(
-          data: data,
-          color: _theme.colorScheme.success,
-          showValue: true,
-        ),
-      ),
-    ),
+    builder: () => _framed(const _SparklineExample()),
   ),
   ExampleInfo(
     id: 'linechart.basic',
@@ -242,25 +230,7 @@ final List<ExampleInfo> exampleList = <ExampleInfo>[
   showLegend: true,
   yRange: const (0, 100),
 )''',
-    builder: () => _framed(
-      _LiveSeries(
-        length: 40,
-        min: 0,
-        max: 100,
-        builder: (data) => LineChart(
-          series: <LineSeries>[
-            LineSeries(
-              <(num, num)>[for (var i = 0; i < data.length; i++) (i, data[i])],
-              label: 'load',
-              color: _theme.colorScheme.primary,
-            ),
-          ],
-          showAxes: true,
-          showLegend: true,
-          yRange: const (0, 100),
-        ),
-      ),
-    ),
+    builder: () => _framed(const _LineChartExample()),
   ),
   // --- LineChart rendering-option lab: compare line weights + markers ------
   ExampleInfo(
@@ -369,29 +339,7 @@ final List<ExampleInfo> exampleList = <ExampleInfo>[
   showLegend: true,
   yRange: const (0, 100),
 )''',
-    builder: () => _framed(
-      _LiveSeries(
-        length: 40,
-        min: 0,
-        max: 100,
-        builder: (data) => AreaChart(
-          series: <AreaSeries>[
-            AreaSeries(
-              <(num, num)>[for (var i = 0; i < data.length; i++) (i, data[i])],
-              label: 'load',
-              gradient: <Color>[
-                _theme.colorScheme.success,
-                _theme.colorScheme.warning,
-                _theme.colorScheme.error,
-              ],
-            ),
-          ],
-          showAxes: true,
-          showLegend: true,
-          yRange: const (0, 100),
-        ),
-      ),
-    ),
+    builder: () => _framed(const _AreaChartExample()),
   ),
   ExampleInfo(
     id: 'barchart.basic',
@@ -404,19 +352,7 @@ final List<ExampleInfo> exampleList = <ExampleInfo>[
   bars: <Bar>[Bar('q1', 12), Bar('q2', 19), Bar('q3', 9), Bar('q4', 22)],
   showYAxis: true,
 )''',
-    builder: () => _framed(
-      _LiveSeries(
-        length: 5,
-        min: 2,
-        max: 24,
-        builder: (data) => BarChart(
-          bars: <Bar>[
-            for (var i = 0; i < data.length; i++) Bar('q${i + 1}', data[i]),
-          ],
-          showYAxis: true,
-        ),
-      ),
-    ),
+    builder: () => _framed(const _BarChartExample()),
   ),
   ExampleInfo(
     id: 'histogram.basic',
@@ -503,18 +439,7 @@ Canvas(
   semanticRole: SemanticRole.chart,
   semanticLabel: 'Sine wave',
 )''',
-    builder: () => _framed(
-      SizedBox(
-        width: 48,
-        height: 9,
-        child: Canvas(
-          painter: _DocsCanvasPainter(),
-          bounds: const CanvasBounds(minX: 0, maxX: 6.28, minY: -1, maxY: 1),
-          semanticRole: SemanticRole.chart,
-          semanticLabel: 'Sine wave',
-        ),
-      ),
-    ),
+    builder: () => _framed(const _CanvasExample()),
   ),
   ExampleInfo(
     id: 'panel.basic',
@@ -581,34 +506,7 @@ Canvas(
     cols: 48,
     rows: 8,
     interactive: true,
-    builder: () => _framed(
-      DataTable(
-        rowCount: _people.length,
-        controller: DataTableController(),
-        selectionMode: DataTableSelectionMode.row,
-        columns: const <DataTableColumn>[
-          DataTableColumn(
-            id: 'name',
-            title: 'NAME',
-            width: FixedColumnWidth(10),
-          ),
-          DataTableColumn(id: 'role', title: 'ROLE'),
-          DataTableColumn(
-            id: 'commits',
-            title: 'COMMITS',
-            width: FixedColumnWidth(9),
-          ),
-        ],
-        cellBuilder: (row, col) {
-          final p = _people[row];
-          return switch (col) {
-            'name' => p.$1,
-            'role' => p.$2,
-            _ => p.$3.toString(),
-          };
-        },
-      ),
-    ),
+    builder: () => _framed(const _DataTableExample()),
   ),
   ExampleInfo(
     id: 'datatable.rows',
@@ -618,8 +516,7 @@ Canvas(
     cols: 30,
     rows: 13,
     interactive: true,
-    builder: () =>
-        const Padding(padding: EdgeInsets.all(1), child: TableRows()),
+    builder: () => _framed(const TableRows()),
   ),
   ExampleInfo(
     id: 'datatable.cells',
@@ -630,8 +527,7 @@ Canvas(
     cols: 30,
     rows: 13,
     interactive: true,
-    builder: () =>
-        const Padding(padding: EdgeInsets.all(1), child: TableCells()),
+    builder: () => _framed(const TableCells()),
   ),
   ExampleInfo(
     id: 'tree.basic',
@@ -1306,7 +1202,7 @@ FileBrowser(
   initialDirectory: '/my_app',
   onActivate: (entry) => openFile(entry.path),
 )''',
-    builder: () => _framed(const live.FileBrowserPreview()),
+    builder: () => _framed(const _FileBrowserExample()),
   ),
   ExampleInfo(
     id: 'filepicker.basic',
@@ -1318,15 +1214,24 @@ FileBrowser(
     cols: 48,
     rows: 13,
     interactive: true,
-    code: '''FilePicker(
+    code: '''// In a terminal, FilePicker reads the local disk:
+FilePicker(
   initialDirectory: Directory.current.path,
   filter: (entry) => entry.isDirectory || entry.name.endsWith('.dart'),
   onSelect: (file) => openFile(file.path),
 )
 
-// In the browser, pass a source, such as the MemoryFileSource this demo uses:
-// FilePicker(source: projectFiles, initialDirectory: '/my_app', ...)''',
-    builder: () => _framed(const live.FilePickerPreview()),
+// In the browser there is no disk to list, so pass a source, as this demo
+// does:
+FilePicker(
+  source: MemoryFileSource([
+    '/my_app/lib/app.dart',
+    '/my_app/test/app_test.dart',
+  ]),
+  initialDirectory: '/my_app',
+  onSelect: (file) => openFile(file.path),
+)''',
+    builder: () => _framed(const _FilePickerExample()),
   ),
   ExampleInfo(
     id: 'colorpicker.basic',
@@ -1485,7 +1390,7 @@ Toaster(child: app)
 
 // …then from anywhere below it:
 Toaster.show(context, 'Saved', severity: ToastSeverity.success);''',
-    builder: () => _framed(const live.ToasterPreview()),
+    builder: () => _framed(const _ToasterExample()),
   ),
   ExampleInfo(
     id: 'container.filled',
@@ -2447,7 +2352,7 @@ Text('\${summary.health.name}: \${summary.activeTaskCount} of \${summary.taskCou
     cols: 48,
     rows: 12,
     interactive: true,
-    builder: () => const _SnapshotLoadingTour(),
+    builder: () => _framed(const loading.SnapshotExplorer()),
   ),
   ExampleInfo(
     id: 'loading.image',
@@ -2459,7 +2364,7 @@ Text('\${summary.health.name}: \${summary.activeTaskCount} of \${summary.taskCou
     cols: 54,
     rows: 16,
     interactive: true,
-    builder: () => _framed(const _NetworkImageLoadingTour()),
+    builder: () => _framed(const _PhotoPreview()),
   ),
   ExampleInfo(
     id: 'loading.stream',
@@ -2469,7 +2374,7 @@ Text('\${summary.health.name}: \${summary.activeTaskCount} of \${summary.taskCou
     cols: 48,
     rows: 14,
     interactive: true,
-    builder: () => const _StreamLoadingTour(),
+    builder: () => _framed(const loading.TransmissionView()),
   ),
   ExampleInfo(
     id: 'commands.overview',
@@ -2629,12 +2534,7 @@ Text('\${summary.health.name}: \${summary.activeTaskCount} of \${summary.taskCou
     cols: 38,
     rows: 8,
     interactive: true,
-    builder: () => _framed(
-      Navigator(
-        transition: RouteTransition.none,
-        home: const flutter_map.HomeScreen(),
-      ),
-    ),
+    builder: () => _framed(const flutter_map.ProjectsApp()),
   ),
   ExampleInfo(
     id: 'concepts.clock',
@@ -2698,8 +2598,7 @@ Text('\${summary.health.name}: \${summary.activeTaskCount} of \${summary.taskCou
     cols: 38,
     rows: 10,
     interactive: true,
-    builder: () =>
-        const Padding(padding: EdgeInsets.all(1), child: input.ContactFields()),
+    builder: () => _framed(const input.ContactFields()),
   ),
   ExampleInfo(
     id: 'input.actions',
@@ -2709,8 +2608,7 @@ Text('\${summary.health.name}: \${summary.activeTaskCount} of \${summary.taskCou
     cols: 38,
     rows: 11,
     interactive: true,
-    builder: () =>
-        const Padding(padding: EdgeInsets.all(1), child: input.FileActions()),
+    builder: () => _framed(const input.FileActions()),
   ),
   ExampleInfo(
     id: 'input.press',
@@ -2721,8 +2619,7 @@ Text('\${summary.health.name}: \${summary.activeTaskCount} of \${summary.taskCou
     cols: 38,
     rows: 19,
     interactive: true,
-    builder: () =>
-        const Padding(padding: EdgeInsets.all(1), child: input.PressTile()),
+    builder: () => _framed(const input.PressTile()),
   ),
   ExampleInfo(
     id: 'input.selection',
@@ -2732,10 +2629,7 @@ Text('\${summary.health.name}: \${summary.activeTaskCount} of \${summary.taskCou
     cols: 38,
     rows: 12,
     interactive: true,
-    builder: () => const Padding(
-      padding: EdgeInsets.all(1),
-      child: input.SelectableNote(),
-    ),
+    builder: () => _framed(const input.SelectableNote()),
   ),
   ExampleInfo(
     id: 'input.splitter',
@@ -2745,8 +2639,7 @@ Text('\${summary.health.name}: \${summary.activeTaskCount} of \${summary.taskCou
     cols: 38,
     rows: 10,
     interactive: true,
-    builder: () =>
-        const Padding(padding: EdgeInsets.all(1), child: input.SplitPane()),
+    builder: () => _framed(const input.SplitPane()),
   ),
   ExampleInfo(
     id: 'input.nesting',
@@ -2756,8 +2649,7 @@ Text('\${summary.health.name}: \${summary.activeTaskCount} of \${summary.taskCou
     cols: 38,
     rows: 9,
     interactive: true,
-    builder: () =>
-        const Padding(padding: EdgeInsets.all(1), child: input.NestedRow()),
+    builder: () => _framed(const input.NestedRow()),
   ),
   ExampleInfo(
     id: 'input.scrolling',
@@ -2767,8 +2659,7 @@ Text('\${summary.health.name}: \${summary.activeTaskCount} of \${summary.taskCou
     cols: 38,
     rows: 14,
     interactive: true,
-    builder: () =>
-        const Padding(padding: EdgeInsets.all(1), child: input.ScrollPanes()),
+    builder: () => _framed(const input.ScrollPanes()),
   ),
   ExampleInfo(
     id: 'testing.counter',
@@ -2778,8 +2669,7 @@ Text('\${summary.health.name}: \${summary.activeTaskCount} of \${summary.taskCou
     cols: 32,
     rows: 5,
     interactive: true,
-    builder: () =>
-        const Padding(padding: EdgeInsets.all(1), child: testing.Counter()),
+    builder: () => _framed(const testing.Counter()),
   ),
   ExampleInfo(
     id: 'testing.preferences',
@@ -2789,10 +2679,7 @@ Text('\${summary.health.name}: \${summary.activeTaskCount} of \${summary.taskCou
     cols: 32,
     rows: 11,
     interactive: true,
-    builder: () => Padding(
-      padding: const EdgeInsets.all(1),
-      child: testing.preferencesPair(),
-    ),
+    builder: () => _framed(testing.preferencesPair()),
   ),
   ExampleInfo(
     id: 'testing.save',
@@ -2802,10 +2689,7 @@ Text('\${summary.health.name}: \${summary.activeTaskCount} of \${summary.taskCou
     cols: 32,
     rows: 5,
     interactive: true,
-    builder: () => const Padding(
-      padding: EdgeInsets.all(1),
-      child: testing.TestingSaveDemo(),
-    ),
+    builder: () => _framed(const testing.TestingSaveDemo()),
   ),
   ExampleInfo(
     id: 'testing.animation',
@@ -2815,10 +2699,7 @@ Text('\${summary.health.name}: \${summary.activeTaskCount} of \${summary.taskCou
     cols: 32,
     rows: 6,
     interactive: true,
-    builder: () => const Padding(
-      padding: EdgeInsets.all(1),
-      child: testing.AnimatedUpload(),
-    ),
+    builder: () => _framed(const testing.AnimatedUpload()),
   ),
   ExampleInfo(
     id: 'testing.editor',
@@ -2848,8 +2729,7 @@ Text('\${summary.health.name}: \${summary.activeTaskCount} of \${summary.taskCou
     cols: 34,
     rows: 9,
     interactive: true,
-    builder: () =>
-        const Padding(padding: EdgeInsets.all(1), child: lists.FileList()),
+    builder: () => _framed(const lists.FileList()),
   ),
   ExampleInfo(
     id: 'lists.tasks',
@@ -2859,8 +2739,7 @@ Text('\${summary.health.name}: \${summary.activeTaskCount} of \${summary.taskCou
     cols: 40,
     rows: 22,
     interactive: true,
-    builder: () =>
-        const Padding(padding: EdgeInsets.all(1), child: lists.TaskBrowser()),
+    builder: () => _framed(const lists.TaskBrowser()),
   ),
   ExampleInfo(
     id: 'lists.reorder',
@@ -2870,8 +2749,7 @@ Text('\${summary.health.name}: \${summary.activeTaskCount} of \${summary.taskCou
     cols: 38,
     rows: 11,
     interactive: true,
-    builder: () =>
-        const Padding(padding: EdgeInsets.all(1), child: lists.ReorderTasks()),
+    builder: () => _framed(const lists.ReorderTasks()),
   ),
   ExampleInfo(
     id: 'lists.document',
@@ -2882,8 +2760,7 @@ Text('\${summary.health.name}: \${summary.activeTaskCount} of \${summary.taskCou
     cols: 40,
     rows: 18,
     interactive: true,
-    builder: () =>
-        const Padding(padding: EdgeInsets.all(1), child: lists.ScrollEdges()),
+    builder: () => _framed(const lists.ScrollEdges()),
   ),
   ExampleInfo(
     id: 'lists.horizontal',
@@ -2893,10 +2770,7 @@ Text('\${summary.health.name}: \${summary.activeTaskCount} of \${summary.taskCou
     cols: 40,
     rows: 8,
     interactive: true,
-    builder: () => const Padding(
-      padding: EdgeInsets.all(1),
-      child: lists.HorizontalList(),
-    ),
+    builder: () => _framed(const lists.HorizontalList()),
   ),
   ExampleInfo(
     id: 'lists.wide-content',
@@ -2906,10 +2780,7 @@ Text('\${summary.health.name}: \${summary.activeTaskCount} of \${summary.taskCou
     cols: 40,
     rows: 10,
     interactive: true,
-    builder: () => const Padding(
-      padding: EdgeInsets.all(1),
-      child: lists.HorizontalContent(),
-    ),
+    builder: () => _framed(const lists.HorizontalContent()),
   ),
   ExampleInfo(
     id: 'lists.log',
@@ -2919,8 +2790,7 @@ Text('\${summary.health.name}: \${summary.activeTaskCount} of \${summary.taskCou
     cols: 46,
     rows: 14,
     interactive: true,
-    builder: () =>
-        const Padding(padding: EdgeInsets.all(1), child: lists.BuildLog()),
+    builder: () => _framed(const lists.BuildLog()),
   ),
   ExampleInfo(
     id: 'layout.responsive',
@@ -2932,7 +2802,7 @@ Text('\${summary.health.name}: \${summary.activeTaskCount} of \${summary.taskCou
     cols: 74,
     rows: 18,
     interactive: true,
-    builder: () => const _ResponsiveWorkspaceTour(),
+    builder: () => _framed(const _ResizableWorkspace()),
   ),
   ExampleInfo(
     id: 'navigation.basics',
@@ -3022,13 +2892,25 @@ context.pop('done'); // completes the push that opened this screen''',
   ),
   ExampleInfo(
     id: 'focus.explorer',
+    widget: 'Focus traversal',
+    category: 'Guide examples',
+    blurb:
+        'Automatic traversal across two panes: Tab reads each row, arrows '
+        'move by direction, and a dialog keeps focus until it closes.',
+    cols: 70,
+    rows: 18,
+    interactive: true,
+    builder: () => _framed(const Navigator(home: _FocusExplorerTour())),
+  ),
+  ExampleInfo(
+    id: 'focus.basic',
     widget: 'Focus',
     category: 'Input handling & focus',
     blurb:
         'Makes a custom widget focusable, so it receives keys and joins Tab '
         'and arrow traversal.',
-    cols: 70,
-    rows: 18,
+    cols: 40,
+    rows: 8,
     interactive: true,
     code:
         '''// A custom control becomes one focus stop. Handle its keys outside the
@@ -3043,7 +2925,7 @@ KeyBindings(
 // In TrackRow's build, reading Focus.of rebuilds it when focus changes:
 final focused = Focus.of(context).hasFocus;
 return Text(focused ? '▸ Track 1' : '  Track 1');''',
-    builder: () => const Navigator(home: _FocusExplorerTour()),
+    builder: () => _framed(const _FocusExample()),
   ),
   ExampleInfo(
     id: 'focusnode.programmatic',
@@ -3241,7 +3123,12 @@ FocusDetector(
     cols: 38,
     rows: 14,
     code: _customThemeSource,
-    builder: () => Theme(data: _customTheme, child: const _ThemePreview()),
+    builder: () => Theme(
+      // An app passes its theme to FleuryApp(theme: …); this preview themes
+      // one subtree.
+      data: _buildCustomTheme(),
+      child: const _ThemePreview(),
+    ),
   ),
   ExampleInfo(
     id: 'themes.gallery',
@@ -3269,7 +3156,7 @@ void main() =>
     rows: 4,
     interactive: true,
     code: _localStyleSource,
-    builder: () => const _LocalStyleTour(),
+    builder: () => const _StyledInput(),
   ),
   ExampleInfo(
     id: 'themes.cell_style',
@@ -3279,7 +3166,7 @@ void main() =>
     cols: 34,
     rows: 5,
     code: _cellStyleSource,
-    builder: () => const _CellStyleTour(),
+    builder: () => const _StyledText(),
   ),
   ExampleInfo(
     id: 'themes.local_interactive',
@@ -3290,7 +3177,7 @@ void main() =>
     rows: 8,
     interactive: true,
     code: _localInteractiveSource,
-    builder: () => const _LocalStateTour(),
+    builder: () => _framed(const _LocalFocusStyle()),
   ),
   ExampleInfo(
     id: 'themes.invalid_none',
@@ -3303,7 +3190,7 @@ void main() =>
     rows: 9,
     interactive: true,
     code: _invalidNoneSource,
-    builder: () => const _InvalidNoneTour(),
+    builder: () => _framed(const _NeutralInvalidField()),
   ),
   ExampleInfo(
     id: 'themes.interactive_styles',
@@ -3315,7 +3202,7 @@ void main() =>
     cols: 52,
     rows: 13,
     code: _interactiveStylesSource,
-    builder: () => const _InteractiveStyleTour(),
+    builder: () => _framed(const _InteractiveStyleTour()),
   ),
 ];
 
@@ -3323,13 +3210,6 @@ void main() =>
 final Map<String, ExampleBuilder> examples = <String, ExampleBuilder>{
   for (final e in exampleList) e.id: e.builder,
 };
-
-const List<(String, String, int)> _people = <(String, String, int)>[
-  ('dan', 'author', 1284),
-  ('ada', 'reviewer', 642),
-  ('lin', 'docs', 219),
-  ('rey', 'infra', 877),
-];
 
 // Compact docs themes so embedded examples read well against the site chrome.
 final ThemeData _theme = const ThemeData(
@@ -3407,20 +3287,69 @@ final class _DocsExampleTheme {
 // ── Stateful wrappers ───────────────────────────────────────────────────────
 // Controlled widgets (value + onChanged) need a holder so interacting with the
 // live example actually moves them; self-managing widgets are used directly.
-final class _DocsCanvasPainter extends CanvasPainter {
+class _CanvasExample extends StatelessWidget {
+  const _CanvasExample();
+
+  @override
+  Widget build(BuildContext context) => SizedBox(
+    width: 48,
+    height: 9,
+    child: Canvas(
+      painter: _SineWavePainter(),
+      // The painter draws in these logical coordinates: one period of sin(x).
+      bounds: const CanvasBounds(minX: 0, maxX: 6.28, minY: -1, maxY: 1),
+      semanticRole: SemanticRole.chart,
+      semanticLabel: 'Sine wave',
+    ),
+  );
+}
+
+/// Draws one period of sin(x) as short line segments.
+class _SineWavePainter extends CanvasPainter {
   @override
   void paint(CanvasContext ctx) {
     const segments = 96;
-    var previousX = 0.0;
-    var previousY = 0.0;
-    for (var i = 1; i <= segments; i++) {
-      final x = 6.28 * i / segments;
-      final y = sin(x);
-      ctx.drawLine(previousX, previousY, x, y);
-      previousX = x;
-      previousY = y;
+    for (var i = 0; i < segments; i++) {
+      final x1 = 6.28 * i / segments;
+      final x2 = 6.28 * (i + 1) / segments;
+      ctx.drawLine(x1, sin(x1), x2, sin(x2));
     }
   }
+}
+
+class _DataTableExample extends StatelessWidget {
+  const _DataTableExample();
+
+  static const _people = [
+    (name: 'dan', role: 'author', commits: 1284),
+    (name: 'ada', role: 'reviewer', commits: 642),
+    (name: 'lin', role: 'docs', commits: 219),
+    (name: 'rey', role: 'infra', commits: 877),
+  ];
+
+  @override
+  Widget build(BuildContext context) => DataTable(
+    rowCount: _people.length,
+    selectionMode: DataTableSelectionMode.row,
+    columns: const [
+      DataTableColumn(id: 'name', title: 'NAME', width: FixedColumnWidth(10)),
+      DataTableColumn(id: 'role', title: 'ROLE'),
+      DataTableColumn(
+        id: 'commits',
+        title: 'COMMITS',
+        width: FixedColumnWidth(9),
+      ),
+    ],
+    // Asked only for the rows on screen, so the list can be any length.
+    cellBuilder: (row, column) {
+      final person = _people[row];
+      return switch (column) {
+        'name' => person.name,
+        'role' => person.role,
+        _ => '${person.commits}',
+      };
+    },
+  );
 }
 
 class _ContainerFillExample extends StatefulWidget {
@@ -4020,6 +3949,61 @@ class _FocusScopeExampleState extends State<_FocusScopeExample> {
   );
 }
 
+class _FocusExample extends StatefulWidget {
+  const _FocusExample();
+
+  @override
+  State<_FocusExample> createState() => _FocusExampleState();
+}
+
+class _FocusExampleState extends State<_FocusExample> {
+  static const _tracks = ['Intro', 'Night drive', 'Outro'];
+  String _playing = 'nothing';
+
+  @override
+  Widget build(BuildContext context) => Column(
+    crossAxisAlignment: CrossAxisAlignment.start,
+    children: [
+      for (final (i, track) in _tracks.indexed)
+        // Each row is one focus stop. Keys travel from the focused node up
+        // through its ancestors, so Enter reaches the focused row's binding.
+        KeyBindings(
+          bindings: [
+            KeyBinding(
+              KeySequence.enter,
+              label: 'Play',
+              onTrigger: (_) => setState(() => _playing = track),
+            ),
+          ],
+          child: Focus(autofocus: i == 0, child: _TrackRow(track)),
+        ),
+      const SizedBox(height: 1),
+      const Text(
+        'Tab or arrows move · Enter plays',
+        style: CellStyle(dim: true),
+      ),
+      Text('Playing: $_playing'),
+    ],
+  );
+}
+
+/// One track title, marked while its row has focus.
+class _TrackRow extends StatelessWidget {
+  const _TrackRow(this.title);
+
+  final String title;
+
+  @override
+  Widget build(BuildContext context) {
+    // Reading Focus.of rebuilds this row when its focus changes.
+    final focused = Focus.of(context).hasFocus;
+    return Text(
+      focused ? '▸ $title' : '  $title',
+      style: CellStyle(bold: focused),
+    );
+  }
+}
+
 // Log surfaces read as a running process: each demo appends its next scripted
 // line every 0.7 seconds, looping at the end.
 
@@ -4233,6 +4217,141 @@ class _WorkflowSnapshotExampleState extends State<_WorkflowSnapshotExample> {
   }
 }
 
+class _FileBrowserExample extends StatefulWidget {
+  const _FileBrowserExample();
+
+  @override
+  State<_FileBrowserExample> createState() => _FileBrowserExampleState();
+}
+
+class _FileBrowserExampleState extends State<_FileBrowserExample> {
+  // The browser has no disk to list, so this demo browses a project held in
+  // memory. In a terminal, leave out `source` to browse the local disk.
+  final _project = MemoryFileSource([
+    '/my_app/.gitignore',
+    '/my_app/README.md',
+    '/my_app/pubspec.yaml',
+    '/my_app/bin/run_app.dart',
+    '/my_app/lib/app.dart',
+    '/my_app/lib/src/status_panel.dart',
+    '/my_app/lib/src/theme.dart',
+    '/my_app/test/app_test.dart',
+    '/my_app/web/index.html',
+    '/my_app/web/main.dart',
+  ]);
+  String _status = 'Enter opens · Backspace goes up';
+
+  @override
+  Widget build(BuildContext context) => Column(
+    crossAxisAlignment: CrossAxisAlignment.stretch,
+    children: [
+      Expanded(
+        child: FileBrowser(
+          source: _project,
+          initialDirectory: '/my_app',
+          autofocus: true,
+          maxVisible: 8,
+          onActivate: (entry) =>
+              setState(() => _status = 'opened ${entry.path}'),
+        ),
+      ),
+      Text(_status, style: const CellStyle(dim: true)),
+    ],
+  );
+}
+
+class _FilePickerExample extends StatefulWidget {
+  const _FilePickerExample();
+
+  @override
+  State<_FilePickerExample> createState() => _FilePickerExampleState();
+}
+
+class _FilePickerExampleState extends State<_FilePickerExample> {
+  // The browser has no disk to list, so this demo picks from a project held
+  // in memory. In a terminal, leave out `source` to pick from the local disk.
+  final _project = MemoryFileSource([
+    '/my_app/README.md',
+    '/my_app/pubspec.yaml',
+    '/my_app/bin/run_app.dart',
+    '/my_app/lib/app.dart',
+    '/my_app/lib/src/status_panel.dart',
+    '/my_app/lib/src/theme.dart',
+    '/my_app/test/app_test.dart',
+    '/my_app/web/main.dart',
+  ]);
+  String _status = 'Pick a Dart file';
+
+  @override
+  Widget build(BuildContext context) => Column(
+    crossAxisAlignment: CrossAxisAlignment.stretch,
+    children: [
+      Expanded(
+        child: FilePicker(
+          source: _project,
+          initialDirectory: '/my_app',
+          autofocus: true,
+          maxVisible: 8,
+          filter: (entry) => entry.isDirectory || entry.name.endsWith('.dart'),
+          onSelect: (file) => setState(() => _status = 'picked ${file.path}'),
+        ),
+      ),
+      Text(_status, style: const CellStyle(dim: true)),
+    ],
+  );
+}
+
+/// Wraps the app once, so any widget below it can raise a toast.
+class _ToasterExample extends StatelessWidget {
+  const _ToasterExample();
+
+  @override
+  Widget build(BuildContext context) =>
+      const Toaster(duration: Duration(seconds: 3), child: _ToastButtons());
+}
+
+/// Raises toasts with [Toaster.show], from below the [Toaster].
+class _ToastButtons extends StatelessWidget {
+  const _ToastButtons();
+
+  @override
+  Widget build(BuildContext context) => Column(
+    crossAxisAlignment: CrossAxisAlignment.start,
+    children: [
+      const Text('Raise a toast:'),
+      const SizedBox(height: 1),
+      Row(
+        children: [
+          Button(
+            text: 'Save',
+            autofocus: true,
+            onPressed: () =>
+                Toaster.show(context, 'Saved', severity: ToastSeverity.success),
+          ),
+          const SizedBox(width: 1),
+          Button(
+            text: 'Retry',
+            onPressed: () => Toaster.show(
+              context,
+              'Connection slow, retrying',
+              severity: ToastSeverity.warning,
+            ),
+          ),
+          const SizedBox(width: 1),
+          Button(
+            text: 'Fail',
+            onPressed: () => Toaster.show(
+              context,
+              'Upload failed',
+              severity: ToastSeverity.error,
+            ),
+          ),
+        ],
+      ),
+    ],
+  );
+}
+
 // ── Knobs (interactive props) ───────────────────────────────────────────────
 //
 // A small set of widgets gets a live "playground": the docs UI renders form
@@ -4371,8 +4490,9 @@ Widget knobRoot(String id, KnobParams params) {
 }
 
 /// An interactive world clock: a [Tabs] strip selects a timezone and a [Digits]
-/// shows that zone's wall-clock time, ticking once a second. Demonstrates making
-/// a display widget interactive — pick a zone with ← / → (or click a tab).
+/// shows that zone's wall-clock time, ticking once a second. Demonstrates
+/// making a display widget interactive: pick a zone with ← / → (or click a
+/// tab).
 class _WorldClock extends StatefulWidget {
   const _WorldClock();
 
@@ -4443,9 +4563,189 @@ class _WorldClockState extends State<_WorldClock>
   }
 }
 
-/// Streams a bounded random-walk series into [builder] on a ticker, so chart
-/// examples animate in the docs. The shown code stays the plain static widget
-/// (see each example's `code` override).
+// Chart demos stream like a live dashboard: a timer updates their simulated
+// readings every 160 ms.
+
+class _SparklineExample extends StatefulWidget {
+  const _SparklineExample();
+
+  @override
+  State<_SparklineExample> createState() => _SparklineExampleState();
+}
+
+class _SparklineExampleState extends State<_SparklineExample> {
+  final _random = Random(5);
+  late final Timer _timer;
+  late List<num> _requests;
+  var _tick = 0;
+
+  // Simulated requests per second: a slow swing around 10, plus some noise.
+  num _read() => (10 + 6 * sin(_tick++ / 4)).round() + _random.nextInt(5) - 2;
+
+  @override
+  void initState() {
+    super.initState();
+    _requests = [for (var i = 0; i < 28; i++) _read()];
+    // Every 160 ms, drop the oldest reading and add a new one.
+    _timer = Timer.periodic(const Duration(milliseconds: 160), (_) {
+      setState(() => _requests = [..._requests.skip(1), _read()]);
+    });
+  }
+
+  @override
+  void dispose() {
+    _timer.cancel();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) => Sparkline(
+    data: _requests,
+    color: Theme.of(context).colorScheme.success,
+    showValue: true,
+  );
+}
+
+class _LineChartExample extends StatefulWidget {
+  const _LineChartExample();
+
+  @override
+  State<_LineChartExample> createState() => _LineChartExampleState();
+}
+
+class _LineChartExampleState extends State<_LineChartExample> {
+  final _random = Random(5);
+  late final Timer _timer;
+  late List<num> _load;
+  var _tick = 0;
+
+  // Simulated CPU load: a slow swing around 50%, plus some noise.
+  num _read() => 50 + 30 * sin(_tick++ / 6) + _random.nextInt(11) - 5;
+
+  @override
+  void initState() {
+    super.initState();
+    _load = [for (var i = 0; i < 40; i++) _read()];
+    // Every 160 ms, drop the oldest reading and add a new one.
+    _timer = Timer.periodic(const Duration(milliseconds: 160), (_) {
+      setState(() => _load = [..._load.skip(1), _read()]);
+    });
+  }
+
+  @override
+  void dispose() {
+    _timer.cancel();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) => LineChart(
+    series: [
+      LineSeries(
+        [for (final (i, load) in _load.indexed) (i, load)],
+        label: 'load',
+        color: Theme.of(context).colorScheme.primary,
+      ),
+    ],
+    showAxes: true,
+    showLegend: true,
+    yRange: const (0, 100),
+  );
+}
+
+class _AreaChartExample extends StatefulWidget {
+  const _AreaChartExample();
+
+  @override
+  State<_AreaChartExample> createState() => _AreaChartExampleState();
+}
+
+class _AreaChartExampleState extends State<_AreaChartExample> {
+  final _random = Random(5);
+  late final Timer _timer;
+  late List<num> _load;
+  var _tick = 0;
+
+  // Simulated CPU load: a slow swing around 50%, plus some noise.
+  num _read() => 50 + 30 * sin(_tick++ / 6) + _random.nextInt(11) - 5;
+
+  @override
+  void initState() {
+    super.initState();
+    _load = [for (var i = 0; i < 40; i++) _read()];
+    // Every 160 ms, drop the oldest reading and add a new one.
+    _timer = Timer.periodic(const Duration(milliseconds: 160), (_) {
+      setState(() => _load = [..._load.skip(1), _read()]);
+    });
+  }
+
+  @override
+  void dispose() {
+    _timer.cancel();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final colors = Theme.of(context).colorScheme;
+    return AreaChart(
+      series: [
+        AreaSeries(
+          [for (final (i, load) in _load.indexed) (i, load)],
+          label: 'load',
+          // Stops run bottom to top: green at low load, red near the top.
+          gradient: [colors.success, colors.warning, colors.error],
+        ),
+      ],
+      showAxes: true,
+      showLegend: true,
+      yRange: const (0, 100),
+    );
+  }
+}
+
+class _BarChartExample extends StatefulWidget {
+  const _BarChartExample();
+
+  @override
+  State<_BarChartExample> createState() => _BarChartExampleState();
+}
+
+class _BarChartExampleState extends State<_BarChartExample> {
+  final _random = Random(5);
+  late final Timer _timer;
+  // Jobs waiting in each queue.
+  List<num> _waiting = [12, 19, 9, 22];
+
+  @override
+  void initState() {
+    super.initState();
+    // Every 160 ms, each queue gains or loses up to 2 jobs.
+    _timer = Timer.periodic(const Duration(milliseconds: 160), (_) {
+      setState(() {
+        _waiting = [
+          for (final jobs in _waiting)
+            (jobs + _random.nextInt(5) - 2).clamp(0, 30),
+        ];
+      });
+    });
+  }
+
+  @override
+  void dispose() {
+    _timer.cancel();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) => BarChart(
+    bars: [for (final (i, jobs) in _waiting.indexed) Bar('q${i + 1}', jobs)],
+    showYAxis: true,
+  );
+}
+
+/// Streams a bounded random-walk series into [builder] on a ticker, for the
+/// LineChart lab's side-by-side rendering comparisons.
 class _LiveSeries extends StatefulWidget {
   const _LiveSeries({
     required this.length,
@@ -4573,14 +4873,14 @@ TextInput(
   style: const CellStyle(foreground: Colors.cyan),
 )''';
 
-class _LocalStyleTour extends StatefulWidget {
-  const _LocalStyleTour();
+class _StyledInput extends StatefulWidget {
+  const _StyledInput();
 
   @override
-  State<_LocalStyleTour> createState() => _LocalStyleTourState();
+  State<_StyledInput> createState() => _StyledInputState();
 }
 
-class _LocalStyleTourState extends State<_LocalStyleTour> {
+class _StyledInputState extends State<_StyledInput> {
   final _query = TextEditingController(text: 'api-gateway');
 
   @override
@@ -4612,8 +4912,8 @@ Column(children: [
   ),
 ]);''';
 
-class _CellStyleTour extends StatelessWidget {
-  const _CellStyleTour();
+class _StyledText extends StatelessWidget {
+  const _StyledText();
 
   @override
   Widget build(BuildContext context) => const Column(
@@ -4650,8 +4950,8 @@ Row(
   ],
 )''';
 
-class _LocalStateTour extends StatelessWidget {
-  const _LocalStateTour();
+class _LocalFocusStyle extends StatelessWidget {
+  const _LocalFocusStyle();
 
   @override
   Widget build(BuildContext context) => Theme(
@@ -4662,28 +4962,25 @@ class _LocalStateTour extends StatelessWidget {
         focused: CellStyle(inverse: true, bold: true),
       ),
     ),
-    child: Padding(
-      padding: const EdgeInsets.all(1),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: <Widget>[
-          const Text('LOCAL INTERACTION STYLE', style: CellStyle(bold: true)),
-          const Text('Tab or click to compare focus cues'),
-          Row(
-            children: <Widget>[
-              Button(text: 'Theme focus', autofocus: true, onPressed: () {}),
-              const SizedBox(width: 2),
-              Button(
-                text: 'Local focus',
-                style: const CellStyle.interactive(
-                  focused: CellStyle(foreground: Colors.cyan, underline: true),
-                ),
-                onPressed: () {},
+    child: Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: <Widget>[
+        const Text('LOCAL INTERACTION STYLE', style: CellStyle(bold: true)),
+        const Text('Tab or click to compare focus cues'),
+        Row(
+          children: <Widget>[
+            Button(text: 'Theme focus', autofocus: true, onPressed: () {}),
+            const SizedBox(width: 2),
+            Button(
+              text: 'Local focus',
+              style: const CellStyle.interactive(
+                focused: CellStyle(foreground: Colors.cyan, underline: true),
               ),
-            ],
-          ),
-        ],
-      ),
+              onPressed: () {},
+            ),
+          ],
+        ),
+      ],
     ),
   );
 }
@@ -4699,14 +4996,14 @@ FormField(
   ),
 )''';
 
-class _InvalidNoneTour extends StatefulWidget {
-  const _InvalidNoneTour();
+class _NeutralInvalidField extends StatefulWidget {
+  const _NeutralInvalidField();
 
   @override
-  State<_InvalidNoneTour> createState() => _InvalidNoneTourState();
+  State<_NeutralInvalidField> createState() => _NeutralInvalidFieldState();
 }
 
-class _InvalidNoneTourState extends State<_InvalidNoneTour> {
+class _NeutralInvalidFieldState extends State<_NeutralInvalidField> {
   final _form = FormController();
   final _query = TextEditingController();
 
@@ -4718,32 +5015,29 @@ class _InvalidNoneTourState extends State<_InvalidNoneTour> {
   }
 
   @override
-  Widget build(BuildContext context) => Padding(
-    padding: const EdgeInsets.all(1),
-    child: Form(
-      controller: _form,
-      onSubmit: () {},
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: <Widget>[
-          const Text('NEUTRAL INVALID CHROME', style: CellStyle(bold: true)),
-          const Text('Submit empty: the message stays visible'),
-          FormField(
-            validator: () => _query.text.isEmpty ? 'Enter a query.' : null,
-            child: SizedBox(
-              width: 30,
-              child: TextInput(
-                controller: _query,
-                autofocus: true,
-                semanticLabel: 'Query',
-                placeholder: 'Query',
-                style: const CellStyle.interactive(invalid: CellStyle.none),
-              ),
+  Widget build(BuildContext context) => Form(
+    controller: _form,
+    onSubmit: () {},
+    child: Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: <Widget>[
+        const Text('NEUTRAL INVALID CHROME', style: CellStyle(bold: true)),
+        const Text('Submit empty: the message stays visible'),
+        FormField(
+          validator: () => _query.text.isEmpty ? 'Enter a query.' : null,
+          child: SizedBox(
+            width: 30,
+            child: TextInput(
+              controller: _query,
+              autofocus: true,
+              semanticLabel: 'Query',
+              placeholder: 'Query',
+              style: const CellStyle.interactive(invalid: CellStyle.none),
             ),
           ),
-          Button(text: 'Submit', onPressed: _form.submit),
-        ],
-      ),
+        ),
+        Button(text: 'Submit', onPressed: _form.submit),
+      ],
     ),
   );
 }
@@ -4863,93 +5157,96 @@ const interactions = CellStyle.interactive(
 
 /// Exposed for the guide/source/live parity test.
 CellStyle get interactiveStyleForTest => _interactiveStyle;
+
+/// Exposed so a test can check the legend describes any edited style.
+String describeInteractiveStyleForTest(CellStyle style) =>
+    _InteractiveStyleTour._describe(style);
 String get interactiveStyleSourceForTest => _interactiveStylesSource;
 
 /// Visual legend for the styles carried by one interaction-aware value.
 class _InteractiveStyleTour extends StatelessWidget {
   const _InteractiveStyleTour();
 
+  static const _ansiNames = <String>[
+    'black',
+    'red',
+    'green',
+    'yellow',
+    'blue',
+    'magenta',
+    'cyan',
+    'white',
+  ];
+
+  /// [color] in words, such as `green` or `bright blue`.
+  static String _colorName(Color color) => color is AnsiColor
+      ? '${color.index < 8 ? '' : 'bright '}${_ansiNames[color.index % 8]}'
+      : '$color';
+
+  /// [style] in words, such as `green on blue + bold`, so each row's label
+  /// describes the style it is drawn with.
+  static String _describe(CellStyle style) {
+    final foreground = style.foreground;
+    final background = style.background;
+    final parts = [
+      if (foreground != null || background != null)
+        [
+          if (foreground != null) _colorName(foreground),
+          if (background != null) 'on ${_colorName(background)}',
+        ].join(' '),
+      if (style.inverse) 'inverse',
+      if (style.bold) 'bold',
+      if (style.dim) 'dim',
+      if (style.italic) 'italic',
+      if (style.underline) 'underline',
+      if (style.strikethrough) 'strikethrough',
+    ];
+    return parts.isEmpty ? 'ordinary control paint' : parts.join(' + ');
+  }
+
   @override
   Widget build(BuildContext context) {
-    final outer = Theme.of(context);
+    // Each state's row is drawn and labeled with what _interactiveStyle
+    // resolves to for that state, so editing the style updates both.
+    final states = <String, CellStyle>{
+      'base': CellStyle.resolve(cascade: [_interactiveStyle]),
+      'focused': CellStyle.resolve(cascade: [_interactiveStyle], focused: true),
+      'hovered': CellStyle.resolve(cascade: [_interactiveStyle], hovered: true),
+      'selected': CellStyle.resolve(
+        cascade: [_interactiveStyle],
+        selected: true,
+      ),
+      'invalid': CellStyle.resolve(cascade: [_interactiveStyle], invalid: true),
+      'disabled': CellStyle.resolve(
+        cascade: [_interactiveStyle],
+        disabled: true,
+      ),
+    };
     return Theme(
-      data: outer.copyWith(interactiveStyle: _interactiveStyle),
-      child: Padding(
-        padding: const EdgeInsets.all(1),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: <Widget>[
-            Text('INTERACTION STYLES', style: CellStyle(bold: true)),
-            SizedBox(height: 1),
-            Text('base      ordinary control paint'),
-            Text(
-              'focused   inverse + bold',
-              style: CellStyle.resolve(
-                cascade: [_interactiveStyle],
-                focused: true,
-              ),
-            ),
-            Text(
-              'hovered   underline',
-              style: CellStyle.resolve(
-                cascade: [_interactiveStyle],
-                hovered: true,
-              ),
-            ),
-            Text(
-              'selected  green + bold',
-              style: CellStyle.resolve(
-                cascade: [_interactiveStyle],
-                selected: true,
-              ),
-            ),
-            Text(
-              'invalid   red + underline',
-              style: CellStyle.resolve(
-                cascade: [_interactiveStyle],
-                invalid: true,
-              ),
-            ),
-            Text(
-              'disabled  dim',
-              style: CellStyle.resolve(
-                cascade: [_interactiveStyle],
-                disabled: true,
-              ),
-            ),
-          ],
-        ),
+      data: Theme.of(context).copyWith(interactiveStyle: _interactiveStyle),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: <Widget>[
+          const Text('INTERACTION STYLES', style: CellStyle(bold: true)),
+          const SizedBox(height: 1),
+          for (final MapEntry(key: state, value: style) in states.entries)
+            Text('${state.padRight(10)}${_describe(style)}', style: style),
+        ],
       ),
     );
   }
 }
 
-class _SnapshotLoadingTour extends StatelessWidget {
-  const _SnapshotLoadingTour();
+class _PhotoPreview extends StatefulWidget {
+  const _PhotoPreview();
 
   @override
-  Widget build(BuildContext context) => _framed(
-    const Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: <Widget>[
-        Text('PREVIEW ASYNC UI', style: CellStyle(bold: true)),
-        loading.SnapshotExplorer(),
-      ],
-    ),
-  );
-}
-
-class _NetworkImageLoadingTour extends StatefulWidget {
-  const _NetworkImageLoadingTour();
-
-  @override
-  State<_NetworkImageLoadingTour> createState() =>
-      _NetworkImageLoadingTourState();
+  State<_PhotoPreview> createState() => _PhotoPreviewState();
 }
 
 /// Mounts the photo viewer only after the reader asks for it, so opening a
 /// page that embeds this demo sends no request to the photo service.
-class _NetworkImageLoadingTourState extends State<_NetworkImageLoadingTour> {
+class _PhotoPreviewState extends State<_PhotoPreview> {
   var _seed = 0;
   var _started = false;
 
@@ -4966,21 +5263,6 @@ class _NetworkImageLoadingTourState extends State<_NetworkImageLoadingTour> {
             ),
           ],
         );
-}
-
-class _StreamLoadingTour extends StatelessWidget {
-  const _StreamLoadingTour();
-
-  @override
-  Widget build(BuildContext context) => _framed(
-    const Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: <Widget>[
-        Text('STAR MAP TRANSMISSION', style: CellStyle(bold: true)),
-        loading.TransmissionView(),
-      ],
-    ),
-  );
 }
 
 class _OrbitalCourier extends StatefulWidget {
@@ -5368,10 +5650,6 @@ class _ConnectionStatusState extends State<_ConnectionStatus> {
   );
 }
 
-enum _EntryEffectChoice { fade, slide, wipe, expand }
-
-enum _ExitEffectChoice { fade, slide, wipe, shrink }
-
 class _EffectPicker extends StatefulWidget {
   const _EffectPicker();
 
@@ -5380,149 +5658,122 @@ class _EffectPicker extends StatefulWidget {
 }
 
 class _EffectPickerState extends State<_EffectPicker> {
-  var _entry = _EntryEffectChoice.fade;
-  var _exit = _ExitEffectChoice.fade;
+  // Each choice pairs an effect with a duration that follows its distance:
+  // slides and wipes cross the 24-column sample, so they run longest.
+  static final _entrances = <String, (Effect, Duration)>{
+    'Fade in': (Effects.fadeIn(), const Duration(milliseconds: 400)),
+    'Slide in': (
+      Effects.slideIn(from: Edge.left),
+      const Duration(milliseconds: 800),
+    ),
+    'Wipe in': (
+      Effects.wipeIn(from: Edge.left),
+      const Duration(milliseconds: 800),
+    ),
+    'Expand': (Effects.expand(), const Duration(milliseconds: 300)),
+  };
+  static final _exits = <String, (Effect, Duration)>{
+    'Fade out': (Effects.fadeOut(), const Duration(milliseconds: 400)),
+    'Slide out': (
+      Effects.slideOut(to: Edge.right),
+      const Duration(milliseconds: 800),
+    ),
+    'Wipe out': (
+      Effects.wipeOut(to: Edge.right),
+      const Duration(milliseconds: 800),
+    ),
+    'Shrink': (Effects.shrink(), const Duration(milliseconds: 300)),
+  };
+
+  var _entry = 'Fade in';
+  var _exit = 'Fade out';
   var _visible = true;
 
-  Effect get _entryEffect => switch (_entry) {
-    _EntryEffectChoice.fade => Effects.fadeIn(),
-    _EntryEffectChoice.slide => Effects.slideIn(from: Edge.left),
-    _EntryEffectChoice.wipe => Effects.wipeIn(from: Edge.left),
-    _EntryEffectChoice.expand => Effects.expand(),
-  };
-
-  Effect get _exitEffect => switch (_exit) {
-    _ExitEffectChoice.fade => Effects.fadeOut(),
-    _ExitEffectChoice.slide => Effects.slideOut(to: Edge.right),
-    _ExitEffectChoice.wipe => Effects.wipeOut(to: Edge.right),
-    _ExitEffectChoice.shrink => Effects.shrink(),
-  };
-
-  Duration get _transitionDuration {
-    if (_visible) {
-      return switch (_entry) {
-        _EntryEffectChoice.fade => const Duration(milliseconds: 400),
-        _EntryEffectChoice.slide ||
-        _EntryEffectChoice.wipe => const Duration(milliseconds: 800),
-        _EntryEffectChoice.expand => const Duration(milliseconds: 300),
-      };
-    }
-    return switch (_exit) {
-      _ExitEffectChoice.fade => const Duration(milliseconds: 400),
-      _ExitEffectChoice.slide ||
-      _ExitEffectChoice.wipe => const Duration(milliseconds: 800),
-      _ExitEffectChoice.shrink => const Duration(milliseconds: 300),
-    };
-  }
-
   @override
-  Widget build(BuildContext context) => Column(
-    crossAxisAlignment: CrossAxisAlignment.start,
-    children: <Widget>[
-      const Text('ENTRANCE + EXIT LAB', style: CellStyle(bold: true)),
-      const Text('Choose a pair, then toggle the sample.'),
-      const SizedBox(height: 1),
-      Row(
-        children: <Widget>[
-          SizedBox(
-            width: 25,
-            child: Column(
+  Widget build(BuildContext context) {
+    final (enter, enterDuration) = _entrances[_entry]!;
+    final (exit, exitDuration) = _exits[_exit]!;
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: <Widget>[
+        const Text('ENTRANCE + EXIT LAB', style: CellStyle(bold: true)),
+        const Text('Choose a pair, then toggle the sample.'),
+        const SizedBox(height: 1),
+        Row(
+          children: <Widget>[
+            SizedBox(
+              width: 25,
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: <Widget>[
+                  const Text('ENTER'),
+                  Select<String>(
+                    semanticLabel: 'Entrance effect',
+                    autofocus: true,
+                    value: _entry,
+                    options: [
+                      for (final label in _entrances.keys)
+                        SelectOption(value: label, label: label),
+                    ],
+                    onChanged: (value) => setState(() => _entry = value),
+                  ),
+                ],
+              ),
+            ),
+            SizedBox(
+              width: 25,
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: <Widget>[
+                  const Text('EXIT'),
+                  Select<String>(
+                    semanticLabel: 'Exit effect',
+                    value: _exit,
+                    options: [
+                      for (final label in _exits.keys)
+                        SelectOption(value: label, label: label),
+                    ],
+                    onChanged: (value) => setState(() => _exit = value),
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
+        const SizedBox(height: 1),
+        Button(
+          text: _visible ? 'Hide sample' : 'Show sample',
+          onPressed: () => setState(() => _visible = !_visible),
+        ),
+        const SizedBox(height: 1),
+        AnimatedVisibility(
+          visible: _visible,
+          enter: enter,
+          exit: exit,
+          // The transition that is starting decides the duration.
+          duration: _visible ? enterDuration : exitDuration,
+          curve: Curves.linear,
+          child: Container(
+            width: 24,
+            border: BoxBorder(style: Theme.of(context).borderStyle),
+            padding: const EdgeInsets.symmetric(horizontal: 1),
+            child: const Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: <Widget>[
-                const Text('ENTER'),
-                Select<_EntryEffectChoice>(
-                  semanticLabel: 'Entrance effect',
-                  autofocus: true,
-                  value: _entry,
-                  options: const <SelectOption<_EntryEffectChoice>>[
-                    SelectOption(
-                      value: _EntryEffectChoice.fade,
-                      label: 'Fade in',
-                    ),
-                    SelectOption(
-                      value: _EntryEffectChoice.slide,
-                      label: 'Slide in',
-                    ),
-                    SelectOption(
-                      value: _EntryEffectChoice.wipe,
-                      label: 'Wipe in',
-                    ),
-                    SelectOption(
-                      value: _EntryEffectChoice.expand,
-                      label: 'Expand',
-                    ),
-                  ],
-                  onChanged: (value) => setState(() => _entry = value),
-                ),
+                Text('DEPLOY PREVIEW', style: CellStyle(bold: true)),
+                Text('✓ Resolve'),
+                Text('✓ Analyze'),
+                Text('✓ Test'),
+                Text('✓ Package'),
+                Text('✓ Sign'),
+                Text('✓ Publish'),
               ],
             ),
-          ),
-          SizedBox(
-            width: 25,
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: <Widget>[
-                const Text('EXIT'),
-                Select<_ExitEffectChoice>(
-                  semanticLabel: 'Exit effect',
-                  value: _exit,
-                  options: const <SelectOption<_ExitEffectChoice>>[
-                    SelectOption(
-                      value: _ExitEffectChoice.fade,
-                      label: 'Fade out',
-                    ),
-                    SelectOption(
-                      value: _ExitEffectChoice.slide,
-                      label: 'Slide out',
-                    ),
-                    SelectOption(
-                      value: _ExitEffectChoice.wipe,
-                      label: 'Wipe out',
-                    ),
-                    SelectOption(
-                      value: _ExitEffectChoice.shrink,
-                      label: 'Shrink',
-                    ),
-                  ],
-                  onChanged: (value) => setState(() => _exit = value),
-                ),
-              ],
-            ),
-          ),
-        ],
-      ),
-      const SizedBox(height: 1),
-      Button(
-        text: _visible ? 'Hide sample' : 'Show sample',
-        onPressed: () => setState(() => _visible = !_visible),
-      ),
-      const SizedBox(height: 1),
-      AnimatedVisibility(
-        visible: _visible,
-        enter: _entryEffect,
-        exit: _exitEffect,
-        duration: _transitionDuration,
-        curve: Curves.linear,
-        child: Container(
-          width: 24,
-          border: BoxBorder(style: Theme.of(context).borderStyle),
-          padding: const EdgeInsets.symmetric(horizontal: 1),
-          child: const Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: <Widget>[
-              Text('DEPLOY PREVIEW', style: CellStyle(bold: true)),
-              Text('✓ Resolve'),
-              Text('✓ Analyze'),
-              Text('✓ Test'),
-              Text('✓ Package'),
-              Text('✓ Sign'),
-              Text('✓ Publish'),
-            ],
           ),
         ),
-      ),
-    ],
-  );
+      ],
+    );
+  }
 }
 
 class _PilotValidation extends StatefulWidget {
@@ -5748,94 +5999,98 @@ class _TickerSimulationState extends State<_TickerSimulation>
   }
 }
 
+/// Two panes side by side when there is room, stacked when there is not.
+class _Workspace extends StatelessWidget {
+  const _Workspace();
+
+  @override
+  Widget build(BuildContext context) {
+    const files = Panel(
+      title: 'Files',
+      child: Padding(
+        padding: EdgeInsets.all(1),
+        child: Text('README.md\nlib/\ntest/'),
+      ),
+    );
+    const preview = Panel(
+      title: 'Preview',
+      child: Padding(
+        padding: EdgeInsets.all(1),
+        child: Text('# Fleury\n\nA framework for terminal apps.'),
+      ),
+    );
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final wide = (constraints.maxCols ?? 0) >= 60;
+        return Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            Text(
+              wide ? 'WIDE · TWO PANES' : 'NARROW · STACKED',
+              style: const CellStyle(bold: true),
+            ),
+            const SizedBox(height: 1),
+            Expanded(
+              child: wide
+                  ? const Row(
+                      crossAxisAlignment: CrossAxisAlignment.stretch,
+                      children: [
+                        Expanded(flex: 2, child: files),
+                        SizedBox(width: 1),
+                        Expanded(flex: 3, child: preview),
+                      ],
+                    )
+                  : const Column(
+                      crossAxisAlignment: CrossAxisAlignment.stretch,
+                      children: [
+                        Expanded(child: files),
+                        SizedBox(height: 1),
+                        Expanded(child: preview),
+                      ],
+                    ),
+            ),
+          ],
+        );
+      },
+    );
+  }
+}
+
 /// A local-breakpoint demo: its buttons change only the child envelope, so the
 /// LayoutBuilder proves that panes adapt to parent constraints rather than the
 /// global browser or terminal size.
-class _ResponsiveWorkspaceTour extends StatefulWidget {
-  const _ResponsiveWorkspaceTour();
+class _ResizableWorkspace extends StatefulWidget {
+  const _ResizableWorkspace();
 
   @override
-  State<_ResponsiveWorkspaceTour> createState() =>
-      _ResponsiveWorkspaceTourState();
+  State<_ResizableWorkspace> createState() => _ResizableWorkspaceState();
 }
 
-class _ResponsiveWorkspaceTourState extends State<_ResponsiveWorkspaceTour> {
+class _ResizableWorkspaceState extends State<_ResizableWorkspace> {
+  // The buttons stand in for a resize: in an app, the terminal or the
+  // surrounding layout decides how wide the workspace is.
   var _width = 68;
 
-  Widget _files() => const Panel(
-    title: 'Files',
-    child: Padding(
-      padding: EdgeInsets.all(1),
-      child: Text('README.md\nlib/\ntest/'),
-    ),
-  );
-
-  Widget _preview() => const Panel(
-    title: 'Preview',
-    child: Padding(
-      padding: EdgeInsets.all(1),
-      child: Text('# Fleury\n\nA framework for terminal apps.'),
-    ),
-  );
-
   @override
-  Widget build(BuildContext context) => _framed(
-    Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Row(
-          children: [
-            Button(
-              text: 'Narrow',
-              autofocus: true,
-              onPressed: () => setState(() => _width = 42),
-            ),
-            const SizedBox(width: 1),
-            Button(text: 'Wide', onPressed: () => setState(() => _width = 68)),
-          ],
-        ),
-        const SizedBox(height: 1),
-        Expanded(
-          child: SizedBox(
-            width: _width,
-            child: LayoutBuilder(
-              builder: (context, constraints) {
-                final wide = (constraints.maxCols ?? 0) >= 60;
-                return Column(
-                  crossAxisAlignment: CrossAxisAlignment.stretch,
-                  children: [
-                    Text(
-                      wide ? 'WIDE · TWO PANES' : 'NARROW · STACKED',
-                      style: const CellStyle(bold: true),
-                    ),
-                    const SizedBox(height: 1),
-                    Expanded(
-                      child: wide
-                          ? Row(
-                              crossAxisAlignment: CrossAxisAlignment.stretch,
-                              children: [
-                                Expanded(flex: 2, child: _files()),
-                                const SizedBox(width: 1),
-                                Expanded(flex: 3, child: _preview()),
-                              ],
-                            )
-                          : Column(
-                              crossAxisAlignment: CrossAxisAlignment.stretch,
-                              children: [
-                                Expanded(child: _files()),
-                                const SizedBox(height: 1),
-                                Expanded(child: _preview()),
-                              ],
-                            ),
-                    ),
-                  ],
-                );
-              },
-            ),
+  Widget build(BuildContext context) => Column(
+    crossAxisAlignment: CrossAxisAlignment.start,
+    children: [
+      Row(
+        children: [
+          Button(
+            text: 'Narrow',
+            autofocus: true,
+            onPressed: () => setState(() => _width = 42),
           ),
-        ),
-      ],
-    ),
+          const SizedBox(width: 1),
+          Button(text: 'Wide', onPressed: () => setState(() => _width = 68)),
+        ],
+      ),
+      const SizedBox(height: 1),
+      Expanded(
+        child: SizedBox(width: _width, child: const _Workspace()),
+      ),
+    ],
   );
 }
 
@@ -6313,64 +6568,62 @@ class _FocusExplorerTourState extends State<_FocusExplorerTour> {
       );
 
   @override
-  Widget build(BuildContext context) => _framed(
-    Column(
-      crossAxisAlignment: CrossAxisAlignment.stretch,
-      children: [
-        const Text(
-          'AUTOMATIC · TAB READS · ARROWS MOVE',
-          style: CellStyle(bold: true),
-        ),
-        Text('active: $_activeRegion', style: const CellStyle(dim: true)),
-        const SizedBox(height: 1),
-        Expanded(
-          child: Row(
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              Expanded(
-                child: _region(
-                  name: 'Files',
-                  controls: [
-                    _actionButton(
-                      label: 'New file',
-                      autofocus: true,
-                      onPressed: () => _act('Created a file'),
-                    ),
-                    _actionButton(
-                      label: 'Open file',
-                      onPressed: () => _act('Opened a file'),
-                    ),
-                    _actionButton(
-                      label: 'Settings',
-                      onPressed: () => _act('Opened settings'),
-                    ),
-                  ],
-                ),
+  Widget build(BuildContext context) => Column(
+    crossAxisAlignment: CrossAxisAlignment.stretch,
+    children: [
+      const Text(
+        'AUTOMATIC · TAB READS · ARROWS MOVE',
+        style: CellStyle(bold: true),
+      ),
+      Text('active: $_activeRegion', style: const CellStyle(dim: true)),
+      const SizedBox(height: 1),
+      Expanded(
+        child: Row(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            Expanded(
+              child: _region(
+                name: 'Files',
+                controls: [
+                  _actionButton(
+                    label: 'New file',
+                    autofocus: true,
+                    onPressed: () => _act('Created a file'),
+                  ),
+                  _actionButton(
+                    label: 'Open file',
+                    onPressed: () => _act('Opened a file'),
+                  ),
+                  _actionButton(
+                    label: 'Settings',
+                    onPressed: () => _act('Opened settings'),
+                  ),
+                ],
               ),
-              const SizedBox(width: 2),
-              Expanded(
-                child: _region(
-                  name: 'Preview',
-                  controls: [
-                    _actionButton(
-                      label: 'Refresh',
-                      onPressed: () => _act('Refreshed preview'),
-                    ),
-                    _actionButton(
-                      label: 'Inspect',
-                      onPressed: () => _act('Opened inspector'),
-                    ),
-                    _actionButton(label: 'Publish…', onPressed: _openDialog),
-                  ],
-                ),
+            ),
+            const SizedBox(width: 2),
+            Expanded(
+              child: _region(
+                name: 'Preview',
+                controls: [
+                  _actionButton(
+                    label: 'Refresh',
+                    onPressed: () => _act('Refreshed preview'),
+                  ),
+                  _actionButton(
+                    label: 'Inspect',
+                    onPressed: () => _act('Opened inspector'),
+                  ),
+                  _actionButton(label: 'Publish…', onPressed: _openDialog),
+                ],
               ),
-            ],
-          ),
+            ),
+          ],
         ),
-        const SizedBox(height: 1),
-        Text('last: $_lastAction'),
-      ],
-    ),
+      ),
+      const SizedBox(height: 1),
+      Text('last: $_lastAction'),
+    ],
   );
 }
 
@@ -6617,7 +6870,7 @@ class _KeyBindingsTourState extends State<_KeyBindingsTour> {
               child: Text(_last, style: const CellStyle(bold: true)),
             ),
             Expanded(
-              child: ListViewSelectionDemoRows(row: _row, saved: _saved),
+              child: _ItemRows(count: _count, row: _row, saved: _saved),
             ),
             const KeyHintBar(),
           ],
@@ -6627,21 +6880,24 @@ class _KeyBindingsTourState extends State<_KeyBindingsTour> {
   }
 }
 
-/// Seven rows: one highlighted (the j/k cursor), any bookmarked (★, Ctrl+S).
-class ListViewSelectionDemoRows extends StatelessWidget {
-  const ListViewSelectionDemoRows({
-    super.key,
+/// [count] rows: one highlighted (the j/k cursor), any bookmarked (★, Ctrl+S).
+class _ItemRows extends StatelessWidget {
+  const _ItemRows({
+    required this.count,
     required this.row,
     this.saved = const <int>{},
   });
+
+  final int count;
   final int row;
   final Set<int> saved;
+
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     return Column(
       children: [
-        for (var i = 0; i < 7; i++)
+        for (var i = 0; i < count; i++)
           Text(
             '${i == row ? '▸' : ' '} ${saved.contains(i) ? '★' : ' '} '
             'item ${i + 1}',

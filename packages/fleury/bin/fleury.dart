@@ -25,9 +25,10 @@
 //
 //   # In VSCode / IntelliJ, F5 your app as you normally would.
 //   # The app auto-detects `.fleury/handle` and connects.
-//   # Terminal A shows the TUI and sends it every key; the IDE keeps the
-//   # debugger console. Each run attaches in turn; Ctrl+C in terminal A
-//   # quits the shell while no app is attached.
+//   # Terminal A shows the TUI and sends it every key, and the mouse when the
+//   # app's TerminalMode asks for it; the IDE keeps the debugger console.
+//   # Each run attaches in turn; Ctrl+C in terminal A quits the shell while
+//   # no app is attached.
 
 import 'dart:async';
 import 'dart:convert';
@@ -371,6 +372,9 @@ Future<int> _runShell(List<String> args) async {
     }
     final ended = switch (end.reason) {
       ShellSessionEndReason.failed => 'the session failed (${end.error})',
+      // Says why, and how to run a shell that matches the app.
+      ShellSessionEndReason.handshakeFailed =>
+        'the app could not attach: ${end.error}',
       ShellSessionEndReason.appDisconnected => 'the app disconnected',
       _ => 'the app exited',
     };

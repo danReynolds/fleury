@@ -111,6 +111,7 @@ Future<List<String>>? futureFor(SnapshotPreview preview) => switch (preview) {
 }
 // #enddocregion describe
 
+// #docregion card
 class AsyncStateCard extends StatelessWidget {
   const AsyncStateCard({super.key, required this.snapshot});
 
@@ -147,6 +148,7 @@ class AsyncStateCard extends StatelessWidget {
     );
   }
 }
+// #enddocregion card
 
 class SnapshotExplorer extends StatefulWidget {
   const SnapshotExplorer({super.key});

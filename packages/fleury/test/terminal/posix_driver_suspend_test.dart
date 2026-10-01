@@ -123,6 +123,8 @@ void main() {
     }
   });
 
+  // Faked stdio is no job of the test process's terminal: each driver below
+  // says whether a job-control shell started its session (shellJobOverride).
   group('requestCtrlZSuspend', () {
     test('suspends a live native session that owns Ctrl+Z', () async {
       final input = _FakeStdin(hasTerminal: true);
@@ -131,6 +133,7 @@ void main() {
         stdinOverride: input,
         stdoutOverride: _RecordingStdout(),
         terminalModeController: _RawMode(),
+        shellJobOverride: true,
         selfStopOverride: () {
           stops++;
           return true;
@@ -168,6 +171,7 @@ void main() {
         stdoutOverride: _RecordingStdout(),
         suspendOnCtrlZ: false,
         terminalModeController: _RawMode(),
+        shellJobOverride: true,
         selfStopOverride: () {
           stops++;
           return true;
@@ -192,6 +196,7 @@ void main() {
       final driver = PosixTerminalDriver(
         stdinOverride: input,
         stdoutOverride: _RecordingStdout(),
+        shellJobOverride: true,
         selfStopOverride: () {
           stops++;
           return true;
@@ -208,6 +213,33 @@ void main() {
       }
     });
 
+    test('declines when no job-control shell started the session', () async {
+      // A terminal emulator, a tmux pane, or `ssh -t host app` runs the app
+      // directly: nothing would continue a stopped job, so Ctrl+Z stays a key.
+      final input = _FakeStdin(hasTerminal: true);
+      var stops = 0;
+      final driver = PosixTerminalDriver(
+        stdinOverride: input,
+        stdoutOverride: _RecordingStdout(),
+        terminalModeController: _RawMode(),
+        shellJobOverride: false,
+        selfStopOverride: () {
+          stops++;
+          return true;
+        },
+      );
+      try {
+        await driver.enter(TerminalMode.interactive);
+        expect(requestCtrlZSuspend(driver), isFalse);
+        await Future<void>.delayed(Duration.zero);
+        expect(stops, 0);
+        expect(driver.debugSuspended, isFalse);
+      } finally {
+        await driver.restore();
+        await input.close();
+      }
+    });
+
     test('declines for a driver without job control', () async {
       final driver = FakeTerminalDriver();
       await driver.enter(TerminalMode.interactive);
@@ -215,6 +247,186 @@ void main() {
       await driver.restore();
       await driver.dispose();
     });
+  });
+
+  // The application's own request: the route to job control for an app whose
+  // focused text field takes every Ctrl+Z. It runs the same routine an
+  // unhandled Ctrl+Z does. Here `selfStopOverride` stands in for the SIGSTOP,
+  // so a request completes once the job "stopped"; in production the stop
+  // returns only after `fg`, and the request completes after the re-entry
+  // (test/integration/job_control_pty_test.dart proves that half).
+  group('TerminalSession.suspend on the native driver', () {
+    late _FakeStdin input;
+    late _RecordingStdout output;
+    late int stops;
+    late bool stopTakes;
+
+    PosixTerminalDriver nativeDriver({
+      bool suspendOnCtrlZ = true,
+      bool terminalInput = true,
+      bool shellJob = true,
+    }) {
+      input = _FakeStdin(hasTerminal: terminalInput);
+      output = _RecordingStdout();
+      return PosixTerminalDriver(
+        stdinOverride: input,
+        stdoutOverride: output,
+        suspendOnCtrlZ: suspendOnCtrlZ,
+        terminalModeController: _RawMode(),
+        shellJobOverride: shellJob,
+        selfStopOverride: () {
+          stops++;
+          return stopTakes;
+        },
+      );
+    }
+
+    setUp(() {
+      stops = 0;
+      stopTakes = true;
+    });
+
+    test('suspends a live session and completes with true', () async {
+      final driver = nativeDriver();
+      final session = TerminalSession(driver);
+      try {
+        await driver.enter(TerminalMode.interactive);
+        expect(session.supportsSuspend, isTrue);
+
+        expect(await session.suspend(), isTrue);
+        expect(stops, 1);
+        expect(driver.debugSuspended, isTrue, reason: 'frames are gated');
+
+        await driver.debugResume(); // `fg`
+        expect(driver.debugSuspended, isFalse);
+        await driver.restore();
+        expect(
+          await session.suspend(),
+          isFalse,
+          reason: 'an ended session has no terminal to give the shell',
+        );
+        expect(stops, 1);
+      } finally {
+        await driver.restore();
+        await input.close();
+      }
+    });
+
+    test('suspendOnCtrlZ: false does not refuse it', () async {
+      // The flag turns off the unhandled-press fallback. An app that owns
+      // Ctrl+Z still decides when to suspend: it calls this.
+      final driver = nativeDriver(suspendOnCtrlZ: false);
+      try {
+        await driver.enter(TerminalMode.interactive);
+        expect(requestCtrlZSuspend(driver), isFalse);
+        expect(stops, 0, reason: 'the unhandled press stays an ordinary key');
+
+        final session = TerminalSession(driver);
+        expect(session.supportsSuspend, isTrue);
+        expect(await session.suspend(), isTrue);
+        expect(stops, 1);
+        expect(driver.debugSuspended, isTrue);
+      } finally {
+        await driver.restore();
+        await input.close();
+      }
+    });
+
+    test('a request while a suspension is under way joins it', () async {
+      final driver = nativeDriver();
+      final session = TerminalSession(driver);
+      try {
+        await driver.enter(TerminalMode.interactive);
+        final first = session.suspend();
+        final second = session.suspend();
+        expect(requestCtrlZSuspend(driver), isTrue, reason: 'Ctrl+Z joins too');
+
+        expect(await first, isTrue);
+        expect(await second, isTrue);
+        expect(stops, 1, reason: 'one job stop, not three');
+      } finally {
+        await driver.restore();
+        await input.close();
+      }
+    });
+
+    test('declines while a handoff holds the terminal', () async {
+      final driver = nativeDriver();
+      final session = TerminalSession(driver);
+      try {
+        await driver.enter(TerminalMode.interactive);
+        bool? duringHandoff;
+        await session.runWithHandoff(() async {
+          duringHandoff = await session.suspend();
+        });
+
+        expect(duringHandoff, isFalse, reason: 'the child owns the terminal');
+        expect(stops, 0);
+        expect(driver.debugSuspended, isFalse);
+        driver.write('FRAME');
+        expect(output.written.toString(), contains('FRAME'));
+      } finally {
+        await driver.restore();
+        await input.close();
+      }
+    });
+
+    test('declines without native raw mode, where the kernel owns job '
+        'control', () async {
+      // Standard input is not a terminal. The driver's test seam could stop
+      // even so (the F7 tests below rely on that); the request must not.
+      final driver = nativeDriver(terminalInput: false);
+      final session = TerminalSession(driver);
+      try {
+        await driver.enter(TerminalMode.interactive);
+        expect(session.supportsSuspend, isFalse);
+        expect(await session.suspend(), isFalse);
+        expect(stops, 0);
+        expect(driver.debugSuspended, isFalse);
+      } finally {
+        await driver.restore();
+        await input.close();
+      }
+    });
+
+    test('declines, and supportsSuspend is false, when no job-control shell '
+        'started the session', () async {
+      final driver = nativeDriver(shellJob: false);
+      final session = TerminalSession(driver);
+      try {
+        await driver.enter(TerminalMode.interactive);
+        expect(session.supportsSuspend, isFalse);
+        expect(await session.suspend(), isFalse);
+        expect(stops, 0);
+        expect(driver.debugSuspended, isFalse);
+        driver.write('FRAME');
+        expect(output.written.toString(), contains('FRAME'));
+      } finally {
+        await driver.restore();
+        await input.close();
+      }
+    });
+
+    test(
+      'a stop that does not take completes with false and re-enters',
+      () async {
+        final driver = nativeDriver();
+        final session = TerminalSession(driver);
+        try {
+          await driver.enter(TerminalMode.interactive);
+          stopTakes = false;
+
+          expect(await session.suspend(), isFalse);
+          expect(stops, 1, reason: 'the stop was attempted');
+          expect(driver.debugSuspended, isFalse, reason: 'still running');
+          driver.write('STILL-ALIVE');
+          expect(output.written.toString(), contains('STILL-ALIVE'));
+        } finally {
+          await driver.restore();
+          await input.close();
+        }
+      },
+    );
   });
 
   test('applications can own Ctrl+Z without driver self-suspension', () async {

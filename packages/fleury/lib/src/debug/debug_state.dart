@@ -239,7 +239,7 @@ class DebugController extends Notifier {
     notify();
   }
 
-  /// F11 — docked ↔ fullscreen. No-op when off. (Ctrl+G only opens and
+  /// F11 or `f` — docked ↔ fullscreen. No-op when off. (Ctrl+G only opens and
   /// closes the shell; see [toggleOnOff].)
   void toggleExpand() {
     _checkNotDisposed();

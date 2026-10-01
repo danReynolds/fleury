@@ -650,6 +650,176 @@ void main() {
       );
     });
   });
+
+  group('INIT protocol declaration', () {
+    InitFrame decode(String body) =>
+        (FrameDecoder()..feed(_rawFrame(FrameType.init, utf8.encode(body))))
+                .drain()
+                .single
+            as InitFrame;
+
+    Matcher rejects(String message) => throwsA(
+      isA<RemoteProtocolException>().having(
+        (e) => e.message,
+        'message',
+        contains(message),
+      ),
+    );
+
+    const base =
+        'cols=80,rows=24,color=truecolor,glyph=unicode,image=halfBlock,tmux=0';
+    const input =
+        'mouse=1,motion=0,paste=1,focus=0,keyboardProtocol=disambiguated';
+
+    test('a structured INIT keeps the exact bytes it had before the shell got '
+        'a version space of its own', () {
+      // The serve wire is untouched by the split: every structured peer
+      // (the browser client, fleury_mcp) still sends and reads these bytes.
+      const everything = InitFrame(
+        size: CellSize(80, 24),
+        colorMode: ColorMode.truecolor,
+        imageProtocol: ImageProtocol.halfBlock,
+        tmuxPassthrough: false,
+        images: InlineImageSupport.placements,
+        hyperlinks: true,
+        keyboard: KeyboardCapabilities.full,
+        provisional: true,
+        debugWire: false,
+      );
+      expect(
+        utf8.decode(encodeFrame(everything).sublist(5)),
+        '$base,images=placements,hyperlinks=1,keyboard=15,provisional=1,'
+        'debug=0,v=$remoteProtocolVersion',
+      );
+    });
+
+    test('the shell protocol is declared as `shell=<n>` and round-trips', () {
+      const frame = InitFrame(
+        size: CellSize(80, 24),
+        colorMode: ColorMode.truecolor,
+        imageProtocol: ImageProtocol.halfBlock,
+        tmuxPassthrough: false,
+        protocol: RemoteWireProtocol.shell,
+      );
+      expect(frame.protocolVersion, shellProtocolVersion);
+      expect(
+        utf8.decode(encodeFrame(frame).sublist(5)),
+        '$base,shell=$shellProtocolVersion',
+      );
+      final decoded = decode('$base,shell=$shellProtocolVersion');
+      expect(decoded.protocol, RemoteWireProtocol.shell);
+      expect(decoded.protocolVersion, shellProtocolVersion);
+      // A version this build does not speak still decodes: the receiver
+      // reads it to report the skew.
+      final skewed = decode('$base,shell=9');
+      expect(skewed.protocol, RemoteWireProtocol.shell);
+      expect(skewed.protocolVersion, 9);
+    });
+
+    test('an INIT declares exactly one protocol', () {
+      expect(
+        () => decode('$base,v=7,shell=2'),
+        rejects('both `v` and `shell`'),
+      );
+      expect(() => decode(base), rejects('missing `v` or `shell`'));
+      expect(() => decode('$base,shell=0'), rejects('invalid `shell`'));
+      expect(() => decode('$base,shell=two'), rejects('invalid `shell`'));
+    });
+
+    test("the app's terminal input round-trips through its answer", () {
+      for (final modes in [
+        for (final mouse in [false, true])
+          for (final motion in [false, true])
+            for (final paste in [false, true])
+              for (final focus in [false, true])
+                for (final tier in KeyboardProtocolMode.values)
+                  TerminalInputModes(
+                    mouse: mouse,
+                    mouseMotion: motion,
+                    bracketedPaste: paste,
+                    focusReporting: focus,
+                    keyboardProtocol: tier,
+                  ),
+      ]) {
+        final decoded =
+            (FrameDecoder()..feed(
+                      encodeFrame(
+                        InitFrame(
+                          size: const CellSize(80, 24),
+                          colorMode: ColorMode.truecolor,
+                          imageProtocol: ImageProtocol.halfBlock,
+                          tmuxPassthrough: false,
+                          protocol: RemoteWireProtocol.shell,
+                          terminalInput: modes,
+                        ),
+                      ),
+                    ))
+                    .drain()
+                    .single
+                as InitFrame;
+        expect(decoded.terminalInput, modes);
+      }
+      expect(
+        decode('$base,$input,shell=2').terminalInput,
+        const TerminalInputModes(
+          mouse: true,
+          mouseMotion: false,
+          bracketedPaste: true,
+          focusReporting: false,
+          keyboardProtocol: KeyboardProtocolMode.disambiguated,
+        ),
+      );
+      expect(decode('$base,shell=2').terminalInput, isNull);
+    });
+
+    test('a partial, malformed, or structured terminal input is rejected', () {
+      expect(
+        () => decode('$base,${input.replaceFirst('motion=0,', '')},shell=2'),
+        rejects('missing `motion`'),
+      );
+      expect(
+        () => decode('$base,mouse=1,shell=2'),
+        rejects('missing `motion`'),
+      );
+      expect(
+        () =>
+            decode('$base,${input.replaceFirst('mouse=1', 'mouse=2')},shell=2'),
+        rejects('invalid `mouse`'),
+      );
+      expect(
+        () => decode(
+          '$base,${input.replaceFirst('=disambiguated', '=kitty')},shell=2',
+        ),
+        rejects('invalid `keyboardProtocol`'),
+      );
+      expect(
+        () => decode('$base,$input,v=$remoteProtocolVersion'),
+        rejects('under the structured protocol'),
+      );
+    });
+
+    test('a structured INIT that carries terminal input is never encoded', () {
+      // The decoder rejects that shape, so the encoder refuses to make it.
+      expect(
+        () => encodeFrame(
+          const InitFrame(
+            size: CellSize(80, 24),
+            colorMode: ColorMode.truecolor,
+            imageProtocol: ImageProtocol.halfBlock,
+            tmuxPassthrough: false,
+            terminalInput: TerminalInputModes(
+              mouse: true,
+              mouseMotion: false,
+              bracketedPaste: true,
+              focusReporting: true,
+              keyboardProtocol: KeyboardProtocolMode.lifecycle,
+            ),
+          ),
+        ),
+        rejects('under the structured protocol'),
+      );
+    });
+  });
 }
 
 Uint8List _header(FrameType type, int payloadLength) {

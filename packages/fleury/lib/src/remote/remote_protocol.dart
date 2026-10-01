@@ -16,20 +16,41 @@
 // inside a fake ANSI sequence, which is brittle and layers terminal
 // concerns into the transport.
 //
+// Two protocols share this framing and the INIT handshake, and version
+// independently ([RemoteWireProtocol]):
+//
+//   - structured — `fleury serve`'s browser client and agent peers:
+//     presentation plans, semantics and structured input. Declared in INIT
+//     as `v=<n>`, at [remoteProtocolVersion].
+//   - shell — `fleury shell`, a real terminal relayed byte for byte: raw
+//     INPUT in, raw ANSI OUTPUT back. Declared in INIT as `shell=<n>`, at
+//     [shellProtocolVersion].
+//
 // Message types — direction is informational; nothing in the encoder
 // rejects an off-direction frame, so test harnesses can inject either
 // side:
 //
 //   Peer (shell / serve) → App
 //     0x01 INIT     payload = `cols=<n>,rows=<n>,color=<mode>,`
-//                            `glyph=<tier>,image=<protocol>,tmux=<0|1>`
+//                            `glyph=<tier>,image=<protocol>,tmux=<0|1>`, the
+//                            optional capability params, then the protocol:
+//                            `v=<n>` or `shell=<n>`
 //                   sent exactly once, before any INPUT frame
 //     0x02 INPUT    payload = raw bytes destined for stdin
 //                   (escape sequences, key chords, paste contents)
 //     0x03 RESIZE   payload = `cols=<n>,rows=<n>`
 //
 //   App → Peer
-//     0x10 OUTPUT   payload = raw ANSI bytes to render (the v1 `fleury shell`
+//     0x01 INIT     the app's answer to the peer's INIT, before anything else
+//                   it sends: the peer's own fields restated, and the same
+//                   protocol at the app's version, so the peer can confirm the
+//                   lockstep or report the skew. To `fleury shell` it also
+//                   declares the terminal input the app reads (`mouse`,
+//                   `motion`, `paste`, `focus`, `keyboardProtocol`: its
+//                   TerminalMode's input half), which the shell's terminal then
+//                   reports. The mode is fixed for the session, so it is said
+//                   once.
+//     0x10 OUTPUT   payload = raw ANSI bytes to render (the `fleury shell`
 //                            host; structured hosts emit PLAN/SEMANTICS)
 //     0x12 PLAN     payload = binary presentation plan (see remote_codec)
 //     0x13 SEMANTICS payload = UTF-8 JSON semantic snapshot
@@ -45,9 +66,7 @@
 //     0x1A SEMANTIC_ACTION_RESULT payload = `<nodeId><action><status>` (see
 //                   remote_codec) — the invocation status for a peer's
 //                   SEMANTIC_ACTION, so agents/AT get real outcomes instead
-//                   of guessing from tree diffs. The app also echoes INIT to
-//                   a structured peer after receiving the peer's, carrying
-//                   its protocol version so the peer can detect skew.
+//                   of guessing from tree diffs.
 //     0x1C DEBUG_RESPONSE payload = [u32 seq][u8 kindLen][kind][json] — the
 //                   app's answer to a DEBUG_REQUEST: the recent records for the
 //                   requested kind (shape is per-kind)
@@ -67,18 +86,28 @@
 //   Either direction
 //     0x11 BYE      payload = empty, signals a clean shutdown
 //
-// The INIT payload carries `v=<n>` (protocol version, required). The ANSI
-// host (`fleury shell`) sends [remoteAnsiProtocolVersion]; structured peers
-// send [remoteProtocolVersion]. The payload size is a 32-bit unsigned length
-// so a single frame can hold a fat-screen full repaint.
+// The INIT payload declares exactly one protocol: `v=<n>` (structured) or
+// `shell=<n>` (`fleury shell`); both, or neither, is a malformed frame. The
+// payload size is a 32-bit unsigned length so a single frame can hold a
+// fat-screen full repaint.
 //
-// Versioning rule: the wire is LOCKSTEP. A structured peer and the app speak
-// exactly [remoteProtocolVersion]. The app echoes its INIT to a structured
-// peer and then rejects any other structured version; first-party peers reject
-// an echo that does not match their own. Any change to a frame's encoding bumps
-// the version — there are no emission gates or down-shifted shapes for other
-// versions. The browser client ships in the server binary; separately launched
-// first-party peers must use a matching Fleury build.
+// Versioning rule: each protocol is LOCKSTEP. A peer and the app speak exactly
+// this build's version of the protocol the peer declares. The app answers
+// the peer's handshake INIT with its own, even at another version, and then
+// fails the session closed; first-party peers reject an answer that does not
+// match their own. A change bumps the version of every protocol whose peers
+// would send or accept different bytes: a frame only one protocol uses bumps
+// that protocol, and the envelope bumps both. (Shell protocol 2 added INIT
+// params only shell peers send or receive, so the structured version stayed.)
+// There are no emission gates or down-shifted shapes for other versions.
+// The browser client ships in the server binary; separately launched
+// first-party peers (`fleury shell`, `fleury_mcp`) must use a matching Fleury
+// build.
+//
+// The shell protocol once declared itself `v=1`, inside the structured space,
+// so it could not change without colliding with structured history (v2 is an
+// old structured version). Shell protocol 2 moved it to `shell=<n>`; `v=1` is
+// now just an unsupported structured version, rejected like any other.
 //
 // Encodings worth calling out (remote_codec holds the layouts):
 //   - PLAN cell styles: set-mask bit 6 flags an OSC 8 link, and a
@@ -115,20 +144,45 @@ import '../semantics/semantics.dart';
 import '../terminal/capabilities.dart';
 import '../input/events.dart';
 import '../input/keyboard_state.dart';
+import '../terminal/terminal_driver.dart'
+    show KeyboardProtocolMode, TerminalInputModes, TerminalMode;
 import 'remote_codec.dart';
 
-/// The structured wire protocol version. Bumped on any change to a frame's
-/// encoding; carried in the INIT handshake and echoed app → peer. The wire is
-/// lockstep: a structured peer and the app must speak exactly this version.
+/// The structured wire protocol version ([RemoteWireProtocol.structured]).
+/// Bumped on any change to a frame the structured protocol uses; declared in
+/// INIT as `v=<n>` and answered app → peer. The protocol is lockstep: a
+/// structured peer and the app must speak exactly this version.
 const int remoteProtocolVersion = 7;
 
-/// The ANSI terminal-host protocol spoken by `fleury shell`.
+/// The version of the protocol `fleury shell` speaks
+/// ([RemoteWireProtocol.shell]), declared in INIT as `shell=<n>`.
 ///
-/// Keep this named separately from [remoteProtocolVersion]: shell renders raw
-/// [OutputFrame] bytes into a real terminal, while v2+ peers receive structured
-/// [PlanFrame]s. Accidentally negotiating the latest structured version leaves
-/// shell connected but blank.
-const int remoteAnsiProtocolVersion = 1;
+/// A version space of its own, separate from [remoteProtocolVersion]: the two
+/// protocols share the frame envelope and the handshake but nothing else, so
+/// either can change without the other. Shell protocol 1 was the original ANSI
+/// host, which declared itself `v=1` inside the structured space; 2 gave it
+/// its own declaration and added the app's answer to the shell's INIT, which
+/// declares the terminal input the app reads ([InitFrame.terminalInput]).
+const int shellProtocolVersion = 2;
+
+/// The two protocols the remote wire carries. They share the frame envelope
+/// and the INIT handshake and version independently; an INIT declares
+/// exactly one, and the session speaks it throughout.
+enum RemoteWireProtocol {
+  /// Presentation plans, semantics, and structured input: `fleury serve`'s
+  /// browser client and agent peers. Declared in INIT as `v=<n>`.
+  structured(remoteProtocolVersion),
+
+  /// A real terminal relayed byte for byte, as `fleury shell` relays one: raw
+  /// INPUT in, raw ANSI OUTPUT back, and the app's terminal input declared in
+  /// its answer to the shell's INIT. Declared in INIT as `shell=<n>`.
+  shell(shellProtocolVersion);
+
+  const RemoteWireProtocol(this.version);
+
+  /// The version of this protocol this build speaks.
+  final int version;
+}
 
 /// WebSocket close code `fleury serve` turns a browser away with when the
 /// admission cap (`--max-sessions`) is already full.
@@ -268,9 +322,11 @@ sealed class RemoteFrame {
   const RemoteFrame();
 }
 
-/// Initial handshake sent by the peer before any [InputFrame]. Carries
-/// the remote display's size and the capabilities the app should plan
-/// against (color mode, image protocol, multiplexer wrapping).
+/// The handshake. The peer sends one before any [InputFrame], carrying the
+/// remote display's size and the capabilities the app should plan against
+/// (color mode, image protocol, multiplexer wrapping), and the protocol it
+/// speaks. The app answers with one of its own (see [protocolVersion] and
+/// [terminalInput]).
 final class InitFrame extends RemoteFrame {
   const InitFrame({
     required this.size,
@@ -281,17 +337,19 @@ final class InitFrame extends RemoteFrame {
     this.images,
     this.hyperlinks = false,
     this.keyboard,
-    this.protocolVersion = remoteProtocolVersion,
+    this.protocol = RemoteWireProtocol.structured,
+    int? protocolVersion,
+    this.terminalInput,
     this.provisional = false,
     this.debugWire,
-  });
+  }) : _protocolVersion = protocolVersion;
 
   final CellSize size;
   final ColorMode colorMode;
   final GlyphTier glyphTier;
 
-  /// The terminal-projection fields: a v1 ANSI peer (`fleury shell`, a
-  /// real terminal) genuinely has an escape protocol and a multiplexer.
+  /// The terminal-projection fields: a shell peer (`fleury shell`, a real
+  /// terminal) genuinely has an escape protocol and a multiplexer.
   final ImageProtocol imageProtocol;
   final bool tmuxPassthrough;
 
@@ -318,9 +376,29 @@ final class InitFrame extends RemoteFrame {
   /// identical wire version and have completely different keyboards.
   final KeyboardCapabilities? keyboard;
 
-  /// Protocol version: [remoteProtocolVersion] for a structured peer,
-  /// [remoteAnsiProtocolVersion] for the ANSI host (`fleury shell`).
-  final int protocolVersion;
+  /// Which of the wire's two protocols the sender speaks: `v=<n>` on the
+  /// wire for [RemoteWireProtocol.structured], `shell=<n>` for
+  /// [RemoteWireProtocol.shell].
+  final RemoteWireProtocol protocol;
+
+  /// The version of [protocol] the sender speaks; by default this build's
+  /// ([RemoteWireProtocol.version]).
+  int get protocolVersion => _protocolVersion ?? protocol.version;
+  final int? _protocolVersion;
+
+  /// The terminal input the app reads — its [TerminalMode]'s input half,
+  /// with the environment's keyboard override applied — which the peer's
+  /// terminal must report for it: mouse clicks and drags, pointer motion,
+  /// bracketed pastes, focus changes, and keys at a Kitty keyboard tier.
+  ///
+  /// Declared only by an app answering a [RemoteWireProtocol.shell] INIT,
+  /// and always by one at [shellProtocolVersion]; null on every peer's INIT
+  /// and on every structured INIT: encoding a structured INIT that carries
+  /// it throws a [RemoteProtocolException], as decoding one does. Optional
+  /// params `mouse`, `motion`, `paste`, `focus` and `keyboardProtocol`, all
+  /// present or all absent. The app's mode is fixed for the session, so the
+  /// declaration is too.
+  final TerminalInputModes? terminalInput;
 
   /// A supervisor's greeting, not a handshake.
   ///
@@ -548,24 +626,48 @@ Uint8List encodeFrame(RemoteFrame frame) {
   return out.toBytes();
 }
 
-String _encodeInit(InitFrame f) =>
-    'cols=${f.size.cols},'
-    'rows=${f.size.rows},'
-    'color=${f.colorMode.name},'
-    'glyph=${f.glyphTier.name},'
-    'image=${f.imageProtocol.name},'
-    'tmux=${f.tmuxPassthrough ? 1 : 0},'
-    // Optional fields are absent when null or false.
-    '${f.images == null ? '' : 'images=${f.images!.name},'}'
-    '${f.hyperlinks ? 'hyperlinks=1,' : ''}'
-    // Semantic guarantees, never Kitty flags: a browser peer has no flags,
-    // and the reader must not have to know the far end's protocol to
-    // understand its promises.
-    '${f.keyboard == null ? '' : 'keyboard=${f.keyboard!.wireBits},'}'
-    // Supervisor-only fields, absent on every peer INIT.
-    '${f.provisional ? 'provisional=1,' : ''}'
-    '${f.debugWire == null ? '' : 'debug=${f.debugWire! ? 1 : 0},'}'
-    'v=${f.protocolVersion}';
+String _encodeInit(InitFrame f) {
+  // The decoder rejects this shape, so the encoder must never produce it.
+  if (f.terminalInput != null && f.protocol != RemoteWireProtocol.shell) {
+    throw const RemoteProtocolException(
+      'INIT frame declares terminal input under the structured protocol; '
+      'only an app answering `fleury shell` declares it. Frame was not '
+      'encoded.',
+    );
+  }
+  return 'cols=${f.size.cols},'
+      'rows=${f.size.rows},'
+      'color=${f.colorMode.name},'
+      'glyph=${f.glyphTier.name},'
+      'image=${f.imageProtocol.name},'
+      'tmux=${f.tmuxPassthrough ? 1 : 0},'
+      // Optional fields are absent when null or false.
+      '${f.images == null ? '' : 'images=${f.images!.name},'}'
+      '${f.hyperlinks ? 'hyperlinks=1,' : ''}'
+      // Semantic guarantees, never Kitty flags: a browser peer has no flags,
+      // and the reader must not have to know the far end's protocol to
+      // understand its promises.
+      '${f.keyboard == null ? '' : 'keyboard=${f.keyboard!.wireBits},'}'
+      // The app's answer to `fleury shell` only: the input its terminal must
+      // report. Absent from every peer INIT and every structured one.
+      '${switch (f.terminalInput) {
+        null => '',
+        final input => 'mouse=${input.mouse ? 1 : 0},'
+            'motion=${input.mouseMotion ? 1 : 0},'
+            'paste=${input.bracketedPaste ? 1 : 0},'
+            'focus=${input.focusReporting ? 1 : 0},'
+            'keyboardProtocol=${input.keyboardProtocol.name},',
+      }}'
+      // Supervisor-only fields, absent on every peer INIT.
+      '${f.provisional ? 'provisional=1,' : ''}'
+      '${f.debugWire == null ? '' : 'debug=${f.debugWire! ? 1 : 0},'}'
+      // The protocol, last. Each has its own key, so the version space of one
+      // can never be read as the other's.
+      '${switch (f.protocol) {
+        RemoteWireProtocol.structured => 'v',
+        RemoteWireProtocol.shell => 'shell',
+      }}=${f.protocolVersion}';
+}
 
 /// Wire layout: [u16 id length][id utf-8][image bytes...].
 Uint8List _encodeInlineImage(InlineImageFrame f) {
@@ -971,6 +1073,14 @@ String _decodeUtf8Payload(Uint8List payload, String frameType) {
 /// default.
 InitFrame _decodeInit(String body) {
   final params = _parseParams(body);
+  final (protocol, version) = _decodeProtocol(params);
+  final terminalInput = _decodeTerminalInput(params);
+  if (terminalInput != null && protocol != RemoteWireProtocol.shell) {
+    throw const RemoteProtocolException(
+      'INIT frame declares terminal input under the structured protocol; '
+      'only an app answering `fleury shell` declares it.',
+    );
+  }
   return InitFrame(
     size: _decodeSize(params, 'INIT'),
     colorMode: _decodeName(params, 'color', ColorMode.values)!,
@@ -985,9 +1095,56 @@ InitFrame _decodeInit(String body) {
     ),
     hyperlinks: _decodeFlag(params, 'hyperlinks', optional: true) ?? false,
     keyboard: _decodeKeyboard(params),
-    protocolVersion: _decodeInt(params, 'v', 'INIT', min: 1),
+    protocol: protocol,
+    protocolVersion: version,
+    terminalInput: terminalInput,
     provisional: _decodeFlag(params, 'provisional', optional: true) ?? false,
     debugWire: _decodeFlag(params, 'debug', optional: true),
+  );
+}
+
+/// The one protocol an INIT declares, and its version: `v=<n>` for the
+/// structured protocol, `shell=<n>` for `fleury shell`'s.
+(RemoteWireProtocol, int) _decodeProtocol(Map<String, String> params) {
+  final structured = params.containsKey('v');
+  final shell = params.containsKey('shell');
+  if (structured && shell) {
+    throw const RemoteProtocolException(
+      'INIT frame declares both `v` and `shell`; it speaks one protocol.',
+    );
+  }
+  if (shell) {
+    return (
+      RemoteWireProtocol.shell,
+      _decodeInt(params, 'shell', 'INIT', min: 1),
+    );
+  }
+  if (!structured) {
+    throw const RemoteProtocolException(
+      'INIT frame is missing `v` or `shell`: the protocol it speaks.',
+    );
+  }
+  return (
+    RemoteWireProtocol.structured,
+    _decodeInt(params, 'v', 'INIT', min: 1),
+  );
+}
+
+/// The app's terminal input, from its answer to `fleury shell`: absent, or
+/// every param present and valid. A partial declaration is malformed.
+TerminalInputModes? _decodeTerminalInput(Map<String, String> params) {
+  const keys = ['mouse', 'motion', 'paste', 'focus', 'keyboardProtocol'];
+  if (!keys.any(params.containsKey)) return null;
+  return TerminalInputModes(
+    mouse: _decodeFlag(params, 'mouse')!,
+    mouseMotion: _decodeFlag(params, 'motion')!,
+    bracketedPaste: _decodeFlag(params, 'paste')!,
+    focusReporting: _decodeFlag(params, 'focus')!,
+    keyboardProtocol: _decodeName(
+      params,
+      'keyboardProtocol',
+      KeyboardProtocolMode.values,
+    )!,
   );
 }
 

@@ -656,3 +656,30 @@ gcloud run services remove-iam-policy-binding fleury-pad-staging \
 Suspending the service with `--scaling=0` (above) also stops all compilation.
 Roll back a release by routing traffic to the previous revision
 (`fleury-pad-staging-00013-qil` was the last private one).
+
+## Release from main, October 1, 2026
+
+After the launch fixes merged ([#292](https://github.com/danReynolds/fleury/pull/292)),
+the docs' Run buttons needed a compiler built from the same packages as the
+prebuilt demos. The image built from `fb2e4154` (build `9cf3f0d7e037c0f1`,
+protocol 3, digest
+`sha256:66ce5d1c7b49b55d4122a603af485e01470d46c0e469f559e70e6d507991a612`) now
+serves as revision `fleury-pad-staging-00017-yoq`, released with the public
+command above (`deploy.py … --cpu-boost --promote --public`).
+
+Verified before and after the release:
+
+- `container_check.py --guides` on the exact image: the API tests, graceful
+  shutdown, and all 129 docs projects compiled, with a cgroup peak of 1.19 GB of
+  2 GiB. `startup_check.py` passed its queued-compilation and stalled-startup
+  checks.
+- `deploy.py` verified the candidate revision through its tag URL before
+  promoting it; the previous serving revision was `fleury-pad-staging-00015-vuv`.
+- From the docs origin: `/api/build` reports the new build anonymously, the
+  preflight and frame policy are unchanged, another origin's compile gets 403,
+  and all 129 projects compiled in 134 seconds.
+- On the published site, the home demo restored a saved draft, ran it, hot
+  reloaded with its state kept, and reverted. The first reload after the deploy
+  took about 10 seconds; later reloads take about a second.
+
+Roll back by routing traffic to `fleury-pad-staging-00015-vuv`.

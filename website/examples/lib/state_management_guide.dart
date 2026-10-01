@@ -110,7 +110,6 @@ class Shop extends StatelessWidget {
   Widget build(BuildContext context) =>
       Scope.create(Cart.new, child: const ShopScreen());
 }
-// #enddocregion shop-owner
 
 class ShopScreen extends StatelessWidget {
   const ShopScreen({super.key});
@@ -126,6 +125,7 @@ class ShopScreen extends StatelessWidget {
     ],
   );
 }
+// #enddocregion shop-owner
 
 // #docregion shop-readers
 class CartBadge extends StatelessWidget {
@@ -211,8 +211,8 @@ class CartValueView extends StatelessWidget {
 }
 // #enddocregion value-notifier
 
-// The two readers share a model owned by State, the third owner the guide lists:
-// created once with the state, disposed with it.
+// The two readers share a model owned by State, the third owner the guide
+// lists: created once with the state, disposed with it.
 class CartDemo extends StatefulWidget {
   const CartDemo({super.key});
 

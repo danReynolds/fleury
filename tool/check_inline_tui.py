@@ -61,6 +61,7 @@ class Session:
         command.extend(arguments)
         if supervised:
             command.append("--supervised")
+        self.guarded = guard
         self.child = subprocess.Popen(
             ([sys.executable, str(Path(__file__).resolve()), '--guard', *command]
              if guard else command),
@@ -71,6 +72,16 @@ class Session:
 
     def set_size(self, cols, rows):
         fcntl.ioctl(self.master, termios.TIOCSWINSZ, struct.pack("HHHH", rows, cols, 0, 0))
+
+    def job_groups(self):
+        """The process groups running the app. The guard runs its command as
+        a job led by the command (run_as_foreground_job), so each child of the
+        guard leads one; unguarded, the command is the session leader."""
+        if not self.guarded:
+            return [self.child.pid]
+        children = subprocess.run(['pgrep', '-P', str(self.child.pid)],
+                                  capture_output=True, text=True).stdout
+        return [int(pid) for pid in children.split()]
 
     def resize(self, cols, rows):
         # Commit old-size output before changing the emulator's geometry.
@@ -83,7 +94,8 @@ class Session:
         self.screen.cursor.y = min(y, rows - 1)
         self.screen.cursor.x = min(self.screen.cursor.x, cols - 1)
         self.set_size(cols, rows)
-        os.killpg(self.child.pid, signal.SIGWINCH)
+        for group in self.job_groups():
+            os.killpg(group, signal.SIGWINCH)
 
     def send(self, data):
         os.write(self.master, data)
@@ -144,13 +156,15 @@ class Session:
             assert "INLINE-READY" not in self.text(), "live region survived cleanup"
 
     def close(self):
-        try:
-            # A failed suspend assertion can leave Dart stopped. Resume the
-            # test's process group so teardown can reap it on macOS as well.
-            os.killpg(self.child.pid, signal.SIGCONT)
-            os.killpg(self.child.pid, signal.SIGKILL)
-        except ProcessLookupError:
-            pass
+        # A failed suspend assertion can leave Dart stopped. Resume the app's
+        # job, which the guard runs in a process group of its own, then the
+        # guard's, so teardown can reap them on macOS as well.
+        for group in dict.fromkeys([*self.job_groups(), self.child.pid]):
+            try:
+                os.killpg(group, signal.SIGCONT)
+                os.killpg(group, signal.SIGKILL)
+            except (ProcessLookupError, PermissionError):
+                pass
         self.child.wait(timeout=5)
         os.close(self.slave)
         if self.master >= 0:
@@ -212,9 +226,9 @@ def lifecycle(dart, supervised=False, crash=False, abrupt=False):
                 app.finish()
         else:
             pid = app.app_pid()
-            # The job is the guard's process group: the guard stands where a
-            # shell's command would, the process the shell waits on.
-            suspend_and_resume(app, [pid, app.child.pid])
+            # The guard stands where an interactive shell would: it runs the
+            # app as a job and keeps running while the job is stopped.
+            suspend_and_resume(app, [pid])
             app.send(b"\x03")
             app.finish(130)  # Raw Ctrl+C preserves the same outcome as SIGINT.
         print(f"PASS inline lifecycle supervised={supervised} crash={crash} abrupt={abrupt}")
@@ -239,7 +253,7 @@ def supervised_suspend(dart):
         # the job stops, as the restart case does.
         for _ in range(10):
             app.pump(0.1)
-        suspend_and_resume(app, [pid, supervisor, app.child.pid])
+        suspend_and_resume(app, [pid, supervisor])
         assert app.app_pid() == pid, "the supervisor replaced the stopped app"
         app.send(b"\x11")
         app.finish()
@@ -248,9 +262,56 @@ def supervised_suspend(dart):
         app.close()
 
 
+def session_processes(app):
+    """The processes in the PTY's session, with their groups, the terminal's
+    foreground group, and their states."""
+    sid = os.getsid(app.child.pid)
+    rows = subprocess.run(['ps', '-eo', 'pid,ppid,pgid,sid,tpgid,stat,args'],
+                          capture_output=True, text=True).stdout.splitlines()
+    return "\n".join(rows[:1] + [row for row in rows[1:]
+                                  if row.split()[3] == str(sid)])
+
+
+def kernel_view(pids):
+    """Linux: each process's signal state and the syscall each of its threads
+    is stopped in, to tell the driver's own stop from a terminal stop."""
+    lines = []
+    for pid in pids:
+        try:
+            status = Path(f"/proc/{pid}/status").read_text().splitlines()
+            keep = [l for l in status
+                    if l.split(":")[0] in ("State", "SigPnd", "ShdPnd", "SigBlk", "SigIgn", "SigCgt")]
+            lines.append(f"{pid}: " + " | ".join(keep))
+            for task in sorted(Path(f"/proc/{pid}/task").iterdir()):
+                comm = (task / "comm").read_text().strip()
+                call = (task / "syscall").read_text().split()[:3]
+                lines.append(f"  {task.name} {comm}: syscall {call}")
+        except OSError as error:
+            lines.append(f"{pid}: {error}")
+    return "\n".join(lines)
+
+
+def termios_diff(expected, actual):
+    """Names each termios field that differs, with the bits that changed."""
+    names = ["iflag", "oflag", "cflag", "lflag", "ispeed", "ospeed"]
+    changes = [
+        f"{name} {want:#x} -> {got:#x} (bits {want ^ got:#x})"
+        for name, want, got in zip(names, expected, actual)
+        if want != got
+    ]
+    changes += [
+        f"cc[{i}] {want!r} -> {got!r}"
+        for i, (want, got) in enumerate(zip(expected[6], actual[6]))
+        if want != got
+    ]
+    return "; ".join(changes)
+
+
 def suspend_and_resume(app, job):
     """Presses Ctrl+Z, checks that every process in [job] stopped and that
-    the terminal is the shell's again, then continues the job as `fg` does."""
+    the terminal is the shell's again, then continues the job as `fg` does.
+    Fleury suspends only a job a job-control shell started; the guard runs
+    the app as one (see run_as_foreground_job)."""
     # Ctrl+Z reaches the app first, and the autofocused field would take it as
     # undo. Focus the button, which leaves the chord unhandled, so it becomes
     # the terminal's job control.
@@ -283,7 +344,12 @@ def suspend_and_resume(app, job):
     pending_input = getattr(termios, "PENDIN", 0)
     restored_modes[3] &= ~pending_input
     expected_modes[3] &= ~pending_input
-    assert restored_modes == expected_modes, "suspend left terminal modes changed"
+    assert restored_modes == expected_modes, (
+        f"suspend left terminal modes changed: "
+        f"{termios_diff(expected_modes, restored_modes)}\n"
+        f"processes:\n{session_processes(app)}\n"
+        f"kernel view:\n{kernel_view(job)}\n"
+        f"output tail: {bytes(app.raw[-600:])!r}")
     # fg continues the job's whole process group, not only the app.
     os.killpg(os.getpgid(job[0]), signal.SIGCONT)
     app.wait(lambda: "INLINE-READY" in app.text(), "resume frame")
@@ -330,6 +396,26 @@ def resize_exit(dart, *, executable=None):
             app.close()
 
 
+def run_as_foreground_job(command):
+    """Runs [command] the way an interactive shell runs a job, and returns its
+    exit code: in a process group of its own that owns the terminal's
+    foreground. Fleury suspends on Ctrl+Z only for such a job. The session
+    leader's own group, where a command started with no shell runs, has
+    nothing above it to continue a stopped app."""
+    # A background group's tcsetpgrp raises SIGTTOU; shells ignore it.
+    signal.signal(signal.SIGTTOU, signal.SIG_IGN)
+
+    def become_foreground_job():
+        os.setpgid(0, 0)
+        os.tcsetpgrp(0, os.getpgrp())
+        signal.signal(signal.SIGTTOU, signal.SIG_DFL)
+
+    job = subprocess.Popen(command, preexec_fn=become_foreground_job)
+    code = job.wait()
+    os.tcsetpgrp(0, os.getpgrp())
+    return code
+
+
 if __name__ == "__main__":
     if len(sys.argv) > 1 and sys.argv[1] == '--guard':
         # Keep the controlling session alive long enough to inspect real
@@ -337,7 +423,7 @@ if __name__ == "__main__":
         # leader dies). The guardian performs no terminal-mode restoration.
         original = termios.tcgetattr(0)
         original_flags = fcntl.fcntl(0, fcntl.F_GETFL)
-        code = subprocess.call(sys.argv[2:])
+        code = run_as_foreground_job(sys.argv[2:])
         final = termios.tcgetattr(0)
         if final == original:
             os.write(1, b'\r\nPTY-TERMIOS-EXACT\r\n')
