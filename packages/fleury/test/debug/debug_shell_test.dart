@@ -157,6 +157,42 @@ void main() {
       );
     });
 
+    testWidgets('the header names f to expand and keeps each key with its '
+        'action', (tester) {
+      final controller = DebugController(
+        const DebugConfig(startMode: DebugMode.docked),
+      );
+      tester.pumpWidget(
+        DebugShell(controller: controller, child: const Text('app')),
+      );
+      // Spaces normalized: the check is that no wrap separates a key from its
+      // action, however the header achieves that.
+      String screen() => tester
+          .renderToString(size: const CellSize(80, 12))
+          .replaceAll('\u00a0', ' ');
+
+      // The default 32-cell panel wraps the hint, with or without restart.
+      for (final restart in [false, true]) {
+        controller.setHotRestartHandler(restart ? () {} : null);
+        final docked = screen();
+        for (final item in [
+          '←→ tabs',
+          'f expand',
+          if (restart) 'F5 restart',
+          'Ctrl+G close',
+        ]) {
+          expect(docked, contains(item), reason: 'restart: $restart');
+        }
+        expect(
+          docked,
+          isNot(contains('F11')),
+          reason: 'hosts often take F11 before the app sees it',
+        );
+      }
+      controller.toggleExpand();
+      expect(screen(), contains('Esc dock'));
+    });
+
     testWidgets('the floating panel absorbs clicks (no tap-through)', (tester) {
       // Pointer regions resolve topmost-by-paint-order PER HANDLER KIND, so a
       // panel body with no tap region would let a click fall through to an app
@@ -1212,6 +1248,37 @@ void main() {
       expect(c.mode, DebugMode.fullscreen);
     });
 
+    test('f expands and docks the open panel, as F11 does', () {
+      // Hosts often take F11 before the app sees it (VS Code's integrated
+      // terminal, Windows Terminal, GNOME Terminal, macOS), so `f` toggles the
+      // same state. It is printable, so it arrives as text, like `p`.
+      final c = DebugController(const DebugConfig());
+      expect(
+        tryConsumeDebugText(c, _text('f')),
+        isFalse,
+        reason: 'f must pass through while the panel is closed',
+      );
+      expect(c.mode, DebugMode.off);
+
+      c.toggleOnOff(); // → docked
+      expect(tryConsumeDebugText(c, _text('f')), isTrue);
+      expect(c.mode, DebugMode.fullscreen);
+      expect(tryConsumeDebugText(c, _text('f')), isTrue);
+      expect(c.mode, DebugMode.docked);
+
+      // One expand state: each key undoes the other.
+      expect(tryConsumeDebugKey(c, _key(KeyCode.f11)), isTrue);
+      expect(tryConsumeDebugText(c, _text('f')), isTrue);
+      expect(c.mode, DebugMode.docked);
+      expect(tryConsumeDebugText(c, _text('f')), isTrue);
+      expect(tryConsumeDebugKey(c, _key(KeyCode.f11)), isTrue);
+      expect(c.mode, DebugMode.docked);
+
+      // Ctrl+F is a key chord, not text, and stays the app's.
+      expect(tryConsumeDebugKey(c, _ctrl('f')), isFalse);
+      expect(c.mode, DebugMode.docked);
+    });
+
     test('Esc only consumes in fullscreen', () {
       final c = DebugController(
         const DebugConfig(startMode: DebugMode.fullscreen),
@@ -1432,6 +1499,30 @@ void main() {
       expect(tryConsumeDebugKey(c, _key(KeyCode.escape)), isTrue);
       expect(c.logSearching, isFalse);
       expect(c.logQuery, isEmpty);
+    });
+
+    test('an open search takes a typed f instead of expanding', () {
+      final c = open();
+      tryConsumeDebugText(c, _text('/'));
+      expect(tryConsumeDebugText(c, _text('f')), isTrue);
+      expect(c.logQuery, 'f');
+      expect(
+        c.mode,
+        DebugMode.docked,
+        reason: "'f' typed a char, not a toggle",
+      );
+
+      // Expanded, the search keeps it too: f does not dock.
+      c.toggleExpand();
+      expect(tryConsumeDebugText(c, _text('f')), isTrue);
+      expect(c.logQuery, 'ff');
+      expect(c.mode, DebugMode.fullscreen);
+
+      // Once Enter commits the query, f toggles the panel again.
+      tryConsumeDebugKey(c, _key(KeyCode.enter));
+      expect(tryConsumeDebugText(c, _text('f')), isTrue);
+      expect(c.mode, DebugMode.docked);
+      expect(c.logQuery, 'ff', reason: 'the committed filter stays');
     });
 
     test('s cycles the source filter all → stdout → stderr → all', () {

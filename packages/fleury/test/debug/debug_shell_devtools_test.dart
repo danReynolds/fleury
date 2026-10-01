@@ -7,6 +7,46 @@ Future<void> _settle() async {
   }
 }
 
+final class _Events implements TuiEventSink {
+  final events = <TuiEvent>[];
+
+  @override
+  void add(TuiEvent event) => events.add(event);
+}
+
+/// The events the real terminal parser makes of [bytes].
+List<TuiEvent> _parsed(String bytes) {
+  final sink = _Events();
+  InputParser()
+    ..feed(bytes.codeUnits, sink)
+    ..flush(sink);
+  return sink.events;
+}
+
+/// How each kind of keyboard delivers one press of a printable key to runApp.
+final _keyboards =
+    <(String, KeyboardCapabilities, List<TuiEvent> Function(String key))>[
+      // The character itself, parsed into text.
+      ('a classic terminal', KeyboardCapabilities.legacy, _parsed),
+      // A key report with text for the press, then one for the release.
+      (
+        'a Kitty-protocol terminal',
+        KeyboardCapabilities.fromKittyFlags(0x0F),
+        (key) =>
+            _parsed('\x1b[${key.codeUnitAt(0)}u\x1b[${key.codeUnitAt(0)};1:3u'),
+      ),
+      // A served browser: keydown, the typed text, then keyup.
+      (
+        'a browser',
+        KeyboardCapabilities.full,
+        (key) => [
+          KeyEvent(KeyCode.char(key)),
+          TextInputEvent(key),
+          KeyEvent(KeyCode.char(key), type: KeyEventType.up),
+        ],
+      ),
+    ];
+
 void main() {
   test('DebugConfig is public API', () {
     // Constructing via package:fleury/fleury.dart is itself the export
@@ -145,4 +185,92 @@ void main() {
     await future;
     await driver.dispose();
   });
+
+  for (final (keyboard, capabilities, press) in _keyboards) {
+    test('from $keyboard, f expands and docks the open panel; the app or an '
+        'open search gets it otherwise', () async {
+      final field = TextEditingController();
+      addTearDown(field.dispose);
+      final driver = FakeTerminalDriver(
+        size: const CellSize(90, 18),
+        keyboardCapabilities: capabilities,
+      );
+      final app = runApp(
+        Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            const Text('notes app'),
+            TextInput(controller: field, autofocus: true, enableBlink: false),
+          ],
+        ),
+        driver: driver,
+        enableHotReload: false,
+      );
+      try {
+        await _settle();
+
+        Future<void> type(String key) async {
+          press(key).forEach(driver.enqueue);
+          await _settle();
+        }
+
+        Future<void> hotkey(KeyEvent event) async {
+          driver.enqueue(event);
+          await _settle();
+        }
+
+        // Repaints everything, so a check can't miss text the last frame's
+        // diff left out.
+        Future<String> screen() async {
+          driver.clearOutput();
+          driver.resize(driver.size);
+          await _settle();
+          return driver.output;
+        }
+
+        const ctrlG = KeyEvent(
+          KeyCode.char('g'),
+          modifiers: {KeyModifier.ctrl},
+        );
+        // The docked panel floats beside the app's text; expanded, it covers
+        // the whole screen.
+        final docked = allOf(contains('FLEURY DEBUG'), contains('notes app'));
+        final expanded = allOf(
+          contains('FLEURY DEBUG'),
+          isNot(contains('notes app')),
+        );
+
+        await type('f');
+        expect(
+          field.text,
+          'f',
+          reason: 'closed, the panel leaves f to the app',
+        );
+
+        await hotkey(ctrlG);
+        expect(await screen(), docked);
+        await type('f');
+        expect(await screen(), expanded, reason: 'f expanded the panel');
+        await type('f');
+        expect(await screen(), docked, reason: 'f docked it again');
+        expect(field.text, 'f', reason: 'the open panel took both presses');
+
+        await hotkey(const KeyEvent(KeyCode.f12)); // the Logs tab
+        await type('/');
+        await type('f');
+        final searching = await screen();
+        expect(searching, contains('/f'), reason: 'the search took f');
+        expect(searching, docked, reason: 'and did not expand the panel');
+
+        await hotkey(const KeyEvent(KeyCode.escape)); // clear the search
+        await hotkey(ctrlG); // close the panel
+        await type('f');
+        expect(field.text, 'ff', reason: 'closed again, the app types f');
+      } finally {
+        exitApp();
+        await app;
+        await driver.dispose();
+      }
+    });
+  }
 }

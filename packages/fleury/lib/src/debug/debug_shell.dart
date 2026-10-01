@@ -7,8 +7,8 @@
 //                the panel covering it (state preserved, only
 //                visibility flipped)
 //
-// Hotkey dispatch is NOT done here. The shell's hotkeys (Ctrl+G, F11,
-// Esc-in-fullscreen, F12, paint-flash 'p') are framework escape
+// Hotkey dispatch is NOT done here. The shell's hotkeys (Ctrl+G, F11 or
+// 'f', Esc-in-fullscreen, F12, paint-flash 'p') are framework escape
 // hatches — they must fire even when a modal route (e.g. Navigator's
 // active screen) is suppressing globals. runApp's event handler
 // consumes them BEFORE the InputDispatcher walks the focus chain, in
@@ -102,15 +102,16 @@ class _DebugShellState extends State<DebugShell> {
 /// in the same escape-hatch tier as the Ctrl+C exit guard — so debug
 /// hotkeys fire even inside a modal route's scope.
 ///
-/// Key-code bindings. The printable shortcuts — `p`, `/`, `s`, and the typed
-/// Logs-search query — arrive as text, not key codes, and are handled by the
-/// companion [tryConsumeDebugText].
+/// Key-code bindings. The printable shortcuts — `f`, `p`, `/`, `s`, and the
+/// typed Logs-search query — arrive as text, not key codes, and are handled by
+/// the companion [tryConsumeDebugText].
 ///   Ctrl+G              toggle off ↔ last-used open mode
 ///   F5                  hot restart (only while open, and only when the
 ///                       runtime installed a handler — a dev supervisor
 ///                       session). A key code on purpose: a printable would
 ///                       steal a destructive action from app text input.
-///   F11                 docked ↔ fullscreen (only while open)
+///   F11                 docked ↔ fullscreen (only while open). Hosts often
+///                       take F11 first, so `f` does the same.
 ///   Tab / Shift+Tab     next / previous panel tab (only while open)
 ///   Esc                 clear a Logs search, else fullscreen → docked
 ///   F12                 show/hide Logs tab (open if off, close if
@@ -260,11 +261,12 @@ bool debugShellWithholdsKey(DebugController controller, KeyEvent event) =>
 /// Consumes a printable [TextInputEvent] as a debug-shell shortcut — the
 /// companion to [tryConsumeDebugKey] for keys the terminal delivers as *text*
 /// rather than key codes. Fleury's input parser emits `TextInputEvent` for
-/// printable ASCII (a plain `p`, `/`, `s`, or a typed query character), so
+/// printable ASCII (a plain `f`, `p`, `/`, `s`, or a typed query character), so
 /// these bindings can't live in the `KeyEvent`-only path. Returns true when the
 /// shell handled it, so the caller skips the normal input dispatcher.
 ///
 /// Bindings (only while the shell is open):
+///   f           docked ↔ fullscreen, as F11 does (which hosts often take)
 ///   p           toggle paint-flash
 ///   / · s       Logs tab: open search · cycle source filter
 ///   `text`      while the Logs search field is open, append to the query — and
@@ -281,6 +283,11 @@ bool tryConsumeDebugText(DebugController controller, TextInputEvent event) {
   }
   if (event.text == 'p') {
     controller.togglePaintFlash();
+    return true;
+  }
+  // F11's twin: hosts often take F11 before the app sees it.
+  if (event.text == 'f') {
+    controller.toggleExpand();
     return true;
   }
   if (controller.tab == DebugTab.logs) {

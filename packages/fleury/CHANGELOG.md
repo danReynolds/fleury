@@ -2,6 +2,9 @@
 
 ## 0.1.0
 
+- The open debug panel also expands and docks with `f`: VS Code's integrated
+  terminal, Windows Terminal, GNOME Terminal, and macOS often take F11 first.
+
 - **`FocusDetector` nests like CSS `:focus-within`.** Every detector around
   the focused widget reports focus, not only the nearest one. A `Panel` now
   accents while focus is inside a `LogRegion`, `DataTable`, or another widget
