@@ -2,11 +2,7 @@ import 'dart:io';
 
 import 'package:test/test.dart';
 
-const _companions = [
-  'fleury_test',
-  'fleury_web',
-  'fleury_mcp',
-];
+const _companions = ['fleury_test', 'fleury_web', 'fleury_mcp'];
 
 void main() {
   test(
@@ -152,6 +148,13 @@ Directory _bootstrapFixture() {
   final tool = File('${fixture.path}/tool/fleury_dev.dart');
   tool.parent.createSync(recursive: true);
   File('../../tool/fleury_dev.dart').copySync(tool.path);
+  final traceConfig = File(
+    '${fixture.path}/profiling/bin/allocation_trace_config.dart',
+  );
+  traceConfig.parent.createSync(recursive: true);
+  File(
+    '../../profiling/bin/allocation_trace_config.dart',
+  ).copySync(traceConfig.path);
   for (final name in [
     'fleury',
     ..._companions,
