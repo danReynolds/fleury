@@ -272,6 +272,25 @@ def session_processes(app):
                                   if row.split()[3] == str(sid)])
 
 
+def kernel_view(pids):
+    """TEMPORARY (Linux): each process's signal state and the syscall each
+    of its threads is stopped in, to tell an orderly stop from a tty stop."""
+    lines = []
+    for pid in pids:
+        try:
+            status = Path(f"/proc/{pid}/status").read_text().splitlines()
+            keep = [l for l in status
+                    if l.split(":")[0] in ("State", "SigPnd", "ShdPnd", "SigBlk", "SigIgn", "SigCgt")]
+            lines.append(f"{pid}: " + " | ".join(keep))
+            for task in sorted(Path(f"/proc/{pid}/task").iterdir()):
+                comm = (task / "comm").read_text().strip()
+                call = (task / "syscall").read_text().split()[:3]
+                lines.append(f"  {task.name} {comm}: syscall {call}")
+        except OSError as error:
+            lines.append(f"{pid}: {error}")
+    return "\n".join(lines)
+
+
 def termios_diff(expected, actual):
     """Names each termios field that differs, with the bits that changed."""
     names = ["iflag", "oflag", "cflag", "lflag", "ispeed", "ospeed"]
@@ -329,6 +348,7 @@ def suspend_and_resume(app, job):
         f"suspend left terminal modes changed: "
         f"{termios_diff(expected_modes, restored_modes)}\n"
         f"processes:\n{session_processes(app)}\n"
+        f"kernel view:\n{kernel_view(job)}\n"
         f"output tail: {bytes(app.raw[-600:])!r}")
     # fg continues the job's whole process group, not only the app.
     os.killpg(os.getpgid(job[0]), signal.SIGCONT)
