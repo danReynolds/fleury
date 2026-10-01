@@ -173,7 +173,10 @@ class _FocusableControlState extends State<FocusableControl>
   void deactivate() {
     // Capture is dropped when this subtree leaves the active tree, including
     // a GlobalKey move. A preserved State must not carry its held visual along.
+    // The same goes for hover: the router drops a deactivated region without
+    // `onExit`, and re-enters it after reactivation if the pointer is over it.
     _pressed = false;
+    _hovered = false;
     super.deactivate();
   }
 

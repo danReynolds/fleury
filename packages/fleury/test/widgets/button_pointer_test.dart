@@ -56,6 +56,41 @@ void main() {
     );
   });
 
+  testWidgets('moving a keyed button away from the pointer clears hover', (
+    tester,
+  ) {
+    final key = GlobalKey();
+    final button = Button(
+      key: key,
+      text: 'Move',
+      style: const CellStyle.interactive(hovered: CellStyle(inverse: true)),
+      onPressed: () {},
+    );
+    Widget tree(bool moved) => Column(
+      children: [
+        Row(
+          children: [if (!moved) button, const SizedBox(width: 1, height: 1)],
+        ),
+        Row(children: [if (moved) button, const SizedBox(width: 1, height: 1)]),
+      ],
+    );
+    tester.pumpWidget(tree(false));
+    tester.sendMouse(
+      const MouseEvent(
+        kind: MouseEventKind.moved,
+        button: MouseButton.none,
+        col: 2,
+        row: 0,
+      ),
+    );
+    tester.pump();
+    expect(tester.render().atColRow(2, 0).style.inverse, isTrue);
+    tester.pumpWidget(tree(true));
+    tester.pump();
+    // The pointer is still at (2,0), now empty; the button is on row 1.
+    expect(tester.render().atColRow(2, 1).style.inverse, isFalse);
+  });
+
   testWidgets('moving a keyed button drops its captured press', (tester) {
     final key = GlobalKey();
     var activations = 0;
