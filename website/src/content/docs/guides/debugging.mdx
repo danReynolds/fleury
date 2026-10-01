@@ -199,7 +199,7 @@ terminal, where `runApp` stops with “runApp needs an interactive terminal”.
    prints `fleury shell ready` and waits.
 2. Run or debug the app from the IDE. The app finds the shell through the
    `.fleury/handle` file the shell wrote, draws in the shell’s terminal, and
-   reads keys from it, while the IDE keeps its console and debugger.
+   takes its input from it, while the IDE keeps its console and debugger.
 3. Leave the shell running. When the app exits, or you stop or restart it
    from the IDE, the shell waits for the next run, which attaches to it.
 
@@ -210,12 +210,22 @@ suspends nothing, though: the app runs in the IDE, not as a job of the
 shell’s terminal. With no app attached, Ctrl+C quits the shell, and keys typed
 then reach no app.
 
+The shell’s terminal reports what the app’s `TerminalMode` asks for, as a
+terminal of its own would: clicks, drags, and the wheel with `mouse: true`
+(the counter `fleury create` writes uses it), hover with `mouseMotion: true`,
+and pastes and focus changes unless the mode turns them off. The shell turns
+them on when the app attaches and off when it detaches, however the run ends.
+It reads the mode the app passed to `runApp` once, at attach, so a changed
+mode takes effect on the next run.
+
 The app finds the shell when its working directory is that package directory
 or one below it. If the IDE runs the app from somewhere else, set the
 `FLEURY_HANDLE` environment variable in the run configuration to the socket
 path the shell prints. Under the IDE’s debugger, which turns on the Dart VM
-service, saving a file also reloads the app. `fleury shell` runs on macOS and
-Linux.
+service, saving a file also reloads the app. The shell and the app must come
+from the same Fleury version: run the shell as `dart run fleury shell` in the
+app’s package to use the app’s own, since the shell turns away an app built
+with another version and says why. `fleury shell` runs on macOS and Linux.
 
 ## Share a reproducible investigation
 
