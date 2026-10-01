@@ -262,6 +262,16 @@ def supervised_suspend(dart):
         app.close()
 
 
+def session_processes(app):
+    """The processes in the PTY's session, with their groups, the terminal's
+    foreground group, and their states."""
+    sid = os.getsid(app.child.pid)
+    rows = subprocess.run(['ps', '-eo', 'pid,ppid,pgid,sid,tpgid,stat,args'],
+                          capture_output=True, text=True).stdout.splitlines()
+    return "\n".join(rows[:1] + [row for row in rows[1:]
+                                  if row.split()[3] == str(sid)])
+
+
 def termios_diff(expected, actual):
     """Names each termios field that differs, with the bits that changed."""
     names = ["iflag", "oflag", "cflag", "lflag", "ispeed", "ospeed"]
@@ -315,8 +325,10 @@ def suspend_and_resume(app, job):
     pending_input = getattr(termios, "PENDIN", 0)
     restored_modes[3] &= ~pending_input
     expected_modes[3] &= ~pending_input
-    assert restored_modes == expected_modes, \
-        f"suspend left terminal modes changed: {termios_diff(expected_modes, restored_modes)}"
+    assert restored_modes == expected_modes, (
+        f"suspend left terminal modes changed: "
+        f"{termios_diff(expected_modes, restored_modes)}\n"
+        f"processes:\n{session_processes(app)}")
     # fg continues the job's whole process group, not only the app.
     os.killpg(os.getpgid(job[0]), signal.SIGCONT)
     app.wait(lambda: "INLINE-READY" in app.text(), "resume frame")
