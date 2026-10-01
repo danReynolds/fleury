@@ -44,7 +44,7 @@ them. The debug shell takes its keys before your bindings see them:
 | Key | What Fleury does | To use it in your app |
 |---|---|---|
 | `Ctrl+C` | In a terminal, ends the app when nothing handles it: `runApp` returns `AppExit.signal(AppSignal.interrupt)`. With text selected, it copies instead. In a browser, it's an ordinary key. | Bind it. A binding that handles it keeps the app running; see [Shutdown and signals](/fleury/guides/shutdown-and-signals/#finish-work-before-closing). |
-| `Ctrl+Z` | In a terminal on macOS or Linux, [suspends the app](/fleury/guides/terminal-modes/#let-another-program-use-the-terminal) when nothing handles it, until `fg` resumes it, but only when a job-control shell, such as your interactive shell, started the app. Run directly by a terminal profile, a tmux pane, or `ssh -t host app`, nothing could resume it, so the press is an ordinary key. A focused text field undoes instead. While the debug panel is expanded over your app, the press skips the hidden app; while its Logs search is open, the search takes it. | Bind it, or turn suspension off with `PosixTerminalDriver(suspendOnCtrlZ: false)`. To suspend from another key, such as when a text field always has focus, call `TerminalSession.suspend()` from its binding. |
+| `Ctrl+Z` | In a terminal on macOS or Linux, [suspends the app](/fleury/guides/terminal-modes/#let-another-program-use-the-terminal) when nothing handles it, until `fg` resumes it, but only when a job-control shell, such as your interactive shell, started the app. When a terminal profile, a tmux pane, or `ssh -t host app` runs the app directly, nothing could resume it, so the press is an ordinary key. A focused text field undoes instead. While the debug panel is expanded over your app, the press skips the hidden app; while its Logs search is open, the search takes it. | Bind it, or turn suspension off with `PosixTerminalDriver(suspendOnCtrlZ: false)`. To suspend from another key, such as when a text field always has focus, call the terminal session's `suspend()` from its binding. |
 | `Ctrl+G`, `F12` | Open the [debug shell](/fleury/guides/debugging/#keep-the-debug-shell-out-of-the-reproduction) and its Logs tab whenever debug tooling is on, even with the panel closed. Your bindings never see them. | Turn the debug shell off with `runApp(const MyApp(), debug: const DebugConfig(enabled: false))`. It's already off in compiled builds. |
 | `Tab`, `Shift+Tab`, `←`, `→`, `f`, `F11`, `p` | Go to the debug panel while it's open. Some of its tabs take more: `Page Up` and `Page Down` outside Logs, `↑`, `↓`, and `Home` on Tree, and `/`, `s`, and a search in progress on Logs. `F5` restarts when the panel offers it, and `Esc` clears a Logs search or docks an expanded panel. | Close the panel with `Ctrl+G`. |
 
@@ -57,7 +57,7 @@ key of its own that calls `suspend()` on the
 
 `suspend()` does exactly what an unhandled Ctrl+Z does, and its future
 completes once `fg` brings the app back. When no job-control shell started
-the app, and under `fleury serve`, `fleury shell`, or Windows, there's no
+the app, or under `fleury serve`, `fleury shell`, or Windows, there's no
 shell job to suspend: `supportsSuspend` is false, so the binding stays
 disabled. A browser app has no terminal session at all; code that also runs
 there reads `context.scope<TerminalSession?>()`.

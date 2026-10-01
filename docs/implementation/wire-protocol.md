@@ -66,8 +66,11 @@ envelope and the INIT handshake, and version independently:
   INIT as `shell=<n>`.
 
 An INIT declares exactly one; both, or neither, is a malformed frame. A change
-to a frame only one protocol uses bumps that protocol's version; a change to a
-shared frame (INIT, RESIZE, BYE) or to the envelope bumps both.
+bumps the version of every protocol whose peers would send or accept different
+bytes: a frame only one protocol uses bumps that protocol's version, and the
+envelope bumps both. A shared frame bumps whichever protocols' bytes changed:
+shell protocol 2 added INIT params that only shell peers send or receive, so
+the structured version stayed at 7.
 
 Why two spaces: the shell protocol used to declare itself `v=1`, inside the
 structured space, where the number doubled as the mode switch. It could not
@@ -100,7 +103,8 @@ the current version of the peer's protocol.
 
 ### The app's answer
 
-The app answers every INIT with its own before it sends anything else: the
+The app answers the peer's handshake INIT with its own before it sends
+anything else (a supervisor's provisional INIT and repeats get none): the
 peer's fields restated, the peer's protocol at the app's version of it, and —
 to a shell — the app's terminal input. A peer reads the version to confirm the
 lockstep or to report the skew; on a mismatch the app still answers, then
@@ -142,14 +146,15 @@ frame, so test harnesses can inject either side. "Peer" is `serve` / `shell`;
 ## Lockstep rule
 
 1. **One version per protocol.** A peer and the app speak exactly this
-   build's version of the protocol the peer declares. The app answers every
-   INIT with its own; for any other version it still sends that answer — so
+   build's version of the protocol the peer declares. The app answers the
+   peer's handshake INIT with its own; for any other version it still sends
+   that answer — so
    the peer can report the skew — and then fails the session closed.
    First-party peers reject an answer that does not match their own and send
    nothing but INIT (and, from `fleury shell`, typed input) until it does.
 2. **Every encoding change bumps the version.** A new frame type, a new field,
-   or a changed cell/enum encoding is a new version of every protocol that
-   uses the frame. There are no emission gates, no down-shifted shapes for an
+   or a changed cell/enum encoding is a new version of every protocol whose
+   peers would send or accept different bytes because of it. There are no emission gates, no down-shifted shapes for an
    older peer, and no tolerance for a newer one.
 3. **Decoders are strict.** An unknown frame type, an unknown enum value, an
    unknown flag bit, a missing required field, or trailing bytes are a

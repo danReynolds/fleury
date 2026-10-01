@@ -93,11 +93,13 @@
 //
 // Versioning rule: each protocol is LOCKSTEP. A peer and the app speak exactly
 // this build's version of the protocol the peer declares. The app answers
-// every INIT with its own, even at another version, and then fails the
-// session closed; first-party peers reject an answer that does not match their
-// own. A change to a frame only one protocol uses bumps that protocol's
-// version; a change to a shared one (INIT, RESIZE, BYE, the envelope) bumps
-// both. There are no emission gates or down-shifted shapes for other versions.
+// the peer's handshake INIT with its own, even at another version, and then
+// fails the session closed; first-party peers reject an answer that does not
+// match their own. A change bumps the version of every protocol whose peers
+// would send or accept different bytes: a frame only one protocol uses bumps
+// that protocol, and the envelope bumps both. (Shell protocol 2 added INIT
+// params only shell peers send or receive, so the structured version stayed.)
+// There are no emission gates or down-shifted shapes for other versions.
 // The browser client ships in the server binary; separately launched
 // first-party peers (`fleury shell`, `fleury_mcp`) must use a matching Fleury
 // build.

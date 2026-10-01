@@ -54,9 +54,10 @@
 
 - **`TerminalSession.suspend()` suspends on the app's request.** An app whose
   text field always has focus, such as a chat composer, undoes on every
-  Ctrl+Z, so it had no keyboard route to the shell. Bind another key to
-  `context.scope<TerminalSession>().suspend()`: it suspends exactly as an
-  unhandled Ctrl+Z does, stopping the whole job until `fg`, and its future
+  Ctrl+Z, so it had no keyboard route to the shell. Read the session in
+  `build` with `context.scope<TerminalSession>()` and bind another key to its
+  `suspend()`: it suspends exactly as an unhandled Ctrl+Z does, stopping the
+  whole job until `fg`, and its future
   completes with `true` once the app is back. `supportsSuspend` says whether
   the session can: a native macOS or Linux terminal that a job-control shell
   started. Without one, under `fleury serve` and `fleury shell`, and on
@@ -76,9 +77,9 @@
   killed, SIGINT, SIGTERM, SIGHUP, or a hangup, which now exits 129), keeps
   serving later runs until you press Ctrl+C with no app attached, and discards
   keys typed while no app was attached. It speaks a wire protocol of its own
-  now, versioned apart from the browser's: an app and a shell from different
-  Fleury versions are turned away with the reason, and `dart run fleury shell`
-  in the app's package runs the matching shell.
+  now, versioned apart from the browser's: an app and a shell that speak
+  different versions of it are turned away with the reason, and
+  `dart run fleury shell` in the app's package runs the matching shell.
 
 - **Key sequences work in dialogs, and Esc aborts them cleanly.** A
   multi-key sequence bound inside a `KeyBindings(modal: true)` scope, such as

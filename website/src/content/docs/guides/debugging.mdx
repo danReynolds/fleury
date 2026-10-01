@@ -216,10 +216,11 @@ The app finds the shell when its working directory is that package directory
 or one below it. If the IDE runs the app from somewhere else, set the
 `FLEURY_HANDLE` environment variable in the run configuration to the socket
 path the shell prints. Under the IDE’s debugger, which turns on the Dart VM
-service, saving a file also reloads the app. The shell and the app must come
-from the same Fleury version: run the shell as `dart run fleury shell` in the
-app’s package to use the app’s own, since the shell turns away an app built
-with another version and says why. `fleury shell` runs on macOS and Linux.
+service, saving a file also reloads the app. The shell and the app must speak
+the same version of the shell’s protocol, so run the shell as
+`dart run fleury shell` in the app’s package: it then comes from the app’s own
+Fleury. The shell turns away an app that speaks another version and says why.
+`fleury shell` runs on macOS and Linux.
 
 ## Share a reproducible investigation
 
