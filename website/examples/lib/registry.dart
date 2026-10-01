@@ -3206,7 +3206,7 @@ void main() =>
     cols: 52,
     rows: 13,
     code: _interactiveStylesSource,
-    builder: () => const _InteractiveStyleTour(),
+    builder: () => _framed(const _InteractiveStyleTour()),
   ),
 ];
 
@@ -5166,56 +5166,64 @@ String get interactiveStyleSourceForTest => _interactiveStylesSource;
 class _InteractiveStyleTour extends StatelessWidget {
   const _InteractiveStyleTour();
 
+  static const _ansiNames = <String>[
+    'black',
+    'red',
+    'green',
+    'yellow',
+    'blue',
+    'magenta',
+    'cyan',
+    'white',
+  ];
+
+  /// [style] in words, such as `green + bold`, so each row's label describes
+  /// the style it is drawn with.
+  static String _describe(CellStyle style) {
+    final color = style.foreground;
+    final parts = [
+      if (color is AnsiColor)
+        '${color.index < 8 ? '' : 'bright '}${_ansiNames[color.index % 8]}'
+      else if (color != null)
+        '$color',
+      if (style.inverse) 'inverse',
+      if (style.bold) 'bold',
+      if (style.dim) 'dim',
+      if (style.italic) 'italic',
+      if (style.underline) 'underline',
+      if (style.strikethrough) 'strikethrough',
+    ];
+    return parts.isEmpty ? 'ordinary control paint' : parts.join(' + ');
+  }
+
   @override
   Widget build(BuildContext context) {
-    final outer = Theme.of(context);
+    // Each state's row is drawn and labeled with what _interactiveStyle
+    // resolves to for that state, so editing the style updates both.
+    final states = <String, CellStyle>{
+      'base': CellStyle.resolve(cascade: [_interactiveStyle]),
+      'focused': CellStyle.resolve(cascade: [_interactiveStyle], focused: true),
+      'hovered': CellStyle.resolve(cascade: [_interactiveStyle], hovered: true),
+      'selected': CellStyle.resolve(
+        cascade: [_interactiveStyle],
+        selected: true,
+      ),
+      'invalid': CellStyle.resolve(cascade: [_interactiveStyle], invalid: true),
+      'disabled': CellStyle.resolve(
+        cascade: [_interactiveStyle],
+        disabled: true,
+      ),
+    };
     return Theme(
-      data: outer.copyWith(interactiveStyle: _interactiveStyle),
-      child: Padding(
-        padding: const EdgeInsets.all(1),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: <Widget>[
-            Text('INTERACTION STYLES', style: CellStyle(bold: true)),
-            SizedBox(height: 1),
-            Text('base      ordinary control paint'),
-            Text(
-              'focused   inverse + bold',
-              style: CellStyle.resolve(
-                cascade: [_interactiveStyle],
-                focused: true,
-              ),
-            ),
-            Text(
-              'hovered   underline',
-              style: CellStyle.resolve(
-                cascade: [_interactiveStyle],
-                hovered: true,
-              ),
-            ),
-            Text(
-              'selected  green + bold',
-              style: CellStyle.resolve(
-                cascade: [_interactiveStyle],
-                selected: true,
-              ),
-            ),
-            Text(
-              'invalid   red + underline',
-              style: CellStyle.resolve(
-                cascade: [_interactiveStyle],
-                invalid: true,
-              ),
-            ),
-            Text(
-              'disabled  dim',
-              style: CellStyle.resolve(
-                cascade: [_interactiveStyle],
-                disabled: true,
-              ),
-            ),
-          ],
-        ),
+      data: Theme.of(context).copyWith(interactiveStyle: _interactiveStyle),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: <Widget>[
+          const Text('INTERACTION STYLES', style: CellStyle(bold: true)),
+          const SizedBox(height: 1),
+          for (final MapEntry(key: state, value: style) in states.entries)
+            Text('${state.padRight(10)}${_describe(style)}', style: style),
+        ],
       ),
     );
   }
