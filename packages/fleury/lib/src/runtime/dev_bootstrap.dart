@@ -430,6 +430,9 @@ final class DevBootstrap {
           // `_spawnChild` has already reaped whatever it started. A child
           // that ended on its own (compile error, early exit) already told
           // the terminal why: mirror its code, never run the app again.
+          // `exit` skips finalizers, so release the watcher and the temp
+          // (inline-lease) directory here, as the fall-through path does.
+          await supervisor._dispose();
           final code = supervisor._lastChildExit;
           if (code != null && code >= 0) return endWith(code);
           stderr.writeln(
