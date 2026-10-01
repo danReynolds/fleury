@@ -2933,13 +2933,25 @@ context.pop('done'); // completes the push that opened this screen''',
   ),
   ExampleInfo(
     id: 'focus.explorer',
+    widget: 'Focus traversal',
+    category: 'Guide examples',
+    blurb:
+        'Automatic traversal across two panes: Tab reads each row, arrows '
+        'move by direction, and a dialog keeps focus until it closes.',
+    cols: 70,
+    rows: 18,
+    interactive: true,
+    builder: () => _framed(const Navigator(home: _FocusExplorerTour())),
+  ),
+  ExampleInfo(
+    id: 'focus.basic',
     widget: 'Focus',
     category: 'Input handling & focus',
     blurb:
         'Makes a custom widget focusable, so it receives keys and joins Tab '
         'and arrow traversal.',
-    cols: 70,
-    rows: 18,
+    cols: 40,
+    rows: 8,
     interactive: true,
     code:
         '''// A custom control becomes one focus stop. Handle its keys outside the
@@ -2954,7 +2966,7 @@ KeyBindings(
 // In TrackRow's build, reading Focus.of rebuilds it when focus changes:
 final focused = Focus.of(context).hasFocus;
 return Text(focused ? '▸ Track 1' : '  Track 1');''',
-    builder: () => const Navigator(home: _FocusExplorerTour()),
+    builder: () => _framed(const _FocusExample()),
   ),
   ExampleInfo(
     id: 'focusnode.programmatic',
@@ -3971,6 +3983,61 @@ class _FocusScopeExampleState extends State<_FocusScopeExample> {
       Text('pressed: $_pressed', style: const CellStyle(dim: true)),
     ],
   );
+}
+
+class _FocusExample extends StatefulWidget {
+  const _FocusExample();
+
+  @override
+  State<_FocusExample> createState() => _FocusExampleState();
+}
+
+class _FocusExampleState extends State<_FocusExample> {
+  static const _tracks = ['Intro', 'Night drive', 'Outro'];
+  String _playing = 'nothing';
+
+  @override
+  Widget build(BuildContext context) => Column(
+    crossAxisAlignment: CrossAxisAlignment.start,
+    children: [
+      for (final (i, track) in _tracks.indexed)
+        // Each row is one focus stop. Keys travel from the focused node up
+        // through its ancestors, so Enter reaches the focused row's binding.
+        KeyBindings(
+          bindings: [
+            KeyBinding(
+              KeySequence.enter,
+              label: 'Play',
+              onTrigger: (_) => setState(() => _playing = track),
+            ),
+          ],
+          child: Focus(autofocus: i == 0, child: _TrackRow(track)),
+        ),
+      const SizedBox(height: 1),
+      const Text(
+        'Tab or arrows move · Enter plays',
+        style: CellStyle(dim: true),
+      ),
+      Text('Playing: $_playing'),
+    ],
+  );
+}
+
+/// One track title, marked while its row has focus.
+class _TrackRow extends StatelessWidget {
+  const _TrackRow(this.title);
+
+  final String title;
+
+  @override
+  Widget build(BuildContext context) {
+    // Reading Focus.of rebuilds this row when its focus changes.
+    final focused = Focus.of(context).hasFocus;
+    return Text(
+      focused ? '▸ $title' : '  $title',
+      style: CellStyle(bold: focused),
+    );
+  }
 }
 
 // Log surfaces read as a running process: each demo appends its next scripted
@@ -6581,64 +6648,62 @@ class _FocusExplorerTourState extends State<_FocusExplorerTour> {
       );
 
   @override
-  Widget build(BuildContext context) => _framed(
-    Column(
-      crossAxisAlignment: CrossAxisAlignment.stretch,
-      children: [
-        const Text(
-          'AUTOMATIC · TAB READS · ARROWS MOVE',
-          style: CellStyle(bold: true),
-        ),
-        Text('active: $_activeRegion', style: const CellStyle(dim: true)),
-        const SizedBox(height: 1),
-        Expanded(
-          child: Row(
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              Expanded(
-                child: _region(
-                  name: 'Files',
-                  controls: [
-                    _actionButton(
-                      label: 'New file',
-                      autofocus: true,
-                      onPressed: () => _act('Created a file'),
-                    ),
-                    _actionButton(
-                      label: 'Open file',
-                      onPressed: () => _act('Opened a file'),
-                    ),
-                    _actionButton(
-                      label: 'Settings',
-                      onPressed: () => _act('Opened settings'),
-                    ),
-                  ],
-                ),
+  Widget build(BuildContext context) => Column(
+    crossAxisAlignment: CrossAxisAlignment.stretch,
+    children: [
+      const Text(
+        'AUTOMATIC · TAB READS · ARROWS MOVE',
+        style: CellStyle(bold: true),
+      ),
+      Text('active: $_activeRegion', style: const CellStyle(dim: true)),
+      const SizedBox(height: 1),
+      Expanded(
+        child: Row(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            Expanded(
+              child: _region(
+                name: 'Files',
+                controls: [
+                  _actionButton(
+                    label: 'New file',
+                    autofocus: true,
+                    onPressed: () => _act('Created a file'),
+                  ),
+                  _actionButton(
+                    label: 'Open file',
+                    onPressed: () => _act('Opened a file'),
+                  ),
+                  _actionButton(
+                    label: 'Settings',
+                    onPressed: () => _act('Opened settings'),
+                  ),
+                ],
               ),
-              const SizedBox(width: 2),
-              Expanded(
-                child: _region(
-                  name: 'Preview',
-                  controls: [
-                    _actionButton(
-                      label: 'Refresh',
-                      onPressed: () => _act('Refreshed preview'),
-                    ),
-                    _actionButton(
-                      label: 'Inspect',
-                      onPressed: () => _act('Opened inspector'),
-                    ),
-                    _actionButton(label: 'Publish…', onPressed: _openDialog),
-                  ],
-                ),
+            ),
+            const SizedBox(width: 2),
+            Expanded(
+              child: _region(
+                name: 'Preview',
+                controls: [
+                  _actionButton(
+                    label: 'Refresh',
+                    onPressed: () => _act('Refreshed preview'),
+                  ),
+                  _actionButton(
+                    label: 'Inspect',
+                    onPressed: () => _act('Opened inspector'),
+                  ),
+                  _actionButton(label: 'Publish…', onPressed: _openDialog),
+                ],
               ),
-            ],
-          ),
+            ),
+          ],
         ),
-        const SizedBox(height: 1),
-        Text('last: $_lastAction'),
-      ],
-    ),
+      ),
+      const SizedBox(height: 1),
+      Text('last: $_lastAction'),
+    ],
   );
 }
 

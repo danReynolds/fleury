@@ -44,6 +44,18 @@
       "declaration": "_FocusDetectorTourState"
     }
   ],
+  "focus.basic": [
+    {
+      "label": "focus_example.dart",
+      "source": "website/examples/lib/registry.dart",
+      "declaration": "_FocusExampleState"
+    },
+    {
+      "label": "track_row.dart",
+      "source": "website/examples/lib/registry.dart",
+      "declaration": "_TrackRow"
+    }
+  ],
   "canvas.basic": [
     {
       "label": "canvas_example.dart",
