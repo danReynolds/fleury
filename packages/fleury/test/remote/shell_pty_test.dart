@@ -2,7 +2,10 @@
 // an app attached from a session of its own — the IDE arrangement. The
 // harness (test/fixtures/shell_pty_harness.py) types into the terminal and
 // records what the shell, the app and the terminal's modes did; these tests
-// assert on that record.
+// assert on that record. The harness also plays the terminal emulator: it
+// keeps the DEC modes and keyboard flags the shell's output sets, and reports
+// a click or a pointer move only while those would make a real terminal
+// report one.
 
 import 'dart:convert';
 import 'dart:io';
@@ -59,6 +62,24 @@ void main() {
         isTrue,
         reason: 'the full termios snapshot must come back\n${run.describe()}',
       );
+      // A default app reads pastes and focus changes, not the mouse: the
+      // shell's terminal reports exactly those, at the keyboard tier it
+      // probes, and every mode is back as it was once the app has gone.
+      final attached = run.terminalModes('attached');
+      expect(
+        attached,
+        containsAll(<int>[_paste, _focus]),
+        reason: run.describe(),
+      );
+      for (final mode in [..._mouseButtons, _motion]) {
+        expect(
+          attached,
+          isNot(contains(mode)),
+          reason: '$mode\n${run.describe()}',
+        );
+      }
+      expect(run.kittyStack('attached'), [3], reason: run.describe());
+      _expectTerminalHandedBack(run, 'afterSession');
 
       // The next run attached to the same shell and got its keys too.
       expect(run.appRecords(1), <Object>[
@@ -71,8 +92,169 @@ void main() {
       // Idle again, Ctrl+C was the terminal's interrupt: it quit the shell.
       expect(run.shellExit, 130, reason: run.describe());
       expect(run.restoredExactly('afterShell'), isTrue, reason: run.describe());
+      _expectTerminalHandedBack(run, 'afterShell');
       _expectScreenHandedBack(run);
       _expectDiscoveryRemoved(run);
+    },
+    skip: skip,
+    tags: const ['integration', 'pty'],
+    timeout: const Timeout(Duration(minutes: 3)),
+  );
+
+  test(
+    'an app whose mode asks for the mouse gets it: tracking comes on, a click '
+    'presses its button, and the terminal comes back exactly',
+    () async {
+      final run = await _runHarness('mouse');
+      run.expectCompleted();
+
+      // Button presses, releases and drags (1000, 1002) in SGR encoding
+      // (1006), as the app's own driver turns on for TerminalMode(mouse:
+      // true) — and not all-motion (1003), which it did not ask for.
+      final attached = run.terminalModes('attached');
+      expect(attached, containsAll(_mouseButtons), reason: run.describe());
+      expect(attached, isNot(contains(_motion)), reason: run.describe());
+      // The click the terminal reported, relayed byte for byte, pressed the
+      // button; the Ctrl+C after it ended the app.
+      expect(run.appRecords(0), <Object>[
+        {'pressed': 'button'},
+        {'key': 'c', 'ctrl': true},
+        {'exit': 'interrupt'},
+      ], reason: run.describe());
+      expect(run.appExit(0), 130, reason: run.describe());
+
+      // After the app exits, tracking is off again and every mode the shell
+      // changed is back as it was found; so is termios.
+      _expectMouseTurnedOff(run);
+      _expectTerminalHandedBack(run, 'afterSession');
+      expect(
+        run.restoredExactly('afterSession'),
+        isTrue,
+        reason: run.describe(),
+      );
+      expect(run.restoredExactly('afterShell'), isTrue, reason: run.describe());
+      _expectTerminalHandedBack(run, 'afterShell');
+      _expectScreenHandedBack(run);
+    },
+    skip: skip,
+    tags: const ['integration', 'pty'],
+    timeout: const Timeout(Duration(minutes: 3)),
+  );
+
+  test(
+    'an app whose mode asks for pointer motion gets hover: all-motion '
+    'tracking comes on, and a move reaches its MouseRegion',
+    () async {
+      final run = await _runHarness('mouse-motion');
+      run.expectCompleted();
+
+      final attached = run.terminalModes('attached');
+      expect(
+        attached,
+        containsAll(<int>[..._mouseButtons, _motion]),
+        reason: run.describe(),
+      );
+      // The move the terminal reported hovered the region; the click after
+      // it pressed the button.
+      expect(run.appRecords(0), <Object>[
+        {'hover': 'enter'},
+        {'pressed': 'button'},
+        {'key': 'c', 'ctrl': true},
+        {'exit': 'interrupt'},
+      ], reason: run.describe());
+
+      _expectMouseTurnedOff(run);
+      _expectTerminalHandedBack(run, 'afterSession');
+      expect(
+        run.restoredExactly('afterSession'),
+        isTrue,
+        reason: run.describe(),
+      );
+      _expectTerminalHandedBack(run, 'afterShell');
+    },
+    skip: skip,
+    tags: const ['integration', 'pty'],
+    timeout: const Timeout(Duration(minutes: 3)),
+  );
+
+  test(
+    'an app that asks for no mouse, pastes, focus reports, or keyboard flags '
+    'gets a terminal that reports none of them',
+    () async {
+      final run = await _runHarness('no-input-reporting');
+      run.expectCompleted();
+
+      final attached = run.terminalModes('attached');
+      for (final mode in [..._mouseButtons, _motion, _paste, _focus]) {
+        expect(
+          attached,
+          isNot(contains(mode)),
+          reason: '$mode\n${run.describe()}',
+        );
+      }
+      // The flags the shell pushed to probe the keyboard are popped again,
+      // on the screen they were pushed to: legacy keys, as the app's own
+      // driver would leave them.
+      expect(run.kittyStack('attached'), isEmpty, reason: run.describe());
+      // A click stayed the terminal's; a typed key reached the app.
+      expect(run.appRecords(0), [
+        {'text': 'x'},
+        {'key': 'c', 'ctrl': true},
+        {'exit': 'interrupt'},
+      ], reason: run.describe());
+      _expectTerminalHandedBack(run, 'afterSession');
+      expect(
+        run.restoredExactly('afterSession'),
+        isTrue,
+        reason: run.describe(),
+      );
+    },
+    skip: skip,
+    tags: const ['integration', 'pty'],
+    timeout: const Timeout(Duration(minutes: 3)),
+  );
+
+  test(
+    'an app from another Fleury is turned away with the reason, and the '
+    'shell serves the next run',
+    () async {
+      final run = await _runHarness('mismatched-apps');
+      run.expectCompleted();
+
+      // The shell declares its own protocol, never a structured `v=`.
+      final init = run.report['shellInit'] as String?;
+      expect(init, endsWith(',shell=2'), reason: run.describe());
+      expect(init, isNot(contains('v=')), reason: run.describe());
+
+      // An app from before shell protocol 2 hangs up on that INIT; one from
+      // a newer Fleury answers at its own version. Neither attaches.
+      expect(
+        run.output,
+        contains(
+          "the app could not attach: it disconnected before answering the "
+          "shell's handshake.",
+        ),
+        reason: run.describe(),
+      );
+      expect(
+        run.output,
+        contains(
+          'the app could not attach: it speaks shell protocol v3, and this '
+          'shell speaks v2.',
+        ),
+        reason: run.describe(),
+      );
+      expect(
+        run.output,
+        contains('dart run fleury shell'),
+        reason: run.describe(),
+      );
+      for (final label in ['afterOldApp', 'afterNewApp']) {
+        expect(run.restoredExactly(label), isTrue, reason: run.describe());
+        _expectTerminalHandedBack(run, label);
+      }
+      // The app from this build attached as usual afterwards.
+      expect(run.appExit(0), 130, reason: run.describe());
     },
     skip: skip,
     tags: const ['integration', 'pty'],
@@ -168,6 +350,42 @@ void _expectScreenHandedBack(_HarnessRun run) {
   expect(exit, contains('\x1B[?7h'));
 }
 
+/// DEC private modes: mouse button tracking (1000), drag tracking (1002),
+/// SGR mouse encoding (1006), any-motion tracking (1003), bracketed paste
+/// (2004), focus reports (1004).
+const _mouseButtons = <int>[1000, 1002, 1006];
+const _motion = 1003;
+const _paste = 2004;
+const _focus = 1004;
+
+/// Every mouse mode is turned off after the last time tracking came on.
+void _expectMouseTurnedOff(_HarnessRun run) {
+  final output = run.output;
+  final on = output.lastIndexOf('\x1B[?1000h');
+  expect(on, greaterThanOrEqualTo(0), reason: run.describe());
+  expect(
+    output.indexOf('\x1B[?1006l\x1B[?1003l\x1B[?1002l\x1B[?1000l', on),
+    greaterThan(on),
+    reason: 'mouse tracking must be turned off again\n${run.describe()}',
+  );
+}
+
+/// The emulated terminal is as the shell found it before the first app:
+/// every DEC private mode, and no keyboard flags left on either screen.
+void _expectTerminalHandedBack(_HarnessRun run, String label) {
+  expect(
+    run.terminalModes(label),
+    run.terminalModes('idle'),
+    reason: '$label\n${run.describe()}',
+  );
+  expect(run.kittyStack(label), isEmpty, reason: '$label\n${run.describe()}');
+  expect(
+    run.mainKittyStack(label),
+    isEmpty,
+    reason: '$label\n${run.describe()}',
+  );
+}
+
 void _expectDiscoveryRemoved(_HarnessRun run) {
   expect(
     File('${run.workDir.path}/.fleury/handle').existsSync(),
@@ -225,6 +443,28 @@ final class _HarnessRun {
 
   bool? restoredExactly(String label) =>
       (report['restoredExactly'] as Map<String, Object?>?)?[label] as bool?;
+
+  /// The emulated terminal's state the harness recorded under [label].
+  Map<String, Object?> _terminal(String label) {
+    final state =
+        (report['terminal'] as Map<String, Object?>?)?[label]
+            as Map<String, Object?>?;
+    if (state == null) fail('no terminal state recorded as $label');
+    return state;
+  }
+
+  /// The DEC private modes set at [label].
+  Set<int> terminalModes(String label) => {
+    ...(_terminal(label)['modes'] as List<Object?>).cast<int>(),
+  };
+
+  /// The Kitty keyboard flag stack of the screen in use at [label].
+  List<int> kittyStack(String label) =>
+      (_terminal(label)['kitty'] as List<Object?>).cast<int>();
+
+  /// The main screen's Kitty keyboard flag stack at [label].
+  List<int> mainKittyStack(String label) =>
+      (_terminal(label)['mainKitty'] as List<Object?>).cast<int>();
 
   Map<String, Object?> _app(int index) =>
       (report['apps'] as List<Object?>)[index] as Map<String, Object?>;
