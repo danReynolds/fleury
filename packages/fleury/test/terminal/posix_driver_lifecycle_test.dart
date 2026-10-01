@@ -612,6 +612,7 @@ void main() {
         stdinOverride: input,
         stdoutOverride: output,
         terminalModeController: modes,
+        shellJobOverride: true,
         // Exercise failed-stop recovery, which resumes from the Ctrl+Z path.
         selfStopOverride: () => false,
       );
@@ -866,6 +867,7 @@ void main() {
         stdinOverride: input,
         stdoutOverride: out,
         terminalModeController: modes,
+        shellJobOverride: true,
         selfStopOverride: () {
           selfStops++;
           trace.add('stop');
@@ -953,6 +955,7 @@ void main() {
       stdinOverride: input,
       stdoutOverride: out,
       terminalModeController: modes,
+      shellJobOverride: true,
       selfStopOverride: () {
         selfStops++;
         return true;
@@ -1883,6 +1886,7 @@ void main() {
             stdinOverride: input,
             stdoutOverride: out,
             terminalModeController: _FakeModeController(trace),
+            shellJobOverride: true,
             selfStopOverride: () => true,
           );
           final events = <TuiEvent>[];

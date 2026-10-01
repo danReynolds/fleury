@@ -58,7 +58,11 @@ final class TerminalSession {
       withTerminalHandoff(driver, operation);
 
   /// Whether this session can [suspend]: a native macOS or Linux terminal
-  /// session that reads the keyboard in raw mode. False under `fleury serve`
+  /// session that reads the keyboard in raw mode, started by a job-control
+  /// shell — an interactive shell that ran the app as a job, so its `fg` can
+  /// bring the app back. False when nothing like that started it: a terminal
+  /// emulator, a tmux pane, or `ssh -t host app` running the app directly,
+  /// where a stopped app would stay stopped. Also false under `fleury serve`
   /// and `fleury shell`, on Windows, and when standard input isn't a
   /// terminal; an app in the browser has no session at all. It doesn't
   /// change during the session, so a build can read it to decide whether to
@@ -82,13 +86,14 @@ final class TerminalSession {
   /// Ctrl+Z itself can close sensitive state and then call this.
   ///
   /// Completes with true once `fg` has brought the app back. Completes with
-  /// false, without suspending, where [supportsSuspend] is false, while a
-  /// [runWithHandoff] operation holds the terminal, or after the session has
-  /// ended; also when the job could not be stopped, once the session has
-  /// re-entered. A call while a suspension is under way joins it. It never
-  /// completes with an error: failing to release or reclaim the terminal
-  /// ends the session, as it does for Ctrl+Z. Call it from an interaction or
-  /// lifecycle callback, not while building.
+  /// false, without suspending or touching the terminal, where
+  /// [supportsSuspend] is false (an app no job-control shell started among
+  /// them), while a [runWithHandoff] operation holds the terminal, or after
+  /// the session has ended; also when the job could not be stopped, once the
+  /// session has re-entered. A call while a suspension is under way joins it.
+  /// It never completes with an error: failing to release or reclaim the
+  /// terminal ends the session, as it does for Ctrl+Z. Call it from an
+  /// interaction or lifecycle callback, not while building.
   Future<bool> suspend() => driver is TerminalSuspendDriver
       ? (driver as TerminalSuspendDriver).suspend()
       : Future<bool>.value(false);

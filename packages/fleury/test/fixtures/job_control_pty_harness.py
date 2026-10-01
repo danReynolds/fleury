@@ -9,14 +9,19 @@ prompt back and ran a command — the observable meaning of "suspended" — then
 brings the job back with `fg` and quits the app with Ctrl+Q.
 
 usage: job_control_pty_harness.py <work-dir> [--supervised] [--suspend-key]
-           -- <command...>
+           [--no-shell] -- <command...>
 
 --supervised waits for the hot-reload supervisor to wire the app before
 suspending it. --suspend-key drives the fixture's composer
 (test/fixtures/job_control_fixture.dart --suspend-key) instead of pressing an
 unhandled Ctrl+Z: Ctrl+Z must undo in its focused field and leave the job
-running, and Ctrl+T, its suspend key, must suspend. The app must be that
-fixture (or honour its FLEURY_JOB_PID_OUT and FLEURY_JOB_EVENTS_OUT contract).
+running, and Ctrl+T, its suspend key, must suspend. --no-shell runs the command
+with no shell at all, the way a terminal emulator, a tmux pane, or `ssh -t host
+app` does: the command is the session leader and the PTY's controlling
+process, so nothing could continue it if it stopped. The harness then presses
+Ctrl+Z and Ctrl+T and records whether each reached the app and whether the
+terminal and the processes were left alone. The app must be that fixture (or
+honour its FLEURY_JOB_PID_OUT and FLEURY_JOB_EVENTS_OUT contract).
 Writes <work-dir>/report.json (the facts; `failure` names the step that could
 not complete) and <work-dir>/pty.bin (every byte the terminal received). Exits
 0 whenever a report was written; the Dart test asserts.
@@ -41,6 +46,10 @@ CTRL_Z = b'\x1a'
 CTRL_T = b'\x14'
 CTRL_Q = b'\x11'
 
+# Written only when a session leaves the terminal for the shell (or exits):
+# mouse reporting off, and the alternate screen left.
+RESTORE_MARKERS = (b'\x1b[?1000l', b'\x1b[?1049l')
+
 
 class StepFailed(Exception):
     pass
@@ -57,17 +66,23 @@ class Harness:
         self.bootstrap_log = os.path.join(work_dir, 'bootstrap.log')
         self.output = bytearray()
         self.trace = []
-        self.report = {'command': command, 'trace': self.trace}
+        self.offsets = {}
+        self.report = {'command': command, 'trace': self.trace,
+                       'offsets': self.offsets}
         self.master = None
-        self.shell_pid = None
-        self.shell_status = None
+        # The process the harness forks as the PTY's session leader: bash, or
+        # with --no-shell the command itself.
+        self.leader_pid = None
+        self.leader_status = None
 
     def note(self, event):
         self.trace.append(event)
 
-    # -- the terminal and its shell -------------------------------------
+    # -- the terminal and its session leader ----------------------------
 
-    def start_shell(self):
+    def start_session(self, path, argv, extra_env):
+        """Forks [argv] as the session leader of a new PTY, with the PTY as its
+        controlling terminal."""
         master, slave = os.openpty()
         fcntl.ioctl(slave, termios.TIOCSWINSZ, struct.pack('HHHH', 24, 80, 0, 0))
         env = {
@@ -78,12 +93,10 @@ class Harness:
         }
         env.update({
             'TERM': 'xterm-256color',
-            'PS1': PROMPT.decode(),
-            'BASH_SILENCE_DEPRECATION_WARNING': '1',
-            'HISTFILE': '/dev/null',
             'FLEURY_JOB_PID_OUT': self.pid_file,
             'FLEURY_JOB_EVENTS_OUT': self.events_file,
             'FLEURY_DEV_BOOTSTRAP_LOG': self.bootstrap_log,
+            **extra_env,
         })
         pid = os.fork()
         if pid == 0:
@@ -96,12 +109,19 @@ class Harness:
                 if slave > 2:
                     os.close(slave)
                 os.chdir(self.work_dir)
-                os.execve('/bin/bash', ['bash', '--norc', '--noprofile', '-i'], env)
+                os.execve(path, argv, env)
             finally:
                 os._exit(127)
         os.close(slave)
         self.master = master
-        self.shell_pid = pid
+        self.leader_pid = pid
+
+    def start_shell(self):
+        self.start_session('/bin/bash', ['bash', '--norc', '--noprofile', '-i'], {
+            'PS1': PROMPT.decode(),
+            'BASH_SILENCE_DEPRECATION_WARNING': '1',
+            'HISTFILE': '/dev/null',
+        })
         self.note('shell started')
 
     def pump(self, timeout):
@@ -126,10 +146,10 @@ class Harness:
             if predicate():
                 return
             self.pump(0.05)
-            if self.shell_status is None:
-                reaped, status = os.waitpid(self.shell_pid, os.WNOHANG)
+            if self.leader_status is None:
+                reaped, status = os.waitpid(self.leader_pid, os.WNOHANG)
                 if reaped:
-                    self.shell_status = status
+                    self.leader_status = status
         if predicate():
             return
         raise StepFailed(what)
@@ -186,16 +206,8 @@ class Harness:
             'stat': self.ps(pid, 'stat'),
         }
 
-    # -- the scenario ---------------------------------------------------
-
-    def run(self):
-        self.start_shell()
-        self.wait_for(lambda: PROMPT in self.output, 'first prompt', 20)
-
-        start = len(self.output)
-        self.run_in_shell(' '.join(shlex.quote(part) for part in self.command))
+    def wait_for_app(self, start):
         self.wait_for(lambda: self.app_pid() is not None, 'app started', 120)
-        app = self.app_pid()
         self.wait_for(lambda: b'JOB-READY' in self.output_after(start),
                       'first frame', 60)
         if self.supervised:
@@ -203,11 +215,22 @@ class Harness:
                 lambda: os.path.exists(self.bootstrap_log) and
                 'child ready' in open(self.bootstrap_log).read(),
                 'supervisor wired to the app', 60)
+        return self.app_pid()
+
+    # -- the scenario: a job of an interactive shell --------------------
+
+    def run(self):
+        self.start_shell()
+        self.wait_for(lambda: PROMPT in self.output, 'first prompt', 20)
+
+        start = len(self.output)
+        self.run_in_shell(' '.join(shlex.quote(part) for part in self.command))
+        app = self.wait_for_app(start)
         facts = self.process_facts(app)
         self.report['app'] = facts
         parent = facts['ppid']
         self.report['parent'] = self.process_facts(parent)
-        self.report['shellPid'] = self.shell_pid
+        self.report['shellPid'] = self.leader_pid
         self.note('app running')
 
         if self.suspend_key:
@@ -218,7 +241,7 @@ class Harness:
             suspend = CTRL_Z
 
         # The app hands the terminal back and stops.
-        start = len(self.output)
+        start = self.offsets['suspend'] = len(self.output)
         self.send(suspend)
         try:
             self.wait_for(lambda: PROMPT in self.output_after(start),
@@ -248,7 +271,7 @@ class Harness:
         self.report['shellRanCommand'] = True
 
         # fg: the job continues, and the app re-enters and repaints.
-        start = len(self.output)
+        start = self.offsets['fg'] = len(self.output)
         self.run_in_shell('fg')
         self.wait_for(lambda: b'JOB-READY' in self.output_after(start),
                       'the repaint after fg', 30)
@@ -270,7 +293,7 @@ class Harness:
             self.report['undoAfterFg'] = self.ctrl_z_undoes('y', app)
 
         # Ctrl+Q ends the app; the shell reports the job's exit status.
-        start = len(self.output)
+        start = self.offsets['quit'] = len(self.output)
         self.send(CTRL_Q)
         self.wait_for(lambda: PROMPT in self.output_after(start),
                       'the prompt after the app exits', 30)
@@ -282,7 +305,7 @@ class Harness:
         self.report['jobExit'] = int(
             status.search(self.output_after(start)).group(1))
         self.run_in_shell('exit')
-        self.wait_for(lambda: self.shell_status is not None, 'shell exit', 15)
+        self.wait_for(lambda: self.leader_status is not None, 'shell exit', 15)
         self.note('done')
 
     def ctrl_z_undoes(self, text, app):
@@ -303,9 +326,71 @@ class Harness:
             'prompt': PROMPT in self.output_after(start),
         }
 
+    # -- the scenario: no shell -----------------------------------------
+
+    def run_without_shell(self):
+        path = self.command[0]
+        self.start_session(path, self.command, {})
+        self.note('command started as the session leader')
+        app = self.wait_for_app(0)
+        self.report['app'] = self.process_facts(app)
+        self.report['leader'] = self.process_facts(self.leader_pid)
+        self.report['leaderPid'] = self.leader_pid
+        self.report['supportsSuspend'] = [
+            e[len('supportsSuspend:'):] for e in self.app_events()
+            if e.startswith('supportsSuspend:')]
+        self.note('app running')
+
+        # Nothing could continue a stopped app: Ctrl+Z reaches it as an
+        # ordinary key, and its own suspend key's request completes with false.
+        self.report['ctrlZ'] = self.press_without_suspending(
+            CTRL_Z, 'key:ctrl+z', app)
+        self.report['suspendKey'] = self.press_without_suspending(
+            CTRL_T, 'suspended:', app)
+
+        # The app still answers: Ctrl+Q ends it, and the session with it.
+        start = self.offsets['quit'] = len(self.output)
+        self.send(CTRL_Q)
+        self.wait_for(lambda: self.leader_status is not None,
+                      'the app to exit on Ctrl+Q', 30)
+        self.settle(0.2)
+        self.report['exit'] = os.waitstatus_to_exitcode(self.leader_status)
+        self.report['restoredOnExit'] = all(
+            marker in self.output_after(start) for marker in RESTORE_MARKERS)
+        self.note('done')
+
+    def press_without_suspending(self, key, expected, app):
+        """Presses [key] and waits for an app event starting with [expected];
+        records the app's events since the press, the processes' states, and
+        whether anything restored the terminal for a shell."""
+        before = len(self.app_events())
+        start = len(self.output)
+
+        def facts():
+            return {
+                'events': self.app_events()[before:],
+                'appState': self.ps(app, 'stat'),
+                'leaderState': self.ps(self.leader_pid, 'stat'),
+                'terminalReleased': any(marker in self.output_after(start)
+                                        for marker in RESTORE_MARKERS),
+            }
+
+        self.send(key)
+        try:
+            self.wait_for(
+                lambda: any(e.startswith(expected)
+                            for e in self.app_events()[before:]),
+                f'{expected!r} after the key', 15)
+        except StepFailed:
+            self.report['stuck'] = facts()
+            raise
+        # A suspension would have released the terminal and stopped by now.
+        self.settle(0.5)
+        return facts()
+
     def cleanup(self):
         # A failed step can leave the job stopped: continue its whole group so
-        # it can take the kill, then end the shell.
+        # it can take the kill, then end the session leader.
         app = self.app_pid()
         if app is not None:
             try:
@@ -314,10 +399,11 @@ class Harness:
                 os.killpg(pgid, signal.SIGKILL)
             except (ProcessLookupError, PermissionError):
                 pass
-        if self.shell_pid is not None and self.shell_status is None:
+        if self.leader_pid is not None and self.leader_status is None:
             try:
-                os.kill(self.shell_pid, signal.SIGKILL)
-                os.waitpid(self.shell_pid, 0)
+                os.kill(self.leader_pid, signal.SIGCONT)
+                os.kill(self.leader_pid, signal.SIGKILL)
+                os.waitpid(self.leader_pid, 0)
             except ChildProcessError:
                 pass
             except ProcessLookupError:
@@ -333,14 +419,17 @@ def main():
         return 2
     split = args.index('--')
     work_dir, options, command = args[0], set(args[1:split]), args[split + 1:]
-    unknown = options - {'--supervised', '--suspend-key'}
+    unknown = options - {'--supervised', '--suspend-key', '--no-shell'}
     if unknown:
         print(f'unknown options: {sorted(unknown)}\n{__doc__}', file=sys.stderr)
         return 2
     harness = Harness(work_dir, '--supervised' in options,
                       '--suspend-key' in options, command)
     try:
-        harness.run()
+        if '--no-shell' in options:
+            harness.run_without_shell()
+        else:
+            harness.run()
     except StepFailed as failure:
         harness.report['failure'] = str(failure)
     finally:

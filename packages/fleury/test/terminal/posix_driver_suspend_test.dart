@@ -123,6 +123,8 @@ void main() {
     }
   });
 
+  // Faked stdio is no job of the test process's terminal: each driver below
+  // says whether a job-control shell started its session (shellJobOverride).
   group('requestCtrlZSuspend', () {
     test('suspends a live native session that owns Ctrl+Z', () async {
       final input = _FakeStdin(hasTerminal: true);
@@ -131,6 +133,7 @@ void main() {
         stdinOverride: input,
         stdoutOverride: _RecordingStdout(),
         terminalModeController: _RawMode(),
+        shellJobOverride: true,
         selfStopOverride: () {
           stops++;
           return true;
@@ -168,6 +171,7 @@ void main() {
         stdoutOverride: _RecordingStdout(),
         suspendOnCtrlZ: false,
         terminalModeController: _RawMode(),
+        shellJobOverride: true,
         selfStopOverride: () {
           stops++;
           return true;
@@ -192,6 +196,7 @@ void main() {
       final driver = PosixTerminalDriver(
         stdinOverride: input,
         stdoutOverride: _RecordingStdout(),
+        shellJobOverride: true,
         selfStopOverride: () {
           stops++;
           return true;
@@ -202,6 +207,33 @@ void main() {
         expect(requestCtrlZSuspend(driver), isFalse);
         await Future<void>.delayed(Duration.zero);
         expect(stops, 0);
+      } finally {
+        await driver.restore();
+        await input.close();
+      }
+    });
+
+    test('declines when no job-control shell started the session', () async {
+      // A terminal emulator, a tmux pane, or `ssh -t host app` runs the app
+      // directly: nothing would continue a stopped job, so Ctrl+Z stays a key.
+      final input = _FakeStdin(hasTerminal: true);
+      var stops = 0;
+      final driver = PosixTerminalDriver(
+        stdinOverride: input,
+        stdoutOverride: _RecordingStdout(),
+        terminalModeController: _RawMode(),
+        shellJobOverride: false,
+        selfStopOverride: () {
+          stops++;
+          return true;
+        },
+      );
+      try {
+        await driver.enter(TerminalMode.interactive);
+        expect(requestCtrlZSuspend(driver), isFalse);
+        await Future<void>.delayed(Duration.zero);
+        expect(stops, 0);
+        expect(driver.debugSuspended, isFalse);
       } finally {
         await driver.restore();
         await input.close();
@@ -232,6 +264,7 @@ void main() {
     PosixTerminalDriver nativeDriver({
       bool suspendOnCtrlZ = true,
       bool terminalInput = true,
+      bool shellJob = true,
     }) {
       input = _FakeStdin(hasTerminal: terminalInput);
       output = _RecordingStdout();
@@ -240,6 +273,7 @@ void main() {
         stdoutOverride: output,
         suspendOnCtrlZ: suspendOnCtrlZ,
         terminalModeController: _RawMode(),
+        shellJobOverride: shellJob,
         selfStopOverride: () {
           stops++;
           return stopTakes;
@@ -349,6 +383,24 @@ void main() {
         expect(await session.suspend(), isFalse);
         expect(stops, 0);
         expect(driver.debugSuspended, isFalse);
+      } finally {
+        await driver.restore();
+        await input.close();
+      }
+    });
+
+    test('declines, and supportsSuspend is false, when no job-control shell '
+        'started the session', () async {
+      final driver = nativeDriver(shellJob: false);
+      final session = TerminalSession(driver);
+      try {
+        await driver.enter(TerminalMode.interactive);
+        expect(session.supportsSuspend, isFalse);
+        expect(await session.suspend(), isFalse);
+        expect(stops, 0);
+        expect(driver.debugSuspended, isFalse);
+        driver.write('FRAME');
+        expect(output.written.toString(), contains('FRAME'));
       } finally {
         await driver.restore();
         await input.close();

@@ -270,46 +270,66 @@ void main() {
       );
     }, skip: skipPty);
 
-    test(
-      'raw Ctrl+Z restores, self-stops, and re-enters after SIGCONT',
-      () async {
-        final capture = await _capturePty(
-          tempDir,
-          'suspend-resume',
-          extraArgs: const [
-            '--cols',
-            '40',
-            '--rows',
-            '8',
-            '--input-hex',
-            '1a',
-            '--input-after-output-ms',
-            '700',
-            '--continue-after-input-ms',
-            '300',
-            '--interrupt-after-output-ms',
-            '1500',
-            '--allow-exit-code',
-            '130',
-          ],
-        );
-        if (capture == null) return;
+    test('raw Ctrl+Z on a terminal that is not the controlling terminal is an '
+        'ordinary key', () async {
+      // capture_pty starts the app on a PTY that isn't its controlling
+      // terminal, so no shell could `fg` it after a stop: there is no job
+      // control at all. The press must leave the session alone — no stop, no
+      // restore and re-entry — and SIGINT ends it 800 ms later. (Suspending as
+      // a shell's job, restore and re-entry included, is
+      // test/integration/job_control_pty_test.dart.)
+      //
+      // The app runs in a process group of its own, as a shell's job would,
+      // so only the missing controlling terminal can rule a suspension out —
+      // not whether this test process happens to share a session leader's
+      // group.
+      final capture = await _capturePty(
+        tempDir,
+        'ctrl-z-without-job-control',
+        launcher: const [
+          'python3',
+          '-c',
+          'import os, sys; os.setpgid(0, 0); os.execv(sys.argv[1], sys.argv[1:])',
+        ],
+        extraArgs: const [
+          '--cols',
+          '40',
+          '--rows',
+          '8',
+          '--input-hex',
+          '1a',
+          '--input-after-output-ms',
+          '700',
+          '--interrupt-after-output-ms',
+          '1500',
+          '--allow-exit-code',
+          '130',
+        ],
+      );
+      if (capture == null) return;
 
-        expect(capture.metadata['timedOut'], isFalse);
-        expect(capture.metadata['exitCode'], 130);
-        expect(capture.output, contains('PTY-FIRST-FRAME'));
-        final signals = _signalNames(capture.metadata);
-        expect(signals, containsAll(['sigcont', 'sigint']));
-        expect(
-          signals,
-          isNot(contains('sigtstp')),
-          reason: 'the proof must exercise the parsed Ctrl+Z byte path',
-        );
-        _expectTerminalRestored(capture.output);
-        _expectTerminalReentered(capture.output);
-      },
-      skip: skipPty,
-    );
+      expect(
+        capture.metadata['timedOut'],
+        isFalse,
+        reason: 'a stopped app never takes the SIGINT',
+      );
+      expect(capture.metadata['exitCode'], 130);
+      expect(capture.output, contains('PTY-FIRST-FRAME'));
+      expect(_signalNames(capture.metadata), [
+        'sigint',
+      ], reason: 'nothing had to continue the app');
+      _expectTerminalRestored(capture.output);
+      expect(
+        _countOccurrences(capture.output, '\x1B[?1049h'),
+        1,
+        reason: 'the session never left for a shell and re-entered',
+      );
+      expect(
+        _countOccurrences(capture.output, '\x1B[?1049l'),
+        1,
+        reason: 'only the exit left the alternate screen',
+      );
+    }, skip: skipPty);
 
     test(
       'raw Ctrl+Z in a focused text field undoes instead of suspending',
@@ -412,6 +432,7 @@ Future<({Map<String, Object?> metadata, String output})?> _capturePty(
   required List<String> extraArgs,
   List<String> fixtureArgs = const [],
   String? stderrPath,
+  List<String> launcher = const [],
 }) async {
   final packageRoot = Directory.current;
   final repoRoot = _findRepoRoot(packageRoot);
@@ -424,7 +445,7 @@ Future<({Map<String, Object?> metadata, String output})?> _capturePty(
     ...fixtureArgs,
   ];
   final childCommand = stderrPath == null
-      ? fixtureCommand
+      ? [...launcher, ...fixtureCommand]
       : <String>[
           '/bin/sh',
           '-c',
@@ -506,13 +527,6 @@ void _expectTerminalRestored(String output) {
   expect(output, contains('\x1B[?2004l'));
   expect(output, contains('\x1B[?25h'));
   expect(output, contains('\x1B[?1049l'));
-}
-
-void _expectTerminalReentered(String output) {
-  expect(_countOccurrences(output, '\x1B[?1049h'), greaterThanOrEqualTo(2));
-  expect(_countOccurrences(output, '\x1B[?1049l'), greaterThanOrEqualTo(2));
-  expect(_countOccurrences(output, '\x1B[?2004h'), greaterThanOrEqualTo(2));
-  expect(_countOccurrences(output, '\x1B[?2004l'), greaterThanOrEqualTo(2));
 }
 
 void _expectTerminalHandoffOrder(String output) {

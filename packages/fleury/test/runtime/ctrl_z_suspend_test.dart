@@ -8,9 +8,10 @@
 //
 // These run the real runApp over a real PosixTerminalDriver whose stdio is
 // faked: stdin reports a terminal and a fake termios controller grants native
-// raw mode, so Ctrl+Z arrives as the parsed byte it is in production, and
-// `selfStopOverride` stands in for the SIGSTOP self-stop. The real-terminal
-// proof lives in test/integration/pty_run_app_test.dart.
+// raw mode, so Ctrl+Z arrives as the parsed byte it is in production,
+// `selfStopOverride` stands in for the SIGSTOP self-stop, and
+// `shellJobOverride` says whether a job-control shell started the session.
+// The real-terminal proof lives in test/integration/job_control_pty_test.dart.
 
 import 'dart:async';
 import 'dart:io';
@@ -111,9 +112,12 @@ final class _Session {
   /// SIGSTOP self-stops the driver attempted.
   int selfStops = 0;
 
+  /// [shellJob]: whether a job-control shell started the session, as one
+  /// does when a user runs the app from an interactive shell.
   static Future<_Session> start(
     Widget root, {
     bool suspendOnCtrlZ = true,
+    bool shellJob = true,
     DebugConfig debug = const DebugConfig(),
   }) async {
     final input = _TerminalStdin();
@@ -124,6 +128,7 @@ final class _Session {
       stdoutOverride: _QuietStdout(),
       suspendOnCtrlZ: suspendOnCtrlZ,
       terminalModeController: _RawMode(),
+      shellJobOverride: shellJob,
       selfStopOverride: () {
         session.selfStops++;
         // The stop "took": the session stays suspended until `fg`, which a
@@ -323,6 +328,27 @@ void main() {
       },
     );
 
+    test('without a job-control shell, an unhandled Ctrl+Z is an ordinary key '
+        'and the app keeps running', () async {
+      // A terminal emulator, a tmux pane, or `ssh -t host app` runs the app
+      // directly. Nothing there could continue a stopped job.
+      final session = await _Session.start(
+        const Text('nothing focusable'),
+        shellJob: false,
+      );
+      try {
+        await session.type(_ctrlZ);
+        await session.type(_kittyCtrlZ);
+
+        expect(session.selfStops, 0);
+        expect(session.driver.debugSuspended, isFalse);
+        expect(session.keyEvents.where(_isCtrlZ), hasLength(2));
+        expect(session.driver.isActive, isTrue);
+      } finally {
+        await session.close();
+      }
+    });
+
     test('a driver without job control keeps an unhandled Ctrl+Z an ordinary '
         'key (browser, served, and remote sessions)', () async {
       final driver = FakeTerminalDriver();
@@ -427,6 +453,39 @@ void main() {
         expect(concealed, isTrue);
         expect(session.selfStops, 1);
         expect(await requests.single, isTrue);
+      } finally {
+        await session.close();
+      }
+    });
+
+    test('without a job-control shell, supportsSuspend is false and the '
+        'request completes with false', () async {
+      bool? supported;
+      final requests = <Future<bool>>[];
+      final session = await _Session.start(
+        ScopeBuilder<TerminalSession>(
+          builder: (_, terminal) {
+            supported = terminal.supportsSuspend;
+            return KeyBindings(
+              bindings: [
+                KeyBinding(
+                  KeySequence.ctrl.t,
+                  onTrigger: (_) => requests.add(terminal.suspend()),
+                ),
+              ],
+              child: const Focus(autofocus: true, child: Text('composer')),
+            );
+          },
+        ),
+        shellJob: false,
+      );
+      try {
+        await session.type(_ctrlT);
+
+        expect(supported, isFalse);
+        expect(await requests.single, isFalse);
+        expect(session.selfStops, 0);
+        expect(session.driver.debugSuspended, isFalse);
       } finally {
         await session.close();
       }
