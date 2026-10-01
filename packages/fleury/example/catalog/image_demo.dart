@@ -3,9 +3,9 @@
 // eyeball how the half-block renderer handles aspect, letterboxing,
 // and edge sampling.
 //
-// Run (from packages/Fleury catalog):
+// Run (from packages/fleury):
 //
-//   dart run example/image_demo.dart
+//   dart run example/catalog/image_demo.dart
 //
 // Hot reload works — edit the gradient generator or the fit values
 // below, save, watch the image redraw in place.

@@ -2,8 +2,8 @@
 // the rendered grapheme grid to stdout. Lets you eyeball the layout
 // without running the live demo. Useful in CI / on a headless box.
 //
-// Run from packages/Fleury catalog:
-//   dart run example/dashboard_snapshot.dart
+// Run from packages/fleury:
+//   dart run example/catalog/dashboard_snapshot.dart
 
 import 'package:fleury/fleury.dart';
 import 'package:fleury/fleury_test_support.dart';

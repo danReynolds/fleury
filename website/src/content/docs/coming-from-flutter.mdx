@@ -110,8 +110,7 @@ the same widget tree, but different host entrypoints:
 | Use case | Import | Entrypoint |
 |---|---|---|
 | Native terminal app | `package:fleury/fleury.dart` | `runApp(const FleuryApp(title: 'My app', home: MyHomeScreen()))` |
-| Higher-level widgets in a terminal app | `package:fleury/fleury_core.dart` | still `runApp` |
-| Client-side browser embed | `package:fleury/fleury_core.dart`, `package:fleury_web/fleury_web.dart`, plus web-safe widgets | `mountApp(() => const FleuryApp(title: 'My app', home: MyHomeScreen()), into: host)` |
+| Client-side browser embed | `package:fleury/fleury_core.dart`, `package:fleury_web/fleury_web.dart` | `mountApp(() => const FleuryApp(title: 'My app', home: MyHomeScreen()), into: host)` |
 | Local browser preview of a native app, during development (macOS and Linux) | terminal app imports | `fleury serve --spawn dart --enable-vm-service=0 run bin/run_app.dart` |
 
 `MyHomeScreen` below is the first screen inside the shell. In a project made

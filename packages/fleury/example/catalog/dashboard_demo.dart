@@ -1,11 +1,11 @@
-// A live-updating dashboard demo that composes the Fleury catalog viz
+// A live-updating dashboard demo that composes the visualization
 // catalog under one layout — the "do they actually compose?" smoke test
 // for everything we've shipped.
 //
-// Run (from packages/Fleury catalog):
+// Run (from packages/fleury):
 //
 //   dart pub get
-//   dart run example/dashboard_demo.dart
+//   dart run example/catalog/dashboard_demo.dart
 //
 // Keys:
 //   Tab           focus the line chart (then arrows drive the crosshair)

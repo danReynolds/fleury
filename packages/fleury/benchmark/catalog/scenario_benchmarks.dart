@@ -1,7 +1,7 @@
 // Scenario benchmarks for app-shaped Fleury catalog workloads.
 //
-// This runner lives in Fleury catalog because core fleury cannot depend on the
-// higher-level widget package without creating the wrong dependency direction.
+// Keep composed-widget workloads together so their scenario fixtures and
+// performance history can move with the catalog if it is extracted later.
 
 import 'dart:async';
 import 'dart:convert';
