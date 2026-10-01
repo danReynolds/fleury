@@ -393,9 +393,11 @@ final class InitFrame extends RemoteFrame {
   ///
   /// Declared only by an app answering a [RemoteWireProtocol.shell] INIT,
   /// and always by one at [shellProtocolVersion]; null on every peer's INIT
-  /// and on every structured INIT. Optional params `mouse`, `motion`, `paste`,
-  /// `focus` and `keyboardProtocol`, all present or all absent. The app's
-  /// mode is fixed for the session, so the declaration is too.
+  /// and on every structured INIT: encoding a structured INIT that carries
+  /// it throws a [RemoteProtocolException], as decoding one does. Optional
+  /// params `mouse`, `motion`, `paste`, `focus` and `keyboardProtocol`, all
+  /// present or all absent. The app's mode is fixed for the session, so the
+  /// declaration is too.
   final TerminalInputModes? terminalInput;
 
   /// A supervisor's greeting, not a handshake.
@@ -624,39 +626,48 @@ Uint8List encodeFrame(RemoteFrame frame) {
   return out.toBytes();
 }
 
-String _encodeInit(InitFrame f) =>
-    'cols=${f.size.cols},'
-    'rows=${f.size.rows},'
-    'color=${f.colorMode.name},'
-    'glyph=${f.glyphTier.name},'
-    'image=${f.imageProtocol.name},'
-    'tmux=${f.tmuxPassthrough ? 1 : 0},'
-    // Optional fields are absent when null or false.
-    '${f.images == null ? '' : 'images=${f.images!.name},'}'
-    '${f.hyperlinks ? 'hyperlinks=1,' : ''}'
-    // Semantic guarantees, never Kitty flags: a browser peer has no flags,
-    // and the reader must not have to know the far end's protocol to
-    // understand its promises.
-    '${f.keyboard == null ? '' : 'keyboard=${f.keyboard!.wireBits},'}'
-    // The app's answer to `fleury shell` only: the input its terminal must
-    // report. Absent from every peer INIT and every structured one.
-    '${switch (f.terminalInput) {
-      null => '',
-      final input => 'mouse=${input.mouse ? 1 : 0},'
-          'motion=${input.mouseMotion ? 1 : 0},'
-          'paste=${input.bracketedPaste ? 1 : 0},'
-          'focus=${input.focusReporting ? 1 : 0},'
-          'keyboardProtocol=${input.keyboardProtocol.name},',
-    }}'
-    // Supervisor-only fields, absent on every peer INIT.
-    '${f.provisional ? 'provisional=1,' : ''}'
-    '${f.debugWire == null ? '' : 'debug=${f.debugWire! ? 1 : 0},'}'
-    // The protocol, last. Each has its own key, so the version space of one
-    // can never be read as the other's.
-    '${switch (f.protocol) {
-      RemoteWireProtocol.structured => 'v',
-      RemoteWireProtocol.shell => 'shell',
-    }}=${f.protocolVersion}';
+String _encodeInit(InitFrame f) {
+  // The decoder rejects this shape, so the encoder must never produce it.
+  if (f.terminalInput != null && f.protocol != RemoteWireProtocol.shell) {
+    throw const RemoteProtocolException(
+      'INIT frame declares terminal input under the structured protocol; '
+      'only an app answering `fleury shell` declares it. Frame was not '
+      'encoded.',
+    );
+  }
+  return 'cols=${f.size.cols},'
+      'rows=${f.size.rows},'
+      'color=${f.colorMode.name},'
+      'glyph=${f.glyphTier.name},'
+      'image=${f.imageProtocol.name},'
+      'tmux=${f.tmuxPassthrough ? 1 : 0},'
+      // Optional fields are absent when null or false.
+      '${f.images == null ? '' : 'images=${f.images!.name},'}'
+      '${f.hyperlinks ? 'hyperlinks=1,' : ''}'
+      // Semantic guarantees, never Kitty flags: a browser peer has no flags,
+      // and the reader must not have to know the far end's protocol to
+      // understand its promises.
+      '${f.keyboard == null ? '' : 'keyboard=${f.keyboard!.wireBits},'}'
+      // The app's answer to `fleury shell` only: the input its terminal must
+      // report. Absent from every peer INIT and every structured one.
+      '${switch (f.terminalInput) {
+        null => '',
+        final input => 'mouse=${input.mouse ? 1 : 0},'
+            'motion=${input.mouseMotion ? 1 : 0},'
+            'paste=${input.bracketedPaste ? 1 : 0},'
+            'focus=${input.focusReporting ? 1 : 0},'
+            'keyboardProtocol=${input.keyboardProtocol.name},',
+      }}'
+      // Supervisor-only fields, absent on every peer INIT.
+      '${f.provisional ? 'provisional=1,' : ''}'
+      '${f.debugWire == null ? '' : 'debug=${f.debugWire! ? 1 : 0},'}'
+      // The protocol, last. Each has its own key, so the version space of one
+      // can never be read as the other's.
+      '${switch (f.protocol) {
+        RemoteWireProtocol.structured => 'v',
+        RemoteWireProtocol.shell => 'shell',
+      }}=${f.protocolVersion}';
+}
 
 /// Wire layout: [u16 id length][id utf-8][image bytes...].
 Uint8List _encodeInlineImage(InlineImageFrame f) {

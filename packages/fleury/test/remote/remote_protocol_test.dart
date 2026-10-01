@@ -797,6 +797,28 @@ void main() {
         rejects('under the structured protocol'),
       );
     });
+
+    test('a structured INIT that carries terminal input is never encoded', () {
+      // The decoder rejects that shape, so the encoder refuses to make it.
+      expect(
+        () => encodeFrame(
+          const InitFrame(
+            size: CellSize(80, 24),
+            colorMode: ColorMode.truecolor,
+            imageProtocol: ImageProtocol.halfBlock,
+            tmuxPassthrough: false,
+            terminalInput: TerminalInputModes(
+              mouse: true,
+              mouseMotion: false,
+              bracketedPaste: true,
+              focusReporting: true,
+              keyboardProtocol: KeyboardProtocolMode.lifecycle,
+            ),
+          ),
+        ),
+        rejects('under the structured protocol'),
+      );
+    });
   });
 }
 
