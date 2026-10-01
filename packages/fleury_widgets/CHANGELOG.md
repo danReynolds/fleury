@@ -63,7 +63,7 @@
 
 - **Breaking:** `Dialog` and `CommandPalette` no longer carry a semantic
   dismiss action of their own. A presented dialog's or palette's route
-  advertises dismiss and honours `barrierDismissible` and `PopScope`; their
+  advertises dismiss and honors `barrierDismissible` and `PopScope`; their
   own action bypassed both and could pop a page they were shown inline in.
   Dismiss through the route node (`role: SemanticRole.route`).
 - A `CommandPalette` shown inline on a page no longer pops the page after

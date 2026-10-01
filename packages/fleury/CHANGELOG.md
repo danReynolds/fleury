@@ -46,7 +46,7 @@
 
 - **`fleury shell` relays every key.** The shell now puts its terminal in the
   same raw mode a native app uses, so Ctrl+C, Ctrl+Z, Ctrl+\\ and Ctrl+S reach
-  the attached app instead of signalling the shell. It restores the terminal
+  the attached app instead of signaling the shell. It restores the terminal
   exactly on every exit path (the app exits or is killed, SIGINT, SIGTERM,
   SIGHUP, or a hangup, which now exits 129), keeps serving later runs until
   you press Ctrl+C with no app attached, and discards keys typed while no app
@@ -405,7 +405,7 @@
   `ListController.pinToBottom` (use `followTail` and `isFollowing`). The
   vertical spellings `atTop` / `atBottom` / `jumpToBottom` on `ListController`
   and `atTop` / `atBottom` / `scrollToTop` / `scrollToBottom` on
-  `ScrollController` are removed in favour of `atStart` / `atEnd` /
+  `ScrollController` are removed in favor of `atStart` / `atEnd` /
   `jumpToEnd` / `scrollToStart` / `scrollToEnd`.
 - **Breaking:** `RenderObject.markNeedsPaint()` is removed. It invalidated
   layout as well as paint, as a safe default for unaudited setters; call
@@ -619,7 +619,7 @@
 - **Reentrant paste.** Synchronous model listeners can start another paste
   without truncating accepted content or splitting its undo transaction.
 - **Navigation cancellation.** Removing an entering replacement or stack-clear
-  route no longer lets its cancelled transition delete the revealed route.
+  route no longer lets its canceled transition delete the revealed route.
 - **Overlay ownership.** Invalid insertions and initial entry lists are checked
   before attachment, preserving the original owner and allowing safe retries.
 - **Remote startup.** Teardown resolves pending handshakes, overlapping startup
@@ -746,7 +746,7 @@ elements, state, layout) and terminal-native internals.
 - **Keyboard lifecycle (RFC 0020).** Key releases and held-state work out of
   the box: `runApp` requests the full Kitty keyboard protocol and capable
   drivers negotiate down transactionally — no flags, no tiers to declare, and a
-  terminal that only partly honours the protocol is rolled back to the safe
+  terminal that only partly honors the protocol is rolled back to the safe
   tier before the app sees a keystroke (inside tmux/screen the automatic ask
   stops at the safe tier; `FLEURY_KEYBOARD` overrides). New DX surface:
   `Keyboard.of(context)` (latched `snapshot` with `isHeld` / `wasPressed` /
@@ -769,10 +769,11 @@ elements, state, layout) and terminal-native internals.
   — any editor, no flags, no extension. Reload telemetry and compile errors
   surface in the debug shell (Logs / Errors tabs). Opt out with
   `FLEURY_HOT_RELOAD=0` or `runApp(enableHotReload: false)`.
-- Hot restart: `ext.fleury.restart` tears the app down gracefully and
-  re-runs `main()` fresh in the same terminal session (for the edits reload
-  can't apply). `ext.fleury.shutdown` and `ext.fleury.reloadReport` complete
-  the dev-tooling service-extension surface.
+- Hot restart: Ctrl+G, then F5, while the dev supervisor runs the app, tears
+  the app down gracefully and re-runs `main()` fresh in the same terminal
+  session (for the edits reload can't apply). The `ext.fleury.restart`,
+  `ext.fleury.shutdown` and `ext.fleury.reloadReport` service extensions are
+  the supervisor's hooks, not an entry point for other tools.
 - Apps spawned under `fleury serve --spawn` self-reload on save when the
   spawn command itself enables the VM service (e.g. `dart
   --enable-vm-service=0 run bin/main.dart`) — the browser preview updates
