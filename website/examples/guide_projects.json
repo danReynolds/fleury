@@ -572,11 +572,14 @@
   ],
   "layout.responsive": [
     {
-      "label": "layout.dart",
+      "label": "workspace.dart",
       "source": "website/examples/lib/registry.dart",
-      "declaration": "_ResponsiveWorkspaceTourState",
-      "member": "build",
-      "expression": "LayoutBuilder"
+      "declaration": "_Workspace"
+    },
+    {
+      "label": "width_buttons.dart",
+      "source": "website/examples/lib/registry.dart",
+      "declaration": "_ResizableWorkspaceState"
     }
   ],
   "agents.release-checklist": [

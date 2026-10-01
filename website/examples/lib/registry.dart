@@ -2806,7 +2806,7 @@ Text('\${summary.health.name}: \${summary.activeTaskCount} of \${summary.taskCou
     cols: 74,
     rows: 18,
     interactive: true,
-    builder: () => const _ResponsiveWorkspaceTour(),
+    builder: () => _framed(const _ResizableWorkspace()),
   ),
   ExampleInfo(
     id: 'navigation.basics',
@@ -5986,91 +5986,95 @@ class _TickerSimulationState extends State<_TickerSimulation>
 /// A local-breakpoint demo: its buttons change only the child envelope, so the
 /// LayoutBuilder proves that panes adapt to parent constraints rather than the
 /// global browser or terminal size.
-class _ResponsiveWorkspaceTour extends StatefulWidget {
-  const _ResponsiveWorkspaceTour();
+/// Two panes side by side when there is room, stacked when there is not.
+class _Workspace extends StatelessWidget {
+  const _Workspace();
 
   @override
-  State<_ResponsiveWorkspaceTour> createState() =>
-      _ResponsiveWorkspaceTourState();
+  Widget build(BuildContext context) {
+    const files = Panel(
+      title: 'Files',
+      child: Padding(
+        padding: EdgeInsets.all(1),
+        child: Text('README.md\nlib/\ntest/'),
+      ),
+    );
+    const preview = Panel(
+      title: 'Preview',
+      child: Padding(
+        padding: EdgeInsets.all(1),
+        child: Text('# Fleury\n\nA framework for terminal apps.'),
+      ),
+    );
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final wide = (constraints.maxCols ?? 0) >= 60;
+        return Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            Text(
+              wide ? 'WIDE · TWO PANES' : 'NARROW · STACKED',
+              style: const CellStyle(bold: true),
+            ),
+            const SizedBox(height: 1),
+            Expanded(
+              child: wide
+                  ? const Row(
+                      crossAxisAlignment: CrossAxisAlignment.stretch,
+                      children: [
+                        Expanded(flex: 2, child: files),
+                        SizedBox(width: 1),
+                        Expanded(flex: 3, child: preview),
+                      ],
+                    )
+                  : const Column(
+                      crossAxisAlignment: CrossAxisAlignment.stretch,
+                      children: [
+                        Expanded(child: files),
+                        SizedBox(height: 1),
+                        Expanded(child: preview),
+                      ],
+                    ),
+            ),
+          ],
+        );
+      },
+    );
+  }
 }
 
-class _ResponsiveWorkspaceTourState extends State<_ResponsiveWorkspaceTour> {
-  var _width = 68;
-
-  Widget _files() => const Panel(
-    title: 'Files',
-    child: Padding(
-      padding: EdgeInsets.all(1),
-      child: Text('README.md\nlib/\ntest/'),
-    ),
-  );
-
-  Widget _preview() => const Panel(
-    title: 'Preview',
-    child: Padding(
-      padding: EdgeInsets.all(1),
-      child: Text('# Fleury\n\nA framework for terminal apps.'),
-    ),
-  );
+class _ResizableWorkspace extends StatefulWidget {
+  const _ResizableWorkspace();
 
   @override
-  Widget build(BuildContext context) => _framed(
-    Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Row(
-          children: [
-            Button(
-              text: 'Narrow',
-              autofocus: true,
-              onPressed: () => setState(() => _width = 42),
-            ),
-            const SizedBox(width: 1),
-            Button(text: 'Wide', onPressed: () => setState(() => _width = 68)),
-          ],
-        ),
-        const SizedBox(height: 1),
-        Expanded(
-          child: SizedBox(
-            width: _width,
-            child: LayoutBuilder(
-              builder: (context, constraints) {
-                final wide = (constraints.maxCols ?? 0) >= 60;
-                return Column(
-                  crossAxisAlignment: CrossAxisAlignment.stretch,
-                  children: [
-                    Text(
-                      wide ? 'WIDE · TWO PANES' : 'NARROW · STACKED',
-                      style: const CellStyle(bold: true),
-                    ),
-                    const SizedBox(height: 1),
-                    Expanded(
-                      child: wide
-                          ? Row(
-                              crossAxisAlignment: CrossAxisAlignment.stretch,
-                              children: [
-                                Expanded(flex: 2, child: _files()),
-                                const SizedBox(width: 1),
-                                Expanded(flex: 3, child: _preview()),
-                              ],
-                            )
-                          : Column(
-                              crossAxisAlignment: CrossAxisAlignment.stretch,
-                              children: [
-                                Expanded(child: _files()),
-                                const SizedBox(height: 1),
-                                Expanded(child: _preview()),
-                              ],
-                            ),
-                    ),
-                  ],
-                );
-              },
-            ),
+  State<_ResizableWorkspace> createState() => _ResizableWorkspaceState();
+}
+
+class _ResizableWorkspaceState extends State<_ResizableWorkspace> {
+  // The buttons stand in for a resize: in an app, the terminal or the
+  // surrounding layout decides how wide the workspace is.
+  var _width = 68;
+
+  @override
+  Widget build(BuildContext context) => Column(
+    crossAxisAlignment: CrossAxisAlignment.start,
+    children: [
+      Row(
+        children: [
+          Button(
+            text: 'Narrow',
+            autofocus: true,
+            onPressed: () => setState(() => _width = 42),
           ),
-        ),
-      ],
-    ),
+          const SizedBox(width: 1),
+          Button(text: 'Wide', onPressed: () => setState(() => _width = 68)),
+        ],
+      ),
+      const SizedBox(height: 1),
+      Expanded(
+        child: SizedBox(width: _width, child: const _Workspace()),
+      ),
+    ],
   );
 }
 
