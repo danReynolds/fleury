@@ -568,6 +568,12 @@
       "label": "commands_intro.dart",
       "source": "packages/samples/lib/src/commands_showcase.dart",
       "declaration": "_CommandIntroState"
+    },
+    {
+      "label": "app.dart",
+      "source": "packages/samples/lib/src/commands_showcase.dart",
+      "declaration": "_openCommandsId",
+      "through": "CommandIntroApp"
     }
   ],
   "layout.responsive": [
