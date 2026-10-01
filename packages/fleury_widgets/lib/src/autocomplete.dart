@@ -89,8 +89,9 @@ class Autocomplete<T extends Object> extends StatefulWidget {
 
   /// Marks the current value invalid: the field draws in the theme's error
   /// style and reports this message through semantics, but doesn't show the
-  /// text. Use it outside a `FormField`; inside one, the field supplies its
-  /// own error and shows the message below the input.
+  /// text. Inside a `FormField`, this message wins over the `FormField`'s
+  /// validator, though not over its own `error`, and the `FormField` shows
+  /// the winning message below the input.
   final String? validationError;
 
   /// Called with the selected option when the user picks a suggestion.

@@ -522,10 +522,12 @@ class ListController extends Notifier {
 ///     number of items in view, and Home and End to the first and last item.
 ///     A move reports [onFocusedItemChanged] and scrolls the item into view.
 ///   - Enter or a completed click selects the current item via [onSelect].
-///   - An arrow or page key that would move past the first or last item
-///     follows [edgeBehavior]: `contain` consumes the key, `bubble` returns
-///     it to the focus chain so an ancestor `KeyBindings` (e.g. one
-///     coordinating sidebar + main pane focus traversal) can react.
+///   - An arrow or page key pressed on the first item toward the start, or on
+///     the last toward the end, follows [edgeBehavior]: `contain` consumes
+///     the key, `bubble` returns it to the focus chain so an ancestor
+///     `KeyBindings` (e.g. one coordinating sidebar + main pane focus
+///     traversal) can react. From any other item, a page key stops at the
+///     first or last item.
 ///   - A list without a current item (`selectable: false`, or a controller
 ///     with no cursor) scrolls instead: the arrows by one cell and PageUp and
 ///     PageDown by a viewport, following [edgeBehavior] once scrolled to an

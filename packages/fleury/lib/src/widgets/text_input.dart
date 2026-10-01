@@ -980,10 +980,12 @@ class TextEditingController extends Notifier {
 /// A single-line editable text field. Read or set its text through a
 /// [TextEditingController], or react to edits with [onChanged] and [onSubmit].
 ///
-/// While focused, the field takes typed characters, so an enclosing
-/// `KeyBindings` never sees printable keys. Other keys the field doesn't use,
-/// such as `Ctrl+S`, pass on to enclosing widgets. With the default [keymap]
-/// ([TextEditingKeymap.defaultSingleLine]):
+/// While focused, the field takes typed characters, so a binding in an
+/// enclosing `KeyBindings` whose first key is one, such as `q`, doesn't fire.
+/// A typed character that continues a sequence already under way still
+/// reaches its binding: the `b` of `Ctrl+X b` completes it. Other keys the
+/// field doesn't use, such as `Ctrl+S`, pass on to enclosing widgets. With the
+/// default [keymap] ([TextEditingKeymap.defaultSingleLine]):
 ///
 /// - Left and Right move the caret. At either end of the text, with nothing
 ///   selected, an unmodified press passes on instead, so arrow-key focus
@@ -1011,7 +1013,7 @@ class TextEditingController extends Notifier {
 ///
 /// Where the terminal or browser reports the Super key (Cmd on macOS),
 /// Super+A, Super+C, Super+X, Super+Z, and Super+Shift+Z do the same as their
-/// Ctrl forms. [TextEditingKeymap.emacsSingleLine] adds readline keys and
+/// Ctrl forms. [TextEditingKeymap.emacsSingleLine] adds Emacs-style keys and
 /// takes over Ctrl+A and Ctrl+Y: among others, Ctrl+A and Ctrl+E jump to the
 /// start and end; Ctrl+K, Ctrl+U, and Ctrl+W cut text into a kill ring shared
 /// by all fields; and Ctrl+Y pastes it back.
@@ -1176,7 +1178,7 @@ class TextInput extends StatefulWidget {
 
   /// Which keys trigger which editing actions. Defaults to
   /// [TextEditingKeymap.defaultSingleLine]; [TextEditingKeymap.emacsSingleLine]
-  /// adds readline keys.
+  /// adds Emacs-style keys such as Ctrl+A, Ctrl+E, and Ctrl+K.
   final TextEditingKeymap keymap;
 
   /// Policy for chunking large bracketed paste payloads.

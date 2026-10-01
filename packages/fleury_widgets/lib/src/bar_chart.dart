@@ -115,9 +115,10 @@ class BarChart extends StatelessWidget {
   /// derived from the theme's color scheme (primary, info, warning, success,
   /// error).
   ///
-  /// For stacked bars where segments are categorical (no semantic
-  /// meaning), prefer overriding with `Palettes.categorical` to avoid
-  /// implying that a yellow segment is a "warning" or red is "error".
+  /// For stacked bars whose segments are just categories, with no meaning of
+  /// their own, `Palettes.categorical` orders its colors for telling them
+  /// apart. It still includes yellow and red, so a segment can still read as
+  /// a warning or an error; pass colors of your own to rule that out.
   final List<Color>? palette;
 
   /// Labels for stacked-bar segments, parallel to each [Bar.stacked]'s

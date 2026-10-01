@@ -151,8 +151,9 @@ class CompletionTextInput extends StatefulWidget {
 
   /// Marks the current value invalid: the field draws in the theme's error
   /// style and reports this message through semantics, but doesn't show the
-  /// text. Use it outside a `FormField`; inside one, the field supplies its
-  /// own error and shows the message below the input.
+  /// text. Inside a `FormField`, this message wins over the `FormField`'s
+  /// validator, though not over its own `error`, and the `FormField` shows
+  /// the winning message below the input.
   final String? validationError;
 
   /// Label exposed through the underlying text-field semantic node.
