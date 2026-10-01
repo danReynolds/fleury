@@ -220,7 +220,6 @@ String _pubspec({
       '''
 dependencies:
   fleury: $_fleuryConstraint
-  fleury_widgets: $_fleuryConstraint
 
 dev_dependencies:
   fleury_test: $_fleuryConstraint
@@ -234,10 +233,6 @@ dependencies:
     git:
       url: $_repositoryUrl
       path: packages/fleury
-  fleury_widgets:
-    git:
-      url: $_repositoryUrl
-      path: packages/fleury_widgets
 
 dev_dependencies:
   fleury_test:
@@ -587,7 +582,6 @@ const _reservedWords = <String>{
 
 const _generatedDependencyNames = <String>{
   'fleury',
-  'fleury_widgets',
   'fleury_test',
   'lints',
   'test',

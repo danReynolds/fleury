@@ -51,12 +51,11 @@ packages don't exist yet, so `dart pub get` fails without it.
 settings, then runs `dart pub get`. To use an existing empty directory, run
 `fleury create . --dependency-source=git` from inside it.
 
-The project depends on two packages:
-`fleury`, the framework and its core widgets (layout, text and text editing,
-focus, buttons, lists, navigation, theming), and `fleury_widgets`, the larger
-control library on top (checkboxes and selects, tables, charts and meters,
-tabs, dialogs, and more). [Core and targets](/fleury/architecture/core-and-targets/)
-explains the split.
+The app has one UI dependency: `fleury`. It includes layout, text editing,
+focus, navigation, theming, and the full catalog of controls, tables, charts,
+tabs, and dialogs. `fleury_test` is a development dependency for the generated
+tests. [Core and targets](/fleury/architecture/core-and-targets/) explains the
+optional browser and tooling companions.
 
 ## 2. Run the app
 
@@ -102,7 +101,6 @@ Replace `lib/app.dart` with:
 import 'dart:async';
 
 import 'package:fleury/fleury.dart';
-import 'package:fleury_widgets/fleury_widgets.dart';
 
 class MyApp extends StatelessWidget {
   const MyApp({super.key});
@@ -194,7 +192,6 @@ timer and its `dart:async` import go:
 
 ```dart title="lib/app.dart"
 import 'package:fleury/fleury.dart';
-import 'package:fleury_widgets/fleury_widgets.dart';
 
 class MyApp extends StatelessWidget {
   const MyApp({super.key});
@@ -257,8 +254,8 @@ Stop the preview with `Ctrl+C` in the terminal running `serve`.
 
 `serve` needs the native process running. To ship the app as a static page with
 no backend, compile it to JavaScript instead. The app code in the bundle must
-use the **web-safe** libraries, `fleury_core.dart` instead of `fleury.dart` and
-`fleury_widgets_web.dart` instead of `fleury_widgets.dart`: dart2js compiles
+use the **web-safe** `fleury_core.dart` library, which includes the entire
+widget catalog, instead of the native `fleury.dart` library: dart2js compiles
 code that imports `dart:io`, but that code throws when it runs in the browser.
 
 Add `fleury_web` and `web` to `pubspec.yaml`, merging these entries into the
@@ -277,12 +274,12 @@ Then run `dart pub upgrade`, so every Fleury package resolves from the same
 commit.
 
 `lib/app.dart` uses no native-only APIs, so it becomes web-safe by switching its
-two imports to the web-safe libraries. Nothing else in the file changes, and
+Fleury import to `fleury_core.dart`, which includes the whole widget catalog.
+Nothing else in the file changes, and
 `bin/run_app.dart` keeps running it in the terminal:
 
 ```dart title="lib/app.dart"
 import 'package:fleury/fleury_core.dart';
-import 'package:fleury_widgets/fleury_widgets_web.dart';
 ```
 
 The browser entrypoint mounts the same `MyApp` into a page element:

@@ -6,8 +6,6 @@ environment:
 dependencies:
   fleury:
     path: ../packages/fleury
-  fleury_widgets:
-    path: ../packages/fleury_widgets
   fleury_samples:
     path: ../packages/samples
   ffi: ^2.1.0

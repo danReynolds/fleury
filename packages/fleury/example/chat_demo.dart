@@ -11,7 +11,7 @@
 //     the top of the composer-adjacent list) move focus directly to
 //     the spatial neighbor — no Tab cycling needed.
 //   - A static hint line surfaces the bindings at the bottom. (The
-//     auto-discovering KeyHintBar lives in fleury_widgets.)
+//     auto-discovering KeyHintBar lives in Fleury catalog.)
 //   - Wrapping Text inside ListView lets long messages span multiple
 //     rows without manual line management.
 //

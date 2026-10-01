@@ -42,3 +42,6 @@ export 'src/runtime/run_app.dart'
 export 'src/terminal/native_driver.dart' show createNativeTerminalDriver;
 export 'src/terminal/posix_driver.dart' show PosixTerminalDriver;
 export 'src/terminal/windows_driver.dart' show WindowsTerminalDriver;
+
+// Native filesystem source for the bundled catalog.
+export 'src/catalog/local_file_source.dart' show LocalFileSource;

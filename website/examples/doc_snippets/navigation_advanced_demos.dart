@@ -5,7 +5,6 @@
 import 'dart:async';
 
 import 'package:fleury/fleury.dart';
-import 'package:fleury_widgets/fleury_widgets.dart';
 
 Widget placementDemoApp() =>
     const FleuryApp(title: 'Dialog placement', home: PlacementDemo());

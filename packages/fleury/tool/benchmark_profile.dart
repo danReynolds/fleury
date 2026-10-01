@@ -68,7 +68,7 @@ Future<Map<String, Object?>> _runProfile(
     '--disable-service-auth-codes',
     '--pause-isolates-on-start',
     '--pause-isolates-on-exit',
-    'benchmark/scenario_benchmarks.dart',
+    target.runner,
     ...runnerArgs,
   ];
 
@@ -371,10 +371,8 @@ bool _isProjectClass(ClassHeapStats stat) {
 
 bool _isProjectUri(String value) {
   return value.startsWith('package:fleury') ||
-      value.startsWith('package:fleury_widgets') ||
       value.startsWith('package:fleury_example_console') ||
       value.contains('/packages/fleury/') ||
-      value.contains('/packages/fleury_widgets/') ||
       value.contains('/packages/fleury_example_console/');
 }
 
@@ -714,9 +712,14 @@ final class _ProfileOptions {
 }
 
 final class _BenchmarkTarget {
-  const _BenchmarkTarget({required this.packagePath, required this.scenarios});
+  const _BenchmarkTarget({
+    required this.packagePath,
+    required this.scenarios,
+    this.runner = 'benchmark/scenario_benchmarks.dart',
+  });
 
   final String packagePath;
+  final String runner;
   final List<String> scenarios;
 }
 
@@ -726,7 +729,8 @@ const _targets = <_BenchmarkTarget>[
     scenarios: <String>['SB.1', 'SB.2', 'SB.12'],
   ),
   _BenchmarkTarget(
-    packagePath: 'packages/fleury_widgets',
+    packagePath: 'packages/fleury',
+    runner: 'benchmark/catalog/scenario_benchmarks.dart',
     scenarios: <String>[
       'SB.3',
       'SB.4',

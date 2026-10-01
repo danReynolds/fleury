@@ -46,7 +46,7 @@ void main() {
       expect(result.stdout, contains('Widget demos:'));
       expect(
         result.stdout,
-        contains('app-shell -> example/app_shell_demo.dart'),
+        contains('app-shell -> example/catalog/app_shell_demo.dart'),
       );
       expect(result.stdout, contains('Demo app:'));
       expect(result.stdout, contains('Storybook:'));
@@ -107,8 +107,8 @@ void main() {
         expect(
           appShell.stdout,
           contains(
-            '(packages/fleury_widgets) dart run '
-            'example/app_shell_demo.dart',
+            '(packages/fleury) dart run '
+            'example/catalog/app_shell_demo.dart',
           ),
         );
 
@@ -126,13 +126,7 @@ void main() {
         );
         expect(check.stdout, contains('(packages/storybook) dart analyze'));
         expect(check.stdout, contains('(packages/storybook) dart test'));
-        expect(
-          check.stdout,
-          contains(
-            '(packages/fleury_widgets) dart test '
-            'test/dashboard_demo_test.dart test/app_shell_demo_test.dart',
-          ),
-        );
+        expect(check.stdout, contains('(packages/fleury_test) dart test'));
         expect(check.stdout, isNot(contains('proof_console_test.dart')));
 
         final fullCheck = await _runTool(['--dry-run', 'check']);
@@ -155,7 +149,7 @@ void main() {
         expect(
           coverage.stdout,
           contains(
-            '(packages/fleury_widgets) dart test --concurrency=1 '
+            '(packages/fleury_test) dart test test/catalog --concurrency=1 '
             '--reporter=json',
           ),
         );
@@ -172,6 +166,13 @@ void main() {
         final fixtureTool = File('${fixture.path}/tool/fleury_dev.dart');
         await fixtureTool.parent.create(recursive: true);
         await File('../../tool/fleury_dev.dart').copy(fixtureTool.path);
+        final fixtureFlags = File(
+          '${fixture.path}/profiling/bin/allocation_trace_config.dart',
+        );
+        await fixtureFlags.parent.create(recursive: true);
+        await File(
+          '../../profiling/bin/allocation_trace_config.dart',
+        ).copy(fixtureFlags.path);
         final result = await Process.run(Platform.resolvedExecutable, <String>[
           fixtureTool.path,
           'check',

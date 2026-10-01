@@ -14,6 +14,8 @@ void main() {
     'lib/fleury_core.dart',
     'lib/fleury_host.dart',
     'lib/fleury_wire.dart',
+    'lib/fleury_widget_support.dart',
+    'lib/themes.dart',
   ]) {
     test('$barrel is transitively free of dart:io and dart:ffi', () {
       final offenders = <String>[];

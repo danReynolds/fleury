@@ -1,0 +1,974 @@
+import 'dart:async' show unawaited;
+
+import '../primitives.dart';
+
+/// One result rendered by [SearchPanel].
+final class SearchResult {
+  const SearchResult({
+    required this.title,
+    this.id,
+    this.subtitle,
+    this.category,
+    this.source,
+    this.detail,
+    this.enabled = true,
+    this.metadata = const <String, Object?>{},
+  });
+
+  /// Stable result identity used by semantics and copy callbacks.
+  final Object? id;
+
+  /// Primary row text.
+  final String title;
+
+  /// Secondary row text.
+  final String? subtitle;
+
+  /// Optional grouping/category text.
+  final String? category;
+
+  /// Optional source or origin label.
+  final String? source;
+
+  /// Optional longer detail text. Included in search and copy, but not
+  /// rendered in the compact row by default.
+  final String? detail;
+
+  /// Whether this result can be activated.
+  final bool enabled;
+
+  /// App-specific semantic state carried by the row.
+  final Map<String, Object?> metadata;
+}
+
+/// Predicate used by [SearchResultIndex] and [buildSearchResultOrder].
+typedef SearchResultMatcher = bool Function(SearchResult result, String query);
+
+/// Cached, sanitized search index for [SearchResult] collections.
+///
+/// The index returns source-result indexes instead of reordered result objects
+/// so callers can preserve stable selection, activation, copy, and semantic
+/// state from their original list. Default matching is ranked as exact,
+/// prefix, contains, then fuzzy subsequence. Passing a custom `matcher` keeps
+/// caller-owned source-order filtering semantics.
+final class SearchResultIndex {
+  SearchResultIndex(List<SearchResult> results)
+    : _entries = List<_SearchResultEntry>.unmodifiable([
+        for (var index = 0; index < results.length; index++)
+          _SearchResultEntry(
+            sourceIndex: index,
+            result: results[index],
+            searchFields: _searchResultFields(results[index]),
+          ),
+      ]);
+
+  final List<_SearchResultEntry> _entries;
+
+  /// Number of indexed source results.
+  int get length => _entries.length;
+
+  /// Returns source result indexes in display order after applying [query].
+  List<int> order({String query = '', SearchResultMatcher? matcher}) {
+    final trimmed = _sanitizeSearchText(query).trim();
+    if (trimmed.isEmpty) {
+      return List<int>.unmodifiable(_entries.map((entry) => entry.sourceIndex));
+    }
+
+    if (matcher != null) {
+      return List<int>.unmodifiable([
+        for (final entry in _entries)
+          if (matcher(entry.result, trimmed)) entry.sourceIndex,
+      ]);
+    }
+
+    final q = trimmed.toLowerCase();
+    final exact = <int>[];
+    final prefix = <int>[];
+    final contains = <int>[];
+    final fuzzy = <int>[];
+    for (final entry in _entries) {
+      switch (_searchResultRank(entry, q)) {
+        case _SearchResultRank.exact:
+          exact.add(entry.sourceIndex);
+        case _SearchResultRank.prefix:
+          prefix.add(entry.sourceIndex);
+        case _SearchResultRank.contains:
+          contains.add(entry.sourceIndex);
+        case _SearchResultRank.fuzzy:
+          fuzzy.add(entry.sourceIndex);
+        case null:
+          break;
+      }
+    }
+    return List<int>.unmodifiable([...exact, ...prefix, ...contains, ...fuzzy]);
+  }
+}
+
+/// Clipboard/export behavior for [SearchPanel] selected-result copy.
+final class SearchPanelCopyOptions {
+  const SearchPanelCopyOptions({
+    this.includeSubtitle = true,
+    this.includeCategory = true,
+    this.includeSource = true,
+    this.includeDetail = true,
+    this.clipboardPolicy = ClipboardWritePolicy.standard,
+  });
+
+  final bool includeSubtitle;
+  final bool includeCategory;
+  final bool includeSource;
+  final bool includeDetail;
+  final ClipboardWritePolicy clipboardPolicy;
+}
+
+/// Result delivered after [SearchPanel] copies the selected result.
+final class SearchPanelCopyResult {
+  const SearchPanelCopyResult({
+    required this.resultIndex,
+    required this.viewIndex,
+    required this.result,
+    required this.text,
+    required this.report,
+  });
+
+  /// Index in the source [SearchPanel.results] list.
+  final int resultIndex;
+
+  /// Index in the current filtered/logical view.
+  final int viewIndex;
+
+  final SearchResult result;
+  final String text;
+  final ClipboardWriteReport report;
+}
+
+/// Returns source result indexes in display order after applying [query].
+List<int> buildSearchResultOrder(
+  List<SearchResult> results, {
+  String query = '',
+  SearchResultMatcher? matcher,
+}) {
+  return SearchResultIndex(results).order(query: query, matcher: matcher);
+}
+
+/// Exports one [SearchResult] as sanitized single-line clipboard text.
+String exportSearchResult(
+  SearchResult result, {
+  SearchPanelCopyOptions options = const SearchPanelCopyOptions(),
+}) {
+  final parts = <String>[
+    result.title,
+    if (options.includeSubtitle && result.subtitle != null) result.subtitle!,
+    if (options.includeCategory && result.category != null) result.category!,
+    if (options.includeSource && result.source != null) result.source!,
+    if (options.includeDetail && result.detail != null) result.detail!,
+  ];
+  return parts
+      .map(_sanitizeSearchText)
+      .where((part) => part.trim().isNotEmpty)
+      .join(' | ');
+}
+
+/// A search field over a list of [results]: typing filters and ranks them,
+/// and the user activates one.
+///
+/// By default a query keeps results that match it exactly, by prefix, as a
+/// substring, or as a fuzzy subsequence, listed in that order; pass [matcher]
+/// to decide matches yourself (results then keep their order). An empty query
+/// shows every result in order.
+///
+/// While the query field has focus, Up and Down move the selected result and
+/// Enter activates it. In the result list, Up, Down, PageUp, PageDown, Home,
+/// and End move the selection, and Enter or a click activates. Activating an
+/// enabled result calls [onActivate]. Ctrl+C copies the selected result (in
+/// the query field, selected query text is copied instead).
+class SearchPanel extends StatefulWidget {
+  const SearchPanel({
+    super.key,
+    required this.results,
+    this.queryController,
+    this.controller,
+    this.matcher,
+    this.semanticLabel = 'Search',
+    this.placeholder = 'Search...',
+    this.width = 60,
+    this.maxVisible = 10,
+    this.fillHeight = false,
+    this.groupByCategory = false,
+    this.queryFocusNode,
+    this.resultsFocusNode,
+    this.autofocus = false,
+    this.copySelection = true,
+    this.copyOptions = const SearchPanelCopyOptions(),
+    this.onActivate,
+    this.onCopy,
+  }) : assert(width > 0),
+       assert(maxVisible > 0);
+
+  /// Source results to search, display, activate, and copy.
+  final List<SearchResult> results;
+
+  /// External controller for the query input.
+  final TextEditingController? queryController;
+
+  /// External controller for result-list selection.
+  final ListController? controller;
+
+  /// Optional app-owned matcher used instead of the default ranked search.
+  final SearchResultMatcher? matcher;
+
+  /// Semantic label (the accessibility name; not rendered) for the search surface.
+  final String semanticLabel;
+
+  /// Placeholder shown in the query input.
+  final String placeholder;
+
+  /// Width, in terminal cells, reserved for the query and result rows.
+  final int width;
+
+  /// Cap on the number of result rows when [fillHeight] is false. When
+  /// [fillHeight] is true this is ignored and the list grows to fill the
+  /// available vertical space.
+  final int maxVisible;
+
+  /// When true the result list expands to fill the height handed down by the
+  /// parent (e.g. an [Expanded] panel slot) instead of being capped at
+  /// [maxVisible] rows. Requires a bounded-height parent.
+  final bool fillHeight;
+
+  /// When true (and no search query is active), a muted category header is
+  /// drawn above the first item of each category group, and the per-row
+  /// category tag is suppressed. Assumes results are already ordered by
+  /// category. Searching re-ranks results, so headers are hidden while a query
+  /// is active.
+  final bool groupByCategory;
+
+  /// Focus node used by the query input.
+  final FocusNode? queryFocusNode;
+
+  /// Focus node used by the result list.
+  final FocusNode? resultsFocusNode;
+
+  /// Whether the query input should request focus when mounted.
+  final bool autofocus;
+
+  /// Whether Ctrl+C (and the semantic copy action) copies the selected
+  /// result.
+  final bool copySelection;
+
+  /// Clipboard/export options for the selected result.
+  final SearchPanelCopyOptions copyOptions;
+
+  /// Called with the result and its index in [results] when the user
+  /// activates an enabled result: Enter in the query field or the list, or a
+  /// click on its row.
+  final void Function(SearchResult result, int resultIndex)? onActivate;
+
+  /// Called after a copy attempt completes.
+  final void Function(SearchPanelCopyResult result)? onCopy;
+
+  @override
+  State<SearchPanel> createState() => _SearchPanelState();
+}
+
+class _SearchPanelState extends State<SearchPanel> {
+  late TextEditingController _query;
+  late ListController _list;
+  late FocusNode _queryFocusNode;
+  late FocusNode _resultsFocusNode;
+  bool _ownsQuery = false;
+  bool _ownsList = false;
+  bool _ownsQueryFocusNode = false;
+  bool _ownsResultsFocusNode = false;
+  List<SearchResult>? _indexedResults;
+  SearchResultIndex? _searchIndex;
+
+  // The ranked order, kept until the index, the query or the matcher
+  // changes: navigation, activation and copy read it, and each used to rank
+  // every result again (two passes per arrow key).
+  List<int>? _order;
+  (SearchResultIndex, String, SearchResultMatcher?)? _orderKey;
+
+  @override
+  void initState() {
+    super.initState();
+    _query = widget.queryController ?? TextEditingController();
+    _ownsQuery = widget.queryController == null;
+    _query.addListener(_onQueryChange);
+    _list = widget.controller ?? ListController(initialIndex: 0);
+    _ownsList = widget.controller == null;
+    _queryFocusNode =
+        widget.queryFocusNode ?? FocusNode(debugLabel: 'SearchPanel query');
+    _ownsQueryFocusNode = widget.queryFocusNode == null;
+    _resultsFocusNode =
+        widget.resultsFocusNode ?? FocusNode(debugLabel: 'SearchPanel results');
+    _ownsResultsFocusNode = widget.resultsFocusNode == null;
+    _resetSelectionForOrder(_currentOrder, preserveCurrent: true);
+    _list.viewChanges.addListener(_onListChange);
+  }
+
+  @override
+  void didUpdateWidget(covariant SearchPanel oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (widget.queryController != oldWidget.queryController) {
+      _query.removeListener(_onQueryChange);
+      if (_ownsQuery) _query.dispose();
+      _query = widget.queryController ?? TextEditingController();
+      _ownsQuery = widget.queryController == null;
+      _query.addListener(_onQueryChange);
+    }
+    if (widget.controller != oldWidget.controller) {
+      _list.viewChanges.removeListener(_onListChange);
+      if (_ownsList) _list.dispose();
+      _list = widget.controller ?? ListController(initialIndex: 0);
+      _ownsList = widget.controller == null;
+    }
+    if (widget.queryFocusNode != oldWidget.queryFocusNode) {
+      if (_ownsQueryFocusNode) _queryFocusNode.dispose();
+      _queryFocusNode =
+          widget.queryFocusNode ?? FocusNode(debugLabel: 'SearchPanel query');
+      _ownsQueryFocusNode = widget.queryFocusNode == null;
+    }
+    if (widget.resultsFocusNode != oldWidget.resultsFocusNode) {
+      if (_ownsResultsFocusNode) _resultsFocusNode.dispose();
+      _resultsFocusNode =
+          widget.resultsFocusNode ??
+          FocusNode(debugLabel: 'SearchPanel results');
+      _ownsResultsFocusNode = widget.resultsFocusNode == null;
+    }
+    if (widget.results != oldWidget.results ||
+        widget.matcher != oldWidget.matcher) {
+      // The index still holds the old results, so this reuses it (and the
+      // cached order) rather than indexing the old list again.
+      final previousResult = _selectedResultFor(
+        oldWidget.results,
+        _orderFor(oldWidget.results, oldWidget.matcher),
+      )?.result;
+      if (widget.results != oldWidget.results) {
+        _indexedResults = null;
+        _searchIndex = null;
+      }
+      _preserveSelectionForOrder(_currentOrder, previousResult);
+    }
+    if (widget.controller != oldWidget.controller) {
+      _resetSelectionForOrder(_currentOrder, preserveCurrent: true);
+      _list.viewChanges.addListener(_onListChange);
+    }
+  }
+
+  void _onQueryChange() {
+    final previous = _list.currentIndex;
+    _resetSelectionForOrder(_currentOrder);
+    if (_list.currentIndex == previous) setState(() {});
+  }
+
+  void _onListChange() => setState(() {});
+
+  SearchResultIndex get _resultIndex {
+    final index = _searchIndex;
+    if (index != null && identical(_indexedResults, widget.results)) {
+      return index;
+    }
+    final next = SearchResultIndex(widget.results);
+    _indexedResults = widget.results;
+    _searchIndex = next;
+    return next;
+  }
+
+  List<int> get _currentOrder => _orderFor(widget.results, widget.matcher);
+
+  List<int> _orderFor(
+    List<SearchResult> results,
+    SearchResultMatcher? matcher,
+  ) {
+    final index = identical(results, widget.results)
+        ? _resultIndex
+        : (identical(results, _indexedResults) ? _searchIndex! : null) ??
+              SearchResultIndex(results);
+    final query = _query.text;
+    final key = _orderKey;
+    final cached = _order;
+    if (cached != null &&
+        key != null &&
+        identical(key.$1, index) &&
+        key.$2 == query &&
+        identical(key.$3, matcher)) {
+      return cached;
+    }
+    _orderKey = (index, query, matcher);
+    return _order = index.order(query: query, matcher: matcher);
+  }
+
+  void _resetSelectionForOrder(
+    List<int> order, {
+    bool preserveCurrent = false,
+  }) {
+    _list.currentIndex = order.isEmpty
+        ? null
+        : preserveCurrent
+        ? _list.currentIndex?.clamp(0, order.length - 1)
+        : 0;
+  }
+
+  void _preserveSelectionForOrder(
+    List<int> order,
+    SearchResult? previousResult,
+  ) {
+    if (order.isEmpty) {
+      _list.currentIndex = null;
+      return;
+    }
+
+    if (previousResult != null) {
+      final preserved = _matchingViewIndex(order, previousResult);
+      if (preserved != null) {
+        _list.currentIndex = preserved;
+        return;
+      }
+    }
+
+    final currentIndex = _list.currentIndex;
+    _list.currentIndex = currentIndex == null
+        ? 0
+        : currentIndex.clamp(0, order.length - 1);
+  }
+
+  void _move(int delta) {
+    final order = _currentOrder;
+    if (order.isEmpty) return;
+    final current = _list.currentIndex ?? 0;
+    _list.currentIndex = (current + delta).clamp(0, order.length - 1);
+  }
+
+  void _activateSelected() {
+    final selected = _selectedResult(_currentOrder);
+    if (selected == null || !selected.result.enabled) return;
+    widget.onActivate?.call(selected.result, selected.sourceIndex);
+  }
+
+  Future<void> _copySelection() async {
+    if (!widget.copySelection) return;
+    final selected = _selectedResult(_currentOrder);
+    if (selected == null) return;
+    final text = exportSearchResult(
+      selected.result,
+      options: widget.copyOptions,
+    );
+    final report = await ClipboardScope.of(
+      context,
+    ).writeWithReport(text, policy: widget.copyOptions.clipboardPolicy);
+    if (!mounted) return;
+    widget.onCopy?.call(
+      SearchPanelCopyResult(
+        resultIndex: selected.sourceIndex,
+        viewIndex: selected.viewIndex,
+        result: selected.result,
+        text: text,
+        report: report,
+      ),
+    );
+  }
+
+  Future<void> _handlePanelSemanticAction(SemanticAction action) async {
+    switch (action) {
+      case SemanticAction.focus:
+        _queryFocusNode.requestFocus();
+        return;
+      case SemanticAction.submit:
+        _activateSelected();
+        return;
+      case SemanticAction.copy:
+        await _copySelection();
+        return;
+      case _:
+        return;
+    }
+  }
+
+  Future<void> _activateResultAt(int viewIndex) async {
+    final order = _currentOrder;
+    if (viewIndex < 0 || viewIndex >= order.length) return;
+    _list.currentIndex = viewIndex;
+    _activateSelected();
+  }
+
+  Future<void> _copyResultAt(int viewIndex) async {
+    final order = _currentOrder;
+    if (viewIndex < 0 || viewIndex >= order.length) return;
+    _list.currentIndex = viewIndex;
+    await _copySelection();
+  }
+
+  _SelectedSearchResult? _selectedResult(List<int> order) {
+    return _selectedResultFor(widget.results, order);
+  }
+
+  _SelectedSearchResult? _selectedResultFor(
+    List<SearchResult> results,
+    List<int> order,
+  ) {
+    if (order.isEmpty) return null;
+    final currentIndex = _list.currentIndex;
+    if (currentIndex == null) return null;
+    final viewIndex = currentIndex.clamp(0, order.length - 1);
+    final sourceIndex = order[viewIndex];
+    return _SelectedSearchResult(
+      viewIndex: viewIndex,
+      sourceIndex: sourceIndex,
+      result: results[sourceIndex],
+    );
+  }
+
+  int? _matchingViewIndex(List<int> order, SearchResult previousResult) {
+    for (var viewIndex = 0; viewIndex < order.length; viewIndex++) {
+      final result = widget.results[order[viewIndex]];
+      if (_sameSearchResultIdentity(result, previousResult)) {
+        return viewIndex;
+      }
+    }
+    return null;
+  }
+
+  @override
+  void dispose() {
+    _query.removeListener(_onQueryChange);
+    if (_ownsQuery) _query.dispose();
+    _list.viewChanges.removeListener(_onListChange);
+    if (_ownsList) _list.dispose();
+    if (_ownsQueryFocusNode) _queryFocusNode.dispose();
+    if (_ownsResultsFocusNode) _resultsFocusNode.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final order = _currentOrder;
+    final visible = order.isEmpty
+        ? 1
+        : (order.length > widget.maxVisible ? widget.maxVisible : order.length);
+    final selected = _selectedResult(order);
+    final copyEnabled = widget.copySelection && selected != null;
+    final canActivate = widget.onActivate != null;
+    // Category section headers only make sense in the browse (no-query) order,
+    // where results are grouped; a search re-ranks them.
+    final grouped = widget.groupByCategory && _query.text.trim().isEmpty;
+
+    final Widget listArea = order.isEmpty
+        ? Text(
+            _query.text.trim().isEmpty
+                ? widget.placeholder
+                : 'No matching results',
+          )
+        : ListView.builder(
+            controller: _list,
+            focusNode: _resultsFocusNode,
+            itemCount: order.length,
+            onSelect: (_) => _activateSelected(),
+            itemBuilder: (context, viewIndex, activeSelected) {
+              final sourceIndex = order[viewIndex];
+              final selected = viewIndex == _list.currentIndex;
+              final row = _SearchResultRow(
+                result: widget.results[sourceIndex],
+                sourceIndex: sourceIndex,
+                viewIndex: viewIndex,
+                selected: selected,
+                activeSelection: activeSelected,
+                copyEnabled: copyEnabled,
+                canActivate: canActivate,
+                onActivate: () => _activateResultAt(viewIndex),
+                onCopy: () => _copyResultAt(viewIndex),
+                showCategory: !grouped,
+              );
+              if (!grouped) return row;
+              // A header precedes the first row of each category group. Rows
+              // stay 1:1 with results (selection is unchanged); only the
+              // first-of-group item is two lines tall — the ListView supports
+              // variable item heights.
+              final category = widget.results[sourceIndex].category;
+              final previousCategory = viewIndex == 0
+                  ? null
+                  : widget.results[order[viewIndex - 1]].category;
+              if (category == null ||
+                  category.isEmpty ||
+                  category == previousCategory) {
+                return row;
+              }
+              return Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  _CategoryHeader(label: category, topGap: viewIndex != 0),
+                  row,
+                ],
+              );
+            },
+          );
+
+    Widget panel = Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        TextInput(
+          controller: _query,
+          focusNode: _queryFocusNode,
+          placeholder: widget.placeholder,
+          autofocus: widget.autofocus,
+          onSubmit: (_) => _activateSelected(),
+        ),
+        // Breathing room under the field. Without it the input's frame butts
+        // straight into the match count and the results run on from there, so
+        // the panel reads as one undifferentiated block — the field stops
+        // looking like a field.
+        const SizedBox(height: 1),
+        // Match count — the primary "is the filter working?" feedback (fzf,
+        // VS Code, k9s all show it).
+        Text(
+          _query.text.trim().isEmpty
+              ? '${widget.results.length} results'
+              : '${order.length} of ${widget.results.length}',
+          style: Theme.of(context).mutedStyle,
+        ),
+        if (widget.fillHeight)
+          Expanded(child: listArea)
+        else
+          SizedBox(height: visible, child: listArea),
+      ],
+    );
+
+    panel = SizedBox(width: widget.width, child: panel);
+
+    if (copyEnabled) {
+      panel = KeyBindings(
+        bindings: [
+          KeyBinding(
+            KeySequence.ctrl.c,
+            label: 'Copy search result',
+            onTrigger: (_) => unawaited(_copySelection()),
+          ),
+        ],
+        child: panel,
+      );
+    }
+
+    return KeyBindings(
+      bindings: [
+        // Arrow up/down drive the results selection when the *query* is focused
+        // (fzf-style: filter and navigate without leaving the field). When the
+        // *results list* is focused, an arrow that reaches this ancestor came
+        // from the list's top/bottom edge — the ListView consumes interior
+        // moves and only bubbles (`EdgeBehavior.bubble`) at a boundary — so
+        // bubble it on, letting directional focus traversal carry focus back
+        // out (up to the query, or past the panel) instead of clamping and
+        // swallowing the key. Regressed to a plain clamp in the RFC 0018
+        // binding-constructor pass; restored here via the event form.
+        KeyBinding(
+          KeyCode.arrowUp,
+          onTrigger: (event) {
+            if (_resultsFocusNode.hasFocus) {
+              event.bubble();
+            } else {
+              _move(-1);
+            }
+          },
+          hideFromHintBar: true,
+        ),
+        KeyBinding(
+          KeyCode.arrowDown,
+          onTrigger: (event) {
+            if (_resultsFocusNode.hasFocus) {
+              event.bubble();
+            } else {
+              _move(1);
+            }
+          },
+          hideFromHintBar: true,
+        ),
+      ],
+      child: Semantics(
+        role: SemanticRole.region,
+        label: widget.semanticLabel,
+        value: _query.text,
+        // `|`, not `||`: each read subscribes to its node.
+        focused:
+            context.listen(_queryFocusNode).hasFocus |
+            context.listen(_resultsFocusNode).hasFocus,
+        actions: {
+          SemanticAction.focus,
+          if (canActivate) SemanticAction.submit,
+          if (copyEnabled) SemanticAction.copy,
+        },
+        onAction: _handlePanelSemanticAction,
+        stateListenable: _list,
+        stateBuilder: () {
+          final visibleRange = _list.visibleRange;
+          return SemanticState({
+            'filterText': _query.text,
+            'collectionRowCount': order.length,
+            'totalResultCount': widget.results.length,
+            'filteredResultCount': order.length,
+            'copyEnabled': copyEnabled,
+            'clipboardPolicy': widget.copyOptions.clipboardPolicy.name,
+            if (visibleRange != null && order.isNotEmpty) ...{
+              'visibleRangeStart': visibleRange.first,
+              'visibleRangeEnd': visibleRange.last,
+            },
+            if (_list.currentIndex != null) 'currentIndex': _list.currentIndex,
+            if (selected != null) ..._selectedResultState(selected.result),
+          });
+        },
+        child: panel,
+      ),
+    );
+  }
+}
+
+final class _SelectedSearchResult {
+  const _SelectedSearchResult({
+    required this.viewIndex,
+    required this.sourceIndex,
+    required this.result,
+  });
+
+  final int viewIndex;
+  final int sourceIndex;
+  final SearchResult result;
+}
+
+bool _sameSearchResultIdentity(SearchResult a, SearchResult b) {
+  if (identical(a, b)) return true;
+  if (a.id != null || b.id != null) return a.id == b.id;
+  return a.title == b.title &&
+      a.subtitle == b.subtitle &&
+      a.category == b.category &&
+      a.source == b.source &&
+      a.detail == b.detail;
+}
+
+class _SearchResultRow extends StatelessWidget {
+  const _SearchResultRow({
+    required this.result,
+    required this.sourceIndex,
+    required this.viewIndex,
+    required this.selected,
+    required this.activeSelection,
+    required this.copyEnabled,
+    required this.canActivate,
+    required this.onActivate,
+    required this.onCopy,
+    this.showCategory = true,
+  });
+
+  final SearchResult result;
+  final int sourceIndex;
+  final int viewIndex;
+  final bool selected;
+  final bool activeSelection;
+  final bool copyEnabled;
+  final bool canActivate;
+  final Future<void> Function() onActivate;
+  final Future<void> Function() onCopy;
+
+  /// Whether the category is shown inline in the row. Suppressed when the list
+  /// renders category section headers (the header carries it instead).
+  final bool showCategory;
+
+  @override
+  Widget build(BuildContext context) {
+    final title = _sanitizeSearchText(result.title);
+    final subtitle = _sanitizeOptionalSearchText(result.subtitle);
+    final category = _sanitizeOptionalSearchText(result.category);
+    final source = _sanitizeOptionalSearchText(result.source);
+    final detail = _sanitizeOptionalSearchText(result.detail);
+    final rowText = _rowText(
+      title: title,
+      subtitle: subtitle,
+      category: showCategory ? category : null,
+      source: source,
+      activeSelection: activeSelection,
+    );
+    final style = _searchResultStyle(
+      Theme.of(context),
+      selected: selected,
+      activeSelection: activeSelection,
+      enabled: result.enabled,
+    );
+    return Semantics(
+      role: SemanticRole.listItem,
+      label: title,
+      value: subtitle ?? detail,
+      hint: detail,
+      selected: selected,
+      enabled: result.enabled,
+      actions: {
+        if (result.enabled && canActivate) SemanticAction.activate,
+        if (selected && copyEnabled) SemanticAction.copy,
+      },
+      onAction: (action) async {
+        switch (action) {
+          case SemanticAction.activate:
+            if (result.enabled && canActivate) await onActivate();
+            return;
+          case SemanticAction.copy:
+            if (selected && copyEnabled) await onCopy();
+            return;
+          case _:
+            return;
+        }
+      },
+      state: SemanticState({
+        ...result.metadata,
+        'rowIndex': sourceIndex,
+        'viewIndex': viewIndex,
+        'rowKey': ?result.id,
+        'resultCategory': ?category,
+        'resultSource': ?source,
+        'outputSanitized': _resultWasSanitized(result),
+      }),
+      // Click an enabled result to activate it (same as Enter on the row).
+      child: GestureDetector(
+        onTap: (result.enabled && canActivate)
+            ? () => unawaited(onActivate())
+            : null,
+        child: Text(rowText, style: style),
+      ),
+    );
+  }
+}
+
+/// A muted, uppercase category divider drawn above the first row of each group
+/// when [SearchPanel.groupByCategory] is on. It is bundled into that row's list
+/// item rather than being a list item of its own, so selection and keyboard nav
+/// stay 1:1 with results.
+class _CategoryHeader extends StatelessWidget {
+  const _CategoryHeader({required this.label, this.topGap = true});
+
+  final String label;
+  final bool topGap;
+
+  @override
+  Widget build(BuildContext context) {
+    final header = Text(
+      _sanitizeSearchText(label).toUpperCase(),
+      style: Theme.of(context).mutedStyle,
+    );
+    if (!topGap) return header;
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [const SizedBox(height: 1), header],
+    );
+  }
+}
+
+String _rowText({
+  required String title,
+  required String? subtitle,
+  required String? category,
+  required String? source,
+  required bool activeSelection,
+}) {
+  final meta = <String>[
+    if (category != null && category.isNotEmpty) category,
+    if (source != null && source.isNotEmpty) source,
+    if (subtitle != null && subtitle.isNotEmpty) subtitle,
+  ];
+  final prefix = activeSelection ? '> ' : '  ';
+  if (meta.isEmpty) return '$prefix$title';
+  return '$prefix$title  ${meta.join('  ')}';
+}
+
+Map<String, Object?> _selectedResultState(SearchResult result) {
+  return <String, Object?>{
+    if (result.id != null) 'selectedKey': result.id,
+    if (result.category != null)
+      'selectedCategory': _sanitizeSearchText(result.category!),
+    if (result.source != null)
+      'selectedSource': _sanitizeSearchText(result.source!),
+  };
+}
+
+enum _SearchResultRank { exact, prefix, contains, fuzzy }
+
+_SearchResultRank? _searchResultRank(_SearchResultEntry entry, String query) {
+  for (final field in entry.searchFields) {
+    if (field == query) return _SearchResultRank.exact;
+  }
+  for (final field in entry.searchFields) {
+    if (field.startsWith(query)) return _SearchResultRank.prefix;
+  }
+  if (entry.searchText.contains(query)) return _SearchResultRank.contains;
+  if (_isSubsequence(query, entry.searchText)) return _SearchResultRank.fuzzy;
+  return null;
+}
+
+List<String> _searchResultFields(SearchResult result) {
+  return [
+        if (result.id != null) result.id.toString(),
+        result.title,
+        if (result.subtitle != null) result.subtitle!,
+        if (result.category != null) result.category!,
+        if (result.source != null) result.source!,
+        if (result.detail != null) result.detail!,
+        for (final value in result.metadata.values)
+          if (value != null) value.toString(),
+      ]
+      .map(_sanitizeSearchText)
+      .map((value) => value.toLowerCase())
+      .where((value) => value.trim().isNotEmpty)
+      .toList(growable: false);
+}
+
+final class _SearchResultEntry {
+  _SearchResultEntry({
+    required this.sourceIndex,
+    required this.result,
+    required this.searchFields,
+  }) : searchText = searchFields.join(' ');
+
+  final int sourceIndex;
+  final SearchResult result;
+  final List<String> searchFields;
+  final String searchText;
+}
+
+bool _isSubsequence(String needle, String hay) {
+  var i = 0;
+  for (var j = 0; j < hay.length && i < needle.length; j++) {
+    if (hay[j] == needle[i]) i++;
+  }
+  return i == needle.length;
+}
+
+String? _sanitizeOptionalSearchText(String? text) {
+  if (text == null) return null;
+  return _sanitizeSearchText(text);
+}
+
+String _sanitizeSearchText(String text) {
+  return sanitizeSingleLine(text);
+}
+
+bool _resultWasSanitized(SearchResult result) {
+  return result.title != _sanitizeSearchText(result.title) ||
+      (result.subtitle != null &&
+          result.subtitle != _sanitizeSearchText(result.subtitle!)) ||
+      (result.category != null &&
+          result.category != _sanitizeSearchText(result.category!)) ||
+      (result.source != null &&
+          result.source != _sanitizeSearchText(result.source!)) ||
+      (result.detail != null &&
+          result.detail != _sanitizeSearchText(result.detail!));
+}
+
+CellStyle _searchResultStyle(
+  ThemeData theme, {
+  required bool selected,
+  required bool activeSelection,
+  required bool enabled,
+}) {
+  final style = activeSelection
+      ? theme.selectionStyle
+      : selected
+      ? theme.mutedStyle
+      : CellStyle.none;
+  return enabled ? style : style.merge(const CellStyle(dim: true));
+}

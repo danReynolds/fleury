@@ -14,7 +14,7 @@ import 'package:test/test.dart';
 import '../support/harness.dart';
 
 /// A region that reports focus while focus is anywhere inside it: the shape
-/// of fleury_widgets' Panel, which core tests can't import.
+/// of the bundled Panel, isolating the primitive focus contract.
 class _Pane extends StatefulWidget {
   const _Pane({required this.label, required this.child});
 

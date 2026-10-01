@@ -48,24 +48,10 @@ packages:
       relative: true
     source: path
     version: "0.1.0"
-  fleury_themes:
-    dependency: "direct main"
-    description:
-      path: "../../../../packages/fleury_themes"
-      relative: true
-    source: path
-    version: "0.1.0"
   fleury_web:
     dependency: "direct main"
     description:
       path: "../../../../packages/fleury_web"
-      relative: true
-    source: path
-    version: "0.1.0"
-  fleury_widgets:
-    dependency: "direct main"
-    description:
-      path: "../../../../packages/fleury_widgets"
       relative: true
     source: path
     version: "0.1.0"

@@ -1,7 +1,6 @@
 // Compile-checked source behind the Focus management guide.
 
 import 'package:fleury/fleury.dart';
-import 'package:fleury_widgets/fleury_widgets.dart';
 
 /// A compact focus explorer. [FleuryApp] supplies traversal for the screen.
 class FocusExplorerExample extends StatefulWidget {

@@ -35,8 +35,8 @@ import 'dart:io';
 import 'dart:math';
 import 'dart:typed_data';
 import 'package:fleury/fleury.dart';
-import 'package:fleury_themes/fleury_themes.dart';
-import 'package:fleury_widgets/fleury_widgets.dart';
+import 'package:fleury/themes.dart';
+import 'package:fleury/fleury_core.dart';
 import 'package:image/image.dart' as img;
 `;
 

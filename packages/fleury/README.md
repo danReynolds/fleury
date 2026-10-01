@@ -142,8 +142,7 @@ should keep the hit target at the content width.
   sharing one per-runtime scheduler. See below.
 - **Hot reload**: state-preserving reload wired for VS Code — see
   [the hot-reload guide](https://danreynolds.github.io/fleury/guides/hot-reload/).
-- **Widgets**: a deep catalog lives in the companion `fleury_widgets`
-  package — inputs, selects, tables, trees, charts, an image widget
+- **Widgets**: the bundled catalog includes inputs, selects, tables, trees, charts, an image widget
   with Kitty/iTerm2 progressive enhancement, experimental Sixel, and portable
   glyph rendering, and more.
 

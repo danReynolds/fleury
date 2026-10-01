@@ -9,10 +9,6 @@ environment:
 dependencies:
   fleury:
     path: ../fleury
-  fleury_themes:
-    path: ../fleury_themes
-  fleury_widgets:
-    path: ../fleury_widgets
 
 dev_dependencies:
   fleury_test: ^0.1.0

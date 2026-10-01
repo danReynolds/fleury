@@ -17,14 +17,7 @@ CommonServerApi createCompilerBackend(String root, String sdkPath) {
       path.join(root, 'lib/bootstrap.dart'),
     ).readAsStringSync(),
     summaries: [path.join(build, 'deps.dill')],
-    packages: {
-      'fleury',
-      'fleury_web',
-      'fleury_widgets',
-      'fleury_themes',
-      'http',
-      'image',
-    },
+    packages: {'fleury', 'fleury_web', 'http', 'image'},
   );
   return CommonServerApi(
     CommonServerImpl(Sdk.fromDartSdk(sdkPath), NoopCache()),

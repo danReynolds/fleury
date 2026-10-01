@@ -9,7 +9,10 @@ import 'pointer.dart';
 import 'selection/selection_area.dart';
 import 'theme.dart';
 
-/// Shared focus, hover, validation, and activation behavior for controls.
+/// Unstyled focus, hover, validation, and activation behavior for controls.
+///
+/// The builder owns the entire appearance. Available to widget libraries through
+/// `package:fleury/fleury_widget_support.dart`.
 /// Enter or Space activates ([onActivate]) when enabled. The [builder] gets
 /// the fully resolved style and active style states for the control.
 ///
@@ -18,6 +21,7 @@ import 'theme.dart';
 /// other text so it still bubbles).
 class FocusableControl extends StatefulWidget {
   const FocusableControl({
+    super.key,
     required this.onActivate,
     this.onSecondaryActivate,
     required this.builder,

@@ -129,7 +129,7 @@ class _DebugCounterState extends State<_DebugCounter> {
 }
 
 /// A pane that reports focus while focus is anywhere inside it, the way
-/// fleury_widgets' Panel does.
+/// the bundled Panel does.
 class _FocusPane extends StatefulWidget {
   const _FocusPane({required this.child});
 

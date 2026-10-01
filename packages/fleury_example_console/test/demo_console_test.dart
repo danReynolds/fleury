@@ -1,6 +1,5 @@
 import 'package:fleury/fleury.dart';
 import 'package:fleury_test/fleury_test.dart';
-import 'package:fleury_widgets/fleury_widgets.dart';
 import 'package:test/test.dart';
 
 import '../lib/fleury_example_console.dart';

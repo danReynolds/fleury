@@ -1,7 +1,6 @@
 import 'package:fleury/fleury.dart';
 import 'package:fleury_samples/src/finance.dart';
 import 'package:fleury_test/fleury_test.dart';
-import 'package:fleury_widgets/fleury_widgets.dart';
 import 'package:test/test.dart';
 
 void main() {

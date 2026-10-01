@@ -543,7 +543,7 @@ void main() {
     );
 
     // Hint-bar display of extension commands is covered by
-    // key_hint_bar_test.dart in fleury_widgets.
+    // key_hint_bar_test.dart in Fleury catalog.
     final result = await tester.invokeCommand(_openWorkspace);
 
     expect(result.completed, isTrue);

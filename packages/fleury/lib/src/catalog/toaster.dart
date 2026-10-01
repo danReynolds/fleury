@@ -1,0 +1,467 @@
+import 'dart:async';
+
+import '../primitives.dart';
+
+/// Semantic level of a toast, driving the color of its status dot. [info] is
+/// neutral (uncolored); the rest color the dot.
+enum ToastSeverity { info, success, warning, error }
+
+/// Dismisses the exact toast returned by [Toaster.show].
+///
+/// Once the toast expires, is replaced or evicted, or its host is disposed,
+/// this handle becomes inert. Keeping an old handle cannot dismiss a newer
+/// toast that reused the same replacement ID.
+final class ToastHandle {
+  ToastHandle._();
+
+  void Function()? _dismiss;
+
+  /// Whether this exact toast is still retained by its host.
+  ///
+  /// False after dismissal, expiry, replacement, eviction or host disposal.
+  /// This is a snapshot, not a subscription.
+  bool get isActive => _dismiss != null;
+
+  /// Dismisses this toast. Safe to call repeatedly or after host disposal.
+  void dismiss() {
+    final dismiss = _dismiss;
+    _dismiss = null;
+    dismiss?.call();
+  }
+}
+
+/// A toast's leading status dot: one uniform, reliably monospace-width glyph for
+/// every severity. (Distinct per-severity shapes — ✓ ✗ ▲ — render at
+/// inconsistent widths in proportional browser fonts, which threw the text out
+/// of alignment.) Severity is carried by the dot's *color* via
+/// [_styleForSeverity], not its shape — keeping color use sparse: a neutral
+/// frame and message with one colored accent.
+const String _severityDot = '●';
+
+CellStyle _styleForSeverity(ToastSeverity severity, ColorScheme colors) =>
+    switch (severity) {
+      ToastSeverity.info => CellStyle.none, // neutral by design
+      ToastSeverity.success => CellStyle(foreground: colors.success),
+      ToastSeverity.warning => CellStyle(foreground: colors.warning),
+      ToastSeverity.error => CellStyle(foreground: colors.error),
+    };
+
+/// An actionable affordance on a toast — a [label] and the [key] chord
+/// that triggers [onPressed] (and dismisses the toast) while it's
+/// visible. The chord fires from anywhere in the app, so prefer a
+/// modifier chord (e.g. `KeySequence.alt('u')`); a bare letter is swallowed
+/// by a focused text field.
+class ToastAction {
+  const ToastAction({
+    required this.label,
+    required this.onPressed,
+    required this.key,
+  });
+
+  /// Text displayed for the toast action.
+  final String label;
+
+  /// Called after the toast is dismissed through this action.
+  final void Function() onPressed;
+
+  /// App-wide chord that activates this action while the toast is visible.
+  final KeySequence key;
+}
+
+/// Hosts toast notifications. Place one high in the app
+/// (wrapping your content); it floats toasts in a screen corner above
+/// everything — including modals — via an Overlay entry, stacking them
+/// and auto-dismissing each after a delay unless it is persistent.
+///
+/// To show a toast from anywhere below it, call [Toaster.show] with a
+/// `BuildContext` and the message. It returns a [ToastHandle] that can
+/// dismiss that toast early.
+///
+/// ```dart
+/// Toaster.show(context, 'Saved', severity: ToastSeverity.success);
+/// ```
+class Toaster extends StatefulWidget {
+  const Toaster({
+    super.key,
+    required this.child,
+    this.alignment = Alignment.bottomRight,
+    this.duration = const Duration(seconds: 5),
+    this.maxToasts,
+  }) : assert(maxToasts == null || maxToasts > 0);
+
+  /// Application subtree over which toast overlays are presented.
+  final Widget child;
+
+  /// Which corner toasts stack in.
+  final Alignment alignment;
+
+  /// How long each toast stays before auto-dismissing.
+  final Duration duration;
+
+  /// Maximum retained toasts. Null preserves unrestricted stacking.
+  ///
+  /// Adding a distinct toast while full evicts the oldest, even if persistent.
+  /// There is no pending queue. Replacing an ID retains its position and does
+  /// not consume another slot. Reducing the limit also evicts oldest toasts.
+  final int? maxToasts;
+
+  /// Shows [message] as a toast via the nearest enclosing [Toaster].
+  /// Throws if there is no Toaster above [context].
+  ///
+  /// [severity] picks a default color; [style] overrides it outright when
+  /// supplied (merged over the severity's style). An optional [action]
+  /// adds a hotkey affordance shown in the toast.
+  /// Reusing a non-null [id] replaces that toast in place and starts a fresh
+  /// lifetime. IDs are scoped to this host and compared with `==`. Omitting an
+  /// ID creates a distinct toast. The returned handle belongs to this exact
+  /// instance, not to later replacements.
+  ///
+  /// [persistent] disables expiry; explicit dismissal, replacement, eviction
+  /// and host disposal still remove the toast. It cannot be combined with an
+  /// explicit [duration]. Otherwise null [duration] inherits the host default.
+  /// A transient toast must have a positive duration.
+  static ToastHandle show(
+    BuildContext context,
+    String message, {
+    Duration? duration,
+    ToastSeverity severity = ToastSeverity.info,
+    CellStyle? style,
+    ToastAction? action,
+    Object? id,
+    bool persistent = false,
+  }) {
+    if (persistent && duration != null) {
+      throw ArgumentError('A persistent toast cannot have a duration.');
+    }
+    // An action from a handler: locate the toaster without subscribing the
+    // caller to anything (the state never changes identity or notifies).
+    final state = context.findAncestorStateOfType<_ToasterState>();
+    if (state == null) {
+      throw StateError(
+        'No Toaster above this BuildContext. Wrap your app in a Toaster.',
+      );
+    }
+    final lifetime = persistent ? null : duration ?? state.widget.duration;
+    if (lifetime != null && lifetime <= Duration.zero) {
+      throw ArgumentError.value(lifetime, 'duration', 'Must be positive');
+    }
+    final colors = Theme.of(context).colorScheme;
+    final resolved = style == null
+        ? _styleForSeverity(severity, colors)
+        : _styleForSeverity(severity, colors).merge(style);
+    return state._enqueue(message, lifetime, resolved, severity, action, id);
+  }
+
+  @override
+  State<Toaster> createState() => _ToasterState();
+}
+
+class _Toast {
+  _Toast({
+    required this.id,
+    required this.message,
+    required this.severity,
+    required this.style,
+    required this.duration,
+    required this.action,
+    required this.replacementId,
+  });
+
+  final int id;
+  final String message;
+  final ToastSeverity severity;
+  final CellStyle style;
+  final Duration? duration;
+  final ToastAction? action;
+  final Object? replacementId;
+  final ToastHandle handle = ToastHandle._();
+  FrameTicker? timer; // scheduler-driven auto-dismiss clock
+}
+
+class _ToasterState extends State<Toaster> {
+  final List<_Toast> _toasts = <_Toast>[];
+  TuiBinding? _binding;
+  var _nextToastId = 0;
+
+  // Created once (layer state survives), mounted lazily: the entry is only
+  // inserted while toasts exist. An idle Toaster must not keep the host
+  // overlay multi-entry — that would keep the overlay's adaptive repaint
+  // boundaries engaged and tax every app-dirty frame with a full-screen
+  // cache write + blit for an empty layer.
+  late final OverlayEntry _entry = OverlayEntry(
+    owner: context,
+    builder: _buildLayer,
+  );
+  late final OverlayMount _entrySync = OverlayMount(
+    entry: _entry,
+    // Guard mounted: after unmount the context is defunct, and the ancestor
+    // walk would throw rather than return null.
+    overlay: () => mounted ? Overlay.maybeOf(context) : null,
+    mountWhen: () => mounted && _toasts.isNotEmpty,
+  );
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    _binding ??= TuiBinding.maybeOf(context);
+  }
+
+  @override
+  void initState() {
+    super.initState();
+    _validateLimit();
+  }
+
+  void _validateLimit() {
+    final limit = widget.maxToasts;
+    if (limit != null && limit <= 0) {
+      throw ArgumentError.value(limit, 'maxToasts', 'Must be positive');
+    }
+  }
+
+  @override
+  void didUpdateWidget(Toaster oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    _validateLimit();
+    if (_trim()) {
+      // Widget update already schedules build; only the overlay needs marking.
+      _entry.markNeedsBuild();
+    }
+  }
+
+  bool _trim() {
+    final limit = widget.maxToasts;
+    var changed = false;
+    while (limit != null && _toasts.length > limit) {
+      _retire(_toasts.removeAt(0));
+      changed = true;
+    }
+    return changed;
+  }
+
+  ToastHandle _enqueue(
+    String message,
+    Duration? duration,
+    CellStyle style,
+    ToastSeverity severity,
+    ToastAction? action,
+    Object? replacementId,
+  ) {
+    final toast = _Toast(
+      id: ++_nextToastId,
+      message: message,
+      severity: severity,
+      style: style,
+      duration: duration,
+      action: action,
+      replacementId: replacementId,
+    );
+    toast.handle._dismiss = () => _dismiss(toast);
+    final index = replacementId == null
+        ? -1
+        : _toasts.indexWhere((item) => item.replacementId == replacementId);
+    if (index < 0) {
+      _toasts.add(toast);
+    } else {
+      _retire(_toasts[index]);
+      _toasts[index] = toast;
+    }
+    _trim();
+    // Synchronous (not the microtask path): show() runs from event/timer
+    // contexts where setState is already legal, and the toast should be on
+    // screen by the very next pump.
+    _entrySync.updateNow();
+    _refresh();
+    final binding = _binding;
+    if (binding == null || duration == null) return toast.handle;
+    // A one-shot timer on the shared scheduler (so it's FakeClock-driven
+    // in tests): the first tick at +duration dismisses the toast.
+    toast.timer =
+        FrameTicker(interval: duration, scheduler: binding.tickerScheduler)
+          ..addListener(() => _dismiss(toast))
+          ..start();
+    return toast.handle;
+  }
+
+  void _dismiss(_Toast toast) {
+    if (!_toasts.remove(toast)) return;
+    _retire(toast);
+    _entrySync.updateNow(); // last toast gone → the layer entry unmounts
+    _refresh();
+  }
+
+  void _retire(_Toast toast) {
+    toast.handle._dismiss = null;
+    // The tick is firing right now (this runs from the ticker's listener);
+    // defer disposal so we don't tear the ticker down mid-notify.
+    final ticker = toast.timer;
+    toast.timer = null;
+    ticker?.stop();
+    scheduleMicrotask(() => ticker?.dispose());
+  }
+
+  /// Rebuilds both the floating layer (an Overlay entry) and this widget's
+  /// own subtree, where the action hotkeys live as `KeyBindings`.
+  void _refresh() {
+    _entry.markNeedsBuild(); // no-op notify while the entry is unmounted
+    if (mounted) setState(() {});
+  }
+
+  Widget _buildLayer(BuildContext context) {
+    final Widget layer = Align(
+      alignment: widget.alignment,
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          for (final toast in _toasts)
+            Semantics(
+              id: SemanticNodeId('toast-${toast.id}'),
+              role: SemanticRole.notification,
+              label: toast.message,
+              hint: toast.action == null
+                  ? toast.duration == null
+                        ? 'Persistent notification'
+                        : 'Transient notification'
+                  : '${toast.action!.label} (${toast.action!.key.hintLabel})',
+              actions: <SemanticAction>{
+                SemanticAction.dismiss,
+                if (toast.action != null) SemanticAction.activate,
+              },
+              state: _toastSemanticState(toast),
+              includeChildren: false,
+              onAction: (action) {
+                switch (action) {
+                  case SemanticAction.dismiss:
+                    _dismiss(toast);
+                  case SemanticAction.activate:
+                    _activateAction(toast);
+                  default:
+                    break;
+                }
+              },
+              // Container.framed supplies the float's skin: opaque fill plus
+              // a neutral frame — severity lives in the dot, not the border —
+              // with horizontal padding so the content breathes.
+              child: Container.framed(
+                border: const BoxBorder(style: BorderStyle.rounded),
+                padding: const EdgeInsets.symmetric(horizontal: 1),
+                child: _toastContent(context, toast),
+              ),
+            ),
+        ],
+      ),
+    );
+    // A toast's text is chrome, not content: it must never end up on the
+    // user's clipboard via the app's ambient selection. Stated here rather
+    // than inherited from the fact that an overlay entry happens to mount
+    // outside DefaultRootSelection.
+    return SelectionArea.disabled(child: layer);
+  }
+
+  SemanticState _toastSemanticState(_Toast toast) {
+    return SemanticState(<String, Object?>{
+      'severity': toast.severity.name,
+      'notificationIndex': _toasts.indexOf(toast) + 1,
+      'notificationCount': _toasts.length,
+      if (toast.duration case final duration?)
+        'autoDismissMs': duration.inMilliseconds,
+      if (toast.action case final action?) ...<String, Object?>{
+        'notificationActionLabel': action.label,
+        'notificationActionKey': action.key.hintLabel,
+      },
+    });
+  }
+
+  Widget _toastContent(BuildContext context, _Toast toast) {
+    final action = toast.action;
+    // Sparse color: only the status dot carries the severity color; the message
+    // is neutral and the frame is plain. The action (if any) gets the one
+    // interactive accent, so it's clearly the part you can act on.
+    final dot = Text(_severityDot, style: toast.style);
+    final message = Flexible(child: Text(toast.message));
+    if (action == null) {
+      return Row(
+        mainAxisSize: MainAxisSize.min,
+        children: <Widget>[dot, const SizedBox(width: 1), message],
+      );
+    }
+    final theme = Theme.of(context);
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      children: <Widget>[
+        dot,
+        const SizedBox(width: 1),
+        message,
+        const Text('   '),
+        GestureDetector(
+          onTap: () => _activateAction(toast),
+          child: Text(
+            action.label,
+            style: CellStyle(foreground: theme.colorScheme.primary, bold: true),
+          ),
+        ),
+        Text(' [${action.key.hintLabel}]', style: theme.mutedStyle),
+      ],
+    );
+  }
+
+  void _activateAction(_Toast toast) {
+    final action = toast.action;
+    if (action == null) return;
+    if (!_toasts.contains(toast)) return;
+    _dismiss(toast);
+    action.onPressed();
+  }
+
+  @override
+  void dispose() {
+    _entrySync.dispose(); // removes the entry if currently mounted
+    for (final toast in _toasts) {
+      _retire(toast);
+    }
+    _toasts.clear();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    // Action hotkeys live here (not in the floating layer): the Toaster
+    // wraps the whole app, so these KeyBindings are an ancestor of
+    // whatever is focused and fire from anywhere. Newest-first so a newer
+    // toast wins a chord shared with an older one.
+    final actionable = [
+      for (final toast in _toasts.reversed)
+        if (toast.action != null) toast,
+    ];
+    final bindings = <KeyBinding>[
+      for (final toast in actionable)
+        KeyBinding(
+          toast.action!.key,
+          onTrigger: (_) {
+            _activateAction(toast);
+          },
+          hideFromHintBar: true,
+        ),
+      // Esc dismisses the most recent toast so plain (action-less) toasts are
+      // keyboard-dismissible (WCAG 2.1.1). Bound at the app's outermost layer,
+      // so a modal/menu that uses Esc consumes it first; it only fires here
+      // when a toast is showing and nothing inner handled it.
+      if (_toasts.isNotEmpty)
+        KeyBinding(
+          KeySequence.escape,
+          onTrigger: (event) {
+            if (_toasts.isEmpty) {
+              event.bubble();
+              return;
+            }
+            _dismiss(_toasts.last);
+          },
+          hideFromHintBar: true,
+        ),
+    ];
+    // Always wrap (even with no bindings) so the child's position in the tree
+    // is stable: conditionally adding/removing this wrapper as toasts come and
+    // go would re-parent the child and tear down e.g. an open menu's overlay.
+    return KeyBindings(bindings: bindings, child: widget.child);
+  }
+}

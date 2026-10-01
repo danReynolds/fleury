@@ -6,7 +6,6 @@ import 'dart:async';
 // #enddocregion transmission
 
 import 'package:fleury/fleury_core.dart';
-import 'package:fleury_widgets/fleury_widgets_web.dart';
 // The imports share the region with fetchPhoto, so the editable view shows
 // where the `http` and `img` prefixes come from.
 // #docregion fetch-photo

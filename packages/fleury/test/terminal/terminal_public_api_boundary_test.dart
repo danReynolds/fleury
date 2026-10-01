@@ -4,7 +4,11 @@ import 'package:test/test.dart';
 
 void main() {
   test('terminal extension points are intentionally public', () {
-    final core = File('lib/fleury_core.dart').readAsStringSync();
+    final core = [
+      File('lib/fleury_core.dart'),
+      File('lib/src/primitives.dart'),
+      File('lib/src/catalog/catalog.dart'),
+    ].map((file) => file.readAsStringSync()).join('\n');
     final native = File('lib/fleury.dart').readAsStringSync();
 
     for (final symbol in <String>[
@@ -45,6 +49,8 @@ void main() {
       final productionLibraries = <String>[
         'lib/fleury.dart',
         'lib/fleury_core.dart',
+        'lib/src/primitives.dart',
+        'lib/src/catalog/catalog.dart',
       ];
 
       for (final path in productionLibraries) {
