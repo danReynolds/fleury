@@ -5,6 +5,9 @@ description: Define an application action once and expose it wherever users work
 
 import FleuryExample from '../../../components/FleuryExample.astro';
 import GuidePad from '../../../components/GuidePad.astro';
+import SourceExcerpt from '../../../components/SourceExcerpt.astro';
+import commandsSource from '../../../../examples/doc_snippets/commands.dart?raw';
+import testingTests from '../../../../examples/test/testing_guide_test.dart?raw';
 
 Use a command when the same action should appear in several places, or when the
 available actions need to be discoverable. For a single control, call its
@@ -26,14 +29,15 @@ current file** once, and every surface reads the same definition:
   id="commands.overview"
   title="Use one Save command from a button, Ctrl+S, or the command palette"
   cols={60}
-  rows={12}
+  rows={13}
   interactive
 />
 </GuidePad>
 
 Edit the document. **Save**, **Ctrl+S**, and the **Ctrl+K** palette all reach
 `_save()`. The same `enabled` rule disables every surface after saving, while
-the command's ID remains stable for semantics, tests, and agents.
+the command's ID remains stable for semantics,
+[tests, and agents](#invoke-commands-from-tests-and-agents).
 
 `CommandButton` is an ordinary Fleury button backed by a command ID. It reads
 the current title, availability, and callback from the active registry instead
@@ -83,6 +87,28 @@ This is the main value of the model: the interface can ask which actions are
 available *here* instead of every button, shortcut, palette, test, or agent
 maintaining its own catalog.
 
+### Decide where a command applies
+
+A command's `enabled` and `visible` predicates decide where it applies, and
+`availability` says when to ask them again. Here `document` is a `Notifier`
+that notifies whenever it changes:
+
+<SourceExcerpt code={commandsSource} region="availability" />
+
+- While `enabled` returns false, the command stays listed but can't run: its
+  buttons and palette row are disabled, invoking it returns a disabled result,
+  and its shortcut passes the key on to outer bindings.
+- While `visible` returns false, the command leaves its scope: no button,
+  palette row, semantics, or shortcut, and invoking it reports that it wasn't
+  found.
+- `availability` is a `Listenable` that notifies when either answer may change.
+  Fleury then refreshes the command's shortcut hints and semantics when it
+  notifies, instead of asking the predicates on every frame. Keys, clicks, and
+  invocations always ask the predicates.
+
+The palette opener above uses a fourth switch: `showInPalette: false` keeps a
+command and its shortcut active but out of palettes.
+
 ## Discover commands with a palette
 
 A command palette turns the active command registry into searchable UI. This
@@ -114,11 +140,28 @@ The complete deterministic example is
 | Show a fixed palette of unrelated callbacks | `CommandPaletteItem` |
 
 A command callback may be synchronous or asynchronous, but loading and progress
-remain ordinary application state. Tests and agents can invoke the stable
-`CommandId` without depending on one particular button or shortcut.
+remain ordinary application state.
+
+## Invoke commands from tests and agents
+
+A test can run a command by its stable `CommandId`, without finding a button or
+pressing a shortcut. This test from the
+[Testing guide](/fleury/guides/testing/#test-a-command-and-its-shortcut) saves
+a draft through the editor's `editor.save` command:
+
+<SourceExcerpt code={testingTests} region="command-test" />
+
+`invokeCommand` waits for the command to finish. The result's `completed` is
+false when the command was disabled, missing, or threw, and `status` says which.
+
+An agent sees each active command as a semantic node with the role `command`,
+the command's title as its label, and its ID in `state.commandId`. Through
+`fleury_mcp`, `find_nodes` with the role `command` lists them, and
+`invoke_action` with `activate` runs one; see
+[Driving with an agent](/fleury/guides/driving-with-agents/).
 
 ## Next steps
 
-- [Key handling](/fleury/guides/focus-and-keyboard/) for keyboard-only input.
+- [Key handling](/fleury/guides/key-handling/) for keyboard-only input.
 - [Testing](/fleury/guides/testing/) for semantic and interaction tests.
 - [`CommandPalette`](/fleury/widgets/commandpalette/) for palette behavior.

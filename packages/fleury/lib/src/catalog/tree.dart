@@ -32,11 +32,12 @@ class TreeNode<T> {
 /// Flattens the expanded hierarchy into rows and renders them through a
 /// `ListView` (so it inherits selection, scrolling, and auto-scroll for
 /// free). On top of that:
-///   - Up/Down move the selection, Home/End jump (from `ListView`).
+///   - Up/Down move the selection; PageUp/PageDown and Home/End jump (from
+///     `ListView`).
 ///   - Right expands a collapsed branch, or steps into the first child of
 ///     an expanded one.
 ///   - Left collapses an expanded branch, or steps out to the parent.
-///   - Enter toggles a branch, or fires [onSelect] for a leaf.
+///   - Enter or a click toggles a branch, or calls [onSelect] for a leaf.
 ///
 /// Left/Right return to the focus chain when they'd do nothing (a leaf, a
 /// top-level collapsed node), so the tree composes with pane traversal.
@@ -73,10 +74,12 @@ class Tree<T> extends StatefulWidget {
   /// those bindings see it.
   final bool typeahead;
 
-  /// Called when Enter activates a leaf node.
+  /// Called with a leaf node (one without children) when the user activates
+  /// it with Enter or a click. On a branch, those expand or collapse it
+  /// instead.
   final void Function(TreeNode<T> node)? onSelect;
 
-  /// Style for the highlighted row. Defaults to reverse video.
+  /// Style for the selected row. Defaults to the theme's selection style.
   final CellStyle? selectedStyle;
 
   /// Branch nodes shallower than this depth start expanded. `0` (the default)

@@ -48,19 +48,22 @@ The full scenario matrix and peer target rationale live in the
 ## Driving an agent stays cheap, too
 
 The same discipline carries to the [MCP agent surface](/guides/driving-with-agents/).
-Reads are bounded: `get_ui` and action results use node and token budgets.
-Id-to-node lookup uses a cached index for each tree revision, and
+Reads are bounded: `get_ui` and action results are node-capped and
+token-trimmed. Id-to-node lookup uses a cached index for each tree revision, and
 `wait_for_change` caps settling so an animating app can return without running
-to its timeout. Legacy `2025-06-18` clients can subscribe to compact tree deltas;
-current clients use revision-based `wait_for_change` because Fleury does not yet
-advertise modern MCP streaming subscriptions.
+to its timeout. Legacy clients (MCP `2025-06-18` and earlier) can subscribe to
+compact tree deltas; current clients use revision-based `wait_for_change`
+because Fleury does not yet advertise modern MCP streaming subscriptions.
 
 The [June 29, 2026 baseline](https://github.com/danReynolds/fleury/blob/main/packages/fleury_mcp/benchmark/BASELINE.md)
 measured a delta at about 0.3% of a full re-read, indexed lookup at about 477×
 faster than a tree walk, and capped settling at about 3.7× faster than uncapped
-settling on its 80-row fixture. Those are recorded measurements, not guarantees
-for every app. CI enforces the baseline's stated thresholds, which allow timing
-variance and do not require reproducing those exact speedups.
+settling on its 80-row, 332-node dashboard fixture. Those are recorded
+measurements, not guarantees for every app. CI enforces the baseline's stated
+thresholds, which allow timing variance and do not require reproducing those
+exact speedups: a delta under 2% of a full re-read, capped settling more than
+1.5× faster than uncapped, and indexed lookup more than 2× faster than a tree
+walk.
 
 ## How to inspect it
 

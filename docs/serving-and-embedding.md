@@ -22,11 +22,13 @@ Both are targets behind the same host SPI; see
    widget tree                          widget tree  ← runs here
    Fleury core                          Fleury core
    fleury_web DOM host                  remote driver → cell-diff frames
+        │                                        │  Unix-domain socket
+        │                               fleury serve (relays bytes)
         │                                        │  WebSocket
         ▼ runs in the browser                    ▼
    paints DOM cell grid               thin dart2js client paints DOM cell grid
         ▲                                        ▲
-   browser events ┘                    browser events ┘ (sent back over the socket)
+   browser events ┘                    browser events ┘ (sent back the same way)
 ```
 
 ---
@@ -39,19 +41,22 @@ the DOM host paints the `CellBuffer` into retained DOM rows and feeds browser
 keyboard/mouse/input back into the framework.
 
 ```dart
-// web/main.dart — compiled with: dart compile js web/main.dart -o app.js
+// web/main.dart — compile with: dart compile js web/main.dart -o web/app.js -O2
 import 'package:fleury_web/fleury_web.dart';
+import 'package:my_app/app.dart'; // MyApp, built only from web-safe imports
 import 'package:web/web.dart' as web;
 
-void main() {
-  final host = web.document.querySelector('#app')! as web.Element;
-  mountApp(() => const MyApp(), into: host);
+Future<void> main() async {
+  await mountApp(
+    () => const MyApp(),
+    into: web.document.getElementById('app')!,
+  );
 }
 ```
 
 ```html
-<!-- the host element must have a real size + monospace metrics, or the
-     grid computes 0×0 and paints nothing -->
+<!-- web/index.html: the host element must have a real size + monospace
+     metrics, or the grid computes 0×0 and paints nothing -->
 <div id="app" style="width:80ch;height:24em;font-family:monospace"></div>
 <script src="app.js"></script>
 ```
@@ -84,24 +89,31 @@ offline apps, or anything that should deploy as a static asset.
 
 ## Serve — `fleury serve` (local bridge)
 
-`fleury serve` requires macOS or Linux: its connection to the native app uses
-Unix-domain sockets. The Windows terminal driver does not support this path.
+`fleury serve` requires macOS or Linux: the app and `serve` talk over a
+Unix-domain socket, and Dart supports those only on Linux, macOS, and Android.
 
 `fleury serve` carries a **native** Dart app's rendering to the browser. The
-native process holds the real widget tree. Its remote driver emits visual
-cell-diff frames over a WebSocket; semantic updates are diffed and sent
-separately when the exposed tree or its painted coverage changes. A small
-dart2js client in the browser paints the visual frames into the same DOM cell
-grid and sends input events back.
+native process holds the real widget tree. Its remote driver sends visual
+cell-diff frames to the `serve` process over a private Unix-domain socket, and
+`serve` relays them to the browser over a WebSocket;
+semantic updates are diffed and sent separately
+when the exposed tree or its painted coverage changes. A small dart2js client
+in the browser paints the visual frames into the same DOM cell grid and sends
+input events back the same way. The app dials that socket when `runApp`
+starts, and `serve` cannot attach to an app that is already running, so there
+are two ways to start one:
 
-There are two lifecycle models:
-
-- **Bridge mode** (no `--spawn`) attaches one app process that you start and
-  accepts one browser at a time. Close that browser before connecting another;
-  a second simultaneous browser is rejected. It is useful for IDE-driven
-  debugging and local demos.
+- **Bridge mode** (no `--spawn`) waits for an app you start once `serve` is
+  running. `serve` writes its socket's path to `.fleury/handle` in the current
+  directory, and an app started from that directory finds it. (The startup
+  banner also prints a `FLEURY_HANDLE=…` form for starting the app from
+  elsewhere.) Bridge mode accepts one browser at a time: close that browser
+  before connecting another, because a second simultaneous browser is rejected
+  with close code `4002`. It is useful for IDE-driven debugging, since the app
+  runs under your debugger, and for local demos.
 - **Spawn mode** (`--spawn <command …>`) owns an isolated app subprocess per
-  browser connection and keeps a warm standby so reconnects start quickly.
+  browser connection, so each tab gets its own session, and keeps a warm
+  standby so reconnects start quickly.
 
 ```sh
 # Run any fleury app and open it in a browser at http://127.0.0.1:5777

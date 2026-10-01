@@ -24,6 +24,13 @@ import 'framework.dart';
 
 /// Animates [child] in and out as [visible] toggles, deferring unmount
 /// until the [exit] effect completes.
+///
+/// When first built with [visible] true, [enter] plays. Both effects follow one
+/// progress value that runs from 0 (hidden) to 1 (shown). If [visible] flips
+/// back before a transition finishes, that value turns around from where it
+/// is instead of restarting, and the other effect takes over: showing the
+/// child again during its exit switches to [enter] at the current progress,
+/// rather than playing [exit] backward.
 class AnimatedVisibility extends StatefulWidget {
   const AnimatedVisibility({
     required this.visible,
@@ -35,7 +42,11 @@ class AnimatedVisibility extends StatefulWidget {
     super.key,
   });
 
+  /// Whether [child] is shown. Changing it plays [enter] or [exit].
   final bool visible;
+
+  /// The widget to show. It stays mounted while [exit] plays and is removed
+  /// when the exit finishes.
   final Widget child;
 
   /// Effect played as the child appears (0 → 1). Null = appear
@@ -46,7 +57,10 @@ class AnimatedVisibility extends StatefulWidget {
   /// no exit animation.
   final Effect? exit;
 
+  /// How long [enter] and [exit] take. Defaults to 250 ms.
   final Duration? duration;
+
+  /// The easing for [enter] and [exit]. Defaults to [Curves.easeOut].
   final Curve? curve;
 
   @override

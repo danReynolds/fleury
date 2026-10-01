@@ -3,14 +3,16 @@ import 'package:fleury/fleury_widget_support.dart' show readScope;
 
 import 'option_label.dart';
 
-/// A text field with an anchored, live-filtered suggestion list.
+/// A text field that suggests matching options in a dropdown as the user
+/// types.
 ///
-/// As the user types, options whose display string matches the text
-/// (case-insensitive substring) appear in a dropdown anchored just below
-/// the field via the [Anchored] primitive, so it floats over content and stays
-/// on screen. The field keeps focus throughout: Up/Down move the highlight,
-/// Enter fills the field with the highlighted option (and calls [onSelect]),
-/// Esc closes the dropdown.
+/// Options whose display string contains the typed text, ignoring case,
+/// appear in a dropdown just below the field (above it when there's no room
+/// below), floating over other content. The field keeps focus throughout: Up
+/// and Down move the highlight, wrapping at the ends; Enter or Tab fills the
+/// field with the highlighted option and calls [onSelect]; Esc or a click
+/// outside closes the dropdown. Clicking a suggestion picks it too. While the
+/// dropdown is closed, these keys pass through, so Tab still moves focus.
 ///
 /// Options can be any type [T]; [displayStringForOption] maps each to the
 /// text shown and matched against (defaults to `toString()`). `onSelect`
@@ -67,9 +69,9 @@ class Autocomplete<T extends Object> extends StatefulWidget {
 
   /// Stable label for the suggestion menu in semantic snapshots.
   ///
-  /// Defaults to [placeholder] when provided. Use this when tests, debug tools,
-  /// prompt fallback, or future adapters need to refer to the suggestion menu
-  /// independently from the current query text.
+  /// Defaults to [placeholder] when provided. Set it when tests, tools, or
+  /// agents need to refer to the suggestion menu by a name that doesn't
+  /// depend on the typed text.
   final String? semanticLabel;
 
   /// Extra semantic state merged into the underlying text-field node.
@@ -85,7 +87,11 @@ class Autocomplete<T extends Object> extends StatefulWidget {
   /// Whether the field can receive focus but not edit text.
   final bool readOnly;
 
-  /// Optional validation error displayed by the underlying input.
+  /// Marks the current value invalid: the field draws in the theme's error
+  /// style and reports this message through semantics, but doesn't show the
+  /// text. Inside a `FormField`, this message wins over the `FormField`'s
+  /// validator, though not over its own `error`, and the `FormField` shows
+  /// the winning message below the input.
   final String? validationError;
 
   /// Called with the selected option when the user picks a suggestion.
@@ -365,61 +371,67 @@ class _AutocompleteState<T extends Object> extends State<Autocomplete<T>> {
         child: SizedBox(
           width: boxWidth,
           height: height,
-          child: ListView.builder(
-            controller: _list,
+          // The field keeps focus and owns the keys; the list only lays out,
+          // scrolls, and reveals the highlight. A press that focused it would
+          // take focus from the field, which closes the dropdown before the
+          // release can pick the row.
+          child: ExcludeFocus(
+            child: ListView.builder(
+              controller: _list,
 
-            itemCount: _filtered.length,
-            itemBuilder: (_, i, selected) {
-              final label = sanitizeOptionLabel(_display(_filtered[i]));
-              return Semantics(
-                role: SemanticRole.menuItem,
-                label: label,
-                value: label,
-                focused: _focusNode.hasFocus && selected,
-                selected: selected,
-                actions: const <SemanticAction>{
-                  SemanticAction.select,
-                  SemanticAction.activate,
-                },
-                state: SemanticState({
-                  'menuDepth': 0,
-                  'menuItemIndex': i,
-                  'menuItemPosition': i + 1,
-                  'menuItemCount': _filtered.length,
-                  'entryKind': 'suggestion',
-                  'completionQuery': _controller.text,
-                }),
-                onAction: (action) {
-                  switch (action) {
-                    case SemanticAction.select:
-                    case SemanticAction.activate:
+              itemCount: _filtered.length,
+              itemBuilder: (_, i, selected) {
+                final label = sanitizeOptionLabel(_display(_filtered[i]));
+                return Semantics(
+                  role: SemanticRole.menuItem,
+                  label: label,
+                  value: label,
+                  focused: _focusNode.hasFocus && selected,
+                  selected: selected,
+                  actions: const <SemanticAction>{
+                    SemanticAction.select,
+                    SemanticAction.activate,
+                  },
+                  state: SemanticState({
+                    'menuDepth': 0,
+                    'menuItemIndex': i,
+                    'menuItemPosition': i + 1,
+                    'menuItemCount': _filtered.length,
+                    'entryKind': 'suggestion',
+                    'completionQuery': _controller.text,
+                  }),
+                  onAction: (action) {
+                    switch (action) {
+                      case SemanticAction.select:
+                      case SemanticAction.activate:
+                        _list.currentIndex = i;
+                        _pick();
+                        return;
+                      case _:
+                        return;
+                    }
+                  },
+                  // Click a suggestion to accept it — the same select+pick the
+                  // keyboard's Tab/Enter performs.
+                  child: GestureDetector(
+                    onTap: () {
                       _list.currentIndex = i;
                       _pick();
-                      return;
-                    case _:
-                      return;
-                  }
-                },
-                // Click a suggestion to accept it — the same select+pick the
-                // keyboard's Tab/Enter performs.
-                child: GestureDetector(
-                  onTap: () {
-                    _list.currentIndex = i;
-                    _pick();
-                  },
-                  child: Text(
-                    '${selected ? '› ' : '  '}$label',
-                    style: selected ? theme.selectionStyle : CellStyle.none,
-                    // One row per option, always: a label too wide for the box
-                    // is cut with an ellipsis rather than wrapped into the row
-                    // that belongs to the next option.
-                    softWrap: false,
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
+                    },
+                    child: Text(
+                      '${selected ? '› ' : '  '}$label',
+                      style: selected ? theme.selectionStyle : CellStyle.none,
+                      // One row per option, always: a label too wide for the
+                      // box is cut with an ellipsis rather than wrapped into
+                      // the row that belongs to the next option.
+                      softWrap: false,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                    ),
                   ),
-                ),
-              );
-            },
+                );
+              },
+            ),
           ),
         ),
       ),

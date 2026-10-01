@@ -1,12 +1,13 @@
 import '../primitives.dart';
 
-/// Shows a hint anchored below [child] while focus is anywhere inside it.
+/// Shows a hint below [child] while keyboard focus is anywhere inside it.
 ///
-/// Focus is the trigger, not the mouse: Tab onto the wrapped widget (or a
-/// focusable within it) and the [message] floats beneath it via the
-/// [Anchored] primitive; move focus away and it disappears. Escape hides it
-/// until focus leaves and returns. Built on [FocusDetector], so it tracks
-/// descendant focus: wrap a button or a field and it works without setup.
+/// Focus is the trigger, not the mouse: Tab onto the wrapped widget (or any
+/// focusable widget inside it) and [message] appears in a framed box just
+/// below it, or above it when there isn't room; move focus away and it
+/// disappears. Escape hides it until focus leaves and returns. Wrap a button
+/// or a field and it works without setup. Clicks elsewhere in the app still
+/// work while the hint is showing.
 class Tooltip extends StatefulWidget {
   const Tooltip({
     super.key,

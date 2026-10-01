@@ -117,3 +117,27 @@ class _CommandGuideDemoState extends State<CommandGuideDemo> {
     ),
   );
 }
+
+/// A document that a Save command follows. It notifies whenever [isDirty] or
+/// [isReadOnly] changes.
+class EditorDocument with Notifier {
+  bool isDirty = false;
+  bool isReadOnly = false;
+
+  Future<void> save() async {
+    isDirty = false;
+    notify();
+  }
+}
+
+// #docregion availability
+AppCommand saveFileCommand(EditorDocument document) => AppCommand(
+  id: const CommandId('editor.save'),
+  title: 'Save current file',
+  shortcuts: [KeySequence.ctrl.s],
+  enabled: (_) => document.isDirty,
+  visible: (_) => !document.isReadOnly,
+  availability: document,
+  run: (_) => document.save(),
+);
+// #enddocregion availability

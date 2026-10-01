@@ -12,6 +12,11 @@ focusable where it makes sense, themeable via `Theme`, and testable with
 import 'package:fleury/fleury.dart'; // Includes the whole catalog.
 ```
 
+In code that runs in a browser, import
+`package:fleury/fleury_core.dart` instead (with
+`package:fleury/fleury_core.dart`). It exports everything the native barrel
+does except `LocalFileSource`, which reads the local disk through `dart:io`.
+
 The lower-level primitives — `Text`, `Row`/`Column`, `Spinner`,
 `TextInput`, `ScrollView`, `Navigator`, focus, animation — live in
 `fleury` alongside this catalog. Richer controls use the same dependency and
@@ -29,7 +34,14 @@ unstyled `FocusableControl`, form registration, and interactive style contracts.
 It follows core's compatibility guarantees. See
 [Core and targets](../../../docs/core-and-targets.md#implementing-a-widget-library).
 
-## Catalog
+Documentation: [Fleury docs](https://danreynolds.github.io/fleury/) ·
+[widget reference](https://danreynolds.github.io/fleury/widgets/).
+
+## Highlights
+
+A selection from the catalog. The
+[widget reference](https://danreynolds.github.io/fleury/widgets/) covers every
+widget this package exports.
 
 ### Inputs & forms
 

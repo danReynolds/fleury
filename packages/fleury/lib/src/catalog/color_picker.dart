@@ -1,10 +1,15 @@
 import '../primitives.dart';
 import 'package:fleury/fleury_widget_support.dart';
 
-/// A grid of color swatches. The preview cursor is bracketed with the theme's
-/// focus style while the committed swatch remains marked; arrow chords preview
-/// other cells without changing [value], and Enter or Space commits the
-/// preview. Escape restores the value active when the picker gained focus.
+/// A grid of color swatches: the arrow keys preview a color, and Enter,
+/// Space, or a click commits one.
+///
+/// The preview cursor is bracketed with the theme's focus style while the
+/// committed swatch stays marked. The arrow keys, Home, and End move the
+/// preview without changing [value]; Enter or Space commits it, and clicking
+/// a swatch commits that swatch. Escape restores the value the picker had
+/// when it gained focus. Typing `#` opens a field for entering any color as
+/// a hex code.
 ///
 /// Defaults to the 16 base ANSI colors laid out in 2 rows × 8 cols.
 /// Pass [colors] for a custom palette (e.g. a 256-color picker, brand
@@ -39,9 +44,14 @@ class ColorPicker extends StatefulWidget {
 
   /// Currently-selected color. The first matching entry in [colors] (or the
   /// default palette) becomes the committed cell and initial preview cursor.
+  /// A color no entry matches, such as one entered as a hex code, marks no
+  /// cell: the preview cursor starts on the first cell, and the picker's
+  /// semantics report the color itself.
   final Color value;
 
-  /// Called when a preview is committed or Escape restores the initial color.
+  /// Called with the new color when the user commits a swatch (Enter, Space,
+  /// or a click), enters a hex code after `#`, or presses Escape to restore
+  /// the color the picker had when it gained focus.
   final void Function(Color color)? onChanged;
 
   /// Palette to pick from. `null` uses the 16 base ANSI colors.
@@ -95,7 +105,7 @@ class _ColorPickerState extends State<ColorPicker>
   /// palette and Tab away without changing the value.
   int _cursor = 0;
 
-  /// The committed colour when focus was gained, so Esc can cancel back to it.
+  /// The committed color when focus was gained, so Esc can cancel back to it.
   Color? _initial;
 
   /// Tracks focus transitions in [build] (FocusNode has no listener API) so we
@@ -137,7 +147,7 @@ class _ColorPickerState extends State<ColorPicker>
     _node = widget.focusNode ?? FocusNode(debugLabel: 'color-picker');
     _node.textInputClaimant = this;
     _owns = widget.focusNode == null;
-    _cursor = _indexOf(widget.value);
+    _cursor = _cursorFor(widget.value);
   }
 
   @override
@@ -152,7 +162,7 @@ class _ColorPickerState extends State<ColorPicker>
     }
     // Follow an externally-driven value change while not actively browsing.
     if (widget.value != oldWidget.value && !_node.hasFocus) {
-      _cursor = _indexOf(widget.value);
+      _cursor = _cursorFor(widget.value);
     }
     _syncFormClaim();
   }
@@ -187,12 +197,18 @@ class _ColorPickerState extends State<ColorPicker>
     super.dispose();
   }
 
-  int _indexOf(Color color) {
+  /// The palette cell holding [ColorPicker.value], or null when no cell
+  /// does.
+  int? get _committedIndex {
+    final i = _palette.indexOf(widget.value);
+    return i >= 0 ? i : null;
+  }
+
+  /// Where the preview cursor rests for [color]: its cell, else the first.
+  int _cursorFor(Color color) {
     final i = _palette.indexOf(color);
     return i >= 0 ? i : 0;
   }
-
-  int get _currentIndex => _indexOf(widget.value);
 
   /// Moves the preview cursor to [index] without committing.
   void _moveCursor(int index) {
@@ -200,18 +216,18 @@ class _ColorPickerState extends State<ColorPicker>
     setState(() => _cursor = index);
   }
 
-  /// Commits the cursor's colour — the "lock in" Enter / Space / a click do.
+  /// Commits the cursor's color — the "lock in" Enter / Space / a click do.
   void _commit() {
     if (!_enabled || _cursor < 0 || _cursor >= _palette.length) return;
     final color = _palette[_cursor];
     if (color != widget.value) _emit(color);
   }
 
-  /// Esc: abandon the in-progress browse, restoring the colour (and cursor)
+  /// Esc: abandon the in-progress browse, restoring the color (and cursor)
   /// from when focus was gained.
   void _cancel() {
     final initial = _initial ?? widget.value;
-    setState(() => _cursor = _indexOf(initial));
+    setState(() => _cursor = _cursorFor(initial));
     if (_enabled && initial != widget.value) _emit(initial);
   }
 
@@ -340,7 +356,7 @@ class _ColorPickerState extends State<ColorPicker>
     if (!focused) _initial = null;
     _wasFocused = focused;
     final disabledStyle = theme.mutedStyle;
-    final selectedIdx = _currentIndex;
+    final selectedIdx = _committedIndex;
     final cols = widget.columns;
     final palette = _palette;
     final validationError = _formRegistration?.error;
@@ -444,7 +460,17 @@ class _ColorPickerState extends State<ColorPicker>
 
     final rowCount = (palette.length + cols - 1) ~/ cols;
     final visibleColumns = palette.length < cols ? palette.length : cols;
-    final selectedColor = palette.isEmpty ? null : palette[selectedIdx];
+    // The committed color, described by its cell when it has one.
+    final value = widget.value;
+    final valueLabel = selectedIdx == null
+        ? _defaultColorLabel(value)
+        : _colorLabel(value, selectedIdx);
+    final valueState = <String, Object?>{
+      'selectedIndex': ?selectedIdx,
+      'selectedKey': _colorValue(value),
+      'selectedColorLabel': valueLabel,
+      'selectedColorKind': _colorKind(value),
+    };
     final body = Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -462,21 +488,14 @@ class _ColorPickerState extends State<ColorPicker>
       final Widget picker = Semantics(
         role: SemanticRole.list,
         label: widget.semanticLabel,
-        value: selectedColor == null
-            ? null
-            : _colorLabel(selectedColor, selectedIdx),
+        value: valueLabel,
         enabled: false,
         validationError: validationError,
         state: SemanticState({
           'collectionRowCount': rowCount,
           'collectionColumnCount': visibleColumns,
           'colorCount': palette.length,
-          if (selectedColor != null) ...{
-            'selectedIndex': selectedIdx,
-            'selectedKey': _colorValue(selectedColor),
-            'selectedColorLabel': _colorLabel(selectedColor, selectedIdx),
-            'selectedColorKind': _colorKind(selectedColor),
-          },
+          ...valueState,
         }),
         child: body,
       );
@@ -486,9 +505,7 @@ class _ColorPickerState extends State<ColorPicker>
     final Widget picker = Semantics(
       role: SemanticRole.list,
       label: widget.semanticLabel,
-      value: selectedColor == null
-          ? null
-          : _colorLabel(selectedColor, selectedIdx),
+      value: valueLabel,
       focused: focused,
       validationError: validationError,
       actions: const {SemanticAction.focus, SemanticAction.navigate},
@@ -497,12 +514,7 @@ class _ColorPickerState extends State<ColorPicker>
         'collectionRowCount': rowCount,
         'collectionColumnCount': visibleColumns,
         'colorCount': palette.length,
-        if (selectedColor != null) ...{
-          'selectedIndex': selectedIdx,
-          'selectedKey': _colorValue(selectedColor),
-          'selectedColorLabel': _colorLabel(selectedColor, selectedIdx),
-          'selectedColorKind': _colorKind(selectedColor),
-        },
+        ...valueState,
       }),
       child: KeyDetector(
         onKey: (event) {
@@ -578,7 +590,7 @@ Map<String, Object?> _colorComponents(Color color) {
   };
 }
 
-/// A small popover, anchored under the picker, for typing a hex colour code.
+/// A small popover, anchored under the picker, for typing a hex color code.
 /// Enter applies it as an [RgbColor]; Esc dismisses without changing anything.
 class _HexEntry extends StatefulWidget {
   const _HexEntry({

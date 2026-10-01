@@ -36,6 +36,11 @@ import 'framework.dart';
 /// Animates toward [value] whenever it changes across a rebuild,
 /// rebuilding [builder] with the current interpolated value each
 /// frame. Owns its [Animation] internally — nothing to dispose.
+///
+/// By default the value moves with a spring ([Spring.smooth]), which keeps its
+/// momentum when [value] changes again mid-flight. Pass [spring] to pick
+/// another spring, or [curve] (with an optional [duration]) for fixed-length
+/// easing instead.
 class AnimationBuilder<T> extends StatefulWidget {
   const AnimationBuilder(
     this.value, {
@@ -64,12 +69,18 @@ class AnimationBuilder<T> extends StatefulWidget {
   /// frame.
   final Widget Function(BuildContext context, T value, Widget? child) builder;
 
-  /// Spring to use when [value] changes (defaults to [Spring.smooth]).
-  /// Mutually exclusive with [curve].
+  /// Spring to use when [value] changes. When both this and [curve] are null,
+  /// the spring is [Spring.smooth]. Setting both this and [curve] throws.
   final Spring? spring;
 
-  /// Curve + [duration] for deterministic easing instead of a spring.
+  /// Easing for a fixed-length animation instead of a spring, lasting
+  /// [duration] (250 ms when that is null). Setting both this and [spring]
+  /// throws.
   final Curve? curve;
+
+  /// How long a [curve] animation lasts; null means 250 ms. Only valid with
+  /// [curve]: setting it without one throws, because a spring's timing comes
+  /// from the [Spring] itself.
   final Duration? duration;
 
   /// Required only for non-built-in [T] (built-ins: double, int,

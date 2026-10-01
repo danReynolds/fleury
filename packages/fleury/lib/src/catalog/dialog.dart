@@ -13,9 +13,12 @@ import '../primitives.dart';
 /// ));
 /// ```
 ///
-/// Dialog supplies only the frame; positioning is `present`'s job (it
-/// centers by default). Give it a [width] for a stable panel size, or
-/// leave it null to size to the content.
+/// Dialog supplies only the frame; positioning and dismissal are `present`'s
+/// job. `present` centers the dialog by default and keeps focus inside it.
+/// Esc dismisses it, completing the `present` future with null, unless you
+/// pass `barrierDismissible: false`; clicking outside the dialog does
+/// nothing. Give it a [width] for a stable panel size, or leave it null to
+/// size to the content.
 class Dialog extends StatelessWidget {
   const Dialog({
     super.key,

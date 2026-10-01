@@ -543,6 +543,9 @@ Future<MountedApp> _runTuiSurface(
             if (text != null &&
                 tryConsumeDebugText(debug, TextInputEvent(text)))
               continue;
+            // A browser has no job control: a Ctrl+Z the expanded shell
+            // withholds from the hidden app simply ends here.
+            if (key != null && debugShellWithholdsKey(debug, key)) continue;
           }
           inputDispatcher.dispatch(event);
         } catch (error, stack) {
@@ -652,7 +655,7 @@ Future<MountedApp> _runTuiSurface(
       ),
       planner: planner,
       isDebugWatching: () =>
-          debugController?.config.enabled == true && DebugEvents.hasListeners,
+          debugController?.enabled == true && DebugEvents.hasListeners,
       onBeforeFrame: dispatchPendingWork,
       // Input bookkeeping runs ahead of every production gate so per-frame
       // edges expire even on frames that render nothing (RFC 0020 §5.6/§7).

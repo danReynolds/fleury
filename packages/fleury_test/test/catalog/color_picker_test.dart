@@ -315,6 +315,67 @@ void main() {
       );
     });
 
+    group('a value that is not in the palette', () {
+      // What `#` hex entry produces: any RGB color, palette or not.
+      const custom = RgbColor(0x12, 0x34, 0x56);
+
+      testWidgets('marks no swatch committed', (tester) {
+        tester.pumpWidget(
+          ColorPicker(value: custom, autofocus: true, onChanged: (_) {}),
+        );
+        expect(
+          tester.semantics().where(role: SemanticRole.radio, checked: true),
+          isEmpty,
+        );
+        expect(
+          tester.semantics().where(role: SemanticRole.radio, selected: true),
+          isEmpty,
+        );
+
+        // Browsing off the first swatch leaves no `‹ ›` committed marks
+        // behind: nothing there was committed.
+        tester.sendKey(const KeyEvent(KeyCode.arrowRight));
+        final out = tester.renderToString(size: const CellSize(80, 3));
+        expect(out, isNot(contains('‹')));
+        expect(out, contains('['), reason: 'the preview cursor still shows');
+      });
+
+      testWidgets('is the value the picker reports', (tester) {
+        tester.pumpWidget(
+          ColorPicker(
+            value: custom,
+            semanticLabel: 'Accent color',
+            onChanged: (_) {},
+          ),
+        );
+        final picker = tester.semantics().single(
+          role: SemanticRole.list,
+          label: 'Accent color',
+        );
+        expect(picker.value, 'RGB color 18 52 86');
+        expect(picker.state['selectedKey'], 'rgb:18,52,86');
+        expect(picker.state['selectedColorKind'], 'rgb');
+        expect(
+          picker.state['selectedIndex'],
+          isNull,
+          reason: 'no swatch holds it',
+        );
+      });
+
+      testWidgets('Enter commits the swatch under the cursor', (tester) {
+        Color? received;
+        tester.pumpWidget(
+          ColorPicker(
+            value: custom,
+            autofocus: true,
+            onChanged: (c) => received = c,
+          ),
+        );
+        tester.sendKey(const KeyEvent(KeyCode.enter));
+        expect(received, const AnsiColor(0), reason: 'the cursor starts first');
+      });
+    });
+
     testWidgets('semantic select chooses a swatch and focuses the picker', (
       tester,
     ) async {

@@ -6,12 +6,12 @@ import 'dart:async';
 // #enddocregion transmission
 
 import 'package:fleury/fleury_core.dart';
+// The imports share the region with fetchPhoto, so the editable view shows
+// where the `http` and `img` prefixes come from.
 // #docregion fetch-photo
 import 'package:http/http.dart' as http;
 import 'package:image/image.dart' as img;
-// #enddocregion fetch-photo
 
-// #docregion fetch-photo
 Future<img.Image> fetchPhoto(int seed) async {
   final response = await http.get(
     Uri.parse('https://picsum.photos/seed/fleury-$seed/480/240.jpg'),

@@ -169,11 +169,19 @@ String exportSearchResult(
       .join(' | ');
 }
 
-/// Search input plus keyboard-navigable result list.
+/// A search field over a list of [results]: typing filters and ranks them,
+/// and the user activates one.
 ///
-/// The widget owns only presentation, selection, activation, copy, and
-/// semantics. Callers can pass already-ranked [results], or use [matcher] to
-/// narrow a larger list with a custom predicate.
+/// By default a query keeps results that match it exactly, by prefix, as a
+/// substring, or as a fuzzy subsequence, listed in that order; pass [matcher]
+/// to decide matches yourself (results then keep their order). An empty query
+/// shows every result in order.
+///
+/// While the query field has focus, Up and Down move the selected result and
+/// Enter activates it. In the result list, Up, Down, PageUp, PageDown, Home,
+/// and End move the selection, and Enter or a click activates. Activating an
+/// enabled result calls [onActivate]. Ctrl+C copies the selected result (in
+/// the query field, selected query text is copied instead).
 class SearchPanel extends StatefulWidget {
   const SearchPanel({
     super.key,
@@ -244,13 +252,16 @@ class SearchPanel extends StatefulWidget {
   /// Whether the query input should request focus when mounted.
   final bool autofocus;
 
-  /// Whether Ctrl+C and semantic copy export the selected result.
+  /// Whether Ctrl+C (and the semantic copy action) copies the selected
+  /// result.
   final bool copySelection;
 
   /// Clipboard/export options for the selected result.
   final SearchPanelCopyOptions copyOptions;
 
-  /// Called when a result is activated.
+  /// Called with the result and its index in [results] when the user
+  /// activates an enabled result: Enter in the query field or the list, or a
+  /// click on its row.
   final void Function(SearchResult result, int resultIndex)? onActivate;
 
   /// Called after a copy attempt completes.

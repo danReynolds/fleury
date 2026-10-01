@@ -585,6 +585,8 @@ class DataTableController extends Notifier {
 /// keeps the navigation cursor separate from a range selected for copying;
 /// Enter or double-click runs a row command. The wheel only scrolls.
 /// Ctrl+C copies the current row or selected cell range as TSV or CSV.
+/// Clicking the header of a sortable column calls [onSort]; the header then
+/// shows the sort you pass back as [sortColumnId] and [sortDirection].
 ///
 /// Unlike `Table`, this widget does not mount every cell as a widget. It asks
 /// [cellBuilder] only for the visible body rows, paints those directly into the
@@ -721,19 +723,21 @@ class DataTable extends StatefulWidget {
   /// Style merged onto the current row in row mode or selected cells in cell mode.
   final CellStyle? selectedStyle;
 
-  /// App-owned sort column identifier exposed through semantics.
+  /// Id of the column your data is sorted by. If that column is sortable
+  /// ([DataTableColumn.sortable]), its header shows ▲ or ▼ for
+  /// [sortDirection]. The sort is also exposed through semantics; the table
+  /// never reorders rows itself.
   final String? sortColumnId;
 
-  /// App-owned sort direction exposed through semantics.
+  /// Direction of the current sort: the [sortColumnId] header shows ▲ for
+  /// ascending and ▼ for descending (`^` and `v` where the terminal draws
+  /// those symbols two cells wide). Also exposed through semantics.
   final DataTableSortDirection? sortDirection;
 
-  /// Called with an eligible column's id when its header is clicked or
-  /// semantically activated, so the app can (re)sort.
-  ///
-  /// A column is eligible only when its [DataTableColumn.sortable] flag is
-  /// true. The app owns the data, comparator, and direction toggle; update
-  /// [sortColumnId] and [sortDirection] to paint and expose the resulting sort
-  /// state.
+  /// Called with a column's id when the user clicks its header or activates
+  /// it through semantics, only for columns whose [DataTableColumn.sortable]
+  /// is true. The app sorts its data and chooses the direction, then rebuilds
+  /// with [sortColumnId] and [sortDirection] to show the new sort.
   final void Function(String columnId)? onSort;
 
   /// App-owned filter text exposed through semantics.

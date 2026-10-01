@@ -1,5 +1,7 @@
 import 'dart:async' show FutureOr;
 
+import 'package:meta/meta.dart';
+
 import '../foundation/change_notifier.dart';
 import '../foundation/geometry.dart';
 import '../foundation/key.dart' show Key, ValueKey;
@@ -766,6 +768,9 @@ final class SemanticNode {
   final Object? value;
   final String? hint;
   final bool enabled;
+
+  /// Whether focus is on this node or inside it (see [Semantics.focused]).
+  /// [SemanticTree.focusedNode] is the one node that holds focus.
   final bool focused;
   final bool selected;
   final bool? checked;
@@ -916,6 +921,23 @@ final class SemanticTree {
   SemanticNode? nodeById(SemanticNodeId id) {
     return nodesById[id];
   }
+
+  /// The node that holds focus, or null when no node reports focus.
+  ///
+  /// [SemanticNode.focused] is also true on nodes with focus inside them, and
+  /// those enclose the node that holds it, so the focused nodes form a path
+  /// down the tree. This is the deepest node on it: the control with the
+  /// keys, or the row a focused table marks as current. When nodes report
+  /// focus on separate paths, such as a text field and the suggestion its
+  /// popup highlights, the first path in tree order wins.
+  ///
+  /// The inspection snapshot's `focusedNodeId` and the accessibility
+  /// snapshot's `focusedNode` follow the same rule.
+  SemanticNode? get focusedNode => innermostFocusedNode(
+    root,
+    isFocused: (node) => node.focused,
+    childrenOf: (node) => node.children,
+  );
 
   /// Returns a tree with the matching semantic nodes replaced.
   ///
@@ -1130,6 +1152,39 @@ Map<SemanticNodeId, SemanticNode> _cachedNodesById(SemanticTree tree) {
   });
   _semanticTreeNodesById[tree] = nodesById;
   return nodesById;
+}
+
+/// The rule behind [SemanticTree.focusedNode], for any tree of nodes that
+/// report focus, so the live tree, the inspection snapshot, and the
+/// accessibility snapshot all name the same node.
+///
+/// The first node in tree order that reports focus is the outermost node of
+/// its focus path. This descends from it, taking the first focused node below
+/// at each step, and returns the last one found.
+@internal
+N? innermostFocusedNode<N extends Object>(
+  N root, {
+  required bool Function(N node) isFocused,
+  required Iterable<N> Function(N node) childrenOf,
+}) {
+  // The first node among [nodes] and their descendants, in tree order, that
+  // reports focus.
+  N? firstFocused(Iterable<N> nodes) {
+    for (final node in nodes) {
+      if (isFocused(node)) return node;
+      final below = firstFocused(childrenOf(node));
+      if (below != null) return below;
+    }
+    return null;
+  }
+
+  var focused = isFocused(root) ? root : firstFocused(childrenOf(root));
+  while (focused != null) {
+    final deeper = firstFocused(childrenOf(focused));
+    if (deeper == null) return focused;
+    focused = deeper;
+  }
+  return null;
 }
 
 /// Invokes [action] on the semantic node [id] by dispatching through the
@@ -1627,6 +1682,14 @@ final class Semantics extends ProxyWidget {
   final Object? value;
   final String? hint;
   final bool enabled;
+
+  /// Whether focus is on this node or inside it.
+  ///
+  /// A control sets it while it holds focus. A region may also set it while
+  /// focus is anywhere inside it, like a pane whose border lights up while
+  /// one of its controls has the keys, and a focused list or table may set it
+  /// on the row it marks as current. A reader that wants the one node holding
+  /// focus takes the deepest: [SemanticTree.focusedNode].
   final bool focused;
   final bool selected;
   final bool? checked;

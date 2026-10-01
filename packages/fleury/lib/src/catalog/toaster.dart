@@ -73,7 +73,9 @@ class ToastAction {
 /// everything — including modals — via an Overlay entry, stacking them
 /// and auto-dismissing each after a delay unless it is persistent.
 ///
-/// Fire one imperatively from anywhere below it:
+/// To show a toast from anywhere below it, call [Toaster.show] with a
+/// `BuildContext` and the message. It returns a [ToastHandle] that can
+/// dismiss that toast early.
 ///
 /// ```dart
 /// Toaster.show(context, 'Saved', severity: ToastSeverity.success);

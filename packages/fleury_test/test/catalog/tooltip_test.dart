@@ -19,6 +19,18 @@ void main() {
     expect(tester.overlay.entries.length, 2);
   });
 
+  testWidgets('shows around a control that watches its own focus', (tester) {
+    // Stepper tracks focus with a FocusDetector of its own; that must not
+    // hide the focus from the tooltip's detector around it.
+    tester.pumpWidget(
+      Tooltip(
+        message: 'Retries',
+        child: Stepper(value: 3, onChanged: (_) {}, autofocus: true),
+      ),
+    );
+    expect(_screen(tester).contains('Retries'), isTrue);
+  });
+
   testWidgets('hides when focus moves away', (tester) {
     final other = FocusNode(debugLabel: 'other');
     tester.pumpWidget(

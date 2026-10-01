@@ -174,6 +174,38 @@ void main() {
         );
       },
     );
+
+    testWidgets(
+      'half-transparent (top transparent, bottom opaque) paints only the '
+      'bottom half',
+      (tester) {
+        final image = img.Image(width: 1, height: 2, numChannels: 4);
+        image.setPixel(0, 0, img.ColorRgba8(0, 0, 0, 0));
+        image.setPixel(0, 1, img.ColorRgba8(255, 128, 64, 255));
+        // Text underneath leaves a foreground in the cell. `▀` would paint
+        // the transparent top half in it.
+        tester.pumpWidget(
+          SizedBox(
+            width: 1,
+            height: 1,
+            child: Stack(
+              children: [
+                const Text('x', style: CellStyle(foreground: AnsiColor(2))),
+                Image(source: ImageSource.decoded(image), fit: ImageFit.fill),
+              ],
+            ),
+          ),
+        );
+        final cell = tester.render(size: const CellSize(1, 1)).atColRow(0, 0);
+        expect(cell.grapheme, '▄');
+        expect(cell.style.foreground, const RgbColor(255, 128, 64));
+        expect(
+          cell.style.background,
+          isNull,
+          reason: 'the transparent top shows the background behind it',
+        );
+      },
+    );
   });
 
   group('Image — alpha compositing against background', () {

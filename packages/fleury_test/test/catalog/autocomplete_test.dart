@@ -76,6 +76,41 @@ void main() {
     expect(tester.overlay.entries.length, 1, reason: 'dropdown closed');
   });
 
+  testWidgets('a click on a suggestion picks it and keeps focus in the field', (
+    tester,
+  ) {
+    final focus = FocusNode(debugLabel: 'fruit');
+    final controller = TextEditingController();
+    String? selected;
+    tester.pumpWidget(
+      Autocomplete(
+        options: _fruits,
+        focusNode: focus,
+        controller: controller,
+        autofocus: true,
+        onSelect: (v) => selected = v,
+      ),
+    );
+    tester.type('ap'); // apple, apricot
+    final buf = tester.render(size: const CellSize(16, 8));
+    final frame = _frame(buf);
+    expect(_inside(buf, frame, 2), 'apricot');
+    for (final kind in [MouseEventKind.down, MouseEventKind.up]) {
+      tester.sendMouse(
+        MouseEvent(
+          kind: kind,
+          button: MouseButton.left,
+          col: frame.left + 3,
+          row: frame.top + 2,
+        ),
+      );
+    }
+    expect(selected, 'apricot');
+    expect(controller.text, 'apricot', reason: 'the field is filled');
+    expect(tester.overlay.entries.length, 1, reason: 'the dropdown closes');
+    expect(focus.hasFocus, isTrue, reason: 'the field keeps focus');
+  });
+
   testWidgets('Esc closes the dropdown but keeps the text', (tester) {
     tester.pumpWidget(const Autocomplete(options: _fruits, autofocus: true));
     tester.type('ba'); // banana

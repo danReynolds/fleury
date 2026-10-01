@@ -83,10 +83,12 @@ related views, though not every view is retained on every surface:
   doesn't have to build for itself.
 - **The render tree** does layout and paint over a cell grid —
   constraints down, sizes up, following Flutter's central layout rule but
-  using cells instead of pixels. Its persistent identity is what change-tracking
-  hangs on: a damage tracker records which rows actually changed,
-  repaint boundaries cache cells for subtrees that didn't, and scroll
-  detection turns moving content into buffer moves instead of repaints.
+  using cells instead of pixels. Its persistent identity is what incremental
+  work hangs on: a render object nothing invalidated keeps its layout under
+  unchanged constraints, and repaint boundaries replay cached cells for
+  subtrees that didn't change. Each painted frame is then compared with the
+  last to find exactly the cells that changed, and scroll detection turns
+  moving content into screen scrolls instead of rewritten rows.
 - **The semantics tree** is the machine-readable shadow of your UI — roles,
   state, and actions. Browser and agent surfaces retain and update it when
   semantics or painted coverage change; tests and plain-terminal debug collect
@@ -96,16 +98,16 @@ related views, though not every view is retained on every surface:
   programs.
 
 From a state change, the pipeline runs: rebuild the dirty subtree →
-layout → paint into a damage-tracked cell buffer → backend. The terminal
-backend diffs cell buffers and emits byte-frugal ANSI — it accounts for
+layout (clean subtrees keep their sizes) → paint into a cell buffer →
+compare it with the previous frame to derive exactly which cells changed →
+backend. Nothing reports damage, so nothing can under-report it. The
+terminal backend emits byte-frugal ANSI for that damage — it accounts for
 every escape byte, writes through small gaps when that's cheaper than
 moving the cursor, and skips the synchronized-output wrapper when a diff
 is tiny. The web backend applies the *same damage* to retained DOM rows.
-Both hosts assemble the same building blocks (`TuiFrameLoop`, the
-presentation planner, the span builder) and an oracle in the test suite
-asserts the two surfaces render the same tree. (A single extracted frame
-driver owning the choreography end-to-end is designed in the pipeline
-program RFC and lands with the web render backend.)
+Both hosts run the same frame program — one `FrameDriver` owns the
+choreography over the shared `TuiFrameLoop` — and an oracle in the test
+suite asserts the two surfaces render the same tree.
 
 Around that pipeline sits the app layer: a typed command registry, focus
 and overlay management, a capability contract (terminals differ in
@@ -288,17 +290,19 @@ you'd expect on the axes the runtime controls. Three of those
 measurements taught us something worth sharing.
 
 **Retained mode pays for itself on the wire.** Going in, we treated the
-damage-tracking machinery as a tax we'd gladly pay for the developer
+retained machinery as a tax we'd gladly pay for the developer
 model — we assumed the leanest immediate-mode renderers set a
 wire-efficiency bar we could only approach. Measured natively against
 the best of the field, the assumption ran backwards: fleury emitted
 fewer bytes per frame and sustained higher frame rates on most shared
-workloads. The mechanism is the interesting part: a renderer that
-rebuilds each frame must diff the result to *recover* what changed,
-while the damage tracker never forgot — so the unchanged screen is never
-painted at all. Under continuous churn, a 13,200-cell grid rewrites
-about 85 cells a frame. For us, that settled retained UI's oldest open
-question in terminals: the machinery isn't a tax, it's the engine.
+workloads. The mechanism is the interesting part: every rendered frame is
+compared with the one before, so the encoder knows exactly which cells
+changed, while the retained trees keep the work of producing that frame
+close to the change — one dirty path rebuilds, clean subtrees keep their
+layout, repaint boundaries replay cached cells, and a frame with nothing
+dirty is skipped outright. Under continuous churn, a 13,200-cell grid
+rewrites about 85 cells a frame. For us, that settled retained UI's oldest
+open question in terminals: the machinery isn't a tax, it's the engine.
 
 **Keystrokes that follow the change, not the document.** A cursor move
 in a 10,000-character editor costs fleury 0.8 ms, and the cost tracks
@@ -312,7 +316,7 @@ for Flutter on phones.
 Every measurement we took pointed the same way: wire efficiency and
 latency track how much a framework's update pipeline knows about change,
 far more than they track its implementation language. That conviction is
-why our effort went into the spine — damage tracking, paint isolation,
+why our effort went into the spine — exact frame damage, paint isolation,
 scroll reuse, byte accounting — rather than into micro-optimizing any
 single layer, and it's why we'd expect the same architecture to pay off
 in any language that hosts it.
@@ -352,7 +356,7 @@ managed-runtime peers, where fleury leads everywhere we measured.
   "recycling" — the standard DOM/Flutter pattern for moving lists —
   measured ~2x *slower* than letting positional rebuild repaint, because
   keyed boundaries turn every moved row into a reconciled subtree and
-  defeat both the damage tracker and scroll reuse. Boundaries are for
+  defeat both the boundary caches and scroll reuse. Boundaries are for
   expensive content that stays put. Living close to Flutter means
   inheriting folklore that sometimes must be unlearned; we document the
   traps where they bite.

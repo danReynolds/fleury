@@ -299,11 +299,14 @@ String exportCodeSelection(
   };
 }
 
-/// A read-only source viewer: a line-number gutter, coarse per-line styling
-/// (comments, imports, keywords, and strings each get a tone), and a
-/// keyboard-movable line selection. Ctrl+C copies the selected line or the
-/// whole document, and source text is sanitized so stray escape sequences
-/// can't corrupt the frame.
+/// A read-only source viewer with a line-number gutter, coarse per-line
+/// styling (comments, imports, keywords, and strings each get a tone), and a
+/// selected line.
+///
+/// Up and Down move the selected line; PageUp, PageDown, Home, and End jump;
+/// clicking a line selects it. Ctrl+C copies the selected line, or the whole
+/// document when [copyOptions] sets [CodeViewCopyMode.document]. Source text
+/// is sanitized so stray escape sequences can't corrupt the frame.
 ///
 /// The viewer bounds its own height: it renders at most [maxVisible] rows
 /// (fewer for a shorter document) and scrolls the rest, so it composes
@@ -340,7 +343,9 @@ class CodeView extends StatefulWidget {
        assert(tabSize > 0),
        assert(maxVisible > 0);
 
-  /// Creates a viewer from an already parsed [CodeDocument].
+  /// Creates a viewer from an already parsed [CodeDocument]. The parsing
+  /// options ([language], [filePath], [maxLineLength], [tabSize], and
+  /// [showLineNumbers]) have no effect here.
   ///
   /// The document's prepared rows and parsing metadata are used as supplied;
   /// source parsing is not repeated.
@@ -385,7 +390,9 @@ class CodeView extends StatefulWidget {
   /// Optional file path exposed through semantics.
   final String? filePath;
 
-  /// Maximum displayed line length.
+  /// Cuts each displayed row, line number included, to this many characters,
+  /// ending it with `…`; null never cuts. Copying still copies the whole
+  /// line.
   final int? maxLineLength;
 
   /// Number of spaces used when expanding tabs.
@@ -400,7 +407,8 @@ class CodeView extends StatefulWidget {
   /// child, say); the internal list cannot window its rows without one.
   final int maxVisible;
 
-  /// Whether Ctrl+C and semantic copy export the selected text.
+  /// Whether Ctrl+C (and the semantic copy action) copies the selected line,
+  /// or the document if [copyOptions] says so.
   final bool copySelection;
 
   /// Clipboard/export options for copied source text.

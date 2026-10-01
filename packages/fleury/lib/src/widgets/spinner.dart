@@ -15,11 +15,13 @@ import 'framework.dart';
 /// Unicode braille reliably (e.g. some constrained SSH setups).
 enum SpinnerStyle { braille, ascii }
 
-/// Animated loading indicator that cycles through a small set of
-/// glyphs at the configured cadence. Driven by [FrameBuilder] —
-/// shares the runtime's TickerScheduler with every other animation,
-/// so N concurrent spinners still produce only one underlying
-/// timer.
+/// Animated loading indicator: a cycling glyph with an optional [label]
+/// beside it.
+///
+/// Use it for work whose progress can't be measured. The glyph advances every
+/// [frameInterval]. Every spinner shares the app's animation timer, so showing
+/// many at once stays cheap. A spinner holds its current glyph while animation
+/// is paused around it, such as under `TickerMode(enabled: false)`.
 ///
 /// ```dart
 /// Spinner(label: 'Connecting')

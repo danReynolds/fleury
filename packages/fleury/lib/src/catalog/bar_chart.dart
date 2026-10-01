@@ -16,9 +16,10 @@ class Bar {
       colors = const [];
 
   /// A stacked bar of [segments] (rendered bottom→top). Segment heights
-  /// sum to determine the bar's total height. [colors] (optional) pairs
-  /// each segment with an explicit color — by index, falling back to the
-  /// chart's palette for any unspecified index.
+  /// sum to determine the bar's total height, so an empty list is a bar of
+  /// zero height. [colors] (optional) pairs each segment with an explicit
+  /// color — by index, falling back to the chart's palette for any
+  /// unspecified index.
   const Bar.stacked(this.label, this.segments, {this.colors = const []})
     : value = null,
       color = null;
@@ -26,7 +27,7 @@ class Bar {
   /// Bar label drawn below the column (when `showLabels: true`).
   final String label;
 
-  /// The bar's single value, or null when [segments] is non-empty.
+  /// The bar's single value; null for a stacked bar.
   final num? value;
 
   /// Stacked segment values (bottom→top). Empty for single-value bars.
@@ -78,9 +79,9 @@ class Bar {
 /// ]);
 /// ```
 ///
-/// Semantics: contributes one summary node (chart role, label, and data
-/// state) by design. Terminal charts are announced and asserted as
-/// summaries; per-element semantic children are intentionally omitted.
+/// Screen readers and agents get one chart node: [semanticLabel] plus the
+/// bar count and the value range (from the smallest bar total up to the
+/// largest total or [max], whichever is larger), not a node per bar.
 class BarChart extends StatelessWidget {
   const BarChart({
     super.key,
@@ -109,19 +110,20 @@ class BarChart extends StatelessWidget {
   /// Cells between bars.
   final int gap;
 
-  /// Colors used for stacked-bar segments and as the default for
-  /// single-value bars that don't set [Bar.color] explicitly. Defaults to
-  /// a palette derived from the theme's color scheme (primary, info,
-  /// warning, success, error).
+  /// Colors cycled through for stacked-bar segments. Single-value bars that
+  /// don't set [Bar.color] all use its first color. Defaults to a palette
+  /// derived from the theme's color scheme (primary, info, warning, success,
+  /// error).
   ///
-  /// For stacked bars where segments are categorical (no semantic
-  /// meaning), prefer overriding with `Palettes.categorical` to avoid
-  /// implying that a yellow segment is a "warning" or red is "error".
+  /// For stacked bars whose segments are just categories, with no meaning of
+  /// their own, `Palettes.categorical` orders its colors for telling them
+  /// apart. It still includes yellow and red, so a segment can still read as
+  /// a warning or an error; pass colors of your own to rule that out.
   final List<Color>? palette;
 
   /// Labels for stacked-bar segments, parallel to each [Bar.stacked]'s
-  /// `segments` list. Required for the legend to render — without it,
-  /// stacked bars are unreadable, so peer libs all auto-emit one.
+  /// `segments` list. [showLegend] draws a legend only when these are set,
+  /// and without one, stacked segments are hard to tell apart.
   final List<String>? segmentLabels;
 
   /// Whether to draw a row of category labels under the chart.
@@ -184,7 +186,7 @@ SemanticState _barChartSemanticState(List<Bar> bars, num? explicitMax) {
       if (minValue == null || total < minValue) minValue = total;
       if (maxValue == null || total > maxValue) maxValue = total;
     }
-    segmentCount += bar.segments.isEmpty ? 1 : bar.segments.length;
+    segmentCount += bar.value == null ? bar.segments.length : 1;
   }
   return SemanticState({
     'chartType': 'bar',
@@ -503,10 +505,13 @@ class RenderBarChart extends RenderObject {
       if (col >= rightEdge) break;
       final b = _bars[i];
 
-      if (b.segments.isNotEmpty) {
+      // The constructor decides the kind: a stacked bar has no value, even
+      // with no segments to stack.
+      final value = b.value;
+      if (value == null) {
         _paintStackedBar(buffer, b, col, chartTopRow, chartRows, topVal);
       } else {
-        _paintSingleBar(buffer, b, col, chartTopRow, chartRows, topVal);
+        _paintSingleBar(buffer, b, value, col, chartTopRow, chartRows, topVal);
       }
 
       // Value label above the bar — totals for stacked.
@@ -524,11 +529,12 @@ class RenderBarChart extends RenderObject {
     }
   }
 
-  /// Paints a single-value [bar] starting at column [col]. Top of bar
-  /// uses a partial 1/8 glyph; full cells below use `█`.
+  /// Paints a single-value [bar] of [value] starting at column [col]. Top of
+  /// bar uses a partial 1/8 glyph; full cells below use `█`.
   void _paintSingleBar(
     CellBuffer buffer,
     Bar bar,
+    num value,
     int col,
     int chartTopRow,
     int chartRows,
@@ -537,7 +543,7 @@ class RenderBarChart extends RenderObject {
     final style = CellStyle(foreground: bar.color ?? _defaultColor);
     // A non-finite value (or scale) renders as an empty column — round()
     // on NaN/±Infinity would throw.
-    final rawTicks = (bar.value!.toDouble() / topVal) * chartRows * 8;
+    final rawTicks = (value.toDouble() / topVal) * chartRows * 8;
     final ticks = rawTicks.isFinite ? rawTicks.round() : 0;
     final fullRows = ticks ~/ 8;
     final partial = ticks % 8;

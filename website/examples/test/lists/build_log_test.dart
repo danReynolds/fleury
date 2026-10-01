@@ -15,7 +15,7 @@ void main() {
     await tester.button('Append').press();
     tester.pump();
     final paused = tester.renderToString();
-    expect(paused, contains('Paused · 1 new entries'));
+    expect(paused, contains('Paused · 1 new'));
     expect(paused, contains('Step 1 complete'));
     expect(paused, isNot(contains('Step 13 complete')));
 

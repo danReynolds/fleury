@@ -43,6 +43,10 @@ dart pub add http image
 />
 </GuidePad>
 
+Press **Load a photo** to mount `PhotoViewer`. The preview waits for that press
+so that opening this page sends no request to Lorem Picsum; the viewer itself
+starts loading as soon as it builds.
+
 Create the future once and keep it in state, as `_photo` does. A future created
 in `build` would start a new request on every rebuild. `widget.loadPhoto` is
 `fetchPhoto` with a new seed each time.
@@ -113,6 +117,13 @@ Ctrl+C, which arrives as input. Move that work to another isolate with
 the resulting future to a builder as usual:
 
 <SourceExcerpt code={program} region="decode-in-background" />
+
+To use it in the photo example, replace the `return` statement at the end of
+`fetchPhoto`, which calls `img.decodeImage` inline, with the background decode:
+
+```dart
+return decodePhotoInBackground(response.bodyBytes);
+```
 
 `Isolate.run` works in terminal apps and under `fleury serve`, where the app
 runs as a native process. A browser embed compiles to JavaScript, which has no

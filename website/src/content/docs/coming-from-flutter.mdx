@@ -30,7 +30,8 @@ structured terminal/browser surfaces.
 | `MaterialApp` / `WidgetsApp` | `FleuryApp(title:, home:, theme:)` is the lightweight app shell. |
 | logical pixels | integer cells (`EdgeInsets.all(1)`, not `8.0`). |
 | Material controls | Fleury includes primitives, controls, tables, charts, forms, and agent surfaces in one package. |
-| Flutter web build | `mountApp(() => const FleuryApp(title: 'My app', home: MyHomeScreen()), into: host)` for client-side browser embeds, or `fleury serve` for a native app streamed to the browser. |
+| Flutter web build | `mountApp(() => const FleuryApp(title: 'My app', home: MyHomeScreen()), into: host)` in a client-side dart2js bundle. (`fleury serve` previews a native app in a browser during development, on macOS and Linux; it isn't a web build.) |
+| `flutter run`, then `r` / `R` | `fleury run` hot reloads when you save a file (macOS and Linux). For a hot restart, press `Ctrl+G` to open the debug shell, then `F5`; see [Hot reload](/fleury/guides/hot-reload/). |
 
 ## The same counter, twice
 
@@ -111,7 +112,7 @@ the same widget tree, but different host entrypoints:
 | Native terminal app | `package:fleury/fleury.dart` | `runApp(const FleuryApp(title: 'My app', home: MyHomeScreen()))` |
 | Higher-level widgets in a terminal app | `package:fleury/fleury_core.dart` | still `runApp` |
 | Client-side browser embed | `package:fleury/fleury_core.dart`, `package:fleury_web/fleury_web.dart`, plus web-safe widgets | `mountApp(() => const FleuryApp(title: 'My app', home: MyHomeScreen()), into: host)` |
-| Browser session backed by a native process | terminal app imports | `fleury serve --spawn dart --enable-vm-service=0 run bin/run_app.dart` |
+| Local browser preview of a native app, during development (macOS and Linux) | terminal app imports | `fleury serve --spawn dart --enable-vm-service=0 run bin/run_app.dart` |
 
 `MyHomeScreen` below is the first screen inside the shell. In a project made
 with `fleury create my_app`, `MyApp` already builds `FleuryApp`: pass
@@ -134,9 +135,10 @@ Future<void> main() async {
 }
 ```
 
-Client-side browser bundles can only use web-safe code. Import
-`package:fleury/fleury_core.dart` for shared UI. Explicit local
-filesystem access lives in `package:fleury/fleury.dart`. `FileBrowser` and
+Client-side browser bundles can only use web-safe code: dart2js compiles
+`dart:io` imports, but that code throws when it runs in the browser. Import
+`package:fleury/fleury_core.dart` for shared UI, including every widget.
+Explicit local filesystem access uses `package:fleury/fleury.dart`. `FileBrowser` and
 `FilePicker` work with a browser-safe `FileSource`, such as `MemoryFileSource`;
 `LogRegion` displays log entries supplied by your app. `LocalFileSource` and
 code that reads host files or launches processes need a native app. With
@@ -174,7 +176,7 @@ The table is intentionally boring: most of the muscle memory is valid.
 | `ValueListenableBuilder` | `NotifierBuilder` or `context.listen` | Read a `ValueNotifier` through the same APIs as other notifiers. |
 | `TweenAnimationBuilder` | `AnimationBuilder` | Animate a value toward a new target when it changes. |
 | `SingleChildScrollView` | `ScrollView` | A scrollable viewport around one child. |
-| `Shortcuts` / `Actions` / `Intent` | `KeyBindings` / `KeySequence` | A key sequence maps directly to a callback; no `Intent` layer. |
+| `Shortcuts` / `Actions` / `Intent` | `KeyBindings` / `KeySequence`, or `AppCommand` in a `CommandScope` | A key sequence maps directly to a callback; no `Intent` layer. For a named action that buttons, shortcuts, and the command palette share, declare an `AppCommand` with its `shortcuts` in a `CommandScope` or `FleuryApp(commands:)`; see [Commands](/fleury/guides/commands/). |
 | `InheritedWidget` / `InheritedNotifier` | `Scope<T>` | One tree-local primitive: the type argument is the key, `context.scope<T>()` or `ScopeBuilder<T>` reads it, and a `Notifier` value notifies readers through the scope. `Scope<T>.create` lets the scope own the object. |
 
 For state, keep `setState` for a widget's own fields. Use `Scope` to share values
@@ -248,6 +250,9 @@ void main(List<String> args) => runApp(
   mode: const TerminalMode(mouse: true),
 );
 ```
+
+`title` is required, but it only labels the app's node in the semantic tree
+that tests and agents read. It doesn't set a terminal or browser window title.
 
 Small one-screen tools can still pass a bare widget to `runApp`. For a custom
 navigation topology, use `FleuryApp(child: ...)` and place explicit `Navigator`
@@ -334,8 +339,9 @@ in Flutter.
 4. Replace Material controls with Fleury widgets or focused app-specific
    widgets.
 5. Add keyboard paths first, then pointer affordances.
-6. Decide the host: terminal `runApp`, static browser `mountApp`, or native app
-   streamed through `fleury serve`.
+6. Decide the host: terminal `runApp`, or a static browser bundle with
+   `mountApp`. `fleury serve` previews a native app in a browser during
+   development on macOS and Linux; it isn't a way to host one.
 
 The fastest way in is the [tutorial](/fleury/tutorial/), then
 [Widgets & state](/fleury/concepts/widgets-and-state/) and [App entry points](/fleury/concepts/app-entry/).

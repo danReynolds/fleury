@@ -54,16 +54,19 @@ void main() {
 
   // 2. Production-shape: DebugShell mounted, mode=off, NO listener
   //    on DebugEvents. This is what every user pays even with debug
-  //    "compiled in." Should match baseline within noise.
+  //    "compiled in." Should match baseline within noise. Enabled
+  //    explicitly: the launch-derived default is off for compiled runs.
   _FrameBenchmark('frame_shell_off_no_listener', () {
-    final c = DebugController(const DebugConfig());
+    final c = DebugController(const DebugConfig(enabled: true));
     return DebugShell(controller: c, child: tree());
   }).report();
 
   // 3. Dev-shape: docked panel actively rendering. Establishes the
   //    "what does debug cost when on?" upper bound.
   _FrameBenchmark('frame_shell_docked', () {
-    final c = DebugController(const DebugConfig(startMode: DebugMode.docked));
+    final c = DebugController(
+      const DebugConfig(enabled: true, startMode: DebugMode.docked),
+    );
     return DebugShell(controller: c, child: tree());
   }).report();
 

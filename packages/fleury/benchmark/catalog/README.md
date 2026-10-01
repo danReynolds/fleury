@@ -1,8 +1,8 @@
-# fleury_widgets scenario benchmarks
+# Fleury catalog scenario benchmarks
 
 Scenario benchmarks measure app-shaped widget journeys and emit JSON records.
-They live in `fleury_widgets` when the scenario depends on high-level widgets
-that core `fleury` must not import.
+They live in `benchmark/catalog` beside the primitive benchmarks in the
+same `fleury` package.
 
 ```sh
 dart run benchmark/catalog/scenario_benchmarks.dart --list

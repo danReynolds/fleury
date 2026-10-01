@@ -4,7 +4,7 @@
 
 import '../primitives.dart';
 
-/// A one-line bar listing the labelled key bindings active for the current
+/// A one-line bar listing the labeled key bindings active for the current
 /// focus, as `[key] label · [key] label`. It updates when focus moves.
 ///
 /// When the width runs out, it shows as many whole hints as fit and collapses
@@ -15,7 +15,9 @@ import '../primitives.dart';
 ///
 /// A binding appears only when it has a `label`, does not set
 /// `hideFromHintBar: true`, and is enabled. When two scopes bind the same key,
-/// the nearer (deeper) binding is shown.
+/// the nearer (deeper) binding is shown. While focus is in a dialog shown with
+/// `context.present`, or inside any other `KeyBindings(modal: true)`, the
+/// bindings outside it aren't shown: keys don't reach them.
 class KeyHintBar extends StatelessWidget {
   const KeyHintBar({
     super.key,
@@ -37,9 +39,8 @@ class KeyHintBar extends StatelessWidget {
   final CellStyle style;
 
   /// Style for the `[key chord]` portion of each hint, so the chord reads
-  /// distinctly from its description (Terminal.Gui's "Hot" idea, for a
-  /// keyboard-first bar). Defaults to the theme's focus colour, bold, layered
-  /// on [style].
+  /// distinctly from its description. Defaults to the theme's focus color in
+  /// bold, layered on [style].
   final CellStyle? keyStyle;
 
   @override
@@ -86,7 +87,7 @@ class KeyHintBar extends StatelessWidget {
   /// Renders [text] with each `[chord]` run in [keyStyle] and everything else
   /// (descriptions, separators, the `+N` marker) in [style]. Splits on the
   /// literal brackets the segments were built with, so the fitted width is
-  /// unchanged — only the colouring differs.
+  /// unchanged — only the coloring differs.
   Widget _styledBar(String text, CellStyle keyStyle) {
     final spans = <TextSpan>[];
     var cursor = 0;

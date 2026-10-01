@@ -2092,6 +2092,13 @@ final class KeyEvent extends TuiEvent {
   }
 }
 
+/// Whether [event] is Ctrl+Z alone: the terminal's job-control chord, which
+/// suspends a native session when nothing handles it. Ctrl+Shift+Z — redo,
+/// wherever a terminal can tell the two apart — is not.
+@internal
+bool isCtrlZChord(KeyEvent event) =>
+    event.code.character == 'z' && event.hasCtrl && event.modifiers.length == 1;
+
 /// One normalized input packet: a key event, committed text, or both —
 /// RFC 0020 §5's batch model.
 ///

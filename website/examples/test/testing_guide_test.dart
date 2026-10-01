@@ -158,6 +158,27 @@ void main() {
     expect(editor.button('Save'), isDisabled);
   });
 
+  // #docregion command-test
+  testWidgets('saves the draft by its command ID', (tester) async {
+    String? saved;
+    tester.pumpWidget(
+      FleuryApp(
+        title: 'Draft editor',
+        home: DraftEditor(save: (text) async => saved = text),
+      ),
+    );
+    await tester.field('Draft').fill('Ready for review.');
+
+    final result = await tester.invokeCommand(const CommandId('editor.save'));
+    expect(result.completed, isTrue);
+    expect(saved, 'Ready for review.');
+
+    final again = await tester.invokeCommand(const CommandId('editor.save'));
+    expect(again.status, CommandInvocationStatus.disabled);
+  });
+  // #enddocregion command-test
+
+  // #docregion shortcut-test
   testWidgets('saves the draft with Ctrl+S', (tester) async {
     String? saved;
     tester.pumpWidget(
@@ -176,6 +197,7 @@ void main() {
     expect(tester.exists(text('All changes saved')), isTrue);
     expect(editor.button('Save'), isDisabled);
   });
+  // #enddocregion shortcut-test
 
   testWidgets('keeps the draft after a failed save, then retries', (
     tester,

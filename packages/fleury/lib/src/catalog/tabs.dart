@@ -91,11 +91,13 @@ class TabController extends Notifier {
 /// A tab strip over swappable content.
 ///
 /// Renders a row of labels (the active one highlighted) above the active
-/// tab's content. When the strip is focused, Left/Right switch tabs
-/// (wrapping). Alt+1..Alt+9 jump straight to a tab from anywhere inside
-/// the tab area, and you can drive [controller] directly for programmatic
-/// switching. The active tab's focusable widgets join the normal focus
-/// traversal, so Tab moves into them.
+/// tab's content. Clicking a label switches to its tab. When the strip is
+/// focused, Left/Right switch tabs (wrapping) and Home/End jump to the first
+/// and last tab. From anywhere inside the tab area, Alt+1 through Alt+9 jump
+/// straight to a tab and Ctrl+PageUp/Ctrl+PageDown cycle through them. You
+/// can also drive [controller] directly for programmatic switching. The
+/// active tab's focusable widgets join the normal focus traversal, so Tab
+/// moves into them.
 ///
 /// Every tab stays mounted, so each one's state (scroll position, typed
 /// text, expanded nodes…) survives switching away and back. Inactive tabs
@@ -129,10 +131,11 @@ class Tabs extends StatefulWidget {
   /// content split clear. Defaults to false — a bare strip-over-content layout.
   final bool bordered;
 
-  /// Style for the active tab's label. Defaults to reverse video.
+  /// Style for the active tab's label. Defaults to the theme's selection
+  /// style.
   final CellStyle? activeStyle;
 
-  /// Style for inactive tab labels. Defaults to dim.
+  /// Style for inactive tab labels. Defaults to the theme's muted style.
   final CellStyle? inactiveStyle;
 
   @override

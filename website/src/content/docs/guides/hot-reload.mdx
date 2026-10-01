@@ -11,8 +11,9 @@ running terminal app updates in place — widget state, focus, and scroll
 positions survive. It uses the Dart VM's own code reloading (the mechanism
 Flutter developers rely on), driven by a dev supervisor rather than a file
 watcher that restarts your process. On macOS and Linux, the supervisor works
-with any editor, with no plugin. On Windows, use an
-[editor debug session](#in-an-editor-debug-session).
+with any editor, with no plugin. It doesn't run on Windows, where `fleury run`
+and `dart run` start the app without reload or restart; use an
+[editor debug session](#in-an-editor-debug-session) there.
 
 Try it in the browser first. Press **Run**, write a draft in the notes app, then
 change the heading in the editor and press **Hot reload** (or **⌘/Ctrl+S**).
@@ -68,17 +69,17 @@ not fix a compilation error.
 ### A plain `dart run`
 
 `dart run bin/run_app.dart` starts the same session, with the same reload and
-restart. On a cold start it compiles your app twice, and your entrypoint runs
-in two processes: [keep startup work inside the app](#keep-startup-work-inside-the-app).
+restart, but your entrypoint runs in two processes and compiles twice on a
+cold start: see [Keep startup work inside the app](#keep-startup-work-inside-the-app).
 If your app reads its command-line arguments, pass them to `runApp`:
 
 ```dart
 Future<void> main(List<String> args) => runApp(const MyApp(), args: args);
 ```
 
-Under a plain `dart run`, the app runs in a child process that cannot recover
-the original arguments by itself. Without `args:` it sees an empty list from
-its first frame. `fleury run` passes the arguments for you.
+The app's process can't recover the original arguments by itself, so without
+`args:` it sees an empty list from its first frame. `fleury run` passes the
+arguments for you.
 
 ## Reload or restart
 
@@ -90,16 +91,41 @@ first run.
 
 For valid changes the VM cannot migrate, or when you deliberately want fresh
 state, use **hot restart**: it drops all state and runs `main()` again in the
-same terminal session. Fix compilation errors before restarting.
+same terminal session. Press `Ctrl+G` to open the debug shell, then `F5`; the
+shell's header shows `F5 restart` whenever a restart is available. Fix
+compilation errors before restarting.
 
-- In a terminal-owned `fleury run` or supervised `dart run` session, press
-  `Ctrl+G` to open the debug shell, then `F5`. The shell header shows
-  `F5 restart` when available. If your editor or terminal intercepts F5, press
-  `Ctrl+C` and rerun the command.
-- If you launched with VS Code's F5, use the editor's **Restart** action. The
-  editor owns that session, so Fleury's in-app restart is unavailable.
-- A VM-service client can also invoke `ext.fleury.restart` in a supervised
-  session.
+### When F5 doesn't restart
+
+- **On a Mac laptop**, the top-row `F5` needs `Fn` unless the keyboard is set
+  to use F1, F2, and so on as standard function keys.
+- **In VS Code's integrated terminal**, VS Code takes `F5` before the app sees
+  it: its default `terminal.integrated.commandsToSkipShell` includes
+  `workbench.action.debug.start` and `workbench.action.debug.continue`. `F5`
+  then starts a debug session (in a `fleury create` project, a second copy of
+  the app) instead of restarting this one. To send `F5` to the app, remove
+  those two defaults in `.vscode/settings.json`; a leading `-` removes an
+  entry:
+
+  ```json title=".vscode/settings.json"
+  {
+    "dart.cliConsole": "terminal",
+    "dart.hotReloadOnSave": "allIfDirty",
+    "terminal.integrated.commandsToSkipShell": [
+      "-workbench.action.debug.start",
+      "-workbench.action.debug.continue"
+    ]
+  }
+  ```
+
+  `F5` still starts debugging from the editor. Otherwise, quit with `Ctrl+C`
+  and run `fleury run` again, or run the app in another terminal.
+- **Under the VS Code debugger** (the `F5` launch configuration), the debug
+  shell offers no restart, because the editor owns the run. Use the editor's
+  **Restart** instead.
+- **Where the supervisor steps aside**, including Windows
+  ([see below](#when-the-supervisor-steps-aside)), there is no restart: quit
+  and run the app again.
 
 ### What survives a reload
 
@@ -151,7 +177,9 @@ With `fleury run`, your `main()` runs once, in the app's process. A plain
 becomes the supervisor, which runs the same entrypoint again as the app.
 Everything in `main()` before `runApp` runs in both processes, so work that
 can happen only once — binding a port, taking a lock, reading stdin, writing a
-pid file — fails or runs twice.
+pid file — fails or runs twice. The supervisor's own call to `runApp` never
+returns: when the session ends, that process exits with the app's exit code,
+so nothing after `runApp` (a `finally` included) runs there.
 
 Code after an awaited `runApp` runs when the UI closes: once per app process,
 and each hot restart ends one process and starts another. It cannot hold a
@@ -168,30 +196,42 @@ app process exits with an error within two seconds of starting.
 
 ## In an editor debug session
 
-When you launch under a debugger (VS Code's F5 with the
-[Dart extension](https://marketplace.visualstudio.com/items?itemName=Dart-Code.dart-code),
-or any editor that speaks the VM service protocol), the editor owns the run
-and the supervisor steps aside — Fleury detects the editor's reload instead:
-when the editor calls `reloadSources`, Fleury picks up the VM's reload event
-and reassembles the widget tree automatically. Use the editor's **Restart**
-action when you need fresh state; Fleury's in-app F5 restart is unavailable in
-this mode.
+When you launch under a debugger, the editor owns the run and the supervisor
+steps aside. Fleury follows the editor's reloads instead: when the editor calls
+`reloadSources`, Fleury picks up the VM's reload event and reassembles the
+widget tree automatically. The debug shell offers no restart in these
+sessions; use the editor's **Restart** when you need fresh state.
 
-`fleury create` projects come pre-wired for this: the generated
-`.vscode/launch.json` points the app at the integrated terminal, and
+In VS Code with the
+[Dart extension](https://marketplace.visualstudio.com/items?itemName=Dart-Code.dart-code),
+`F5` runs the app under the debugger, which for a Fleury app has to happen in
+the integrated terminal. `fleury create` projects come pre-wired for this: the
+generated `.vscode/launch.json` points the app at the integrated terminal, and
 `.vscode/settings.json` sets `dart.hotReloadOnSave: "allIfDirty"` so saving a
 dirty file during a debug session reloads without a keypress. For an existing
 project, copy those two files' three fields (`console: terminal`,
 `dart.cliConsole: terminal`, `dart.hotReloadOnSave`) and point `program` at
 your entrypoint. No Fleury-specific editor extension exists or is needed.
 
+IntelliJ IDEA and Android Studio run the app in a console that isn't a
+terminal, so `runApp` stops with "runApp needs an interactive terminal".
+Start `fleury shell` in a terminal first and leave it running: every run of
+the app, including the editor's restarts, draws there while the IDE keeps its
+debugger. [Debugging](/fleury/guides/debugging/#debug-with-breakpoints) has the
+steps.
+
 ## When the supervisor steps aside
 
 The supervisor runs only when it can own the session safely: a source app
-launched through `fleury run` or a plain JIT `dart run` on a real terminal. It automatically yields to anything else that owns the run — an
-editor debug session (a live VM service), a `fleury serve` or `fleury_mcp`
-handle, a compiled app, Windows, a non-TTY, or an injected test driver — and the
-app runs exactly as it would without it.
+launched through `fleury run` or a plain JIT `dart run bin/run_app.dart` on a
+real terminal, on macOS or Linux. A `dart run` without a file path, or
+`dart run package:exe`, runs a precompiled snapshot instead, so it gets neither
+hot reload nor the debug shell. It automatically yields to anything else that owns the run — an
+editor debug session (a live VM service), a `fleury serve`, `fleury shell`, or
+`fleury_mcp` handle, a compiled app, Windows, a non-TTY, or an app that passes
+its own `driver:` to `runApp` — and the app runs exactly as it would without
+it. (Under `fleury run`, an app with its own driver still reloads on save, but
+the debug shell offers no restart.)
 
 ### Reloading a browser preview
 
@@ -235,10 +275,11 @@ the child. After the VM swaps the code, Fleury walks the element tree calling
 against the new code. Hot restart asks the child to tear down gracefully
 (terminal restored), then starts a fresh one in the same session.
 
-`fleury run` is the same supervisor, started from a launcher that never loads
-your app, so the app compiles once, even when the launcher itself is a native
-executable. Under a plain `dart run`, your entrypoint
-reaches `runApp` first and becomes the supervisor itself.
+`fleury run` starts the same supervisor from a launcher that never loads your
+app, so the app compiles once, even when the launcher itself is a native
+executable. Under a plain `dart run`, your own entrypoint becomes the
+supervisor; [Keep startup work inside the app](#keep-startup-work-inside-the-app)
+covers what that means for `main()`.
 
 When the child exits for real — quit, `Ctrl+C`, a crash — the supervisor
 mirrors its exit code, so scripts and CI see exactly what they'd see without
@@ -246,14 +287,19 @@ it.
 
 ## Troubleshooting
 
-**Nothing happens when I save** — Check you're on a real terminal (not a pipe)
-and that `FLEURY_HOT_RELOAD` isn't `0`. Your entrypoint also has to sit in a
-package with a resolved `.dart_tool/package_config.json` (`dart pub get`) —
-that file is what says which sources to watch, and with nothing to watch the
-supervisor steps aside and the run is an ordinary one. In an editor debug
-session, reload-on-save is the editor's job: run **Dart: Hot Reload** from the
-command palette, or set `dart.hotReloadOnSave: "allIfDirty"` (generated
-projects have it already).
+**Nothing happens when I save** — Check you're on macOS or Linux, on a real
+terminal (not a pipe), and that `FLEURY_HOT_RELOAD` isn't `0`. Your entrypoint
+also has to sit in a package with a resolved `.dart_tool/package_config.json`
+(`dart pub get`) — that file is what says which sources to watch, and with
+nothing to watch the supervisor steps aside and the run is an ordinary one. In
+an editor debug session, reload-on-save is the editor's job: run **Dart: Hot
+Reload** from the command palette, or set `dart.hotReloadOnSave: "allIfDirty"`
+(generated projects have it already). To see what the supervisor does, set
+`FLEURY_DEV_BOOTSTRAP_LOG` to a file path: it logs the directories it watches,
+each save it sees, and each reload, and under `fleury run`, why it didn't
+start.
+
+**F5 doesn't restart** — See [When F5 doesn't restart](#when-f5-doesnt-restart).
 
 **The compiler rejected my save** — Fix the reported source error and save
 again; the running app keeps its previous code and state. Use hot restart for

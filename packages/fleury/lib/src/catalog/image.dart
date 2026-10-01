@@ -14,13 +14,13 @@ import 'image_file_stub.dart'
 enum ImageGlyph {
   /// Classic two-pixel-per-cell rendering with `▀`. One fg color per
   /// row, one bg color per row — the safest, most font-portable
-  /// choice. Matches what every TUI image library shipped first.
+  /// choice.
   halfBlock,
 
   /// Four-pixel-per-cell rendering across the 16 Unicode block
   /// quadrant glyphs (`▘▝▖▗▙▟▛▜▀▄▌▐▞▚█` + space). For each cell we
   /// pick the two-color split + glyph whose pattern best approximates
-  /// the 2×2 source neighborhood — chafa's strategy. Roughly doubles
+  /// the 2×2 source neighborhood. Roughly doubles
   /// effective horizontal resolution at the cost of needing all 16
   /// block glyphs from the active font (universally present in
   /// modern monospace fonts).
@@ -29,7 +29,7 @@ enum ImageGlyph {
   /// Six-pixel-per-cell rendering across the 64 Unicode sextant
   /// glyphs (U+1FB00..U+1FB3B + space, `▌`, `▐`, `█`). For each cell
   /// we sample a 2-wide × 3-tall sub-grid and pick the best 2-color
-  /// pattern — chafa's `--symbols sextant` mode. ~50% more effective
+  /// pattern. ~50% more effective
   /// resolution than quarterBlock; needs the Unicode 13 "Symbols for
   /// Legacy Computing" block in the active font (modern fonts ship
   /// with it; older ones won't render the glyphs).
@@ -41,8 +41,8 @@ enum ImageGlyph {
   /// resolution we can address with widely-supported Unicode. Lower
   /// per-cell fidelity than sextant for photo-like content (only
   /// monochrome dots, no two-color split) but the canonical choice
-  /// for line art, sparklines, and waveform displays — chafa's
-  /// `--symbols braille`. Single fg color per cell.
+  /// for line art, sparklines, and waveform displays. Single fg color per
+  /// cell.
   braille,
 }
 
@@ -74,7 +74,7 @@ abstract class ImageSource {
   img.Image decode();
 
   /// Backed by an in-memory byte buffer (PNG / JPEG / BMP / TIFF /
-  /// GIF — whatever `package:image` recognises).
+  /// GIF — whatever `package:image` recognizes).
   factory ImageSource.bytes(
     /// Encoded image bytes to decode lazily and cache in this source.
     Uint8List bytes,
@@ -214,9 +214,10 @@ class _DecodedSource implements ImageSource {
 /// else it paints glyph art: each terminal cell holds two vertical
 /// "pixels", the top half drawn via the foreground of `▀`, the bottom
 /// half via its background — 24-bit color per half-cell on truecolor
-/// terminals, downsampled to 256 / 16 / none by [AnsiRenderer]'s color
-/// cascade on lesser ones. Both paths resolve [fit] through the same
-/// core geometry, so a letterbox lands on the same cells either way.
+/// terminals. With 256 or 16 colors, the widget reduces the image's colors
+/// itself, dithering to smooth the result; with no color support it draws
+/// without color. Both paths resolve [fit] through the same core geometry,
+/// so a letterbox lands on the same cells either way.
 ///
 /// ```dart
 /// Image.file('logo.png')                      // most common
@@ -296,15 +297,16 @@ class Image extends StatefulWidget {
   /// `out = α · src + (1−α) · bg`. Fully-transparent pixels are also flattened
   /// to [backgroundColor]. True-pixel placements retain the source alpha.
   ///
-  /// When null, transparent pixels render as empty cells (showing the
-  /// terminal's own background) and semitransparent pixels are
+  /// When null, cells whose pixels are all transparent stay empty (showing
+  /// the terminal's own background), a transparent half of a half-block
+  /// cell shows the background too, and semitransparent pixels are
   /// weighted by their α in the area average — readable but doesn't
   /// match what designers expect from a compositor. Provide
   /// [backgroundColor] (typically the surrounding container's color)
   /// when transparent PNGs need crisp edges against a known surface.
   final Color? backgroundColor;
 
-  /// Semantic label exposed to tests, inspectors, and future adapters.
+  /// Describes the image for screen readers, agents, tests, and inspectors.
   ///
   /// Leave null for decorative images. Capability and fallback state is still
   /// exposed so diagnostics can explain how the image rendered.
@@ -766,9 +768,11 @@ class RenderImage extends RenderObject {
         }
 
         // Write the quantized color into the half-cell. We accumulate
-        // per cell: the top half writes the foreground first, the
-        // bottom half merges its color into the existing style as
-        // background.
+        // per cell: the top half writes `▀` in its color as foreground,
+        // then the bottom half merges its color in as background. A
+        // transparent top wrote nothing, and `▀` would paint it in whatever
+        // foreground the cell holds, so an opaque bottom under it is `▄`
+        // in the bottom's color, leaving the top to the background.
         final tgtCol = offset.col + px;
         final tgtRow = offset.row + ry;
         if (tgtCol < 0 ||
@@ -780,10 +784,15 @@ class RenderImage extends RenderObject {
 
         final color = _packColor(qr, qg, qb, _colorMode);
         final existing = buffer.atColRow(tgtCol, tgtRow).style;
-        final newStyle = isTopHalf
+        final bottomOnly = !isTopHalf && sampled[idx - tgtW] == null;
+        final newStyle = isTopHalf || bottomOnly
             ? existing.merge(CellStyle(foreground: color))
             : existing.merge(CellStyle(background: color));
-        buffer.writeGrapheme(CellOffset(tgtCol, tgtRow), '▀', style: newStyle);
+        buffer.writeGrapheme(
+          CellOffset(tgtCol, tgtRow),
+          bottomOnly ? '▄' : '▀',
+          style: newStyle,
+        );
       }
     }
   }

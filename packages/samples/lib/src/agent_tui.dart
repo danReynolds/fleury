@@ -215,7 +215,7 @@ class _AgentBodyState extends State<_AgentBody>
 }
 
 // ---------------------------------------------------------------------------
-// Conversation blocks — each renders one entry in the Claude-Code-style flow.
+// Conversation blocks — each renders one entry in the agent's conversation flow.
 // ---------------------------------------------------------------------------
 
 sealed class _Block {

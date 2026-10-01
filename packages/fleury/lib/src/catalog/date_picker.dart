@@ -8,18 +8,22 @@ import 'calendar_heatmap.dart' show CalendarWeekStart;
 /// (`value`) is highlighted; cursor navigation moves it.
 ///
 /// Keys when focused:
-/// - `← / →`        move by one day
-/// - `↑ / ↓`        move by one week
+/// - `← / →`        move by one day within the week row
+/// - `↑ / ↓`        move by one week within the month
 /// - `PageUp / PageDown`  previous / next month
 /// - `Home / End`   first / last day of the visible month
+/// - `[ / ]`        previous / next year
+/// - `t`            jump to today
 /// - `Enter`        consume (selection already committed on each move)
 ///
-/// `[` and `]` (with no modifier) page by year — handy on terminals
-/// that swallow shift+page combos.
+/// An arrow that would step off the week row or out of the month passes on
+/// instead, so directional focus traversal can leave the calendar; use
+/// PageUp and PageDown to change months.
 ///
 /// Controlled — hold the value yourself and update it from [onChanged].
-/// Days outside `[firstDate, lastDate]` (when provided) are dimmed and
-/// the cursor skips them. Passing null for [onChanged] disables the picker.
+/// Days outside `[firstDate, lastDate]` (when provided) are dimmed, and the
+/// selection can't move onto them. Passing null for [onChanged] disables the
+/// picker.
 ///
 /// ```dart
 /// DatePicker(
@@ -140,7 +144,7 @@ class _DatePickerState extends State<DatePicker> implements TextInputClaimant {
       _formRegistration?.updateClaim(this, focusNode: _node, enabled: _enabled);
 
   /// Publishes a selection. Normalizes to local midnight unconditionally so
-  /// every emitted value honours the picker's contract — a day-granular
+  /// every emitted value honors the picker's contract — a day-granular
   /// control never hands the app a stray time-of-day, whatever route
   /// (keyboard, pointer, semantics, paste) produced the date.
   void _emit(DateTime value) {
@@ -253,7 +257,7 @@ class _DatePickerState extends State<DatePicker> implements TextInputClaimant {
     _emit(next);
   }
 
-  /// The neighbouring day, on the same calendar lattice as [_move]. Used for
+  /// The neighboring day, on the same calendar lattice as [_move]. Used for
   /// the semantic `canIncrement` / `canDecrement` probes.
   DateTime _neighbour(int days) {
     final v = _midnight(widget.value);

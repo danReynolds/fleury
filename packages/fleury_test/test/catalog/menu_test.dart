@@ -250,6 +250,48 @@ void main() {
       expect(ran, 'paste', reason: 'Down hopped over the disabled Copy');
     });
 
+    testWidgets('a press on a disabled item or a separator leaves the keys '
+        'working', (tester) {
+      String? ran;
+      tester.pumpWidget(
+        Menu(
+          trigger: const Text('Edit'),
+          autofocus: true,
+          items: [
+            MenuItem(label: 'Alpha', onSelect: () => ran = 'alpha'),
+            const MenuSeparator(),
+            MenuItem(
+              label: 'Bravo',
+              enabled: false,
+              onSelect: () => ran = 'bravo',
+            ),
+            MenuItem(label: 'Charlie', onSelect: () => ran = 'charlie'),
+          ],
+        ),
+      );
+      tester.sendKey(const KeyEvent(KeyCode.enter)); // open at Alpha
+      final lines = _screen(tester).split('\n');
+      final bravo = lines.indexWhere((l) => l.contains('Bravo'));
+      final rule = lines.indexWhere((l) => l.contains('─') && !l.contains('╭'));
+      expect(bravo, greaterThan(0));
+      expect(rule, greaterThan(0));
+      String highlighted() => tester
+          .semantics()
+          .single(role: SemanticRole.menuItem, selected: true)
+          .label!;
+      _clickAt(tester, col: lines[bravo].indexOf('Bravo'), row: bravo);
+      expect(ran, isNull, reason: 'a disabled item cannot run');
+      expect(highlighted(), 'Alpha', reason: 'a disabled item is inert');
+      _clickAt(tester, col: 3, row: rule);
+      expect(highlighted(), 'Alpha', reason: 'a separator is inert');
+      expect(_screen(tester), contains('Charlie'), reason: 'still open');
+
+      // Down skips the disabled Bravo; the list's own cursor would not.
+      tester.sendKey(const KeyEvent(KeyCode.arrowDown));
+      tester.sendKey(const KeyEvent(KeyCode.enter));
+      expect(ran, 'charlie');
+    });
+
     testWidgets('selection starts on the first enabled item', (tester) {
       String? ran;
       tester.pumpWidget(

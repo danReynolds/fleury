@@ -22,10 +22,8 @@ import 'package:test/test.dart';
 import '../doc_snippets/animation.dart' as animation;
 import '../doc_snippets/commands.dart' as commands;
 import '../doc_snippets/filterable_list.dart' as tutorial;
-import '../doc_snippets/forms.dart' as forms;
 import '../doc_snippets/getting_started_app.dart' as getting_started;
 import '../doc_snippets/layout_demo.dart' as layout;
-import '../doc_snippets/list_demo.dart' as lists;
 import '../doc_snippets/loading_data.dart' as loading_data;
 import '../doc_snippets/navigation_demo.dart' as navigation;
 import '../doc_snippets/navigation_advanced_demos.dart' as navigation_advanced;
@@ -89,14 +87,6 @@ void main() {
       tester.pumpWidget(build());
       expect(tester.renderToString(emptyMark: ' '), contains(expected));
     }
-  });
-
-  testWidgets('forms guide app renders against the real API', (tester) {
-    tester.pumpWidget(forms.formsDemoApp());
-    final rendered = tester.renderToString(emptyMark: ' ');
-    expect(rendered, contains('Name'));
-    expect(rendered, contains('Slug'));
-    expect(rendered, contains('Fill in the project details'));
   });
 
   testWidgets('animation guide trigger demo replays feedback', (tester) async {
@@ -546,15 +536,6 @@ void main() {
               node.state['rowIndex'] != null,
         );
     expect(paletteSave.label, 'Save current file');
-  });
-
-  testWidgets('lists guide app renders against the real API', (tester) {
-    tester.pumpWidget(lists.listsDemoApp());
-    final rendered = tester.renderToString(emptyMark: ' ');
-    expect(rendered, contains('Current: 25 / 1000'));
-    expect(rendered, contains('Task 25'));
-    expect(rendered, contains('Selected: None'));
-    expect(rendered, contains('Go to 25'));
   });
 
   testWidgets('layout guide app renders against the real API', (tester) {

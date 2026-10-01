@@ -270,6 +270,38 @@ void main() {
       expect(review.state['currentIndex'], 1);
     });
 
+    testWidgets('reports its file list focused, and the diff separately', (
+      tester,
+    ) async {
+      // The diff is a separate focus stop with its own semantic node. Focus
+      // there is not the review's focus: the review's `focused` answers
+      // "does the file list have the keys?", as its focus action implies.
+      tester.pumpWidget(
+        PatchReview(
+          diff: _sampleDiff,
+          label: 'Launch patch',
+          diffAutofocus: true,
+        ),
+      );
+      tester.render(size: const CellSize(100, 18));
+      bool reviewFocused() => tester
+          .semantics()
+          .single(role: WidgetRoles.patchReview, label: 'Launch patch')
+          .focused;
+      bool diffFocused() =>
+          tester.semantics().single(role: SemanticRole.diff).focused;
+
+      expect(diffFocused(), isTrue);
+      expect(reviewFocused(), isFalse);
+
+      await tester
+          .target(role: WidgetRoles.patchReview, label: 'Launch patch')
+          .focus();
+      tester.render(size: const CellSize(100, 18));
+      expect(reviewFocused(), isTrue);
+      expect(diffFocused(), isFalse);
+    });
+
     testWidgets('preserves selected patch file identity across file refresh', (
       tester,
     ) {

@@ -84,11 +84,11 @@ class FileBrowserController extends Notifier {
     host._openDirectory(path, interaction: false);
   }
 
-  /// Reads the current directory again, applying the browser's current
-  /// `source` and `entryFilter`, and keeps the selected entry selected when it
-  /// is still listed. The browser reads its directory only when it opens one
-  /// or this is called: a new filter closure on a rebuild does not re-read the
-  /// disk.
+  /// Reads the current directory again from the browser's current `source`,
+  /// and keeps the selected entry selected when it is still listed. The
+  /// browser reads its directory only when it opens one, when
+  /// `filter.showHidden` changes, or when this is called: a new `entryFilter`
+  /// narrows the entries already read.
   void reload() {
     _checkNotDisposed();
     final host = _host;
@@ -181,10 +181,23 @@ String exportFileBrowserEntry(
   return _sanitizeFileText(options.copyAbsolutePath ? entry.path : entry.name);
 }
 
-/// Keyboard-navigable filesystem browser with semantic rows and safe copy.
+/// A directory browser that shows one folder at a time and reports the file
+/// the user opens to [onActivate].
+///
+/// Up and Down move the cursor; PageUp, PageDown, Home, and End jump. Enter,
+/// Right, or a click opens the entry under the cursor: a folder opens in
+/// place, and any other entry is passed to [onActivate]. Left or Backspace,
+/// or a click on the `.. (parent)` row, goes up a level. Ctrl+C copies the
+/// selected entry's path (see [copySelection] and [copyOptions]).
+///
+/// Folders are listed before other entries, and each group is sorted by name,
+/// ignoring case. [filter] narrows the listing by text and shows or hides
+/// hidden entries such as dot-files. A [FileBrowserController] moves the
+/// cursor, opens another directory, and re-reads the current one.
 ///
 /// It lists directories from [source]: the local disk by default on native
-/// platforms. A browser embed passes one, such as a [MemoryFileSource].
+/// platforms. A browser embed passes one, such as a [MemoryFileSource]. A
+/// directory that can't be listed shows the error in place of its entries.
 class FileBrowser extends StatefulWidget {
   const FileBrowser({
     super.key,
@@ -204,14 +217,14 @@ class FileBrowser extends StatefulWidget {
     this.onCopy,
   }) : assert(maxVisible > 0);
 
-  /// Directory opened when the browser mounts.
-  /// Directory used on first mount. Use FileBrowserController.openDirectory
-  /// for later navigation; changing this seed does not navigate.
+  /// The directory shown when the browser first mounts. Changing it later
+  /// does not navigate; call [FileBrowserController.openDirectory] instead.
   final String initialDirectory;
 
   /// Where directories are read from. Defaults to the local disk on native
-  /// platforms; in the browser, pass one, such as a [MemoryFileSource]. Like
-  /// [entryFilter], a new source takes effect at the next directory read.
+  /// platforms; in the browser, pass one, such as a [MemoryFileSource]. A new
+  /// source takes effect at the next directory read: opening a directory, a
+  /// `filter.showHidden` change, or [FileBrowserController.reload].
   final FileSource? source;
 
   /// External selection and visible-range controller.
@@ -229,26 +242,38 @@ class FileBrowser extends StatefulWidget {
   /// Maximum visible rows before the list scrolls.
   final int maxVisible;
 
-  /// Text and hidden-file filter applied to loaded entries.
+  /// Narrows the listing: `query` keeps entries whose name and type (such as
+  /// `directory`) contain its characters in order, ignoring case, and
+  /// `showHidden` includes hidden entries such as dot-files.
   final FileBrowserFilterDescriptor filter;
 
-  /// Optional predicate applied to entries when a directory is read: on
-  /// opening one, and on [FileBrowserController.reload]. A new predicate
-  /// takes effect at the next of those, so an inline closure rebuilt with
-  /// its parent never re-reads the disk.
+  /// Optional predicate that hides entries: return `false` to skip one. It
+  /// runs on the entries of the directory that pass the `filter.showHidden`
+  /// rule.
+  ///
+  /// A different function applies at once to the entries already read,
+  /// without reading the directory again, and the selected entry stays
+  /// selected while it is still listed. So a closure written inline in
+  /// `build` is fine, and one that captures state, such as a "Dart files
+  /// only" toggle, takes effect on the rebuild that changes it.
   final FileEntryFilter? entryFilter;
 
-  /// Whether Ctrl+C and semantic copy export the selected entry.
+  /// Whether Ctrl+C (and the semantic copy action) copies the selected entry
+  /// to the clipboard.
   final bool copySelection;
 
-  /// Clipboard/export options for the selected entry.
+  /// What Ctrl+C copies: the entry's full path (the default) or only its
+  /// name, and the clipboard write policy.
   final FileBrowserCopyOptions copyOptions;
 
-  /// Called when Enter activates a non-directory entry.
+  /// Called when the user opens an entry that isn't a directory, with Enter,
+  /// Right, or a click on its row. Opening a directory navigates into it
+  /// instead.
   final void Function(FileEntry entry)? onActivate;
 
-  /// Called after a navigation interaction changes directories.
-  /// Controller commands notify controller listeners instead.
+  /// Called with the new directory after the user opens a folder or goes up a
+  /// level. [FileBrowserController.openDirectory] notifies the controller's
+  /// listeners instead.
   final void Function(String directory)? onDirectoryChanged;
 
   /// Called after a copy attempt completes.
@@ -265,6 +290,13 @@ class _FileBrowserState extends State<FileBrowser> {
   bool _ownsFocusNode = false;
   late String _currentDirectory;
   FileSource? _defaultSource;
+
+  /// [_currentDirectory]'s entries as last read from the source, sorted,
+  /// before the hidden-entry rule and [FileBrowser.entryFilter] narrow them.
+  List<FileEntry> _listing = const [];
+
+  /// [_listing] narrowed by the hidden-entry rule and
+  /// [FileBrowser.entryFilter]: the entries the query orders.
   List<FileEntry> _entries = const [];
   String? _error;
   bool _updatingController = false;
@@ -304,7 +336,11 @@ class _FileBrowserState extends State<FileBrowser> {
     }
     // The selected entry stays selected wherever it is still listed.
     if (widget.filter.showHidden != oldWidget.filter.showHidden) {
-      _keepSelection(() => _entries = _readEntries(_currentDirectory));
+      _keepSelection(_readCurrentDirectory);
+    } else if (!identical(widget.entryFilter, oldWidget.entryFilter)) {
+      // Narrows the entries already read, so a closure written inline in the
+      // parent's build, a new function on every rebuild, reads nothing.
+      _keepSelection(_narrowListing);
     } else if (widget.filter.query != oldWidget.filter.query) {
       _keepSelection(() {});
     }
@@ -315,7 +351,7 @@ class _FileBrowserState extends State<FileBrowser> {
 
   void _reload() {
     setState(() {
-      _keepSelection(() => _entries = _readEntries(_currentDirectory));
+      _keepSelection(_readCurrentDirectory);
     });
   }
 
@@ -380,25 +416,53 @@ class _FileBrowserState extends State<FileBrowser> {
   }
 
   void _reloadCurrentDirectory({bool preserveCurrent = false}) {
-    _entries = _readEntries(_currentDirectory);
+    _readCurrentDirectory();
     _resetSelection(preserveCurrent: preserveCurrent);
   }
 
-  List<FileEntry> _readEntries(String directory) {
+  /// Reads [_currentDirectory] from the source into [_listing] and narrows it
+  /// into [_entries]. A directory that can't be listed has no entries, and
+  /// its error is shown in their place.
+  void _readCurrentDirectory() {
     try {
-      final filter = widget.entryFilter;
-      final entries = <FileEntry>[
-        for (final entry in _source.list(directory))
-          if ((widget.filter.showHidden || !entry.hidden) &&
-              (filter == null || filter(entry)))
-            entry,
-      ]..sort(_compareEntries);
+      _listing = List<FileEntry>.unmodifiable(
+        _source.list(_currentDirectory).toList()..sort(_compareEntries),
+      );
       _error = null;
-      return List<FileEntry>.unmodifiable(entries);
     } on FileSourceException catch (error) {
+      _listing = const <FileEntry>[];
       _error = error.message;
-      return const <FileEntry>[];
     }
+    _entries = _visible(_listing);
+  }
+
+  /// Narrows [_listing] into [_entries] again under the current
+  /// [FileBrowser.entryFilter]. When that keeps the same entries, as a
+  /// rebuilt inline closure usually does, [_entries] stays the same list, so
+  /// the display order cached for it stays valid.
+  void _narrowListing() {
+    final entries = _visible(_listing);
+    if (!_sameEntries(entries, _entries)) _entries = entries;
+  }
+
+  /// The entries of [listing] that the hidden-entry rule and
+  /// [FileBrowser.entryFilter] keep, in listing order.
+  List<FileEntry> _visible(List<FileEntry> listing) {
+    final filter = widget.entryFilter;
+    return List<FileEntry>.unmodifiable(<FileEntry>[
+      for (final entry in listing)
+        if ((widget.filter.showHidden || !entry.hidden) &&
+            (filter == null || filter(entry)))
+          entry,
+    ]);
+  }
+
+  static bool _sameEntries(List<FileEntry> a, List<FileEntry> b) {
+    if (a.length != b.length) return false;
+    for (var i = 0; i < a.length; i++) {
+      if (!identical(a[i], b[i])) return false;
+    }
+    return true;
   }
 
   int _compareEntries(FileEntry a, FileEntry b) {

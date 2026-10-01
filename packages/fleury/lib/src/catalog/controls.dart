@@ -20,10 +20,10 @@ CellStyle _defaultControlStyle(ThemeData theme) => CellStyle.interactive(
   invalid: theme.errorStyle,
 );
 
-/// A boolean checkbox: `[x]` checked, `[ ]` unchecked. Enter toggles when
-/// focused, calling [onChanged] with the new value. A controlled widget —
-/// hold the value yourself and update it from [onChanged]. Passing null
-/// disables it.
+/// A boolean checkbox: `[x]` checked, `[ ]` unchecked. Enter or Space
+/// toggles it when focused, as does a click, calling [onChanged] with the new
+/// value. A controlled widget — hold the value yourself and update it from
+/// [onChanged]. Passing null disables it.
 class Checkbox extends StatelessWidget {
   const Checkbox({
     super.key,
@@ -81,9 +81,9 @@ class Checkbox extends StatelessWidget {
   }
 }
 
-/// A boolean switch: `[ o]` on, `[o ]` off (the knob slides). Enter
-/// toggles when focused. Like [Checkbox], controlled via [onChanged].
-/// Passing null disables it.
+/// A boolean switch: `[ o]` on, `[o ]` off (the knob slides). Enter or
+/// Space toggles it when focused, as does a click. Like [Checkbox], controlled
+/// via [onChanged]. Passing null disables it.
 class Toggle extends StatelessWidget {
   const Toggle({
     super.key,
@@ -148,8 +148,8 @@ class Toggle extends StatelessWidget {
 /// right; when `false` the track is muted and the handle sits on the
 /// left.
 ///
-/// Off: `[●━━━]`, On (colored): `[━━━●]`. Enter / Space activates.
-/// Passing null for [onChanged] disables the switch.
+/// Off: `[●━━━]`, On (colored): `[━━━●]`. Enter or Space toggles it when
+/// focused, as does a click. Passing null for [onChanged] disables the switch.
 class Switch extends StatelessWidget {
   const Switch({
     super.key,
@@ -228,9 +228,10 @@ class Switch extends StatelessWidget {
 }
 
 /// A single choice in a group: selected when [value] equals [groupValue]
-/// (`(o)` selected, `( )` not). Enter selects when focused, calling
-/// [onChanged] with this radio's [value]. Give every radio in the group
-/// the same [groupValue] and [onChanged]. Passing null disables it.
+/// (`(o)` selected, `( )` not). Enter or Space selects it when focused, as
+/// does a click, calling [onChanged] with this radio's [value]. Give every
+/// radio in the group the same [groupValue] and [onChanged]. Passing null
+/// disables it.
 class Radio<T> extends StatelessWidget {
   const Radio({
     super.key,
@@ -311,11 +312,13 @@ class RadioOption<T> {
   final bool enabled;
 }
 
-/// A group of [Radio]s with the canonical roving-arrow behavior: arrow keys
-/// move focus *and* selection to the adjacent enabled option (wrapping), so the
-/// whole group is one Tab stop's worth of choice — the WAI-ARIA radiogroup
-/// pattern (and Textual's RadioSet). Up/Left select the previous, Down/Right the
-/// next. Controlled — hold the selected [value] and update it from [onChanged].
+/// A controlled group of [Radio]s: hold the selected [value] and update it
+/// from [onChanged].
+///
+/// The arrow keys move focus and selection together to the adjacent enabled
+/// option, wrapping at the ends: Up or Left selects the previous option, and
+/// Down or Right the next, in either [axis]. Each radio is also its own Tab
+/// stop, and Enter, Space, or a click selects it.
 ///
 /// ```dart
 /// RadioGroup<String>(

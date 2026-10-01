@@ -70,7 +70,8 @@ Future<int> _run(List<String> args) async {
       'fleury_mcp: launching via `dart run` JIT-compiles the app on startup '
       '(seconds). For a faster, repeatable launch, AOT-compile once '
       '(`dart compile exe bin/run_app.dart -o my_app`) and run `fleury_mcp -- '
-      './my_app`.',
+      './my_app`. A compiled app turns off read_frames, read_logs, and '
+      'read_errors unless it passes DebugConfig(enabled: true) to runApp.',
     );
   }
 

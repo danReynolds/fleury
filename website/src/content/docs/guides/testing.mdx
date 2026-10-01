@@ -6,9 +6,15 @@ description: Test buttons, forms, asynchronous work, and animations with small r
 import FleuryExample from '../../../components/FleuryExample.astro';
 import GuidePad from '../../../components/GuidePad.astro';
 import PreferencesTestCode from '../../../components/PreferencesTestCode.astro';
+import SourceExcerpt from '../../../components/SourceExcerpt.astro';
+import testingSource from '../../../../examples/lib/testing_guide.dart?raw';
+import testingTests from '../../../../examples/test/testing_guide_test.dart?raw';
 
-A widget test runs your UI without opening a terminal. Each example below pairs
-a running widget with its source and a test you can try.
+A widget test runs your UI without opening a terminal, so `dart test` runs the
+same way in CI. Tests drive the UI through a tester instead of calling
+`runApp`, which needs a real terminal and throws without one, as in most CI
+jobs. Each example below pairs a running widget with its source and a test you
+can try.
 
 ## Write your first test
 
@@ -185,11 +191,40 @@ animation clock without waiting on wall time, but they don't let pending
 futures complete. The progress bar also shows how to select other control
 kinds with `target(role: ..., label: ...)`.
 
+## Test a command and its shortcut
+
+This draft editor registers **Save** as a [command](/fleury/guides/commands/)
+with a `Ctrl+S` shortcut. Edit the draft, then save with the button or
+`Ctrl+S`:
+
+<FleuryExample id="testing.editor" cols={58} rows={16} interactive />
+
+<SourceExcerpt code={testingSource} region="save-command" />
+
+The editor registers the command in a `CommandScope` around its content, and
+its **Save** button is a `CommandButton` for the same ID. A test can run the
+command by that ID, without finding the button:
+
+<SourceExcerpt code={testingTests} region="command-test" />
+
+`invokeCommand` waits for the command to finish and returns its result.
+`completed` is false when the command was disabled, missing, or threw; `status`
+says which. Here the second save is disabled, because there is nothing left to
+save.
+
+To check that the shortcut reaches the command from the focused field, press it
+the way a user would:
+
+<SourceExcerpt code={testingTests} region="shortcut-test" />
+
+A shortcut starts the command without waiting for it, so the test calls
+`settle()` before checking the save.
+
 ## Go further
 
 The [complete test file](https://github.com/danReynolds/fleury/blob/main/website/examples/test/testing_guide_test.dart)
-behind this guide also covers keyboard shortcuts, failed saves, and a dialog
-that restores focus when it closes. For custom controls, see
+behind this guide also covers failed saves and a dialog that restores focus
+when it closes. For custom controls, see
 [how widgets publish semantics](/fleury/architecture/agents-and-semantics/#what-the-graph-contains).
 
 The [testing API reference](https://github.com/danReynolds/fleury/blob/main/packages/fleury_test/README.md)

@@ -1,9 +1,12 @@
 import 'dart:convert';
 import 'dart:io';
 
+import '../version.dart';
 import 'dart_sdk.dart';
 
-const _fleuryVersion = '^0.1.0';
+/// Generated projects depend on the release that created them. The fleury
+/// packages version in lockstep, so one constraint covers all three.
+const _fleuryConstraint = '^$fleuryVersion';
 const _lintsVersion = '^6.0.0';
 const _testVersion = '^1.26.3';
 const _repositoryUrl = 'https://github.com/danReynolds/fleury.git';
@@ -216,10 +219,10 @@ String _pubspec({
     _DependencySource.hosted =>
       '''
 dependencies:
-  fleury: $_fleuryVersion
+  fleury: $_fleuryConstraint
 
 dev_dependencies:
-  fleury_test: $_fleuryVersion
+  fleury_test: $_fleuryConstraint
   lints: $_lintsVersion
   test: $_testVersion
 ''',
@@ -397,9 +400,10 @@ hot-reload session, but compiles the app twice on a cold start.
 
 Press Enter or click **Increment**. Press Ctrl+C to quit.
 
-**Saving a changed file hot reloads the running app** — in any editor: the
-terminal updates in place and widget state survives. Set `FLEURY_HOT_RELOAD=0`
-to opt out.
+**Saving a changed file hot reloads the running app** — in any editor, on
+macOS and Linux: the terminal updates in place and widget state survives. Set
+`FLEURY_HOT_RELOAD=0` to opt out. On Windows the app runs without hot reload;
+to reload there, run it under your editor's Dart debugger.
 
 $editorNote
 ## Test

@@ -34,9 +34,12 @@ A view is the code a reader edits:
 - A view with neither selects the whole file.
 
 A file with a region or whole-file view keeps its comments, minus the marker
-lines. Other files are trimmed to the declarations the demo needs. Views must
-not overlap. The component renders their exact ranges as its initial code;
-there is no separately maintained copy of a snippet.
+lines and any `// dart format width=` pragma, which only keeps the source
+narrow in the repository. Other files are trimmed to the declarations the demo
+needs. Views must not overlap. A region that should show the imports its code
+relies on, such as prefixed ones, keeps them in the same block as that code.
+The component renders their exact ranges as its initial code; there is no
+separately maintained copy of a snippet.
 
 The shared `SourceProject` applies edits to the original ranges and maps
 completion offsets and diagnostics back to the visible code. Multiple views

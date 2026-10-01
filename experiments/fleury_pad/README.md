@@ -106,7 +106,8 @@ Generated files stay in ignored `.build/` and `node_modules/` directories.
 
 Run the example, increment the counter, and enter a draft. Edit the heading or
 button callback and press **Hot reload**. **Restart** runs the current code from
-the beginning. Ctrl/Cmd+Enter runs initially and reloads a running app.
+the beginning. Ctrl/Cmd+Enter or Ctrl/Cmd+S runs initially and reloads a
+running app.
 Ctrl+Space offers Fleury completions; Format uses DartPad's formatter. Editor
 source is saved locally in the browser. The example entry point is
 `Widget buildApp()`; the host owns browser mounting and reassembly.

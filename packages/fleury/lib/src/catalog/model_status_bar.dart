@@ -2,7 +2,7 @@ import '../primitives.dart';
 
 import 'semantic_roles.dart';
 
-/// Protocol-neutral lifecycle state for a model-backed workflow.
+/// Lifecycle state of a model-backed workflow.
 enum ModelRuntimeStatus {
   idle,
   connecting,
@@ -68,7 +68,7 @@ final class TokenUsage {
   }
 }
 
-/// Protocol-neutral model/runtime status used by [ModelStatusBar].
+/// Model and runtime status shown by [ModelStatusBar].
 final class ModelStatusInfo {
   const ModelStatusInfo({
     required this.model,
@@ -120,9 +120,10 @@ final class ModelStatusInfo {
 }
 
 /// A one-line context-window meter: used/limit token counts, a utilization
-/// bar, and a percentage (`Context: 78k/200k [####......] 39%`). Nearing or
-/// exceeding the limit is announced in words — `NEAR LIMIT`, `OVER LIMIT` —
-/// not by color alone, so the state reads in monochrome.
+/// bar, and a percentage (`Context: 78k/200k [####......] 39%`). From
+/// [warningThreshold] of the limit (80% by default) it adds `NEAR LIMIT`, and
+/// from [errorThreshold] (95% by default) `OVER LIMIT` — words, not color
+/// alone, so the state reads in monochrome.
 class TokenMeter extends StatelessWidget {
   const TokenMeter({
     super.key,

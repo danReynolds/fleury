@@ -43,7 +43,7 @@ class BrailleBuffer implements SubCellBuffer {
 
   /// Lights a single pixel at `(px, py)`. Pixels outside the grid are
   /// silently clipped. The most-recently-set color on a cell wins when
-  /// multiple lines cross it (matching Ratatui's behaviour).
+  /// multiple lines cross it (matching Ratatui's behavior).
   @override
   void setPixel(int px, int py, [Color? color]) {
     if (px < 0 || px >= pixelWidth || py < 0 || py >= pixelHeight) return;

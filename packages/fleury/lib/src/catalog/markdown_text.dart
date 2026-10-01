@@ -38,11 +38,11 @@ import '../primitives.dart';
 
 import 'component_theme.dart';
 
-/// Accent colour for Markdown links — a mint green that reads on dark
-/// backgrounds (unlike a browser's default link blue) and matches Fleury's
-/// default styling. Applies to safe-scheme links on every surface (terminal
-/// OSC 8 text, browser `<a>`), since the browser anchor inherits the cell's
-/// foreground.
+/// Accent color for Markdown links — a mint green that reads on dark
+/// backgrounds (unlike a browser's default link blue). It is fixed, not
+/// taken from the theme. Applies to safe-scheme links on every surface
+/// (terminal OSC 8 text, browser `<a>`), since the browser anchor inherits
+/// the cell's foreground.
 const Color _kMarkdownLinkColor = RgbColor(126, 217, 149);
 
 /// A widget that renders a [data] string of light Markdown as styled
@@ -66,7 +66,7 @@ class MarkdownText extends StatefulWidget {
 
   /// Whether a link keeps its inspectable ` (url)` suffix after the text.
   ///
-  /// Default true (RFC 0017): the destination stays visible on terminals that
+  /// Default true: the destination stays visible on terminals that
   /// don't honor OSC 8 and auditable everywhere. Set false for the clean-link
   /// look — but the suffix is only dropped when the link is actually *live*
   /// (a real OSC 8 / anchor target was emitted, which makes the visible url
@@ -749,9 +749,13 @@ String exportMarkdownSelection(
 }
 
 /// A Markdown document viewer with a block cursor: content renders styled
-/// (headings tinted, inline bold/italic/code, blockquotes, fences) while
-/// arrow keys move a selection block by block. Ctrl+C copies the selected
-/// block's Markdown source — or the whole document.
+/// (headings tinted, inline bold/italic/code, blockquotes, fences), and one
+/// block (a line of the source) is selected at a time.
+///
+/// Up and Down move the selection a block at a time; PageUp, PageDown, Home,
+/// and End jump; clicking a block selects it. Ctrl+C copies the selected
+/// block's Markdown source, or the whole document when [copyOptions] sets
+/// [MarkdownViewCopyMode.document].
 class MarkdownView extends StatefulWidget {
   const MarkdownView({
     super.key,
@@ -771,6 +775,7 @@ class MarkdownView extends StatefulWidget {
        assert(tabSize > 0);
 
   /// Creates a viewer from an already parsed [MarkdownDocument].
+  /// [maxLineLength] and [tabSize] have no effect here.
   ///
   /// The document's sanitized blocks, links, and parsing statistics are reused
   /// without parsing Markdown source again.
@@ -815,13 +820,16 @@ class MarkdownView extends StatefulWidget {
   /// Base text style merged into rendered Markdown spans.
   final CellStyle? baseStyle;
 
-  /// Maximum displayed line length.
+  /// Cuts each block's text, inline Markdown markers included, to this many
+  /// characters before styling, ending it with `…`; null never cuts. Copying
+  /// still copies the full source.
   final int? maxLineLength;
 
   /// Number of spaces used when expanding tabs.
   final int tabSize;
 
-  /// Whether Ctrl+C and semantic copy export the selected block/document.
+  /// Whether Ctrl+C (and the semantic copy action) copies the selected block,
+  /// or the document if [copyOptions] says so.
   final bool copySelection;
 
   /// Clipboard/export options for copied Markdown text.

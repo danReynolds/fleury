@@ -50,7 +50,7 @@ export '../input/events.dart'
 ///
 /// For a single-step binding, [events] has one entry. For a multi-step
 /// sequence (`.ctrl.x.ctrl.s`), it has one entry per step, in order, so
-/// `events.length == sequence.stepCount`. For a binding with [KeyBinding.aliases],
+/// `events.length == sequence.stepCount`. For a binding with aliases,
 /// [sequence] tells the handler which alias the user actually pressed.
 @immutable
 final class KeySequenceMatch {
@@ -126,9 +126,9 @@ final class PendingSequenceNotifier with Notifier {
   /// request tree→dispatcher). Apps go through [KeyBindings.cancelPending].
   VoidCallback? onCancel;
 
-  /// Requests cancellation of the in-flight sequence, as if the user pressed
-  /// Esc. No-op when nothing is pending or the dispatcher hasn't wired a
-  /// handler.
+  /// Requests an abort of the in-flight sequence, as if the user pressed Esc:
+  /// the keys typed so far are dropped. No-op when nothing is pending or the
+  /// dispatcher hasn't wired a handler.
   void cancel() => onCancel?.call();
 }
 
@@ -210,7 +210,7 @@ typedef KeyBindingHandler = void Function(KeyBindingEvent event);
 // KeyBinding
 // ===========================================================================
 
-/// One key binding: a [KeySequence] (plus optional [aliases] that fire the
+/// One key binding: a [KeySequence] (plus optional `aliases` that fire the
 /// same action), a handler, an optional hint-bar label, and an enabled flag.
 ///
 /// ```dart
@@ -266,19 +266,19 @@ final class KeyBinding {
        onHoldStart = null,
        onHoldEnd = null;
 
-  /// Bind a key to the *duration* of a press: [onHoldStart] on the down,
-  /// [onHoldEnd] on its release — push-to-talk, hold-to-peek.
+  /// Bind a key to the *duration* of a press: [onHoldStart] fires when the key
+  /// goes down and [onHoldEnd] when it is released, for push-to-talk or
+  /// hold-to-peek.
   ///
-  /// Not a long-press: there is no threshold and no latency. Every keyboard
-  /// press is a hold of some duration, so the start fires immediately and a
-  /// brief tap is simply a brief hold (RFC 0020 §14.5).
+  /// Not a long-press: there is no threshold and no delay, so the start fires
+  /// immediately and a brief tap is simply a brief hold.
   ///
-  /// Exactly one end per start, always: the pairing rides the observation
-  /// lane, so it survives command-lane consumption, and the end is
-  /// synthesized on scope exit or authority loss (modal open, blur,
-  /// disconnect). Inert where the surface reports no held state — never
-  /// silently a toggle; branch on
-  /// `Keyboard.of(context).capabilities.supportsHeldState` for a fallback.
+  /// [onHoldEnd] fires exactly once for every [onHoldStart], even when another
+  /// handler consumes the key. It also fires without a release when focus
+  /// leaves this subtree (a dialog opening over it, say), the binding's
+  /// [KeyBindings] unmounts, or the terminal loses focus or disconnects. A hold
+  /// does nothing on a surface that can't report key releases; check
+  /// `Keyboard.of(context).capabilities.supportsHeldState` to offer a fallback.
   KeyBinding.hold(
     KeySequence key, {
     required KeyBindingHandler this.onHoldStart,
@@ -335,10 +335,9 @@ final class KeyBinding {
   /// Whether this binding brackets a press rather than firing on it.
   bool get isHold => onHoldStart != null;
 
-  /// Short label shown by `KeyHintBar`. When null, the bar synthesises one
-  /// from the primary sequence's [KeySequence.hintLabel]. A binding with
-  /// `label == null` and `hideFromHintBar == false` is hidden from the bar —
-  /// descriptive opt-in is required.
+  /// Short description of the action, shown by hint surfaces such as
+  /// `KeyHintBar` and `WhichKey`. A binding without a label still fires but
+  /// isn't listed there.
   final String? label;
 
   /// When false, the binding doesn't match and doesn't appear in the hint
@@ -406,9 +405,14 @@ final class ActiveKeyBinding {
 
 /// Resolves the discoverable key bindings active in [manager]'s focus context.
 ///
-/// Resolution follows the same precedence as key dispatch: the deepest local
-/// binding wins each sequence. It also applies the framework's user-facing
-/// discovery rules:
+/// Resolution follows the same rules as key dispatch: the deepest local
+/// binding wins each sequence, and the walk ends at a [KeyBindings] with
+/// [KeyBindings.modal] set, such as the one around a dialog shown with
+/// `context.present`, so bindings beyond it are left out. The modal scope's
+/// own bindings are listed, including one that lets its key through with
+/// [KeyBindingEvent.bubble]: whether a handler bubbles is decided when it
+/// runs, so the key is listed under that binding's label. Resolution also
+/// applies the framework's user-facing discovery rules:
 ///
 ///  * bindings need an explicit [KeyBinding.label];
 ///  * disabled and [KeyBinding.hideFromHintBar] bindings are omitted;
@@ -471,6 +475,9 @@ List<ActiveKeyBinding> resolveActiveKeyBindings(FocusManager manager) {
     for (final binding in source.activeBindings) {
       consider(binding);
     }
+    // Dispatch stops here too, for every key no binding at this scope
+    // handled (see `InputDispatcher`'s plain dispatch).
+    if (source.isModalScope) break;
   }
   manager.recordLiveAnswers(liveAnswers);
   return List<ActiveKeyBinding>.unmodifiable(result);
@@ -480,22 +487,60 @@ List<ActiveKeyBinding> resolveActiveKeyBindings(FocusManager manager) {
 // KeyBindings widget
 // ===========================================================================
 
-/// Declarative key bindings for a subtree.
+/// Keyboard shortcuts for a subtree: each [KeyBinding] fires while focus is
+/// inside [child].
+///
+/// While nothing has focus, such as before anything has claimed it, keys go
+/// to every [KeyBindings] instead, the deepest first, so the bindings of
+/// sibling panes fire too. While a dialog or another focus trap is open, that
+/// is only the ones inside it and the ones enclosing it. A subtree under
+/// [ExcludeFocus], such as a route covered by another, takes no part.
 ///
 /// ```dart
 /// KeyBindings(
 ///   bindings: [
-///     KeyBinding(.ctrl.s, label: 'Save', onTrigger: (_) => save()),
+///     KeyBinding(KeySequence.ctrl.s, label: 'Save', onTrigger: (_) => save()),
 ///     KeyBinding(.escape, label: 'Cancel', onTrigger: (_) => cancel()),
+///     KeyBinding(.g.g, label: 'Top', onTrigger: (_) => scrollToTop()),
 ///   ],
-///   child: app,
+///   child: editor,
 /// )
 /// ```
 ///
-/// `KeyBindings` joins the input chain as a mailbox, not a [Focus] target:
-/// it fires while a descendant holds the keyboard, [Focus.of] walks past it,
-/// and it never becomes the focused node. The dispatcher consults its
-/// bindings when a [KeyEvent] reaches this node's spot in the chain.
+/// A binding's first argument is a [KeySequence]. Where a [KeySequence] is
+/// expected, Dart's dot shorthand lets you drop the type name: `.ctrl.s` is
+/// `KeySequence.ctrl.s`, and `.g.g` is the two-key sequence `g g`.
+///
+/// Keys travel outward from the focused widget. A control such as a text field
+/// handles its own keys first; then the nearest enclosing [KeyBindings] gets
+/// the key, then the next one out, so an inner binding shadows an outer one for
+/// the same key. If two bindings in one list match, the first wins. A matched
+/// key is consumed unless its handler calls [KeyBindingEvent.bubble]. The
+/// widget itself never takes focus, so it doesn't affect [Focus.of].
+///
+/// A focused text field takes typed characters before any binding sees them,
+/// so a binding whose first key is a bare printable key (`q`, `?`, Space, or a
+/// Shift+letter) never fires while a text field has focus, and hint bars leave
+/// it out. Chords with Ctrl, Alt, or Super, and keys such as Escape, still
+/// reach bindings unless the field handles them itself.
+///
+/// A multi-key sequence (`.g.g`, `.ctrl.x.ctrl.s`, or a `.space` leader) fires
+/// when its keys arrive in order. While the user is partway through one,
+/// [pendingOf] reports the keys typed so far and the keys that can follow,
+/// which the bundled `WhichKey` widget shows as a popup. A key that
+/// doesn't continue the sequence ends it. Esc backs out and does nothing else:
+/// the keys typed so far are dropped, and the Esc doesn't also close a dialog
+/// or go back a page. Any other key cancels the sequence and is then handled
+/// as usual. When a single-key binding in the same list or an enclosing one
+/// shares the first key (`g` beside `g g`), it fires once a key other than Esc
+/// rules out the sequence, or after the sequence timeout (500 ms by default;
+/// see `runApp`'s `sequenceTimeout`). If focus moves away from these bindings
+/// partway through, for example into a dialog that opens in front of them, the
+/// sequence ends there and the keys typed so far are dropped: they never reach
+/// what has focus now.
+///
+/// With [modal] set, keys that nothing inside this subtree handles stop here.
+/// `Navigator` sets it for dialogs shown with `present`.
 class KeyBindings extends StatefulWidget {
   const KeyBindings({
     super.key,
@@ -504,54 +549,59 @@ class KeyBindings extends StatefulWidget {
     required this.child,
   });
 
-  /// The shortcuts this scope declares. Each pairs a gesture with a handler
-  /// and a label; the label is what [activeOf] surfaces (hint bars, help
-  /// overlays) render, so a labelled binding documents itself.
+  /// The shortcuts that fire while focus is inside [child], or while nothing
+  /// has focus (see [KeyBindings]); if two match the same key, the first in
+  /// the list wins. Hint bars and help overlays list the bindings that have a
+  /// [KeyBinding.label] (see [activeOf]); a binding without one still fires.
   ///
-  /// Keys match deepest-first, so an inner scope shadows an outer one without
-  /// either side knowing about the other.
+  /// A binding here shadows a binding for the same key in an enclosing
+  /// [KeyBindings], without either one knowing about the other.
   final List<KeyBinding> bindings;
 
-  /// Whether unmatched keys stop at this scope.
+  /// Whether keys that nothing inside this subtree handles stop here instead
+  /// of reaching enclosing [KeyBindings] and [KeyDetector]s. Defaults to
+  /// false; `Navigator` sets it for dialogs shown with `present`.
   ///
-  /// A dialog binds y/n/Esc; a fat-fingered `j` matches nothing, and with
-  /// `modal: false` it would sail past into the app behind. There is no
-  /// handler in which to intercept that — the whole problem is that no
-  /// handler runs — so the policy belongs to the scope, not to a row.
+  /// A dialog that binds y, n, and Esc uses it so that a stray `j` doesn't
+  /// reach the screen behind the dialog. To let one particular key through,
+  /// bind it here and call [KeyBindingEvent.bubble] in its handler. This
+  /// doesn't keep focus inside the subtree; for a custom overlay, pair it with
+  /// `FocusScope(trapFocus: true)`, as `Navigator` does for dialogs.
   ///
-  /// `modal: true` blocks ancestor binding scopes. Routed dialogs get this
-  /// policy from Navigator alongside `FocusScope(trapFocus: true)`: the focus
-  /// scope keeps focus inside while this binding scope keeps unmatched keys
-  /// from reaching the covered screen. Low-level overlays can compose the two
-  /// policies explicitly. Per-key passthrough is a binding at THIS scope that
-  /// matches and calls [KeyBindingEvent.bubble].
+  /// Hint bars stop here too: while focus is inside, [activeOf] lists these
+  /// bindings and the ones inside, not the ones beyond. A key let through
+  /// with [KeyBindingEvent.bubble] is listed under its binding here, so give
+  /// that binding a label to show it.
   final bool modal;
 
-  /// The subtree these bindings cover. A key fires them when focus is on this
-  /// subtree — the scope is where the widget sits, not the whole app.
+  /// The subtree these bindings cover. While something has focus, a key fires
+  /// them only when focus is in this subtree — the scope is where the widget
+  /// sits, not the whole app. While nothing has focus, see [KeyBindings].
   final Widget child;
 
   /// The discoverable bindings active in [context]'s focus context — hint
   /// bars, help overlays, and command palettes read this instead of walking
   /// the focus tree. Rebuilds when focus moves or the active bindings change.
+  /// Like key dispatch, it stops at a [modal] scope; see
+  /// [resolveActiveKeyBindings].
   static List<ActiveKeyBinding> activeOf(BuildContext context) {
     final manager = FocusManager.maybeOf(context);
     if (manager == null) return const <ActiveKeyBinding>[];
     return resolveActiveKeyBindings(manager);
   }
 
-  /// The sequence the user is partway through typing, or null when none is in
-  /// flight. Rebuilds when a leader is pressed, advanced, completed, or
-  /// cancelled — a which-key popup depends on this. Null unless `runApp`
-  /// installed a [PendingSequenceScope] (it does by default).
+  /// The multi-key sequence the user is partway through typing, or null when
+  /// none is in progress. [context] rebuilds as a sequence starts, advances,
+  /// completes, or is canceled, which is what a which-key popup needs. Always
+  /// null outside a Fleury runtime such as `runApp`.
   static PendingKeySequenceMatch? pendingOf(BuildContext context) =>
       dependOnScope<PendingSequenceNotifier>(context)?.value;
 
-  /// Cancels the in-flight sequence [pendingOf] reports, as if the user
-  /// pressed Esc — for a which-key popup's close control or any custom
-  /// dismiss affordance. No-op when nothing is pending or no
-  /// [PendingSequenceScope] is installed. Reads the scope WITHOUT a rebuild
-  /// dependency (it's an action, not a value read).
+  /// Abandons the sequence [pendingOf] reports, exactly as pressing Esc does,
+  /// for a which-key popup's close control or another way to dismiss it. The
+  /// keys typed so far are dropped, so a single-key binding waiting on them
+  /// (`g` beside `g g`) doesn't fire. Does nothing when no sequence is in
+  /// progress, and doesn't make [context] rebuild.
   static void cancelPending(BuildContext context) =>
       readScope<PendingSequenceNotifier>(context)?.cancel();
 

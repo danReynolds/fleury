@@ -10,13 +10,15 @@
 // editor handoff remains an opt-in controlling-terminal proof. This unit test
 // drives the gate directly through @visibleForTesting seams: selfStopOverride
 // replaces Process.killPid and non-TTY fake stdio keeps the test deterministic.
+// Which presses suspend at all — only a Ctrl+Z the app left unhandled — is
+// runApp's rule, covered in test/runtime/ctrl_z_suspend_test.dart.
 
 import 'dart:async';
 import 'dart:io';
 
 import 'package:fleury/fleury.dart';
 import 'package:fleury/src/terminal/posix_driver.dart'
-    show PosixTerminalModeController;
+    show PosixTerminalModeController, requestCtrlZSuspend;
 import 'package:test/test.dart';
 
 /// Records every [write]; reports as a non-terminal so enter() stays cheap.
@@ -85,6 +87,136 @@ class _RawMode implements PosixTerminalModeController {
 }
 
 void main() {
+  // Launch audit 3.a: the driver never decides on its own that Ctrl+Z is job
+  // control. The press is parsed and delivered like any key, and runApp asks
+  // for the suspension through requestCtrlZSuspend only when nothing handled
+  // it (test/runtime/ctrl_z_suspend_test.dart covers that rule end to end).
+  test('Ctrl+Z is delivered as a key, never consumed by the driver', () async {
+    final input = _FakeStdin(hasTerminal: true);
+    var stops = 0;
+    final driver = PosixTerminalDriver(
+      stdinOverride: input,
+      stdoutOverride: _RecordingStdout(),
+      terminalModeController: _RawMode(),
+      selfStopOverride: () {
+        stops++;
+        return true;
+      },
+    );
+    final events = <TuiEvent>[];
+    final subscription = driver.events.listen(events.add);
+    try {
+      await driver.enter(TerminalMode.interactive);
+      input._controller.add([0x1a]);
+      input._controller.add('\x1b[122;5u'.codeUnits); // the Kitty encoding
+      await Future<void>.delayed(Duration.zero);
+      expect(events.whereType<KeyEvent>(), [
+        const KeyEvent(KeyCode.char('z'), modifiers: {KeyModifier.ctrl}),
+        const KeyEvent(KeyCode.char('z'), modifiers: {KeyModifier.ctrl}),
+      ]);
+      expect(stops, 0);
+      expect(driver.debugSuspended, isFalse);
+    } finally {
+      await driver.restore();
+      await subscription.cancel();
+      await input.close();
+    }
+  });
+
+  group('requestCtrlZSuspend', () {
+    test('suspends a live native session that owns Ctrl+Z', () async {
+      final input = _FakeStdin(hasTerminal: true);
+      var stops = 0;
+      final driver = PosixTerminalDriver(
+        stdinOverride: input,
+        stdoutOverride: _RecordingStdout(),
+        terminalModeController: _RawMode(),
+        selfStopOverride: () {
+          stops++;
+          return true;
+        },
+      );
+      try {
+        expect(
+          requestCtrlZSuspend(driver),
+          isFalse,
+          reason: 'no session before enter',
+        );
+        await driver.enter(TerminalMode.interactive);
+        expect(requestCtrlZSuspend(driver), isTrue);
+        await driver.debugSuspend(); // joins the suspension in flight
+        expect(stops, 1);
+        expect(driver.debugSuspended, isTrue);
+        await driver.restore();
+        expect(
+          requestCtrlZSuspend(driver),
+          isFalse,
+          reason: 'no session after restore',
+        );
+        expect(stops, 1);
+      } finally {
+        await driver.restore();
+        await input.close();
+      }
+    });
+
+    test('declines when the application owns Ctrl+Z', () async {
+      final input = _FakeStdin(hasTerminal: true);
+      var stops = 0;
+      final driver = PosixTerminalDriver(
+        stdinOverride: input,
+        stdoutOverride: _RecordingStdout(),
+        suspendOnCtrlZ: false,
+        terminalModeController: _RawMode(),
+        selfStopOverride: () {
+          stops++;
+          return true;
+        },
+      );
+      try {
+        await driver.enter(TerminalMode.interactive);
+        expect(requestCtrlZSuspend(driver), isFalse);
+        await Future<void>.delayed(Duration.zero);
+        expect(stops, 0);
+        expect(driver.debugSuspended, isFalse);
+      } finally {
+        await driver.restore();
+        await input.close();
+      }
+    });
+
+    test('declines without native raw mode, where the kernel owns Ctrl+Z '
+        'and no press is ever read', () async {
+      final input = _FakeStdin(); // not a terminal: no raw mode at all
+      var stops = 0;
+      final driver = PosixTerminalDriver(
+        stdinOverride: input,
+        stdoutOverride: _RecordingStdout(),
+        selfStopOverride: () {
+          stops++;
+          return true;
+        },
+      );
+      try {
+        await driver.enter(TerminalMode.interactive);
+        expect(requestCtrlZSuspend(driver), isFalse);
+        await Future<void>.delayed(Duration.zero);
+        expect(stops, 0);
+      } finally {
+        await driver.restore();
+        await input.close();
+      }
+    });
+
+    test('declines for a driver without job control', () async {
+      final driver = FakeTerminalDriver();
+      await driver.enter(TerminalMode.interactive);
+      expect(requestCtrlZSuspend(driver), isFalse);
+      await driver.restore();
+      await driver.dispose();
+    });
+  });
+
   test('applications can own Ctrl+Z without driver self-suspension', () async {
     final input = _FakeStdin(hasTerminal: true);
     var stops = 0;

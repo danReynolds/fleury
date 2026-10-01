@@ -45,10 +45,14 @@ final class FileMentionEntry {
   /// One-based column number for source targets.
   final int? column;
 
-  /// Text inserted/copied when this entry is picked.
+  /// The mention's text, such as `@lib/main.dart`; defaults to `@` followed
+  /// by [path] (see [displayMention]). Copying uses it by default. Picking
+  /// an entry only calls [FileMentionPicker.onPick]; inserting the text is
+  /// up to your app.
   final String? mentionText;
 
-  /// Whether this entry can be selected and picked.
+  /// Whether picking this entry calls [FileMentionPicker.onPick]. A disabled
+  /// entry can still be browsed and copied.
   final bool enabled;
 
   /// App-specific semantic state carried by the entry.

@@ -131,6 +131,35 @@ void main() {
     expect(value.style.foreground, isNot(label.style.foreground));
   });
 
+  testWidgets('a row cut by maxLineLength ends with … and keeps its value '
+      'colored', (tester) {
+    tester.pumpWidget(
+      JsonView(
+        value: const {'aaaaaaaaaaaaaaaaaaaaaaaa': 42, 'n': 123456789012345},
+        maxLineLength: 16,
+      ),
+    );
+    final buffer = tester.render(size: const CellSize(40, 4));
+    String row(int r) {
+      final sb = StringBuffer();
+      for (var c = 0; c < buffer.size.cols; c++) {
+        sb.write(buffer.atColRow(c, r).grapheme ?? ' ');
+      }
+      return sb.toString().trimRight();
+    }
+
+    // Row 0 is the root. Cut inside the label: no value is left to show.
+    expect(row(1), '    aaaaaaaaaaa…');
+    // Cut inside the value: the label stays whole and the value is cut.
+    expect(row(2), '    n: 12345678…');
+    final label = buffer.atColRow(4, 2);
+    final value = buffer.atColRow(7, 2);
+    final ellipsis = buffer.atColRow(15, 2);
+    expect(value.style.foreground, isNotNull);
+    expect(value.style.foreground, isNot(label.style.foreground));
+    expect(ellipsis.style.foreground, value.style.foreground);
+  });
+
   testWidgets('nested rows are indented under their parent', (tester) {
     // Rows other than the selected one are RichText; a wrap that dropped
     // their leading spaces rendered the whole tree flush left.

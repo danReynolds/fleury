@@ -9,6 +9,8 @@ its semantic tree.
 
 - **Read** the UI: `get_ui` and `find_nodes`, plus the `fleury://ui/tree`
   resource — roles, labels, values, state, and the actions each node supports.
+  `get_ui`'s `focusedNodeId` names the node that holds focus (the control
+  with the keys, or a table's current row), not a region around it.
 - **Drive** it: `invoke_action`, `set_value`, `resize`, and
   instance-scoped-revision-aware `wait_for_change`; legacy `2025-06-18`
   clients also retain the focus-relative `type_text` and `press_key` tools.

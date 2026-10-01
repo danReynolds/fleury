@@ -21,23 +21,24 @@
 // Usage:
 //
 //   $ fleury shell                 # in terminal A
-//   # → "fleury shell ready, waiting for an app to attach..."
+//   # → "fleury shell ready (handle at .fleury/handle)"
 //
 //   # In VSCode / IntelliJ, F5 your app as you normally would.
 //   # The app auto-detects `.fleury/handle` and connects.
-//   # Terminal A shows the TUI; the IDE keeps the debugger console.
+//   # Terminal A shows the TUI and sends it every key; the IDE keeps the
+//   # debugger console. Each run attaches in turn; Ctrl+C in terminal A
+//   # quits the shell while no app is attached.
 
 import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
-import 'dart:typed_data' show Uint8List;
 
 import 'package:fleury/src/version.dart';
 import 'package:fleury/src/cli/create_command.dart';
 import 'package:fleury/src/cli/dart_sdk.dart';
 import 'package:fleury/src/cli/run_command.dart';
 import 'package:fleury/src/cli/serve_access.dart';
-import 'package:fleury/src/foundation/geometry.dart';
+import 'package:fleury/src/cli/shell_session.dart';
 import 'package:fleury/src/remote/bridge_app_link.dart';
 import 'package:fleury/src/remote/buffered_browser_input.dart';
 import 'package:fleury/src/rendering/width_policy.dart';
@@ -46,16 +47,13 @@ import 'package:fleury/src/remote/remote_protocol.dart';
 import 'package:fleury/src/remote/serve_index_html.dart';
 import 'package:fleury/src/remote/serve_init.dart';
 import 'package:fleury/src/remote/serve_mono_font_asset.dart';
-import 'package:fleury/src/remote/shell_init.dart';
 import 'package:fleury/src/remote/spawn.dart';
 import 'package:fleury/src/remote/unix_socket_transport.dart';
 import 'package:fleury/src/runtime/dev_bootstrap.dart';
-import 'package:fleury/src/terminal/capabilities.dart';
 import 'package:fleury/src/terminal/diagnostics.dart';
 import 'package:fleury/src/terminal/native_driver.dart';
-import 'package:fleury/fleury.dart'
-    show KeyboardCapabilities, KeyboardProtocolMode;
 import 'package:fleury/src/terminal/terminal_probe.dart';
+import 'package:stdio/stdio.dart' as fd;
 
 Future<void> main(List<String> args) async {
   if (args.isEmpty) {
@@ -226,12 +224,11 @@ Future<int> _runShell(List<String> args) async {
   // keystrokes (so it puts its own stdin into raw mode) and writes the app's
   // frames to stdout. Refuse a non-tty stdin up front — otherwise a
   // backgrounded / redirected-stdin invocation (`fleury shell < /dev/null`)
-  // binds the socket, then the first app-attach throws a StdinException from
-  // _runSession's `stdin.lineMode` setup, escaping the accept callback as an
-  // unhandled async error and killing the shell without cleanup (a stale
-  // .fleury/handle + shell.sock left behind). Checked before the stdout guard
-  // so a stdin-less shell is named even when stdout is also redirected.
-  if (!stdin.hasTerminal) {
+  // binds the socket and only fails when the first app attaches. Checked
+  // before the stdout guard so a stdin-less shell is named even when stdout
+  // is also redirected. `hasTerminal` alone is not enough: it reports any
+  // character device, /dev/null included, so the terminal modes are read too.
+  if (!stdin.hasTerminal || !_stdinSupportsTerminalModes()) {
     stderr.writeln(
       'fleury shell: stdin is not a terminal — no keystrokes to forward. Run '
       'it in an interactive terminal, not backgrounded or with redirected '
@@ -246,10 +243,11 @@ Future<int> _runShell(List<String> args) async {
     );
     return 2;
   }
-  if (!stdin.hasTerminal || !_stdinSupportsTerminalModes()) {
-    stderr.writeln(
-      'fleury shell: stdin is not a terminal — input cannot be forwarded.',
-    );
+  // The relay borrows the terminal with the native driver's own primitives
+  // (termios raw mode, the native input reader), which exist on macOS and
+  // Linux.
+  if (!Platform.isMacOS && !Platform.isLinux) {
+    stderr.writeln('fleury shell: runs on macOS and Linux.');
     return 2;
   }
 
@@ -291,234 +289,116 @@ Future<int> _runShell(List<String> args) async {
     return 1;
   }
   final exitCode = Completer<int>();
+  // The shell's own messages. None is written while an app is attached: the
+  // terminal is the app's screen then.
+  final say = _ShellMessages();
 
-  final shutdownSession = Completer<void>();
-  Future<int>? activeSession;
-  Future<void>? cleanupFuture;
+  ShellSession? activeSession;
+  var turnedAway = 0;
+  Future<void>? shutdownFuture;
 
-  Future<void> cleanup() {
-    final existing = cleanupFuture;
-    if (existing != null) return existing;
-
-    cleanupFuture = () async {
-      if (!shutdownSession.isCompleted) shutdownSession.complete();
+  // Ends the shell: hand the terminal back and tell an attached app goodbye
+  // (the app sees its transport drop and exits cleanly), then remove the
+  // discovery state. Idempotent; the first exit code wins.
+  Future<void> shutdown(int code) => shutdownFuture ??= () async {
+    try {
+      await server.close();
+    } catch (_) {
+      // Keep cleaning up the discovery file and endpoint even when the
+      // listener has already been torn down by the operating system.
+    }
+    final session = activeSession;
+    if (session != null) {
+      session.shutdown();
       try {
-        await server.close();
-      } catch (_) {
-        // Keep cleaning up the discovery file and endpoint even when the
-        // listener has already been torn down by the operating system.
+        // The session hands the terminal back before it waits on the app.
+        await session.run().timeout(const Duration(seconds: 2));
+      } on TimeoutException {
+        // The process is exiting; never hang on a connection that will not
+        // close.
       }
+    }
+    try {
+      handleFile.deleteSync();
+    } catch (_) {}
+    endpoint.delete();
+    _releaseHandleLock(handleLock);
+    if (!exitCode.isCompleted) exitCode.complete(code);
+  }();
 
-      final session = activeSession;
-      if (session != null) {
-        try {
-          await session.timeout(const Duration(seconds: 2));
-        } on TimeoutException {
-          // The process is exiting; avoid hanging forever if the terminal
-          // stream refuses to drain during signal handling.
-        } catch (_) {
-          // Session cleanup is best-effort during signal handling. Keep the
-          // shell exit path deterministic even if the PTY has already closed.
-        }
-      }
-
-      try {
-        handleFile.deleteSync();
-      } catch (_) {}
-      endpoint.delete();
-      _releaseHandleLock(handleLock);
-    }();
-
-    return cleanupFuture!;
-  }
-
-  // Terminal shutdown signals tear down the proxy. The connected app sees its
-  // transport drop and exits cleanly via the events `onDone` path.
   var signalShutdownStarted = false;
   late final List<StreamSubscription<ProcessSignal>> signalSubs;
   signalSubs = _watchShutdownSignals((code, _) async {
     if (signalShutdownStarted) return;
     signalShutdownStarted = true;
     await _cancelSignalSubscriptions(signalSubs);
-    await cleanup();
-    if (!exitCode.isCompleted) exitCode.complete(code);
+    await shutdown(code);
   });
 
+  // Each run of the app attaches in turn, so an IDE's stop, restart and
+  // rerun all land in the same shell. Between runs the terminal is back in
+  // its own modes: there Ctrl+C is the terminal's interrupt again, and quits
+  // the shell through the signal watcher above.
   server.listen((client) async {
-    // One app at a time. A second connection while one is live gets
-    // dropped — the shell terminal can only show one TUI's frames.
-    if (activeSession != null) {
+    // One app at a time: the terminal can only show one app's frames.
+    if (activeSession != null || shutdownFuture != null) {
       client.destroy();
-      stderr.writeln(
-        '[shell] another app connected while a session was live - dropped',
-      );
+      turnedAway++;
       return;
     }
-    final session = _runSession(client, shutdownSignal: shutdownSession.future);
-    activeSession = session;
-    var code = 1;
-    try {
-      code = await session;
-    } on Object catch (error, stackTrace) {
-      stderr
-        ..writeln('fleury shell: session failed: $error')
-        ..writeln(stackTrace);
+    final session = activeSession = ShellSession(
+      UnixSocketFrameTransport.fromSocket(client),
+    );
+    final end = await session.run();
+    activeSession = null;
+    if (shutdownFuture != null) return;
+    if (end.reason == ShellSessionEndReason.terminalGone) {
+      await shutdown(129);
+      return;
     }
-    await cleanup();
-    if (!exitCode.isCompleted) exitCode.complete(code);
+    if (end.restoreError case final error?) {
+      say(
+        'fleury shell: could not restore the terminal ($error). '
+        'Run `reset` if it misbehaves.',
+      );
+    }
+    if (turnedAway > 0) {
+      say(
+        'fleury shell: turned away $turnedAway app'
+        '${turnedAway == 1 ? '' : 's'} that tried to attach during that run.',
+      );
+      turnedAway = 0;
+    }
+    final ended = switch (end.reason) {
+      ShellSessionEndReason.failed => 'the session failed (${end.error})',
+      ShellSessionEndReason.appDisconnected => 'the app disconnected',
+      _ => 'the app exited',
+    };
+    say('fleury shell: $ended. Waiting for the next run; Ctrl+C quits.');
   });
 
   // Readiness is a lifecycle contract: only announce it after the listener and
   // shutdown cleanup are both armed.
-  stderr.writeln('fleury shell ready (handle at ${handleFile.path})');
-  stderr.writeln('');
-  stderr.writeln('To attach an app:');
-  stderr.writeln('  • run it from this directory:  dart run bin/run_app.dart');
-  stderr.writeln('  • or from any directory, set FLEURY_HANDLE:');
-  stderr.writeln(
+  say('fleury shell ready (handle at ${handleFile.path})');
+  say('');
+  say('To attach an app:');
+  say('  • run it from this directory:  dart run bin/run_app.dart');
+  say('  • or from any directory, set FLEURY_HANDLE:');
+  say(
     '      FLEURY_HANDLE=${_posixShellQuote(socketPath)} '
     'dart run bin/run_app.dart',
   );
-  stderr.writeln('  • or launch it from your IDE — the discovery file');
-  stderr.writeln('    handles the rest automatically.');
+  say('  • or launch it from your IDE — the discovery file');
+  say('    handles the rest automatically.');
+  say('');
+  say('Leave it running: every run attaches here and gets every key typed.');
+  say('Ctrl+C quits the shell while no app is attached.');
 
   return exitCode.future;
 }
 
-/// Drives a single connected app: hand off our terminal to the app's
-/// frames, pump local stdin and SIGWINCH back to the app, and clean
-/// up when the socket closes.
-Future<int> _runSession(Socket client, {Future<void>? shutdownSignal}) async {
-  final transport = UnixSocketFrameTransport.fromSocket(client);
-  if (shutdownSignal != null) {
-    unawaited(
-      shutdownSignal.then((_) async {
-        try {
-          transport.send(const ByeFrame());
-        } catch (_) {
-          // Peer may already be gone; close below still tears down locally.
-        }
-        await transport.close();
-      }),
-    );
-  }
-
-  // Take over our own terminal. The app's enter sequences would do this
-  // on the LOCAL side normally; here, the app is remote and its alt
-  // screen / hide-cursor / raw-mode sequences arrive as OUTPUT frames,
-  // which we write verbatim to our stdout. But WE need to be the one
-  // who set raw mode on our stdin (so we read keystrokes instead of
-  // line-buffered input) and put OUR terminal into a clean state.
-  bool? originalLine;
-  bool? originalEcho;
-  try {
-    originalLine = stdin.lineMode;
-    originalEcho = stdin.echoMode;
-    stdin.lineMode = false;
-    stdin.echoMode = false;
-  } on Object {
-    try {
-      if (originalLine != null) stdin.lineMode = originalLine;
-    } catch (_) {}
-    try {
-      if (originalEcho != null) stdin.echoMode = originalEcho;
-    } catch (_) {}
-    rethrow;
-  }
-  StreamSubscription<ProcessSignal>? winchSub;
-  StreamSubscription<List<int>>? stdinSub;
-  try {
-    // Bracketed paste + Kitty keyboard mirror the app's own setup so the
-    // bytes coming back to it match what a normal terminal would send. The
-    // keyboard push must match a local app's DEFAULT TIER, not flag 1 alone
-    // — otherwise every binding behind the relay fires once per auto-repeat
-    // while the same app run locally fires once per press (RFC 0020 §8.1).
-    stdout.write(
-      '\x1B[?1049h\x1B[?25l\x1B[?2004h'
-      '\x1B[>${KeyboardProtocolMode.disambiguated.requestedFlags}u',
-    );
-
-    // ONE stdin subscription serves both phases. `stdin` is
-    // single-subscription: a probe listener of its own would make the relay
-    // listener below throw, and cancelling first would drop whatever the user
-    // typed in between. So the relay attaches now and diverts to the probe
-    // buffer until the reply lands.
-    final probe = _ShellKeyboardProbe();
-    stdinSub = stdin.listen((bytes) {
-      final relayed = probe.absorb(bytes);
-      if (relayed != null) transport.send(InputFrame(_asUint8(relayed)));
-    }, cancelOnError: false);
-
-    // Ask the real emulator what actually stuck: the app behind the relay
-    // needs a keyboard declaration it can trust rather than an inference from
-    // our wire version (§11).
-    final keyboard = await probe.run();
-
-    // Initial handshake — send what the app needs to lay out its first
-    // frame correctly: actual size + the capabilities OUR terminal
-    // negotiated with the user's real terminal emulator.
-    final capabilities = detectTerminalCapabilitiesFromEnvironment(
-      Platform.environment,
-    );
-    transport.send(
-      buildShellInitFrame(
-        size: _localSize(),
-        capabilities: capabilities,
-        keyboard: keyboard,
-      ),
-    );
-
-    // Only NOW may real input flow. Anything typed during the probe window
-    // is genuine keystrokes (the reply is stripped), but a peer discards
-    // input that arrives before the handshake — and a slow-starting app can
-    // easily leave a keystroke sitting in the PTY buffer before its session
-    // even begins. Draining it after INIT is what makes the relay lossless.
-    final typedDuringProbe = probe.finish();
-    if (typedDuringProbe.isNotEmpty) {
-      transport.send(InputFrame(_asUint8(typedDuringProbe)));
-    }
-
-    // SIGWINCH → RESIZE frame. The app reflows on its end.
-    winchSub = ProcessSignal.sigwinch.watch().listen((_) {
-      transport.send(ResizeFrame(_localSize()));
-    });
-
-    // App's OUTPUT frames → stdout verbatim.
-    await for (final frame in transport.incoming) {
-      if (frame is OutputFrame) {
-        stdout.add(frame.bytes);
-      } else if (frame is ByeFrame) {
-        break;
-      }
-      // INIT / INPUT / RESIZE from the app side would be a protocol
-      // violation; silently drop rather than crash the shell.
-    }
-  } finally {
-    await winchSub?.cancel();
-    await stdinSub?.cancel();
-    // Restore terminal modes. Mirror order of the enter sequences.
-    try {
-      stdout.write('\x1B[<u\x1B[?2004l\x1B[?25h\x1B[?1049l');
-    } catch (_) {}
-    try {
-      stdin.lineMode = originalLine;
-    } catch (_) {}
-    try {
-      stdin.echoMode = originalEcho;
-    } catch (_) {}
-    await transport.close();
-  }
-  return 0;
-}
-
-CellSize _localSize() {
-  try {
-    return CellSize(stdout.terminalColumns, stdout.terminalLines);
-  } on StdoutException {
-    return const CellSize(80, 24);
-  }
-}
-
+/// Whether stdin is a terminal whose modes can be read — false for a
+/// character device that is not one, such as /dev/null.
 bool _stdinSupportsTerminalModes() {
   try {
     stdin.lineMode;
@@ -529,9 +409,22 @@ bool _stdinSupportsTerminalModes() {
   }
 }
 
-/// Stdin's stream gives us `List<int>`; the protocol wants `Uint8List`
-/// for zero-copy framing downstream.
-Uint8List _asUint8(List<int> b) => b is Uint8List ? b : Uint8List.fromList(b);
+/// `fleury shell`'s own messages, on stderr.
+///
+/// Written synchronously, so a terminal that has gone away swallows the
+/// message here instead of failing dart:io's asynchronous stderr later, as an
+/// unhandled error that would kill the shell before it cleans up.
+final class _ShellMessages {
+  final fd.FdTerminalSink _stderr = fd.FdTerminalSink(2);
+
+  void call(String line) {
+    try {
+      _stderr.write('$line\n');
+    } catch (_) {
+      // Nowhere left to report to.
+    }
+  }
+}
 
 String _posixShellQuote(String value) => "'${value.replaceAll("'", "'\\''")}'";
 
@@ -2074,71 +1967,6 @@ typedef _ActiveProbeEvidence = ({
   TerminalProbeReport report,
   WidthMeasurements measuredWidths,
 });
-
-/// Probes what the user's real terminal confirmed for the flags `fleury
-/// shell` just pushed, and projects it into the semantic guarantees the app
-/// on the far end will plan against.
-///
-/// Shares the relay's single stdin subscription: [absorb] diverts bytes into
-/// the probe buffer while a reply is owed and returns them for relay
-/// afterwards. Best-effort by construction — a terminal that does not answer
-/// leaves the declaration null, which the app reads as press-only, the same
-/// conservative floor a local session falls back to.
-final class _ShellKeyboardProbe implements TerminalProbeTransport {
-  final List<int> _buffer = <int>[];
-  var _active = true;
-
-  /// Whether the probe is still owed a reply (the DA1 that brackets it).
-  bool get _replyComplete => daReplyEndN(_buffer, 1) >= 0;
-
-  /// Routes one stdin chunk. Returns the bytes the relay should forward, or
-  /// null while the probe still owns the stream.
-  List<int>? absorb(List<int> bytes) {
-    if (!_active) return bytes;
-    _buffer.addAll(bytes);
-    return null;
-  }
-
-  @override
-  Future<List<int>> request(String bytes, {required Duration timeout}) async {
-    stdout.write(bytes);
-    await stdout.flush();
-    final deadline = Stopwatch()..start();
-    while (deadline.elapsed < timeout) {
-      if (_replyComplete) break;
-      await Future<void>.delayed(const Duration(milliseconds: 4));
-    }
-    return List<int>.unmodifiable(_buffer);
-  }
-
-  Future<KeyboardCapabilities?> run() async {
-    if (!stdin.hasTerminal || !stdout.hasTerminal) return null;
-    final override = Platform.environment['FLEURY_KEYBOARD_PROBE'];
-    if (override == '0' || override == 'false') return null;
-    try {
-      final flags = await probeKeyboardFlags(this);
-      if (flags == null) return null;
-      return KeyboardCapabilities.fromKittyFlags(flags);
-    } on Object {
-      return null;
-    }
-  }
-
-  /// Ends the probe phase and returns whatever the user typed during it.
-  ///
-  /// Only the tail past the reply is real input. If the reply never landed the
-  /// whole buffer is real input — a terminal that does not speak the protocol
-  /// answered nothing, so nothing in there is ours.
-  List<int> finish() {
-    _active = false;
-    final tailStart = daReplyEndN(_buffer, 1);
-    final tail = tailStart >= 0
-        ? _buffer.sublist(tailStart)
-        : List<int>.of(_buffer);
-    _buffer.clear();
-    return tail;
-  }
-}
 
 Future<_ActiveProbeEvidence> _runActiveTerminalProbes(Duration timeout) async {
   if (!stdin.hasTerminal || !stdout.hasTerminal) {

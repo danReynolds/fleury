@@ -219,11 +219,20 @@ class _DraftEditorState extends State<DraftEditor> {
     super.dispose();
   }
 
+  // #docregion save-command
+  AppCommand get saveCommand => AppCommand(
+    id: const CommandId('editor.save'),
+    title: 'Save draft',
+    shortcuts: [KeySequence.ctrl.s],
+    enabled: (_) => dirty && !saving,
+    run: (_) => save(),
+  );
+  // #enddocregion save-command
+
   @override
-  Widget build(BuildContext context) => KeyBindings(
-    bindings: [
-      KeyBinding(KeySequence.ctrl.s, onTrigger: (_) => unawaited(save())),
-    ],
+  Widget build(BuildContext context) => CommandScope(
+    label: 'Draft commands',
+    commands: [saveCommand],
     child: Padding(
       padding: const EdgeInsets.all(1),
       child: Column(
@@ -243,10 +252,10 @@ class _DraftEditorState extends State<DraftEditor> {
           const SizedBox(height: 1),
           Row(
             children: [
-              Button(
-                text: 'Save',
+              CommandButton(
+                command: saveCommand.id,
+                label: 'Save',
                 variant: ButtonVariant.primary,
-                onPressed: saving || !dirty ? null : () => unawaited(save()),
               ),
               const SizedBox(width: 1),
               Button(

@@ -1,6 +1,6 @@
 import '../primitives.dart';
 
-/// The default reveal sequence, Ctrl+R. A lazily-initialised top-level value
+/// The default reveal sequence, Ctrl+R. A lazily initialized top-level value
 /// because a modified [KeySequence] is built through the dot-chain and isn't
 /// const-constructible (so it can't be a parameter default).
 final KeySequence _defaultRevealChord = KeySequence.ctrl.char('r');
@@ -97,7 +97,11 @@ class PasswordInput extends StatefulWidget {
   /// consumes it, so it shadows any app-level binding on the same sequence.
   final KeySequence? revealChord;
 
-  /// Optional validation error displayed by the underlying input.
+  /// Marks the current value invalid: the field draws in the theme's error
+  /// style and reports this message through semantics, but doesn't show the
+  /// text. Inside a `FormField`, this message wins over the `FormField`'s
+  /// validator, though not over its own `error`, and the `FormField` shows
+  /// the winning message below the input.
   final String? validationError;
 
   /// Label exposed through the semantic app graph.
