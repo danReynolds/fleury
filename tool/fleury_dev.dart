@@ -2,6 +2,8 @@ import 'dart:convert';
 import 'dart:io';
 import 'dart:math' as math;
 
+import '../profiling/bin/allocation_trace_config.dart';
+
 Future<void> main(List<String> rawArgs) async {
   final parsed = _ParsedArgs.parse(rawArgs);
   if (parsed.help || parsed.command == null) {
@@ -1692,12 +1694,7 @@ Uint8List remoteClientJs() => base64.decode(_remoteClientJsBase64);
       // --deterministic pins JIT compilation order: otherwise a background
       // allocation-sinking tier can land mid-window at a nondeterministic
       // frame and collapse the measured churn (see bin/alloc_gate.dart).
-      '--deterministic',
-      '--profiler',
-      '--max-profile-depth=2',
-      '--profile-startup',
-      '--enable-vm-service=0',
-      '--disable-service-auth-codes',
+      ...allocationTraceVmFlags,
       'bin/alloc_gate.dart',
       ...args,
     ], workingDirectory: profiling);
@@ -1722,12 +1719,7 @@ Uint8List remoteClientJs() => base64.decode(_remoteClientJsBase64);
     await _run('dart', [
       // Same reason as alloc-gate: without --deterministic a background JIT
       // tier can land mid-window and collapse the measured churn.
-      '--deterministic',
-      '--profiler',
-      '--max-profile-depth=2',
-      '--profile-startup',
-      '--enable-vm-service=0',
-      '--disable-service-auth-codes',
+      ...allocationTraceVmFlags,
       'bin/input_alloc_gate.dart',
       ...args,
     ], workingDirectory: profiling);
@@ -1848,22 +1840,12 @@ Uint8List remoteClientJs() => base64.decode(_remoteClientJsBase64);
       (name: 'image-bench', cmd: ['run', 'bin/image_bench.dart', '--gate']),
       (name: 'bundle-size', cmd: ['run', 'bin/bundle_size_gate.dart', '--gate']),
       (name: 'alloc-gate', cmd: [
-        '--deterministic',
-        '--profiler',
-        '--max-profile-depth=2',
-        '--profile-startup',
-        '--enable-vm-service=0',
-        '--disable-service-auth-codes',
+        ...allocationTraceVmFlags,
         'bin/alloc_gate.dart',
         '--gate',
       ]),
       (name: 'input-alloc-gate', cmd: [
-        '--deterministic',
-        '--profiler',
-        '--max-profile-depth=2',
-        '--profile-startup',
-        '--enable-vm-service=0',
-        '--disable-service-auth-codes',
+        ...allocationTraceVmFlags,
         'bin/input_alloc_gate.dart',
         '--gate',
       ]),

@@ -166,6 +166,13 @@ void main() {
         final fixtureTool = File('${fixture.path}/tool/fleury_dev.dart');
         await fixtureTool.parent.create(recursive: true);
         await File('../../tool/fleury_dev.dart').copy(fixtureTool.path);
+        final fixtureFlags = File(
+          '${fixture.path}/profiling/bin/allocation_trace_config.dart',
+        );
+        await fixtureFlags.parent.create(recursive: true);
+        await File(
+          '../../profiling/bin/allocation_trace_config.dart',
+        ).copy(fixtureFlags.path);
         final result = await Process.run(Platform.resolvedExecutable, <String>[
           fixtureTool.path,
           'check',
