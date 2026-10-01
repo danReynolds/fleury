@@ -71,7 +71,9 @@ final class TerminalSession {
   /// A few launchers look like a job-control shell without being one, such
   /// as fish's `exec app` in a macOS terminal tab, or `docker run --init`.
   /// There this is true, and a suspended app stays stopped until something
-  /// sends it SIGCONT (`kill -CONT <pid>` from another terminal).
+  /// sends its process group SIGCONT: from another terminal,
+  /// `kill -CONT -- -<pid>` with the pid of the process the launcher started,
+  /// which leads the group.
   bool get supportsSuspend =>
       driver is TerminalSuspendDriver &&
       (driver as TerminalSuspendDriver).supportsSuspend;

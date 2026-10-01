@@ -133,8 +133,9 @@ class EntryVisitor extends RecursiveAstVisitor<void> {
   }
 }
 
-/// A docregion block, as offsets into a rendered file.
-typedef Block = ({int start, int end});
+/// A stretch of a rendered file, such as a docregion block or a view, as
+/// offsets.
+typedef Span = ({int start, int end});
 
 class Project {
   final selected = <String, Set<CompilationUnitMember>>{};
@@ -147,7 +148,7 @@ class Project {
   final whole = <String>{};
 
   /// Docregion blocks of the whole files, by file then region name.
-  final regions = <String, Map<String, List<Block>>>{};
+  final regions = <String, Map<String, List<Span>>>{};
 
   void include(String file, Set<String> needed) {
     final nodes = selected.putIfAbsent(file, () => {});
@@ -234,7 +235,7 @@ class Project {
     final marker = RegExp(r'^[ \t]*// #(end)?docregion ([\w-]+)[ \t]*$');
     final formatPragma = RegExp(r'^// dart format width=\d+[ \t]*$');
     final open = <String, int>{};
-    final found = <String, List<Block>>{};
+    final found = <String, List<Span>>{};
     final out = StringBuffer();
     for (final line in const LineSplitter().convert(text)) {
       if (formatPragma.hasMatch(line)) continue;
@@ -452,8 +453,8 @@ List<Map<String, dynamic>> widgetPageViews(
 /// The part of [blocks] a reader edits: from the first line of code to the
 /// end of the last, skipping blocks that only hold import directives. [block]
 /// picks one block instead, for a region whose blocks surround other views.
-Block regionView(String content, List<Block> blocks, int? block, String where) {
-  bool directivesOnly(Block b) => content
+Span regionView(String content, List<Span> blocks, int? block, String where) {
+  bool directivesOnly(Span b) => content
       .substring(b.start, b.end)
       .split('\n')
       .map((line) => line.trim())
@@ -505,7 +506,13 @@ void main() {
   final examples = formattedExamples(root, visitor.entries);
   for (final MapEntry(key: id, value: (views, derived)) in entries.entries) {
     try {
-      out[id] = generate(id, root, visitor, views, examples[id]!);
+      out[id] = generate(
+        id,
+        root,
+        visitor,
+        views,
+        examples[id] ?? (throw StateError('no registry example $id')),
+      );
     } on StateError catch (error) {
       // A derived project that cannot run leaves its page's plain demo.
       if (!derived) rethrow;
@@ -643,7 +650,7 @@ Map<String, Object> generate(
     final file = logical('$repo/${view['source']}');
     final content = files[file]!;
     final where = '${id} view $i (${view['source']})';
-    Block range;
+    Span range;
     if (view['region'] case final String region) {
       final blocks =
           project.regions[file]?[region] ??
@@ -725,20 +732,23 @@ Map<String, Object> generate(
 /// the names it reaches through an object, which an extension may declare
 /// (`shout` in `'hi'.shout()`).
 ///
-/// Names a range declares itself (locals, parameters, pattern variables)
-/// shadow the rest within that range only; fields are members, not locals.
+/// Locals, parameters, and pattern variables shadow the rest only inside the
+/// function or block that declares them; fields are members, not locals.
 /// A named argument's label, a dot shorthand such as `.center`, a cascade
 /// section such as `..start()`, and a doc comment's `[reference]` refer to
 /// nothing a reader has to find.
 class References extends RecursiveAstVisitor<void> {
   References(this.ranges, this.prefixes);
 
-  final List<Block> ranges;
+  final List<Span> ranges;
   final Set<String> prefixes;
 
   final _names = <int, Set<String>>{};
-  final _locals = <int, Set<String>>{};
   final _members = <int, Set<(ClassMember, String)>>{};
+
+  /// The locals declared so far in each enclosing function or block, the
+  /// innermost last.
+  final _scopes = <Set<String>>[];
   final _membersOf = <AstNode, Map<String, ClassMember>>{};
 
   /// Names reached through an object, such as `shout` in `'hi'.shout()`.
@@ -754,17 +764,23 @@ class References extends RecursiveAstVisitor<void> {
   bool inside(AstNode node) => rangeOf(node) != null;
 
   /// The top-level names the ranges refer to.
-  Set<String> get external => {
-    for (final MapEntry(key: i, value: names) in _names.entries)
-      ...names.difference(_locals[i] ?? const {}),
-  };
+  Set<String> get external => {for (final names in _names.values) ...names};
 
   /// The members of enclosing classes the ranges use, with each one's name.
   Set<(ClassMember, String)> get members => {
-    for (final MapEntry(key: i, value: uses) in _members.entries)
-      for (final use in uses)
-        if (!(_locals[i] ?? const {}).contains(use.$2)) use,
+    for (final uses in _members.values) ...uses,
   };
+
+  bool _isLocal(String name) => _scopes.any((scope) => scope.contains(name));
+
+  void _scoped(void Function() visit) {
+    _scopes.add({});
+    try {
+      visit();
+    } finally {
+      _scopes.removeLast();
+    }
+  }
 
   bool _isPrefix(Expression? target) =>
       target is SimpleIdentifier && prefixes.contains(target.name);
@@ -825,6 +841,7 @@ class References extends RecursiveAstVisitor<void> {
             identical(parent?.beginToken.next, node.token)) {
       return;
     }
+    if (_isLocal(node.name)) return;
     if (_member(node, node.name) case final member?) {
       _members.putIfAbsent(range, () => {}).add((member, node.name));
       return;
@@ -850,12 +867,54 @@ class References extends RecursiveAstVisitor<void> {
     super.visitNamedType(node);
   }
 
+  /// Declares a local in the innermost function or block, inside the views
+  /// or not: a view of part of a body still reads the body's locals.
   void _local(Token? name, AstNode node) {
-    final range = rangeOf(node);
-    if (name != null && range != null) {
-      _locals.putIfAbsent(range, () => {}).add(name.lexeme);
-    }
+    if (name != null && _scopes.isNotEmpty) _scopes.last.add(name.lexeme);
   }
+
+  @override
+  void visitBlock(Block node) => _scoped(() => super.visitBlock(node));
+
+  @override
+  void visitFunctionExpression(FunctionExpression node) =>
+      _scoped(() => super.visitFunctionExpression(node));
+
+  @override
+  void visitMethodDeclaration(MethodDeclaration node) =>
+      _scoped(() => super.visitMethodDeclaration(node));
+
+  @override
+  void visitConstructorDeclaration(ConstructorDeclaration node) =>
+      _scoped(() => super.visitConstructorDeclaration(node));
+
+  @override
+  void visitForStatement(ForStatement node) =>
+      _scoped(() => super.visitForStatement(node));
+
+  @override
+  void visitForElement(ForElement node) =>
+      _scoped(() => super.visitForElement(node));
+
+  @override
+  void visitCatchClause(CatchClause node) =>
+      _scoped(() => super.visitCatchClause(node));
+
+  @override
+  void visitSwitchPatternCase(SwitchPatternCase node) =>
+      _scoped(() => super.visitSwitchPatternCase(node));
+
+  @override
+  void visitSwitchExpressionCase(SwitchExpressionCase node) =>
+      _scoped(() => super.visitSwitchExpressionCase(node));
+
+  @override
+  void visitIfStatement(IfStatement node) =>
+      _scoped(() => super.visitIfStatement(node));
+
+  @override
+  void visitIfElement(IfElement node) =>
+      _scoped(() => super.visitIfElement(node));
 
   @override
   void visitVariableDeclaration(VariableDeclaration node) {
@@ -975,9 +1034,14 @@ List<Hidden> hiddenCode(
   final reached = <String>{};
   final hidden = <Hidden>[];
   String? created;
+  // A private name belongs to its file: `_x` in one file is not `_x` in
+  // another. Public names match across files.
+  String key(String file, String name) =>
+      name.startsWith('_') ? '$file#$name' : name;
+  String bare(String key) => key.substring(key.indexOf('#') + 1);
   for (final MapEntry(key: file, value: text) in files.entries) {
     if (file == 'main.dart') continue;
-    final ranges = <Block>[
+    final ranges = <Span>[
       for (final view in views)
         if (view['file'] == file)
           (start: view['start'] as int, end: view['end'] as int),
@@ -986,7 +1050,7 @@ List<Hidden> hiddenCode(
     final prefixes = importPrefixes(unit);
     final references = References(ranges, prefixes);
     unit.accept(references);
-    used.addAll(references.external);
+    used.addAll([for (final name in references.external) key(file, name)]);
     reached.addAll(references.reached);
     for (final (member, name) in references.members) {
       if (references.inside(member)) continue;
@@ -999,7 +1063,7 @@ List<Hidden> hiddenCode(
     }
     for (final node in unit.declarations) {
       for (final name in declared(node)) {
-        declarations[name] = node;
+        declarations[key(file, name)] = node;
       }
       fileOf[node] = file;
       prefixesOf[node] = prefixes;
@@ -1007,13 +1071,13 @@ List<Hidden> hiddenCode(
         extensions[node] = {for (final m in node.members) ...memberNames(m)};
       }
       if (references.inside(node)) {
-        shown.addAll(declared(node));
+        shown.addAll([for (final name in declared(node)) key(file, name)]);
         // A State's view stands for its widget's boilerplate declaration.
         if (node case ClassDeclaration(
           extendsClause: ExtendsClause(:final superclass),
         ) when superclass.name2.lexeme == 'State') {
           for (final type in [...?superclass.typeArguments?.arguments]) {
-            if (type is NamedType) standIns.add(type.name2.lexeme);
+            if (type is NamedType) standIns.add(key(file, type.name2.lexeme));
           }
         }
         continue;
@@ -1030,8 +1094,8 @@ List<Hidden> hiddenCode(
             file: file,
             reason: 'its builder runs `${expression.toSource()}`',
           ));
-        } else {
-          created = createdName(expression, prefixes);
+        } else if (createdName(expression, prefixes) case final name?) {
+          created = key(file, name);
         }
       }
     }
@@ -1046,7 +1110,7 @@ List<Hidden> hiddenCode(
       if (declarations[name] case final node?) name: node,
     for (final MapEntry(key: name, value: node) in declarations.entries)
       if (!shown.contains(name) &&
-          (excused.contains(name) || excused.contains(fileOf[node])))
+          (excused.contains(bare(name)) || excused.contains(fileOf[node])))
         name: node,
   };
   final through = <String, String>{};
@@ -1056,23 +1120,27 @@ List<Hidden> hiddenCode(
     ], prefixesOf[node]!);
     node.accept(references);
     reached.addAll(references.reached);
-    for (final use in references.external) {
-      if (!declared(node).contains(use) && !shown.contains(use)) {
-        through[use] ??= name;
-      }
+    final file = fileOf[node]!;
+    final own = {for (final name in declared(node)) key(file, name)};
+    for (final use in references.external.map((name) => key(file, name))) {
+      if (!own.contains(use) && !shown.contains(use)) through[use] ??= name;
     }
   }
   final found = <String, Hidden>{};
   for (final item in <Hidden>[
     for (final name in used)
       if (declarations.containsKey(name) && !shown.contains(name))
-        (name: name, file: fileFor(name), reason: 'its view uses $name'),
+        (
+          name: bare(name),
+          file: fileFor(name),
+          reason: 'its view uses ${bare(name)}',
+        ),
     for (final MapEntry(key: name, value: via) in through.entries)
       if (declarations.containsKey(name))
         (
-          name: name,
+          name: bare(name),
           file: fileFor(name),
-          reason: '$via uses $name, which no view shows',
+          reason: '${bare(via)} uses ${bare(name)}, which no view shows',
         ),
     for (final MapEntry(key: extension, value: members) in extensions.entries)
       for (final member in members.intersection(reached))
@@ -1085,13 +1153,13 @@ List<Hidden> hiddenCode(
         ),
     if (created case final created? when !shown.contains(created))
       (
-        name: created,
+        name: bare(created),
         file: fileFor(created),
-        reason: 'its builder creates $created, which no view shows',
+        reason: 'its builder creates ${bare(created)}, which no view shows',
       ),
     ...hidden,
   ]) {
-    found.putIfAbsent(item.name, () => item);
+    found.putIfAbsent('${item.file}#${item.name}', () => item);
   }
   return [...found.values];
 }

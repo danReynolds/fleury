@@ -92,6 +92,33 @@ void main() {
     });
   });
 
+  test('the interaction-state legend names every part of an edited style', () {
+    // Editing the style in the guide's Pad updates each row's label, so the
+    // label must name whatever the row is drawn with.
+    expect(
+      describeInteractiveStyleForTest(const CellStyle(background: Colors.blue)),
+      'on blue',
+    );
+    expect(
+      describeInteractiveStyleForTest(
+        const CellStyle(
+          foreground: Colors.green,
+          background: Colors.blue,
+          bold: true,
+        ),
+      ),
+      'green on blue + bold',
+    );
+    expect(
+      describeInteractiveStyleForTest(const CellStyle(underline: true)),
+      'underline',
+    );
+    expect(
+      describeInteractiveStyleForTest(const CellStyle()),
+      'ordinary control paint',
+    );
+  });
+
   testWidgets('interaction-state source and live demo cover the same setup', (
     tester,
   ) {

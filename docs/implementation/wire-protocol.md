@@ -111,7 +111,10 @@ lockstep or to report the skew; on a mismatch the app still answers, then
 fails the session closed. `fleury shell` relays no app output until the answer
 arrives, rejects an answer at another shell version, as the structured
 protocol, or without the terminal input, and reports an app that disconnects
-before answering, as one that cannot decode the shell's INIT does.
+before answering, as one that cannot decode the shell's INIT does. An answer
+the shell cannot decode is a handshake failure too, reported with the same
+remedy: decoding is strict, so a newer app's answer can fail before its
+version is compared.
 
 The app's mode is fixed for the session — `runApp` takes one `TerminalMode`,
 and its native driver never changes it after startup either — so the answer
@@ -148,14 +151,15 @@ frame, so test harnesses can inject either side. "Peer" is `serve` / `shell`;
 1. **One version per protocol.** A peer and the app speak exactly this
    build's version of the protocol the peer declares. The app answers the
    peer's handshake INIT with its own; for any other version it still sends
-   that answer — so
-   the peer can report the skew — and then fails the session closed.
-   First-party peers reject an answer that does not match their own and send
-   nothing but INIT (and, from `fleury shell`, typed input) until it does.
+   that answer, so the peer can report the skew, and then fails the session
+   closed. First-party peers reject an answer that does not match their own
+   and send nothing but INIT (and, from `fleury shell`, typed input) until it
+   does.
 2. **Every encoding change bumps the version.** A new frame type, a new field,
    or a changed cell/enum encoding is a new version of every protocol whose
-   peers would send or accept different bytes because of it. There are no emission gates, no down-shifted shapes for an
-   older peer, and no tolerance for a newer one.
+   peers would send or accept different bytes because of it. There are no
+   emission gates, no down-shifted shapes for an older peer, and no tolerance
+   for a newer one.
 3. **Decoders are strict.** An unknown frame type, an unknown enum value, an
    unknown flag bit, a missing required field, or trailing bytes are a
    protocol error. Every binary frame is fixed-shape: an optional field is a

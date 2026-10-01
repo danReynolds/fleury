@@ -498,6 +498,35 @@ void main() {
       }
     });
 
+    test(
+      'a shell session reads FLEURY_SYNC_OUTPUT from its environment',
+      () async {
+        // A shell peer has no query channel, so synchronized output is on only
+        // when the operator asserts it.
+        for (final (environment, expected) in [
+          (const {'FLEURY_SYNC_OUTPUT': '1'}, true),
+          (const {'FLEURY_SYNC_OUTPUT': '0'}, false),
+          (const <String, String>{}, false),
+        ]) {
+          final transport = _FakeTransport();
+          final driver = RemoteTerminalDriver(
+            transport,
+            environment: environment,
+          );
+          final entering = driver.enter(TerminalMode.interactive);
+          transport.emit(_init(protocol: RemoteWireProtocol.shell));
+          final profile = await entering;
+          expect(
+            (profile.presentation as AnsiTerminalPresentation)
+                .synchronizedOutput,
+            expected,
+            reason: '$environment',
+          );
+          await driver.restore();
+        }
+      },
+    );
+
     test('the answer applies FLEURY_KEYBOARD and a multiplexer to the tier, '
         'as a native session would push it', () async {
       for (final (environment, expected) in [

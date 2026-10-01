@@ -5161,6 +5161,10 @@ const interactions = CellStyle.interactive(
 
 /// Exposed for the guide/source/live parity test.
 CellStyle get interactiveStyleForTest => _interactiveStyle;
+
+/// Exposed so a test can check the legend describes any edited style.
+String describeInteractiveStyleForTest(CellStyle style) =>
+    _InteractiveStyleTour._describe(style);
 String get interactiveStyleSourceForTest => _interactiveStylesSource;
 
 /// Visual legend for the styles carried by one interaction-aware value.
@@ -5178,15 +5182,22 @@ class _InteractiveStyleTour extends StatelessWidget {
     'white',
   ];
 
-  /// [style] in words, such as `green + bold`, so each row's label describes
-  /// the style it is drawn with.
+  /// [color] in words, such as `green` or `bright blue`.
+  static String _colorName(Color color) => color is AnsiColor
+      ? '${color.index < 8 ? '' : 'bright '}${_ansiNames[color.index % 8]}'
+      : '$color';
+
+  /// [style] in words, such as `green on blue + bold`, so each row's label
+  /// describes the style it is drawn with.
   static String _describe(CellStyle style) {
-    final color = style.foreground;
+    final foreground = style.foreground;
+    final background = style.background;
     final parts = [
-      if (color is AnsiColor)
-        '${color.index < 8 ? '' : 'bright '}${_ansiNames[color.index % 8]}'
-      else if (color != null)
-        '$color',
+      if (foreground != null || background != null)
+        [
+          if (foreground != null) _colorName(foreground),
+          if (background != null) 'on ${_colorName(background)}',
+        ].join(' '),
       if (style.inverse) 'inverse',
       if (style.bold) 'bold',
       if (style.dim) 'dim',

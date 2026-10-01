@@ -168,6 +168,52 @@ const _limit = 5;
       );
     });
 
+    test('a local hides a top-level name only inside its own function', () {
+      // One view: `_first` declares a local `_limit`, `_second` reads the
+      // hidden top-level one.
+      expect(
+        hidden(r'''
+const _limit = 5;
+
+«Widget _first() {
+  const _limit = 1;
+  return Text('$_limit');
+}
+
+Widget _second() => Text('$_limit');
+
+Widget example() => Column(children: [_first(), _second()]);»
+'''),
+        {'_limit'},
+      );
+    });
+
+    test(
+      "a shown private name in one file does not stand for another file's",
+      () {
+        final names = generator
+            .hiddenCode(
+              project(
+                r'''
+«const _rows = 3;
+
+Widget example() => Text('${_rows + helperRows}');»
+''',
+                others: {
+                  'examples/helpers.dart': '''
+const _rows = 4;
+
+«const helperRows = _rows;»
+''',
+                },
+              ),
+            )
+            .map((h) => '${h.file} ${h.name}')
+            .toSet();
+        expect(names, {'examples/helpers.dart _rows'});
+      },
+    );
+
     test('a named constructor uses its class', () {
       const demo = '''
 class _Demo extends StatelessWidget {
