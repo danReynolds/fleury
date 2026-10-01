@@ -17,7 +17,8 @@ test. Its shortcut is part of the same declaration; see
 
 Use `KeyBindings` when the behavior is specifically keyboard-shaped: movement
 keys, a multi-key editor gesture, or keys that only mean something in one pane.
-Fleury routes each key through the focused part of the tree, chooses the
+Fleury routes each key through the focused part of the tree (with nothing
+focused, through every `KeyBindings` outside an open dialog), chooses the
 nearest matching binding, and shows its label in shortcut hints.
 
 The keyboard-specific tools are:
@@ -174,7 +175,9 @@ for the complete example.
 Printable input is offered to focused text widgets before it becomes a command.
 That is why a root binding can make `q` quit while a focused `TextInput` still
 types the letter `q`. The field claims the text; only unclaimed input continues
-through the binding chain.
+through the binding chain. One exception: a key that continues a sequence
+already under way completes it, so the `b` of `Ctrl+X b` runs the binding even
+while a field has focus.
 
 Use bindings for commands rather than manually checking characters. You then
 get the expected "`q` quits unless the user is typing" behavior without adding

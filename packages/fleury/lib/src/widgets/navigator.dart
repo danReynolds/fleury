@@ -447,7 +447,8 @@ class NavigatorState extends State<Navigator> {
   /// nothing painted beneath shows through it — a modal is never see-through.
   /// [barrierColor] optionally fills the surround (over the screen behind);
   /// null leaves it composited. [barrierDismissible] (default true) controls
-  /// whether Esc dismisses it. Clicking the surround never dismisses it, and
+  /// whether Esc, the route's semantic dismiss action, and `maybePop` can
+  /// close it; `pop` always can. Clicking the surround never dismisses it, and
   /// the screen behind doesn't receive those clicks.
   ///
   /// Framing (a border, padding, an edge for a sheet) is just widgets — wrap
