@@ -683,3 +683,35 @@ Verified before and after the release:
   took about 10 seconds; later reloads take about a second.
 
 Roll back by routing traffic to `fleury-pad-staging-00015-vuv`.
+
+## Release after the bundled launch package, October 1, 2026
+
+[#291](https://github.com/danReynolds/fleury/pull/291) moved the widget
+catalog and themes into `package:fleury`, and the docs it deployed import
+`package:fleury/themes.dart`. Revision `00017-yoq`, built before it, has no such
+library, so every editable demo's Run failed to compile ("Target of URI doesn't
+exist") until this release. The image built from `a4799837` (after
+[#293](https://github.com/danReynolds/fleury/pull/293); build
+`34da96919c9a9061`, protocol 3, digest
+`sha256:9984561746039a87fbf0dfde31319426228cd38338ab3f3f61a34d8582184c7f`) now
+serves as revision `fleury-pad-staging-00019-roy`, released with the public
+command above.
+
+Verified before and after the release:
+
+- `container_check.py --guides` on the exact image: the API tests, graceful
+  shutdown, reload recovery after a worker failure, and all 129 docs projects
+  compiled, with a cgroup peak of 1.22 GB of 2 GiB. `startup_check.py` passed.
+- `deploy.py` verified the candidate revision through its tag URL before
+  promoting it; the previous serving revision was `fleury-pad-staging-00017-yoq`.
+- From the docs origin: `/api/build` reports the new build anonymously, the
+  preflight and frame policy are unchanged, another origin's compile gets 403,
+  and all 129 projects compiled in 149 seconds.
+- On the published Sparkline page, Run compiled the editable demo and its
+  preview streamed.
+
+The Pages workflow deploys the docs on every merge to `main`, but the compiler
+is released by hand, so a change to the packages' public libraries needs a
+compiler release alongside it. Revision `00017-yoq` predates #291 and cannot
+compile the current docs, so it is no longer a usable rollback target; roll back
+only to a revision built after #291.
