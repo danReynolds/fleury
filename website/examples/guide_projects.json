@@ -414,6 +414,11 @@
   ],
   "navigation.placement": [
     {
+      "label": "app.dart",
+      "source": "website/examples/lib/registry.dart",
+      "declaration": "example"
+    },
+    {
       "label": "dialog_placement.dart",
       "source": "website/examples/lib/registry.dart",
       "declaration": "_DialogPlacementState"
@@ -426,6 +431,11 @@
   ],
   "navigation.guard": [
     {
+      "label": "app.dart",
+      "source": "website/examples/lib/registry.dart",
+      "declaration": "example"
+    },
+    {
       "label": "guarded_editor.dart",
       "source": "website/examples/lib/registry.dart",
       "declaration": "_GuardedEditorState"
@@ -437,6 +447,11 @@
     }
   ],
   "navigation.nested-flow": [
+    {
+      "label": "app.dart",
+      "source": "website/examples/lib/registry.dart",
+      "declaration": "example"
+    },
     {
       "label": "projects_screen.dart",
       "source": "website/examples/lib/registry.dart",

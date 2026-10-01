@@ -2538,12 +2538,7 @@ Text('\${summary.health.name}: \${summary.activeTaskCount} of \${summary.taskCou
     cols: 38,
     rows: 8,
     interactive: true,
-    builder: () => _framed(
-      Navigator(
-        transition: RouteTransition.none,
-        home: const flutter_map.HomeScreen(),
-      ),
-    ),
+    builder: () => _framed(const flutter_map.ProjectsApp()),
   ),
   ExampleInfo(
     id: 'concepts.clock',

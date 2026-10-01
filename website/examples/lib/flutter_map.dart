@@ -141,6 +141,16 @@ class _SelectionMeterState extends State<SelectionMeter> {
 // #enddocregion animation
 
 // #docregion routes
+/// The app's root navigator. `FleuryApp(home: HomeScreen())` creates one for
+/// you; this demo creates it directly.
+class ProjectsApp extends StatelessWidget {
+  const ProjectsApp({super.key});
+
+  @override
+  Widget build(BuildContext context) =>
+      Navigator(transition: RouteTransition.none, home: const HomeScreen());
+}
+
 class HomeScreen extends StatelessWidget {
   const HomeScreen({super.key});
 
