@@ -5,6 +5,8 @@ description: Add keyboard commands, make them discoverable, and build advanced r
 
 import FleuryExample from '../../../components/FleuryExample.astro';
 import GuidePad from '../../../components/GuidePad.astro';
+import SourceExcerpt from '../../../components/SourceExcerpt.astro';
+import keyboardTour from '../../../../examples/doc_snippets/keyboard_tour.dart?raw';
 
 Keyboard support is built into Fleury's widgets. A `ListView` already responds
 to the arrow keys, a `TextInput` already edits text, and buttons already react
@@ -42,13 +44,30 @@ them. The debug shell takes its keys before your bindings see them:
 | Key | What Fleury does | To use it in your app |
 |---|---|---|
 | `Ctrl+C` | In a terminal, ends the app when nothing handles it: `runApp` returns `AppExit.signal(AppSignal.interrupt)`. With text selected, it copies instead. In a browser, it's an ordinary key. | Bind it. A binding that handles it keeps the app running; see [Shutdown and signals](/fleury/guides/shutdown-and-signals/#finish-work-before-closing). |
-| `Ctrl+Z` | In a terminal on macOS or Linux, [suspends the app](/fleury/guides/terminal-modes/#let-another-program-use-the-terminal) when nothing handles it, until `fg` resumes it. A focused text field undoes instead. While the debug panel is expanded over your app, the press skips the hidden app; while its Logs search is open, the search takes it. | Bind it, or turn suspension off with `PosixTerminalDriver(suspendOnCtrlZ: false)`. |
+| `Ctrl+Z` | In a terminal on macOS or Linux, [suspends the app](/fleury/guides/terminal-modes/#let-another-program-use-the-terminal) when nothing handles it, until `fg` resumes it, but only when a job-control shell, such as your interactive shell, started the app. When a terminal profile, a tmux pane, or `ssh -t host app` runs the app directly, nothing could resume it, so the press is an ordinary key ([with a few exceptions](/fleury/guides/terminal-modes/#let-another-program-use-the-terminal)). A focused text field undoes instead. While the debug panel is expanded over your app, the press skips the hidden app; while its Logs search is open, the search takes it. | Bind it, or turn suspension off with `PosixTerminalDriver(suspendOnCtrlZ: false)`. To suspend from another key, such as when a text field always has focus, call the terminal session's `suspend()` from its binding. |
 | `Ctrl+G`, `F12` | Open the [debug shell](/fleury/guides/debugging/#keep-the-debug-shell-out-of-the-reproduction) and its Logs tab whenever debug tooling is on, even with the panel closed. Your bindings never see them. | Turn the debug shell off with `runApp(const MyApp(), debug: const DebugConfig(enabled: false))`. It's already off in compiled builds. |
-| `Tab`, `Shift+Tab`, `←`, `→`, `F11`, `p` | Go to the debug panel while it's open. Some of its tabs take more: `Page Up` and `Page Down` outside Logs, `↑`, `↓`, and `Home` on Tree, and `/`, `s`, and a search in progress on Logs. `F5` restarts when the panel offers it, and `Esc` clears a Logs search or docks an expanded panel. | Close the panel with `Ctrl+G`. |
+| `Tab`, `Shift+Tab`, `←`, `→`, `f`, `F11`, `p` | Go to the debug panel while it's open. Some of its tabs take more: `Page Up` and `Page Down` outside Logs, `↑`, `↓`, and `Home` on Tree, and `/`, `s`, and a search in progress on Logs. `F5` restarts when the panel offers it, and `Esc` clears a Logs search or docks an expanded panel. | Close the panel with `Ctrl+G`. |
+
+A text field that always has focus, like a chat composer's or a REPL prompt's,
+undoes on every Ctrl+Z, so Ctrl+Z never suspends that app. Give it a suspend
+key of its own that calls `suspend()` on the
+[terminal session](/fleury/guides/terminal-modes/#let-another-program-use-the-terminal):
+
+<SourceExcerpt code={keyboardTour} region="suspend-key" />
+
+`suspend()` does exactly what an unhandled Ctrl+Z does, and its future
+completes once `fg` brings the app back. When no job-control shell started
+the app, or under `fleury serve`, `fleury shell`, or Windows, there's no
+shell job to suspend: `supportsSuspend` is false, so the binding stays
+disabled. A few launchers look like a shell's job without being one; see
+[Terminal modes](/fleury/guides/terminal-modes/#let-another-program-use-the-terminal). A browser app has no terminal session at all; code that also runs
+there reads `context.scope<TerminalSession?>()`.
 
 The Ctrl+Z switch belongs to the terminal driver, so you pass the driver
 yourself on macOS and Linux:
-`runApp(app, driver: PosixTerminalDriver(suspendOnCtrlZ: false))`. An app that
+`runApp(app, driver: PosixTerminalDriver(suspendOnCtrlZ: false))`. It turns
+off only the suspension of an unhandled press: `suspend()` still works, so an
+app that binds Ctrl+Z can close what it must and then suspend. An app that
 passes `driver:` replaces the driver `runApp` would have chosen, and gives up
 what came with it: the app no longer attaches to `fleury serve`,
 `fleury shell`, or `fleury_mcp`, stray output isn't captured, and the debug

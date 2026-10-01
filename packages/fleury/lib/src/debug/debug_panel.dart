@@ -1200,10 +1200,18 @@ class _Header extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final restart = controller.hotRestartAvailable ? ' · F5 restart' : '';
-    final hint = controller.mode == DebugMode.fullscreen
-        ? '←→ tabs · Esc dock$restart · Ctrl+G close'
-        : '←→ tabs · F11 expand$restart · Ctrl+G close';
+    // A no-break space keeps each key with its action, so a narrow panel
+    // wraps the hint between items, never inside one.
+    String item(String key, String action) => '$key\u00a0$action';
+    final hint = [
+      item('←→', 'tabs'),
+      if (controller.mode == DebugMode.fullscreen)
+        item('Esc', 'dock')
+      else
+        item('f', 'expand'),
+      if (controller.hotRestartAvailable) item('F5', 'restart'),
+      item('Ctrl+G', 'close'),
+    ].join(' · ');
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [

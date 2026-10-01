@@ -54,7 +54,7 @@ void main() {
           colorMode: ColorMode.truecolor,
           imageProtocol: ImageProtocol.halfBlock,
           tmuxPassthrough: false,
-          protocolVersion: 1,
+          protocol: RemoteWireProtocol.shell,
         ),
       );
       await entering;
@@ -109,7 +109,7 @@ void main() {
           colorMode: ColorMode.truecolor,
           imageProtocol: ImageProtocol.halfBlock,
           tmuxPassthrough: false,
-          protocolVersion: 1,
+          protocol: RemoteWireProtocol.shell,
         ),
       );
 

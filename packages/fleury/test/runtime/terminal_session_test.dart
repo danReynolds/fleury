@@ -8,6 +8,8 @@
 import 'dart:async';
 
 import 'package:fleury/fleury.dart';
+import 'package:fleury/src/remote/remote_driver.dart' show RemoteTerminalDriver;
+import '../remote/remote_test_support.dart' show FakeFrameTransport;
 import '../support/harness.dart';
 import 'package:test/test.dart';
 
@@ -60,6 +62,29 @@ void main() {
       );
       await future.timeout(const Duration(seconds: 2));
       await driver.dispose();
+    }
+  });
+
+  // Only a native POSIX session has job control (its tests are in
+  // test/terminal/posix_driver_suspend_test.dart and
+  // test/runtime/ctrl_z_suspend_test.dart). Everywhere else the same app
+  // code runs, the request is a no-op the app can count on.
+  test('a session without job control never suspends: the request completes '
+      'with false and the session carries on', () async {
+    final fake = FakeTerminalDriver();
+    await fake.enter(TerminalMode.interactive);
+    final served = RemoteTerminalDriver(FakeFrameTransport());
+    try {
+      for (final driver in <TerminalDriver>[fake, served]) {
+        final session = TerminalSession(driver);
+        expect(session.supportsSuspend, isFalse, reason: '$driver');
+        expect(await session.suspend(), isFalse, reason: '$driver');
+      }
+      expect(fake.isActive, isTrue);
+      expect(fake.handoffSuspendCallCount, 0);
+    } finally {
+      await fake.restore();
+      await fake.dispose();
     }
   });
 

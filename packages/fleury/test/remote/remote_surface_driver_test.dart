@@ -74,21 +74,24 @@ SemanticTree _latestSemanticTree(_FakeTransport transport) {
 
 void main() {
   group('RemoteTerminalDriver structured (serve) path', () {
-    test('negotiates the plan path only after a v2 handshake', () async {
-      final transport = _FakeTransport();
-      final driver = RemoteTerminalDriver(transport);
-      // Before INIT the version is unknown (defaults to v1, ANSI).
-      expect(driver.wantsPresentationPlans, isFalse);
-      final entered = driver.enter(TerminalMode.interactive);
-      transport.emit(_init); // current structured protocol
-      final profile = await entered;
-      expect(driver.wantsPresentationPlans, isTrue);
-      expect(profile.presentation, isA<StructuredTerminalPresentation>());
-      expect(profile.surface, driver.surfaceCapabilities);
-      await driver.restore();
-    });
+    test(
+      'negotiates the plan path only after a structured handshake',
+      () async {
+        final transport = _FakeTransport();
+        final driver = RemoteTerminalDriver(transport);
+        // Before INIT no protocol is negotiated, and nothing is planned.
+        expect(driver.wantsPresentationPlans, isFalse);
+        final entered = driver.enter(TerminalMode.interactive);
+        transport.emit(_init); // current structured protocol
+        final profile = await entered;
+        expect(driver.wantsPresentationPlans, isTrue);
+        expect(profile.presentation, isA<StructuredTerminalPresentation>());
+        expect(profile.surface, driver.surfaceCapabilities);
+        await driver.restore();
+      },
+    );
 
-    test('a v1 handshake keeps the ANSI path', () async {
+    test('a shell handshake keeps the ANSI path', () async {
       final transport = _FakeTransport();
       final driver = RemoteTerminalDriver(transport);
       final entered = driver.enter(TerminalMode.interactive);
@@ -98,7 +101,7 @@ void main() {
           colorMode: ColorMode.truecolor,
           imageProtocol: ImageProtocol.halfBlock,
           tmuxPassthrough: false,
-          protocolVersion: 1,
+          protocol: RemoteWireProtocol.shell,
         ),
       );
       final profile = await entered;
@@ -108,7 +111,7 @@ void main() {
       expect(
         transport.sent.whereType<OutputFrame>(),
         isNotEmpty,
-        reason: 'v1 emits ANSI',
+        reason: 'the shell protocol emits ANSI',
       );
       await driver.restore();
     });
@@ -267,14 +270,14 @@ void main() {
         await entered;
         expect(driver.wantsPresentationPlans, isTrue);
 
-        // A buggy/hostile peer sends a v1 INIT after the handshake.
+        // A buggy/hostile peer sends a shell INIT after the handshake.
         transport.emit(
           const InitFrame(
             size: CellSize(40, 10),
             colorMode: ColorMode.truecolor,
             imageProtocol: ImageProtocol.halfBlock,
             tmuxPassthrough: false,
-            protocolVersion: 1,
+            protocol: RemoteWireProtocol.shell,
           ),
         );
         await Future<void>.delayed(Duration.zero);

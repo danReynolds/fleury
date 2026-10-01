@@ -835,6 +835,7 @@ void main() {
       'terminaloutputregion.basic': <String>['dart compile exe', 'dart test'],
       'workflowsnapshot.basic': <String>['Deploy', 'health: active', 'Reset'],
       'toaster.basic': <String>['Raise a toast', 'Save', 'Fail'],
+      'focus.basic': <String>['▸ Intro', 'Outro', 'Playing: nothing'],
     };
     final missing = <String>[];
     for (final entry in checks.entries) {
@@ -1710,6 +1711,58 @@ void main() {
     expect(focusedButton()?.textContent, contains('Publish'));
     expect(fixture.host.textContent, contains('Publish canceled'));
   });
+
+  test(
+    'focus.basic moves between focusable rows and plays the focused one',
+    () async {
+      final fixture = await _mountExample('focus.basic', useManifestSize: true);
+      final keyboardCapture =
+          fixture.host.querySelector('textarea') as web.HTMLTextAreaElement;
+      String painted() =>
+          fixture.host.querySelector('.fleury-screen')?.textContent ?? '';
+
+      Future<void> settle() async {
+        await Future<void>.delayed(Duration.zero);
+        for (var i = 0; i < 4 && fixture.flush.pending; i++) {
+          fixture.flush.fire();
+        }
+        await fixture.app.awaitSemanticIdle();
+      }
+
+      Future<void> press(String key) async {
+        keyboardCapture.dispatchEvent(
+          web.KeyboardEvent(
+            'keydown',
+            web.KeyboardEventInit(
+              key: key,
+              code: key,
+              bubbles: true,
+              cancelable: true,
+            ),
+          ),
+        );
+        await settle();
+      }
+
+      expect(painted(), contains('▸ Intro'));
+      expect(painted(), contains('Playing: nothing'));
+
+      await press('ArrowDown');
+      expect(painted(), contains('▸ Night drive'));
+      expect(painted(), isNot(contains('▸ Intro')));
+
+      // Enter reaches the focused row's own binding.
+      await press('Enter');
+      expect(painted(), contains('Playing: Night drive'));
+
+      // A click focuses the row under the pointer.
+      _tapPaintedText(fixture.host, 'Outro');
+      await settle();
+      expect(painted(), contains('▸ Outro'));
+      await press('Enter');
+      expect(painted(), contains('Playing: Outro'));
+    },
+  );
 
   test('focusnode.programmatic visibly hands focus to its target', () async {
     final fixture = await _mountExample(

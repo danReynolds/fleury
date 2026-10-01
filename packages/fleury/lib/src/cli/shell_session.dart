@@ -6,8 +6,11 @@
 // same primitives: raw input through the native termios controller (no
 // ISIG/ICANON/ECHO/IXON, so Ctrl+C and Ctrl+Z are bytes the app decides
 // about, not signals that stop or kill the shell), the shared screen-mode
-// sequences, and the cancellable native input borrow. When the session ends,
-// for any reason, the terminal is handed back exactly as it was found.
+// sequences, and the cancellable native input borrow. The input the terminal
+// reports — mouse, pastes, focus changes, the keyboard tier — is the app's
+// to choose: its answer to the shell's INIT declares it, and the shell turns
+// exactly that on. When the session ends, for any reason, the terminal is
+// handed back exactly as it was found.
 
 import 'dart:async';
 import 'dart:convert';
@@ -29,9 +32,10 @@ import '../terminal/terminal_driver.dart';
 import '../terminal/terminal_probe.dart';
 import '../terminal/terminal_sequences.dart';
 
-/// The screen modes `fleury shell` enters for an attached app: the full-screen
-/// mode the app's own native driver enters, with the disambiguated keyboard
-/// tier.
+/// The modes `fleury shell` takes its terminal over in, before the app has
+/// said what input it reads: the full-screen mode the app's own native driver
+/// enters, with the disambiguated keyboard tier the shell probes, and no
+/// input reporting yet.
 ///
 /// Flag 2 of that tier is what lets a binding behind the relay fire once per
 /// press rather than once per auto-repeat, as it does in a local session
@@ -39,9 +43,44 @@ import '../terminal/terminal_sequences.dart';
 /// negotiating it takes the transactional fallback only the native driver
 /// runs: a terminal that honours flag 8 without flag 16 sends no text at all.
 /// The INIT declares what the terminal actually confirmed.
+///
+/// Mouse tracking, bracketed paste, and focus reports are the app's to ask
+/// for: they come on once its answer declares them ([shellTerminalModeFor]).
 const TerminalMode shellTerminalMode = TerminalMode.fullScreen(
   keyboardProtocol: KeyboardProtocolMode.disambiguated,
+  bracketedPaste: false,
+  focusReporting: false,
 );
+
+/// The modes the shell's terminal is in for an app that reads [input]: the
+/// shell's screen ([shellTerminalMode]) with the app's mouse tracking,
+/// bracketed paste, and focus reports, and the keyboard tier the shell
+/// negotiated — or no keyboard flags, for an app that reads legacy keys, as
+/// its own native driver would push none.
+TerminalMode shellTerminalModeFor(TerminalInputModes input) =>
+    terminalModeWithInput(
+      shellTerminalMode,
+      TerminalInputModes(
+        mouse: input.mouse,
+        mouseMotion: input.mouseMotion,
+        bracketedPaste: input.bracketedPaste,
+        focusReporting: input.focusReporting,
+        keyboardProtocol: input.keyboardProtocol == KeyboardProtocolMode.legacy
+            ? KeyboardProtocolMode.legacy
+            : shellTerminalMode.keyboardProtocol,
+      ),
+    );
+
+/// What the shell writes to its terminal, held in [shellTerminalMode], once
+/// the attached app declares [input]: the input reporting the app reads, and
+/// for an app that reads legacy keys, the pop of the keyboard flags the shell
+/// pushed to probe with — on the screen it pushed them to (RFC 0020 §8.1).
+String buildShellInputSequences(TerminalInputModes input) {
+  final mode = shellTerminalModeFor(input);
+  final dropKeyboard = shellTerminalMode.kittyKeyboard && !mode.kittyKeyboard;
+  return '${dropKeyboard ? popKittyKeyboardFlags : ''}'
+      '${buildTerminalInputReportingSequences(mode)}';
+}
 
 /// The terminal `fleury shell` draws an attached app in.
 abstract interface class ShellTerminal {
@@ -62,14 +101,22 @@ abstract interface class ShellTerminal {
     required void Function() onGone,
   });
 
+  /// Turns on the input the attached app declared it reads, moving the
+  /// terminal from [shellTerminalMode] to [shellTerminalModeFor] [input] with
+  /// [buildShellInputSequences]. Called once per acquisition, when the app
+  /// answers the handshake; [release] undoes it with the rest. A terminal
+  /// that has gone away reports it through [acquire]'s `onGone` instead of
+  /// throwing.
+  void enterInput(TerminalInputModes input);
+
   /// Writes app output, or a terminal query, to the screen. A terminal that
   /// has gone away reports it through [acquire]'s `onGone` instead of
   /// throwing.
   void write(List<int> bytes);
 
   /// Hands the terminal back exactly as [acquire] found it, undoing whatever
-  /// part of it is still held. Idempotent. Throws the first failure after
-  /// attempting every step.
+  /// part of it is still held, the app's input included. Idempotent. Throws
+  /// the first failure after attempting every step.
   Future<void> release();
 }
 
@@ -93,6 +140,11 @@ final class NativeShellTerminal implements ShellTerminal {
   bool _acquired = false;
   bool _rawModeOwned = false;
   bool _screenOwned = false;
+
+  /// The modes the screen is held in while [_screenOwned]: [shellTerminalMode]
+  /// from [acquire], then the app's ([enterInput]). Release leaves exactly
+  /// these.
+  TerminalMode _mode = shellTerminalMode;
   Future<void> _releaseTail = Future<void>.value();
 
   @override
@@ -133,6 +185,7 @@ final class NativeShellTerminal implements ShellTerminal {
 
     _onGone = terminalGone;
     _screenOwned = true;
+    _mode = shellTerminalMode;
     write(utf8.encode(buildTerminalEnterSequences(shellTerminalMode)));
     final input = _input = PosixInputLease(
       onBytes: onInput,
@@ -140,6 +193,15 @@ final class NativeShellTerminal implements ShellTerminal {
       onError: (_, _) => terminalGone(),
     );
     await input.start();
+  }
+
+  @override
+  void enterInput(TerminalInputModes input) {
+    if (!_screenOwned) return;
+    // Own the obligation before the change, as [acquire] does: whatever part
+    // of the write reaches the terminal, release turns off with the rest.
+    _mode = shellTerminalModeFor(input);
+    write(utf8.encode(buildShellInputSequences(input)));
   }
 
   @override
@@ -161,13 +223,13 @@ final class NativeShellTerminal implements ShellTerminal {
 
   Future<void> _release() async {
     (Object, StackTrace)? failure;
-    // The screen first. Leaving it stops the terminal's focus and paste
-    // reports while the reader still drains them, and pops the keyboard flags
-    // on the screen they were pushed to (RFC 0020 §8.1).
+    // The screen first. Leaving it stops the terminal's mouse, focus and
+    // paste reports while the reader still drains them, and pops the keyboard
+    // flags on the screen they were pushed to (RFC 0020 §8.1).
     if (_screenOwned) {
       _screenOwned = false;
       try {
-        _output.write(buildTerminalExitSequences(shellTerminalMode));
+        _output.write(buildTerminalExitSequences(_mode));
       } catch (error, stack) {
         // A terminal that hung up has no screen left to restore.
         if (!posixDescriptorHungUp(1)) failure ??= (error, stack);
@@ -219,6 +281,13 @@ enum ShellSessionEndReason {
   /// stopped or killed (an IDE's Stop and Restart).
   appDisconnected,
 
+  /// The app never attached: it answered the shell's INIT at another version
+  /// of the shell protocol (it and the shell come from different Fleury
+  /// builds), answered with something else, or disconnected before
+  /// answering. [ShellSessionEnd.error] is a [ShellHandshakeException] that
+  /// says which.
+  handshakeFailed,
+
   /// The shell's terminal went away.
   terminalGone,
 
@@ -235,16 +304,40 @@ final class ShellSessionEnd {
 
   final ShellSessionEndReason reason;
 
-  /// Why the session failed, for [ShellSessionEndReason.failed].
+  /// Why the session failed, for [ShellSessionEndReason.failed] and
+  /// [ShellSessionEndReason.handshakeFailed].
   final Object? error;
 
   /// Why handing the terminal back failed, if it did.
   final Object? restoreError;
 }
 
+/// What an app did instead of answering the shell's INIT at
+/// [shellProtocolVersion], worded to finish "the app could not attach: ".
+final class ShellHandshakeException implements Exception {
+  const ShellHandshakeException(this.message);
+
+  final String message;
+
+  @override
+  String toString() => message;
+}
+
+/// The remedy for a shell and an app from different Fleury builds: the
+/// shell an app's package resolves is the one built with the app's Fleury.
+const String _matchingShell =
+    'run the shell from the app\'s package (`dart run fleury shell`) so both '
+    'use the same Fleury';
+
 /// One attached app: [run] takes the terminal over, relays until the app or
 /// the shell ends the session, then hands the terminal back and closes
 /// [transport].
+///
+/// The app attaches by answering the shell's INIT (shell protocol
+/// [shellProtocolVersion]) with its own, which declares the input it reads;
+/// the shell turns that on in its terminal and only then shows what the app
+/// draws. An app that answers at another version, or not at all, ends the
+/// session as [ShellSessionEndReason.handshakeFailed].
 ///
 /// Every byte typed is forwarded, including Ctrl+C and Ctrl+Z: the app
 /// decides what they mean, as it does in a terminal of its own. Window-size
@@ -269,6 +362,11 @@ final class ShellSession {
   StreamSubscription<Object?>? _resizes;
   Future<ShellSessionEnd>? _run;
 
+  /// Whether the app has answered the shell's INIT at this shell's protocol
+  /// version. Until then nothing it sends reaches the screen: only the
+  /// answer says it speaks this protocol at all.
+  var _attached = false;
+
   /// Runs the session, completing once the terminal is handed back and the
   /// connection closed. Calling it again returns the same run.
   Future<ShellSessionEnd> run() => _run ??= _runSession();
@@ -283,6 +381,13 @@ final class ShellSession {
   void _end(ShellSessionEnd end) {
     if (!_ended.isCompleted) _ended.complete(end);
   }
+
+  void _turnAway(String why) => _end(
+    ShellSessionEnd(
+      ShellSessionEndReason.handshakeFailed,
+      error: ShellHandshakeException(why),
+    ),
+  );
 
   Future<ShellSessionEnd> _runSession() async {
     try {
@@ -358,14 +463,34 @@ final class ShellSession {
       // A socket error is the app going away: Linux resets the connection
       // when a killed app leaves input unread, as an IDE's Stop often does.
       // Anything else (a malformed frame, an overflowing send) is a failure.
-      onError: (Object error) => _end(
-        error is SocketException
-            ? const ShellSessionEnd(ShellSessionEndReason.appDisconnected)
-            : ShellSessionEnd(ShellSessionEndReason.failed, error: error),
-      ),
-      onDone: () =>
-          _end(const ShellSessionEnd(ShellSessionEndReason.appDisconnected)),
+      onError: (Object error) => switch (error) {
+        SocketException() => _appGone(),
+        // An answer this shell cannot decode most likely comes from another
+        // Fleury build: decoding is strict, so a newer app's INIT can fail
+        // here before its version is ever compared.
+        RemoteProtocolException(:final message) when !_attached => _turnAway(
+          'its answer to the shell\'s handshake could not be read '
+          '($message). If it was built with another Fleury than this shell, '
+          '$_matchingShell',
+        ),
+        _ => _end(ShellSessionEnd(ShellSessionEndReason.failed, error: error)),
+      },
+      onDone: _appGone,
       cancelOnError: true,
+    );
+  }
+
+  /// The app's connection closed without a goodbye.
+  void _appGone() {
+    if (_attached) {
+      _end(const ShellSessionEnd(ShellSessionEndReason.appDisconnected));
+      return;
+    }
+    // An app that cannot decode this shell's INIT, such as one from another
+    // Fleury build, rejects it and hangs up without a word.
+    _turnAway(
+      'it disconnected before answering the shell\'s handshake. If it was '
+      'built with another Fleury than this shell, $_matchingShell',
     );
   }
 
@@ -385,6 +510,10 @@ final class ShellSession {
 
   void _onFrame(RemoteFrame frame) {
     if (_ended.isCompleted) return;
+    if (!_attached) {
+      _onHandshake(frame);
+      return;
+    }
     switch (frame) {
       case OutputFrame(:final bytes):
         try {
@@ -398,6 +527,41 @@ final class ShellSession {
         // Every other frame type flows the other way, or belongs to a
         // structured peer. A malformed app must not crash the shell.
         break;
+    }
+  }
+
+  /// The app's first frame: its answer to the shell's INIT, or a goodbye.
+  /// Anything else means it does not speak this shell's protocol, and is
+  /// turned away before any of it reaches the screen.
+  void _onHandshake(RemoteFrame frame) {
+    switch (frame) {
+      case InitFrame(protocol: RemoteWireProtocol.structured):
+        _turnAway(
+          'it answered with the structured wire protocol '
+          '(v${frame.protocolVersion}), not the `fleury shell` protocol',
+        );
+      case InitFrame(:final protocolVersion)
+          when protocolVersion != shellProtocolVersion:
+        _turnAway(
+          'it speaks shell protocol v$protocolVersion, and this shell speaks '
+          'v$shellProtocolVersion. To match them, $_matchingShell',
+        );
+      case InitFrame(:final terminalInput?):
+        _attached = true;
+        try {
+          _terminal.enterInput(terminalInput);
+        } catch (error) {
+          _end(ShellSessionEnd(ShellSessionEndReason.failed, error: error));
+        }
+      case InitFrame():
+        _turnAway('its answer declared no terminal input');
+      case ByeFrame():
+        _end(const ShellSessionEnd(ShellSessionEndReason.appExited));
+      default:
+        _turnAway(
+          'it sent ${frame.runtimeType} before answering the shell\'s '
+          'handshake',
+        );
     }
   }
 }

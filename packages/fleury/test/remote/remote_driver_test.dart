@@ -10,8 +10,6 @@ import 'dart:typed_data';
 
 import 'package:fleury/fleury.dart';
 import 'package:fleury/fleury_wire.dart';
-import 'package:fleury/src/remote/remote_protocol.dart'
-    show remoteAnsiProtocolVersion;
 import 'package:fleury/src/remote/remote_driver.dart';
 import 'package:test/test.dart';
 
@@ -44,6 +42,22 @@ class _FakeTransport
     if (!_in.isClosed) await _in.close();
   }
 }
+
+/// A peer's INIT: the structured protocol at this build's version unless
+/// told otherwise.
+InitFrame _init({
+  RemoteWireProtocol protocol = RemoteWireProtocol.structured,
+  int? protocolVersion,
+  KeyboardCapabilities? keyboard,
+}) => InitFrame(
+  size: const CellSize(80, 24),
+  colorMode: ColorMode.truecolor,
+  imageProtocol: ImageProtocol.halfBlock,
+  tmuxPassthrough: false,
+  keyboard: keyboard,
+  protocol: protocol,
+  protocolVersion: protocolVersion,
+);
 
 void main() {
   group('RemoteTerminalDriver', () {
@@ -179,7 +193,7 @@ void main() {
             glyphTier: GlyphTier.ascii,
             imageProtocol: ImageProtocol.kitty,
             tmuxPassthrough: false,
-            protocolVersion: 1,
+            protocol: RemoteWireProtocol.shell,
           ),
         );
         await entering;
@@ -206,7 +220,7 @@ void main() {
           colorMode: ColorMode.truecolor,
           imageProtocol: ImageProtocol.kitty,
           tmuxPassthrough: true,
-          protocolVersion: 1,
+          protocol: RemoteWireProtocol.shell,
         ),
       );
       await entering;
@@ -231,7 +245,7 @@ void main() {
           colorMode: ColorMode.truecolor,
           imageProtocol: ImageProtocol.halfBlock,
           tmuxPassthrough: false,
-          protocolVersion: 1,
+          protocol: RemoteWireProtocol.shell,
         ),
       );
       await entering;
@@ -269,7 +283,7 @@ void main() {
             colorMode: ColorMode.truecolor,
             imageProtocol: ImageProtocol.halfBlock,
             tmuxPassthrough: false,
-            protocolVersion: 1,
+            protocol: RemoteWireProtocol.shell,
           ),
         );
         await entering;
@@ -302,7 +316,7 @@ void main() {
             colorMode: ColorMode.truecolor,
             imageProtocol: ImageProtocol.halfBlock,
             tmuxPassthrough: false,
-            protocolVersion: 1,
+            protocol: RemoteWireProtocol.shell,
           ),
         );
         await entering;
@@ -352,6 +366,7 @@ void main() {
       'a structured peer at any other protocol version fails closed',
       () async {
         for (final version in [
+          1,
           2,
           remoteProtocolVersion - 1,
           remoteProtocolVersion + 1,
@@ -359,15 +374,7 @@ void main() {
           final transport = _FakeTransport();
           final driver = RemoteTerminalDriver(transport);
           final entering = driver.enter(TerminalMode.interactive);
-          transport.emit(
-            InitFrame(
-              size: const CellSize(80, 24),
-              colorMode: ColorMode.truecolor,
-              imageProtocol: ImageProtocol.halfBlock,
-              tmuxPassthrough: false,
-              protocolVersion: version,
-            ),
-          );
+          transport.emit(_init(protocolVersion: version));
 
           await expectLater(
             entering,
@@ -380,11 +387,9 @@ void main() {
           );
           // The app still answers with its own version first, so the peer can
           // report the skew instead of seeing a bare disconnect.
-          expect(
-            transport.sent.whereType<InitFrame>().single.protocolVersion,
-            remoteProtocolVersion,
-            reason: 'peer v$version',
-          );
+          final answer = transport.sent.whereType<InitFrame>().single;
+          expect(answer.protocol, RemoteWireProtocol.structured);
+          expect(answer.protocolVersion, remoteProtocolVersion);
           expect(transport.sent.whereType<PlanFrame>(), isEmpty);
           expect(driver.wantsPresentationPlans, isFalse);
           await driver.restore();
@@ -392,42 +397,240 @@ void main() {
       },
     );
 
+    test('a shell peer at any other shell protocol version fails closed, after '
+        'an answer that names this app\'s version', () async {
+      for (final version in [
+        shellProtocolVersion - 1,
+        shellProtocolVersion + 1,
+      ]) {
+        final transport = _FakeTransport();
+        final driver = RemoteTerminalDriver(transport);
+        final entering = driver.enter(TerminalMode.interactive);
+        transport.emit(
+          _init(protocol: RemoteWireProtocol.shell, protocolVersion: version),
+        );
+
+        await expectLater(
+          entering,
+          throwsA(
+            isA<RemoteProtocolException>()
+                .having((e) => e.recoverable, 'recoverable', isFalse)
+                .having(
+                  (e) => e.message,
+                  'message',
+                  allOf(
+                    contains('shell protocol v$version'),
+                    contains('app speaks v$shellProtocolVersion'),
+                    contains('dart run fleury shell'),
+                  ),
+                ),
+          ),
+          reason: 'shell v$version',
+        );
+        final answer = transport.sent.whereType<InitFrame>().single;
+        expect(answer.protocol, RemoteWireProtocol.shell);
+        expect(answer.protocolVersion, shellProtocolVersion);
+        expect(transport.sent.whereType<OutputFrame>(), isEmpty);
+        await driver.restore();
+      }
+    });
+
+    test('a shell peer and a structured peer at this build\'s versions are '
+        'accepted, and each is answered in its own protocol', () async {
+      for (final (protocol, structured) in [
+        (RemoteWireProtocol.shell, false),
+        (RemoteWireProtocol.structured, true),
+      ]) {
+        final transport = _FakeTransport();
+        final driver = RemoteTerminalDriver(transport);
+        final entering = driver.enter(TerminalMode.interactive);
+        transport.emit(_init(protocol: protocol));
+        await entering;
+
+        expect(driver.wantsPresentationPlans, structured, reason: '$protocol');
+        final answer = transport.sent.whereType<InitFrame>().single;
+        expect(answer.protocol, protocol);
+        expect(answer.protocolVersion, protocol.version);
+        // Only a shell has a terminal to set up for the app.
+        expect(
+          answer.terminalInput,
+          structured ? isNull : isNotNull,
+          reason: '$protocol',
+        );
+        expect(
+          transport.sent.first,
+          same(answer),
+          reason: 'the answer precedes everything else the app sends',
+        );
+        await driver.restore();
+      }
+    });
+
+    test('the answer to a shell declares the input half of the mode', () async {
+      for (final mode in const [
+        TerminalMode(mouse: true),
+        TerminalMode(mouseMotion: true),
+        TerminalMode(
+          bracketedPaste: false,
+          focusReporting: false,
+          keyboardProtocol: KeyboardProtocolMode.disambiguated,
+        ),
+        TerminalMode.inline(rows: 6, mouse: true),
+        TerminalMode.interactive,
+      ]) {
+        final transport = _FakeTransport();
+        // An empty environment: no FLEURY_KEYBOARD or multiplexer from the
+        // shell running the tests changes the tier.
+        final driver = RemoteTerminalDriver(transport, environment: const {});
+        final entering = driver.enter(mode);
+        transport.emit(_init(protocol: RemoteWireProtocol.shell));
+        await entering;
+
+        final answer = transport.sent.whereType<InitFrame>().single;
+        expect(answer.terminalInput, TerminalInputModes.of(mode));
+        // And it survives the wire.
+        final decoded =
+            (FrameDecoder()..feed(encodeFrame(answer))).drain().single
+                as InitFrame;
+        expect(decoded.protocol, RemoteWireProtocol.shell);
+        expect(decoded.terminalInput, TerminalInputModes.of(mode));
+        await driver.restore();
+      }
+    });
+
     test(
-      'the ANSI host and the exact structured version are accepted',
+      'a shell session reads FLEURY_SYNC_OUTPUT from its environment',
       () async {
-        for (final (version, structured) in [
-          (remoteAnsiProtocolVersion, false),
-          (remoteProtocolVersion, true),
+        // A shell peer has no query channel, so synchronized output is on only
+        // when the operator asserts it.
+        for (final (environment, expected) in [
+          (const {'FLEURY_SYNC_OUTPUT': '1'}, true),
+          (const {'FLEURY_SYNC_OUTPUT': '0'}, false),
+          (const <String, String>{}, false),
         ]) {
           final transport = _FakeTransport();
-          final driver = RemoteTerminalDriver(transport);
+          final driver = RemoteTerminalDriver(
+            transport,
+            environment: environment,
+          );
           final entering = driver.enter(TerminalMode.interactive);
-          transport.emit(
-            InitFrame(
-              size: const CellSize(80, 24),
-              colorMode: ColorMode.truecolor,
-              imageProtocol: ImageProtocol.halfBlock,
-              tmuxPassthrough: false,
-              protocolVersion: version,
-            ),
-          );
-          await entering;
-
+          transport.emit(_init(protocol: RemoteWireProtocol.shell));
+          final profile = await entering;
           expect(
-            driver.wantsPresentationPlans,
-            structured,
-            reason: 'v$version',
-          );
-          // Only a structured peer is echoed; the ANSI host takes no echo.
-          expect(
-            transport.sent.whereType<InitFrame>().length,
-            structured ? 1 : 0,
-            reason: 'v$version',
+            (profile.presentation as AnsiTerminalPresentation)
+                .synchronizedOutput,
+            expected,
+            reason: '$environment',
           );
           await driver.restore();
         }
       },
     );
+
+    test('the answer applies FLEURY_KEYBOARD and a multiplexer to the tier, '
+        'as a native session would push it', () async {
+      for (final (environment, expected) in [
+        (const {'FLEURY_KEYBOARD': 'legacy'}, KeyboardProtocolMode.legacy),
+        (
+          const {'TMUX': '/tmp/tmux-501/default,1,0'},
+          KeyboardProtocolMode.disambiguated,
+        ),
+        (const <String, String>{}, KeyboardProtocolMode.lifecycle),
+      ]) {
+        final transport = _FakeTransport();
+        final driver = RemoteTerminalDriver(
+          transport,
+          environment: environment,
+        );
+        final entering = driver.enter(
+          const TerminalMode(keyboardProtocol: KeyboardProtocolMode.lifecycle),
+        );
+        transport.emit(_init(protocol: RemoteWireProtocol.shell));
+        await entering;
+        expect(
+          transport.sent
+              .whereType<InitFrame>()
+              .single
+              .terminalInput
+              ?.keyboardProtocol,
+          expected,
+          reason: '$environment',
+        );
+        await driver.restore();
+      }
+    });
+
+    test(
+      'an app that reads legacy keys claims no keyboard over a shell, because '
+      'the shell drops the flags it probed',
+      () async {
+        for (final (tier, expected) in [
+          (KeyboardProtocolMode.legacy, KeyboardCapabilities.legacy),
+          (
+            KeyboardProtocolMode.disambiguated,
+            const KeyboardCapabilities(distinguishesRepeats: true),
+          ),
+          (
+            KeyboardProtocolMode.lifecycle,
+            const KeyboardCapabilities(distinguishesRepeats: true),
+          ),
+        ]) {
+          final transport = _FakeTransport();
+          final driver = RemoteTerminalDriver(transport, environment: const {});
+          final entering = driver.enter(TerminalMode(keyboardProtocol: tier));
+          transport.emit(
+            _init(
+              protocol: RemoteWireProtocol.shell,
+              keyboard: const KeyboardCapabilities(distinguishesRepeats: true),
+            ),
+          );
+          final profile = await entering;
+          expect(profile.keyboard, expected, reason: '$tier');
+          expect(
+            transport.sent
+                .whereType<InitFrame>()
+                .single
+                .terminalInput
+                ?.keyboardProtocol,
+            tier,
+          );
+          await driver.restore();
+        }
+      },
+    );
+
+    test('SGR mouse reports relayed by a shell become mouse events', () async {
+      final transport = _FakeTransport();
+      final driver = RemoteTerminalDriver(transport);
+      final events = <TuiEvent>[];
+      final eventSub = driver.events.listen(events.add);
+      final entering = driver.enter(const TerminalMode(mouseMotion: true));
+      transport.emit(_init(protocol: RemoteWireProtocol.shell));
+      await entering;
+
+      // What a terminal with 1000/1002/1003 + 1006 on sends: a left press and
+      // release at column 5, row 3, then bare motion one cell right.
+      transport.emit(
+        InputFrame(
+          Uint8List.fromList('\x1B[<0;5;3M\x1B[<0;5;3m\x1B[<35;6;3M'.codeUnits),
+        ),
+      );
+      await Future<void>.delayed(Duration.zero);
+
+      expect(
+        events
+            .whereType<MouseEvent>()
+            .map((e) => (e.kind, e.button, e.col, e.row))
+            .toList(),
+        [
+          (MouseEventKind.down, MouseButton.left, 4, 2),
+          (MouseEventKind.up, MouseButton.left, 4, 2),
+          (MouseEventKind.moved, MouseButton.none, 5, 2),
+        ],
+      );
+      await eventSub.cancel();
+      await driver.restore();
+    });
 
     test(
       'remote grid clamping enforces the total cell allocation budget',
@@ -471,7 +674,7 @@ void main() {
           colorMode: ColorMode.truecolor,
           imageProtocol: ImageProtocol.halfBlock,
           tmuxPassthrough: false,
-          protocolVersion: 1,
+          protocol: RemoteWireProtocol.shell,
         ),
       );
       await entering;
@@ -497,14 +700,13 @@ void main() {
           colorMode: ColorMode.truecolor,
           imageProtocol: ImageProtocol.halfBlock,
           tmuxPassthrough: false,
-          protocolVersion: 1,
+          protocol: RemoteWireProtocol.shell,
         ),
       );
       await entering;
 
       driver.write('héllo ★');
-      // Skip the INIT response (the driver never sends one) — only
-      // OUTPUTs go on the wire from the app side.
+      // Past the app's INIT answer, only OUTPUTs go on the wire.
       final outputs = transport.sent.whereType<OutputFrame>().toList();
       expect(outputs, hasLength(1));
       expect(
@@ -532,7 +734,7 @@ void main() {
           colorMode: ColorMode.truecolor,
           imageProtocol: ImageProtocol.halfBlock,
           tmuxPassthrough: false,
-          protocolVersion: 1,
+          protocol: RemoteWireProtocol.shell,
         ),
       );
       await entering;
@@ -691,7 +893,7 @@ void main() {
           colorMode: ColorMode.truecolor,
           imageProtocol: ImageProtocol.halfBlock,
           tmuxPassthrough: false,
-          protocolVersion: 1,
+          protocol: RemoteWireProtocol.shell,
         ),
       );
       await entering;

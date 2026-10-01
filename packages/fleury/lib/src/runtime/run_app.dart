@@ -339,9 +339,12 @@ const _semanticActionQueueHold = Duration(milliseconds: 500);
 /// bindings first; if unhandled it exits before [onEvent] with an interrupt.
 /// Ctrl+Z follows the same rule in a native POSIX terminal: a focused text
 /// field undoes, an app binding fires, and only a press nothing handled
-/// suspends (before [onEvent]). It stops the whole job the shell started —
-/// with the hot-reload supervisor of a plain `dart run`, or the `fleury run`
-/// launcher, that runs the app — until the shell's `fg`. While the debug
+/// suspends (before [onEvent]) — when a job-control shell started the app.
+/// It stops the whole job the shell started — with the hot-reload supervisor
+/// of a plain `dart run`, or the `fleury run` launcher, that runs the app —
+/// until the shell's `fg`. Started without one (a terminal emulator, a tmux
+/// pane, or `ssh -t host app` running the app directly), the press is an
+/// ordinary key: nothing could bring a stopped app back. While the debug
 /// shell is expanded over the app, the press skips the hidden app. See
 /// [PosixTerminalDriver.suspendOnCtrlZ].
 ///
@@ -932,11 +935,12 @@ Future<AppExit> _runAppImpl(
       // Ctrl+Z suspends by the same rule: only a press the app did not
       // handle. A focused text field's undo or an app binding claims the
       // chord; one nothing claims becomes the terminal's job control. Only a
-      // driver that owns an orderly suspend starts one (native POSIX, see
-      // PosixTerminalDriver.suspendOnCtrlZ); on every other surface — the
-      // browser, a served or remote session, Windows — the chord stays an
-      // ordinary key and continues below. The exact chord: Ctrl+Shift+Z is
-      // redo wherever a terminal can tell them apart.
+      // driver that owns an orderly suspend starts one (native POSIX, in a
+      // job a job-control shell started; see
+      // PosixTerminalDriver.suspendOnCtrlZ); everywhere else — the browser, a
+      // served or remote session, Windows, an app no shell started — the
+      // chord stays an ordinary key and continues below. The exact chord:
+      // Ctrl+Shift+Z is redo wherever a terminal can tell them apart.
       if (event is KeyEvent &&
           event.type == KeyEventType.down &&
           isCtrlZChord(event) &&

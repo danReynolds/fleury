@@ -2,7 +2,8 @@
 // the restoration hygiene that keeps a pushed mode from leaking.
 
 import 'package:fleury/fleury.dart';
-import 'package:fleury/src/terminal/posix_driver.dart';
+import 'package:fleury/src/terminal/terminal_driver.dart'
+    show resolveKeyboardTier;
 import 'package:fleury/src/terminal/terminal_probe.dart';
 import 'package:fleury/src/terminal/terminal_sequences.dart';
 import 'package:test/test.dart';

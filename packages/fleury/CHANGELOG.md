@@ -7,6 +7,10 @@
 
 - Community presets are available from `package:fleury/themes.dart`. Widget authors can use the supported, browser-safe `fleury_widget_support.dart` contracts to build their own controls.
 
+- **The debug panel expands with `f` as well as F11.** VS Code's integrated
+  terminal, Windows Terminal, GNOME Terminal, and macOS often take F11 before
+  the app sees it. While the panel is open, `f` expands or docks it.
+
 - **`FocusDetector` nests like CSS `:focus-within`.** Every detector around
   the focused widget reports focus, not only the nearest one. A `Panel` now
   accents while focus is inside a `LogRegion`, `DataTable`, or another widget
@@ -46,16 +50,44 @@
   either, the app stopped alone and the shell never got the terminal back.
   While the debug shell is expanded over the app, Ctrl+Z skips the hidden
   app; its open Logs search takes the key.
+  Ctrl+Z suspends only when a job-control shell started the app, since only
+  the shell's `fg` can bring it back. Run directly by a terminal profile, a
+  tmux pane, or `ssh -t host app`, the app used to stop for good, leaving the
+  window frozen; the press is now an ordinary key there. A few launchers
+  still look like a shell's job without being one, such as fish's
+  `exec app` in a macOS terminal tab or `docker run --init`; there a
+  suspended app stays stopped until it gets SIGCONT.
   `PosixTerminalDriver(suspendOnCtrlZ: false)` keeps an unhandled Ctrl+Z an
   ordinary key. Browser, served, and `fleury shell` sessions never suspend.
 
-- **`fleury shell` relays every key.** The shell now puts its terminal in the
-  same raw mode a native app uses, so Ctrl+C, Ctrl+Z, Ctrl+\\ and Ctrl+S reach
-  the attached app instead of signaling the shell. It restores the terminal
-  exactly on every exit path (the app exits or is killed, SIGINT, SIGTERM,
-  SIGHUP, or a hangup, which now exits 129), keeps serving later runs until
-  you press Ctrl+C with no app attached, and discards keys typed while no app
-  was attached.
+- **`TerminalSession.suspend()` suspends on the app's request.** An app whose
+  text field always has focus, such as a chat composer, undoes on every
+  Ctrl+Z, so it had no keyboard route to the shell. Read the session in
+  `build` with `context.scope<TerminalSession>()` and bind another key to its
+  `suspend()`: it suspends exactly as an unhandled Ctrl+Z does, stopping the
+  whole job until `fg`, and its future
+  completes with `true` once the app is back. `supportsSuspend` says whether
+  the session can: a native macOS or Linux terminal that a job-control shell
+  started. Without one, under `fleury serve` and `fleury shell`, and on
+  Windows, `suspend()` completes with `false` and leaves the terminal alone.
+  `suspendOnCtrlZ: false` turns off only the unhandled press, so an app that
+  takes Ctrl+Z itself can close sensitive state and then suspend.
+
+- **`fleury shell` relays every key, and the mouse.** The shell now puts its
+  terminal in the same raw mode a native app uses, so Ctrl+C, Ctrl+Z, Ctrl+\\
+  and Ctrl+S reach the attached app instead of signaling the shell. The app's
+  `TerminalMode` now takes effect in the shell's terminal too: `mouse: true`
+  brings clicks, drags, and the wheel (the `fleury create` counter's button
+  can be clicked), `mouseMotion: true` adds hover, and bracketed paste, focus
+  reports, and a legacy keyboard tier follow the app's choice, where the shell
+  used to force paste and focus on and never turn the mouse on. The shell
+  restores the terminal exactly on every exit path (the app exits or is
+  killed, SIGINT, SIGTERM, SIGHUP, or a hangup, which now exits 129), keeps
+  serving later runs until you press Ctrl+C with no app attached, and discards
+  keys typed while no app was attached. It speaks a wire protocol of its own
+  now, versioned apart from the browser's: an app and a shell that speak
+  different versions of it are turned away with the reason, and
+  `dart run fleury shell` in the app's package runs the matching shell.
 
 - **Key sequences work in dialogs, and Esc aborts them cleanly.** A
   multi-key sequence bound inside a `KeyBindings(modal: true)` scope, such as
@@ -538,7 +570,8 @@
   masked mouse selection does not disclose word boundaries.
 - **Application-owned suspension.** `PosixTerminalDriver(suspendOnCtrlZ: false)`
   turns off the suspend fallback, so an unhandled Ctrl+Z is only a key (every
-  session delivers Ctrl+Z to the application first). Raw startup fails if
+  session delivers Ctrl+Z to the application first); the application suspends
+  when it chooses with `TerminalSession.suspend()`. Raw startup fails if
   native termios is unavailable, rather than silently restoring kernel-owned
   suspension.
   Terminal restoration uses an owned close-on-exec descriptor even after

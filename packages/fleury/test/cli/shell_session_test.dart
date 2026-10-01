@@ -7,7 +7,8 @@ import 'dart:convert';
 import 'dart:io' show SocketException;
 import 'dart:typed_data';
 
-import 'package:fleury/fleury.dart' show CellSize;
+import 'package:fleury/fleury.dart'
+    show CellSize, ColorMode, ImageProtocol, KeyboardProtocolMode, TerminalMode;
 import 'package:fleury/fleury_wire.dart';
 import 'package:fleury/src/cli/shell_session.dart';
 import 'package:test/test.dart';
@@ -16,6 +17,31 @@ import '../remote/remote_test_support.dart';
 
 /// No keyboard probe: tests that do not exercise it start immediately.
 const _noProbe = <String, String>{'FLEURY_KEYBOARD_PROBE': '0'};
+
+/// What the scaffold `fleury create` writes asks for: clicks, not hover.
+const _mouseApp = TerminalInputModes(
+  mouse: true,
+  mouseMotion: false,
+  bracketedPaste: true,
+  focusReporting: true,
+  keyboardProtocol: KeyboardProtocolMode.lifecycle,
+);
+
+/// An app's answer to the shell's INIT: this build's shell protocol, and the
+/// input the app reads, unless told otherwise.
+InitFrame _answer({
+  RemoteWireProtocol protocol = RemoteWireProtocol.shell,
+  int? version,
+  TerminalInputModes? input = _mouseApp,
+}) => InitFrame(
+  size: const CellSize(80, 24),
+  colorMode: ColorMode.truecolor,
+  imageProtocol: ImageProtocol.halfBlock,
+  tmuxPassthrough: false,
+  protocol: protocol,
+  protocolVersion: version,
+  terminalInput: input,
+);
 
 void main() {
   test('relays every byte typed, signal keys included, after INIT', () async {
@@ -57,6 +83,7 @@ void main() {
     ).run();
     await pumpEventQueue();
 
+    transport.emit(_answer());
     transport.emit(OutputFrame(Uint8List.fromList(utf8.encode('frame'))));
     await pumpEventQueue();
     expect(terminal.output, 'frame');
@@ -120,12 +147,14 @@ void main() {
       environment: _noProbe,
     ).run();
     await pumpEventQueue();
+    transport.emit(_answer());
+    await pumpEventQueue();
 
     await transport.disconnect();
     final end = await run;
 
     expect(end.reason, ShellSessionEndReason.appDisconnected);
-    expect(terminal.log, ['acquire', 'release']);
+    expect(terminal.log, ['acquire', 'input', 'release']);
   });
 
   test('a reset connection is the app disconnecting, not a failure', () async {
@@ -140,15 +169,17 @@ void main() {
       environment: _noProbe,
     ).run();
     await pumpEventQueue();
+    transport.emit(_answer());
+    await pumpEventQueue();
 
     transport.fail(const SocketException('Connection reset by peer'));
     final end = await run;
 
     expect(end.reason, ShellSessionEndReason.appDisconnected);
-    expect(terminal.log, ['acquire', 'release']);
+    expect(terminal.log, ['acquire', 'input', 'release']);
   });
 
-  test('a protocol error from the app fails the session', () async {
+  test('a protocol error from an attached app fails the session', () async {
     final terminal = _FakeTerminal();
     final transport = _ErroringTransport();
     final run = ShellSession(
@@ -157,6 +188,10 @@ void main() {
       resizes: const Stream<Object?>.empty(),
       environment: _noProbe,
     ).run();
+    await pumpEventQueue();
+    // Before the answer, the same error is a handshake failure (see the
+    // handshake group).
+    transport.emit(_answer());
     await pumpEventQueue();
 
     transport.fail(const RemoteProtocolException('unknown frame type 0x7f'));
@@ -270,11 +305,294 @@ void main() {
     transport.emit(const ByeFrame());
     await run;
   });
+
+  group('the handshake', () {
+    test('the shell declares its own protocol, and the app\'s answer turns on '
+        'the input it reads before anything it draws is shown', () async {
+      final terminal = _FakeTerminal();
+      final transport = FakeFrameTransport();
+      final run = ShellSession(
+        transport,
+        terminal: terminal,
+        resizes: const Stream<Object?>.empty(),
+        environment: _noProbe,
+      ).run();
+      await pumpEventQueue();
+
+      final init = transport.sent.first as InitFrame;
+      expect(init.protocol, RemoteWireProtocol.shell);
+      expect(init.protocolVersion, shellProtocolVersion);
+
+      transport.emit(_answer());
+      transport.emit(OutputFrame(Uint8List.fromList(utf8.encode('frame'))));
+      await pumpEventQueue();
+      expect(terminal.input, _mouseApp);
+      expect(terminal.log, ['acquire', 'input', 'output']);
+
+      transport.emit(const ByeFrame());
+      expect((await run).reason, ShellSessionEndReason.appExited);
+      expect(terminal.log, ['acquire', 'input', 'output', 'release']);
+    });
+
+    test('an app at another shell protocol version is turned away, both '
+        'versions named, and nothing it sends is shown', () async {
+      for (final version in [
+        shellProtocolVersion - 1,
+        shellProtocolVersion + 1,
+      ]) {
+        final terminal = _FakeTerminal();
+        final transport = FakeFrameTransport();
+        final run = ShellSession(
+          transport,
+          terminal: terminal,
+          resizes: const Stream<Object?>.empty(),
+          environment: _noProbe,
+        ).run();
+        await pumpEventQueue();
+
+        transport.emit(_answer(version: version));
+        transport.emit(OutputFrame(Uint8List.fromList(utf8.encode('frame'))));
+        final end = await run;
+
+        expect(end.reason, ShellSessionEndReason.handshakeFailed);
+        expect(end.error, isA<ShellHandshakeException>());
+        expect(
+          '${end.error}',
+          allOf(
+            contains('it speaks shell protocol v$version'),
+            contains('this shell speaks v$shellProtocolVersion'),
+            contains('dart run fleury shell'),
+          ),
+        );
+        expect(terminal.input, isNull, reason: 'v$version');
+        expect(terminal.output, isEmpty, reason: 'v$version');
+        expect(terminal.log, ['acquire', 'release'], reason: 'v$version');
+        expect(transport.sent.last, isA<ByeFrame>());
+        expect(transport.closed, isTrue);
+      }
+    });
+
+    test('an answer in the structured protocol, or without terminal input, '
+        'is turned away', () async {
+      for (final (answer, message) in [
+        (
+          _answer(protocol: RemoteWireProtocol.structured, input: null),
+          'structured wire protocol (v$remoteProtocolVersion)',
+        ),
+        (_answer(input: null), 'declared no terminal input'),
+      ]) {
+        final terminal = _FakeTerminal();
+        final transport = FakeFrameTransport();
+        final run = ShellSession(
+          transport,
+          terminal: terminal,
+          resizes: const Stream<Object?>.empty(),
+          environment: _noProbe,
+        ).run();
+        await pumpEventQueue();
+
+        transport.emit(answer);
+        final end = await run;
+        expect(end.reason, ShellSessionEndReason.handshakeFailed);
+        expect('${end.error}', contains(message));
+        expect(terminal.log, ['acquire', 'release']);
+      }
+    });
+
+    test(
+      'output before the answer is never shown: the app is turned away',
+      () async {
+        final terminal = _FakeTerminal();
+        final transport = FakeFrameTransport();
+        final run = ShellSession(
+          transport,
+          terminal: terminal,
+          resizes: const Stream<Object?>.empty(),
+          environment: _noProbe,
+        ).run();
+        await pumpEventQueue();
+
+        transport.emit(OutputFrame(Uint8List.fromList(utf8.encode('frame'))));
+        final end = await run;
+
+        expect(end.reason, ShellSessionEndReason.handshakeFailed);
+        expect(
+          '${end.error}',
+          contains("sent OutputFrame before answering the shell's handshake"),
+        );
+        expect(terminal.output, isEmpty);
+        expect(terminal.log, ['acquire', 'release']);
+      },
+    );
+
+    test('an app that hangs up before answering — as one that cannot read the '
+        "shell's INIT does — is reported, not taken for a crash", () async {
+      for (final hangUp in <Future<void> Function(_ErroringTransport)>[
+        (transport) => transport.close(),
+        (transport) async =>
+            transport.fail(const SocketException('Connection reset by peer')),
+      ]) {
+        final terminal = _FakeTerminal();
+        final transport = _ErroringTransport();
+        final run = ShellSession(
+          transport,
+          terminal: terminal,
+          resizes: const Stream<Object?>.empty(),
+          environment: _noProbe,
+        ).run();
+        await pumpEventQueue();
+
+        await hangUp(transport);
+        final end = await run;
+
+        expect(end.reason, ShellSessionEndReason.handshakeFailed);
+        expect(
+          '${end.error}',
+          allOf(
+            contains("disconnected before answering the shell's handshake"),
+            contains('another Fleury'),
+            contains('dart run fleury shell'),
+          ),
+        );
+        expect(terminal.log, ['acquire', 'release']);
+      }
+    });
+
+    test(
+      'an answer the shell cannot decode is reported with the remedy',
+      () async {
+        // Decoding is strict, so a newer app's answer can fail to decode
+        // before its version is compared: say what to do, not just what broke.
+        const malformed = RemoteProtocolException(
+          'INIT frame has an invalid `keyboardProtocol`',
+        );
+        final terminal = _FakeTerminal();
+        final transport = _ErroringTransport();
+        final run = ShellSession(
+          transport,
+          terminal: terminal,
+          resizes: const Stream<Object?>.empty(),
+          environment: _noProbe,
+        ).run();
+        await pumpEventQueue();
+
+        transport.fail(malformed);
+        final end = await run;
+
+        expect(end.reason, ShellSessionEndReason.handshakeFailed);
+        expect(
+          '${end.error}',
+          allOf(
+            contains("answer to the shell's handshake could not be read"),
+            contains('invalid `keyboardProtocol`'),
+            contains('dart run fleury shell'),
+          ),
+        );
+        expect(terminal.log, ['acquire', 'release']);
+      },
+    );
+
+    test('a goodbye before the answer is the app exiting', () async {
+      final terminal = _FakeTerminal();
+      final transport = FakeFrameTransport();
+      final run = ShellSession(
+        transport,
+        terminal: terminal,
+        resizes: const Stream<Object?>.empty(),
+        environment: _noProbe,
+      ).run();
+      await pumpEventQueue();
+
+      transport.emit(const ByeFrame());
+      expect((await run).reason, ShellSessionEndReason.appExited);
+    });
+  });
+
+  group("the terminal follows the app's input", () {
+    test('mouse tracking, pastes and focus reports as the app asks', () {
+      expect(
+        buildShellInputSequences(_mouseApp),
+        '\x1B[?2004h\x1B[?1004h\x1B[?1000h\x1B[?1002h\x1B[?1006h',
+      );
+      const hover = TerminalInputModes(
+        mouse: false,
+        mouseMotion: true,
+        bracketedPaste: false,
+        focusReporting: false,
+        keyboardProtocol: KeyboardProtocolMode.disambiguated,
+      );
+      expect(
+        buildShellInputSequences(hover),
+        '\x1B[?1000h\x1B[?1002h\x1B[?1003h\x1B[?1006h',
+      );
+    });
+
+    test('an app that reads legacy keys gets the probe\'s keyboard flags '
+        'popped; any other keeps the shell\'s disambiguated tier', () {
+      for (final tier in KeyboardProtocolMode.values) {
+        final input = TerminalInputModes(
+          mouse: false,
+          mouseMotion: false,
+          bracketedPaste: false,
+          focusReporting: false,
+          keyboardProtocol: tier,
+        );
+        final legacy = tier == KeyboardProtocolMode.legacy;
+        expect(
+          buildShellInputSequences(input),
+          legacy ? '\x1B[<1u' : '',
+          reason: '$tier',
+        );
+        expect(
+          shellTerminalModeFor(input).keyboardProtocol,
+          legacy
+              ? KeyboardProtocolMode.legacy
+              : KeyboardProtocolMode.disambiguated,
+          reason: '$tier',
+        );
+      }
+    });
+
+    test('before an app answers, the shell turns on no input reporting', () {
+      expect(shellTerminalMode.mouse, isFalse);
+      expect(shellTerminalMode.mouseMotion, isFalse);
+      expect(shellTerminalMode.bracketedPaste, isFalse);
+      expect(shellTerminalMode.focusReporting, isFalse);
+      expect(
+        shellTerminalMode.keyboardProtocol,
+        KeyboardProtocolMode.disambiguated,
+        reason: 'the tier the shell probes the terminal at',
+      );
+    });
+
+    test("the app's mode reaches the shell's terminal whole", () {
+      // Whatever the app's TerminalMode asks for, the shell's terminal ends
+      // up asking for the same input, at the shell's keyboard ceiling.
+      for (final mode in const [
+        TerminalMode(mouse: true),
+        TerminalMode(mouseMotion: true),
+        TerminalMode(bracketedPaste: false, focusReporting: false),
+        TerminalMode(keyboardProtocol: KeyboardProtocolMode.legacy),
+      ]) {
+        final shell = shellTerminalModeFor(TerminalInputModes.of(mode));
+        expect(shell.mouse, mode.mouse);
+        expect(shell.mouseMotion, mode.mouseMotion);
+        expect(shell.bracketedPaste, mode.bracketedPaste);
+        expect(shell.focusReporting, mode.focusReporting);
+        expect(
+          shell.isFullScreen,
+          isTrue,
+          reason: 'the shell keeps its screen',
+        );
+      }
+    });
+  });
 }
 
 final class _FakeTerminal implements ShellTerminal {
   final log = <String>[];
   final _output = StringBuffer();
+  TerminalInputModes? input;
   void Function(Uint8List bytes)? _onInput;
   void Function()? _onGone;
   Object? acquireError;
@@ -299,8 +617,17 @@ final class _FakeTerminal implements ShellTerminal {
   }
 
   @override
+  void enterInput(TerminalInputModes input) {
+    log.add('input');
+    this.input = input;
+  }
+
+  @override
   void write(List<int> bytes) {
     final text = utf8.decode(bytes);
+    // Probe queries are the shell's own; app output is what reaches the
+    // screen for the app.
+    if (!text.startsWith('\x1B[?u')) log.add('output');
     _output.write(text);
     onWrite?.call(text);
   }
@@ -323,6 +650,8 @@ final class _ErroringTransport implements RemoteFrameTransport {
   final sent = <RemoteFrame>[];
 
   void fail(Object error) => _in.addError(error);
+
+  void emit(RemoteFrame frame) => _in.add(frame);
 
   @override
   Stream<RemoteFrame> get incoming => _in.stream;

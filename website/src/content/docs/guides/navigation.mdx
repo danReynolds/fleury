@@ -30,9 +30,9 @@ restored.
 ## Push, present, and pop
 
 This first example stays deliberately literal. Each screen labels its stack
-depth, and each action names the operation it performs. The tabs hold its three
-routes: the home screen, the details screen it pushes, and the dialog that
-screen presents:
+depth, and each action names the operation it performs. The tabs hold the
+navigator and its three routes: the home screen, the details screen it pushes,
+and the dialog that screen presents:
 
 <GuidePad id="navigation.basics" layout="demo-wide">
 <FleuryExample
@@ -154,8 +154,8 @@ In the demo, open the editor and **Back** immediately: it succeeds because
 nothing changed. Open it again, type in the field, and choose Back; the guard now
 blocks the request. **Save** clears the dirty state so the same back action can
 close the screen. Reopen the editor and the saved value is still there: the
-drafts screen in the second tab keeps it and passes it to each editor it
-pushes. **Discard** demonstrates an intentional programmatic pop.
+drafts screen in the `drafts_screen.dart` tab keeps it and passes it to each
+editor it pushes. **Discard** demonstrates an intentional programmatic pop.
 
 ## Advanced patterns
 
@@ -218,12 +218,12 @@ cases:
 `Navigator` only when one outer screen needs a self-contained history: a setup
 flow, a file browser beside an editor, or a tab with its own back stack.
 
-Follow the files from left to right: the projects screen sits on the root
-navigator (`FleuryApp` inserts it in an app) and pushes one setup route onto it,
-the setup flow declares the second navigator, and each setup step pushes onto
-that nearest inner navigator. Finishing replaces the one outer setup route with
-the project-ready screen in the last tab, removing the whole inner history
-together; its Back then returns directly to Projects:
+Follow the files from left to right: app.dart creates the root navigator, which
+`FleuryApp` inserts for you in an app. The projects screen sits on it and pushes
+one setup route onto it, the setup flow declares the second navigator, and each
+setup step pushes onto that nearest inner navigator. Finishing replaces the one
+outer setup route with the project-ready screen in the last tab, removing the
+whole inner history together; its Back then returns directly to Projects:
 
 <GuidePad id="navigation.nested-flow" layout="demo-wide">
 <FleuryExample

@@ -30,7 +30,9 @@ A view is the code a reader edits:
   imports; `block` picks one of its blocks instead.
 - `declaration` selects a top-level declaration. `member` narrows a class to a
   method; `expression` selects a constructor or method invocation within it
-  (`occurrence` defaults to zero).
+  (`occurrence` defaults to zero). `through` instead extends the view to the
+  end of a later top-level declaration, for declarations that read together,
+  such as an app's command IDs and its root widget.
 - A view with neither selects the whole file.
 
 A file with a region or whole-file view keeps its comments, minus the marker
@@ -48,14 +50,38 @@ are never concatenated. Compiler errors in hidden setup are shown with the
 backing filename. Each demo has its own revision-bound local draft.
 
 The registry's docs-only `_framed(...)` helper belongs in a builder, never in a
-demo's own `build`, so the code a reader edits reads as app code.
+demo's own `build`, so the code a reader edits reads as app code. A builder
+should only create the demo widget, `_framed(const _Demo())`, so its
+`example()` hides nothing. The generator writes each `example()` through
+`dart format`, and fails on any generated line over 80 columns: rewrap the
+string or comment in its source.
 
 ## Guide and reference demos
 
 `guide_projects.json` lists each guide demo's views, keyed by example id.
-Widget reference pages need no entry: a registry example in a widget category
-edits its demo widget, that widget's State class, or else the builder's
-expression. Props-playground pages (`FleuryKnobs`) keep their knobs.
+Widget reference pages usually need no entry: a registry example in a widget
+category edits its demo widget, that widget's State class, or else the
+builder's expression. Keep the data and helpers a demo uses inside that view.
+When the demo genuinely spans declarations, such as a `Toaster` host and the
+widget below it that raises toasts, list a view for each here instead of
+hiding one. Props-playground pages (`FleuryKnobs`) keep their knobs.
+
+Every demo's views must show the code it runs. The generator fails when a
+view refers to a declaration none of the views shows (an extension method
+counts, and so does the class a named constructor builds), when a view of part
+of a class uses one of the class's members that no view shows, when the
+builder does more than create the demo widget and no view shows it, or when no
+view shows the widget the builder creates. A State class's view stands for its
+widget's declaration, but whatever that declaration reads, such as a
+constant used as a parameter default, must still be shown.
+
+`hiddenByDesign` in `bin/guide_projects.dart` lists the few deliberate
+exceptions, each with its reason: a declaration (whose excuse covers a class's
+members) or a whole project file, such as an input guide file that the page
+shows read-only as the demo's "Full source". What excused code uses needs a
+view or its own entry, so nothing runs hidden behind an excuse unlisted, and
+an entry that no longer matches anything fails too.
+`test/guide_projects_check_test.dart` covers these rules on small projects.
 
 ## Adding an example
 
