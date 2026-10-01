@@ -166,6 +166,7 @@ Future<void> _settle() =>
 
 const _ctrlZ = <int>[0x1a];
 final _kittyCtrlZ = '\x1b[122;5u'.codeUnits;
+const _ctrlT = <int>[0x14];
 
 bool _isCtrlZ(KeyEvent event) =>
     event.code.character == 'z' && event.modifiers.length == 1 && event.hasCtrl;
@@ -348,6 +349,86 @@ void main() {
         exitApp();
         await app;
         await driver.dispose();
+      }
+    });
+  });
+
+  // A chat composer or a REPL prompt: its text field always has focus and
+  // takes every Ctrl+Z for undo, so no press ever reaches job control. The
+  // app offers its own suspend key instead (the real-terminal proof is
+  // test/integration/job_control_pty_test.dart).
+  group("an app's own suspend key (TerminalSession.suspend)", () {
+    test('suspends from a binding while the focused field keeps Ctrl+Z for '
+        'undo', () async {
+      final controller = TextEditingController();
+      addTearDown(controller.dispose);
+      final requests = <Future<bool>>[];
+      final session = await _Session.start(
+        ScopeBuilder<TerminalSession>(
+          builder: (_, terminal) => KeyBindings(
+            bindings: [
+              KeyBinding(
+                KeySequence.ctrl.t,
+                label: 'Suspend',
+                enabled: terminal.supportsSuspend,
+                onTrigger: (_) => requests.add(terminal.suspend()),
+              ),
+            ],
+            child: TextInput(
+              controller: controller,
+              autofocus: true,
+              enableBlink: false,
+            ),
+          ),
+        ),
+      );
+      try {
+        await session.type('x'.codeUnits);
+        await session.type(_ctrlZ);
+        expect(controller.text, isEmpty, reason: 'Ctrl+Z undid the typing');
+        expect(session.selfStops, 0);
+
+        await session.type(_ctrlT);
+
+        expect(session.selfStops, 1);
+        expect(session.driver.debugSuspended, isTrue);
+        expect(await requests.single, isTrue);
+      } finally {
+        await session.close();
+      }
+    });
+
+    test('with suspendOnCtrlZ: false, an app that takes Ctrl+Z suspends after '
+        'its own cleanup', () async {
+      // The sensitive-input pattern: no unhandled-press fallback, so the app
+      // decides — conceal, then suspend.
+      var concealed = false;
+      final requests = <Future<bool>>[];
+      final session = await _Session.start(
+        ScopeBuilder<TerminalSession>(
+          builder: (_, terminal) => KeyBindings(
+            bindings: [
+              KeyBinding(
+                KeySequence.ctrl.z,
+                onTrigger: (_) {
+                  concealed = true;
+                  requests.add(terminal.suspend());
+                },
+              ),
+            ],
+            child: const Focus(autofocus: true, child: Text('secret')),
+          ),
+        ),
+        suspendOnCtrlZ: false,
+      );
+      try {
+        await session.type(_ctrlZ);
+
+        expect(concealed, isTrue);
+        expect(session.selfStops, 1);
+        expect(await requests.single, isTrue);
+      } finally {
+        await session.close();
       }
     });
   });

@@ -51,7 +51,8 @@ void stopPosixInputReports(TerminalDriver driver) {
 /// control (browser, served, remote, Windows), for
 /// [PosixTerminalDriver.suspendOnCtrlZ] false, and for a session without
 /// native raw mode, whose Ctrl+Z the kernel handles before it is ever read.
-/// On false the chord stays an ordinary key.
+/// On false the chord stays an ordinary key. The application's own request,
+/// `TerminalSession.suspend`, starts the same suspension.
 @internal
 bool requestCtrlZSuspend(TerminalDriver driver) =>
     driver is PosixTerminalDriver && driver._suspendForCtrlZ();
@@ -61,13 +62,18 @@ bool requestCtrlZSuspend(TerminalDriver driver) =>
 /// A Ctrl+Z press the application leaves unhandled suspends orderly: Fleury
 /// restores the terminal, stops the app's job — with the hot-reload
 /// supervisor or launcher that runs the app, see [PosixJobControl] — then
-/// re-enters after `fg` (see [suspendOnCtrlZ]). Externally sending SIGTSTP is
-/// not a supported lifecycle path because Dart cannot safely watch
+/// re-enters after `fg` (see [suspendOnCtrlZ]). The application can request
+/// the same suspension with `TerminalSession.suspend`. Externally sending
+/// SIGTSTP is not a supported lifecycle path because Dart cannot safely watch
 /// SIGTSTP/SIGCONT; it may stop the process before Fleury can restore
 /// terminal modes.
 class PosixTerminalDriver
     with TerminalAttentionSequences
-    implements TerminalDriver, TerminalHandoffDriver, InlineTerminalDriver {
+    implements
+        TerminalDriver,
+        TerminalHandoffDriver,
+        InlineTerminalDriver,
+        TerminalSuspendDriver {
   PosixTerminalDriver({
     String? keypadDecimal,
     Stdin? stdinOverride,
@@ -145,14 +151,19 @@ class PosixTerminalDriver
   /// Ctrl+Z is always dispatched to the application first, the way Ctrl+C is
   /// before it exits: a focused text field undoes, an app binding fires, and
   /// only a press nothing handled suspends. Set false for applications that
-  /// must never be suspended from the keyboard. The chord is then only an
-  /// ordinary [KeyEvent]. A binding for it fires only while no text field has
-  /// focus — `TextInput` and `TextArea` take Ctrl+Z for undo — so an app that
-  /// must close sensitive state on a key binds one its fields leave alone.
-  /// Raw terminal startup then fails if native raw mode is unavailable:
-  /// Dart's line/echo fallback leaves Ctrl+Z to the kernel's job control,
-  /// which stops the process before the application could see the key.
-  /// This does not make external SIGTSTP/SIGCONT observable to Dart.
+  /// must never be suspended by that press. The chord is then only an
+  /// ordinary [KeyEvent], and raw terminal startup fails if native raw mode
+  /// is unavailable: Dart's line/echo fallback leaves Ctrl+Z to the kernel's
+  /// job control, which stops the process before the application could see
+  /// the key.
+  ///
+  /// The application can still suspend on its own terms with
+  /// `TerminalSession.suspend`, which this flag does not govern: an app that
+  /// must close sensitive state first binds a key that does so and then
+  /// requests the suspension. A Ctrl+Z binding fires only while no text field
+  /// has focus — `TextInput` and `TextArea` take Ctrl+Z for undo — so pick a
+  /// key the fields leave alone. This does not make external SIGTSTP/SIGCONT
+  /// observable to Dart.
   final bool suspendOnCtrlZ;
 
   /// Test seam: replaces the `exit()` call in the force path so grace
@@ -218,7 +229,7 @@ class PosixTerminalDriver
   int _lifecycleGeneration = 0;
   bool _handoffActive = false;
   Future<void> _handoffTail = Future<void>.value();
-  Future<void> _suspendTail = Future<void>.value();
+  Future<bool> _suspendTail = Future<bool>.value(false);
   Future<void> _resumeTail = Future<void>.value();
   bool _resuming = false;
   // True from the moment Ctrl+Z restoration begins until foregrounding
@@ -1445,16 +1456,38 @@ class PosixTerminalDriver
 
   /// [requestCtrlZSuspend]: the orderly suspend, when this session owns one.
   bool _suspendForCtrlZ() {
+    if (!suspendOnCtrlZ) return false;
+    final suspension = _requestSuspend();
+    if (suspension == null) return false;
+    unawaited(suspension);
+    return true;
+  }
+
+  /// `TerminalSession.supportsSuspend`: whether this session owns its job
+  /// control — the keyboard in native raw mode, as [_requestSuspend] needs.
+  @internal
+  @override
+  bool get supportsSuspend => _nativeRawMode;
+
+  /// `TerminalSession.suspend`: the suspension an unhandled Ctrl+Z starts, on
+  /// the application's request. [suspendOnCtrlZ] governs only that press, so
+  /// it does not refuse this.
+  @internal
+  @override
+  Future<bool> suspend() => _requestSuspend() ?? Future<bool>.value(false);
+
+  /// Starts the orderly suspend — or joins the one under way — when this
+  /// session can suspend now; null when it can't. Completes with whether the
+  /// job stopped.
+  Future<bool>? _requestSuspend() {
     // cfmakeraw disables ISIG, so the terminal delivers Ctrl+Z as 0x1a rather
-    // than the kernel stopping us; without native raw mode no press is ever
-    // read. A handed-off terminal belongs to the child until it returns.
-    if (!suspendOnCtrlZ || !_active || !_nativeRawMode || _handoffActive) {
-      return false;
-    }
+    // than the kernel stopping us; without native raw mode the kernel owns
+    // job control and no press is ever read. A handed-off terminal belongs to
+    // the child until it returns.
+    if (!_active || !_nativeRawMode || _handoffActive) return null;
     // The transition publishes its failure on [events], where runApp treats
     // it as fatal. Do not also send it to the survivable widget-error zone.
-    unawaited(_suspend().catchError((Object _) {}));
-    return true;
+    return _suspend().catchError((Object _) => false);
   }
 
   void _setRawMode() {
@@ -1522,16 +1555,19 @@ class PosixTerminalDriver
 
   /// Ctrl+Z: restore the terminal for the shell, stop this process's job,
   /// then continue here after the shell's `fg` sends SIGCONT and repaint.
+  /// Completes with whether the job stopped — in production, once it has
+  /// been continued and re-entered.
   ///
   /// Dart deliberately does not allow watching SIGTSTP/SIGCONT. Production
   /// therefore reaches this method from a parsed Ctrl+Z press (ISIG is off in
   /// our cfmakeraw mode) that the application left unhandled — runApp calls
-  /// [requestCtrlZSuspend] — and stops the job with uncatchable SIGSTOP
+  /// [requestCtrlZSuspend] — or from the application's own request
+  /// ([suspend]), and stops the job with uncatchable SIGSTOP
   /// ([PosixJobControl.stopJob]). An
   /// external `kill -TSTP` cannot be observed safely by pure Dart and may
   /// bypass this orderly path; callers should use the terminal's Ctrl+Z
   /// job-control chord.
-  Future<void> _suspend() {
+  Future<bool> _suspend() {
     if (_suspended) return _suspendTail;
     return _suspendTail = _suspendImpl().catchError((
       Object error,
@@ -1550,13 +1586,13 @@ class PosixTerminalDriver
     if (!_events.isClosed) _events.addError(error, stack);
   }
 
-  Future<void> _suspendImpl() async {
+  Future<bool> _suspendImpl() async {
     final mode = _mode;
-    if (mode == null) return;
+    if (mode == null) return false;
     final lifecycleGeneration = _lifecycleGeneration;
     // Single-flight: a rapid second Ctrl+Z (or one queued while the awaits
     // below run) must not re-write exit sequences or repeat the self-stop.
-    if (_suspended) return;
+    if (_suspended) return false;
     // A native raw-mode controller is what makes Ctrl+Z observable as a byte;
     // production resumes inline after SIGSTOP/SIGCONT. Tests use the explicit
     // self-stop seam and drive debugResume themselves.
@@ -1564,13 +1600,13 @@ class PosixTerminalDriver
     // legitimately receive the chord then. A test seam or already-queued
     // callback must not stop the parent while the child owns the terminal.
     if ((!_nativeRawMode && _selfStopOverride == null) || _handoffActive) {
-      return;
+      return false;
     }
     _stopInputReports();
     _suspended = true;
     await _inlineTail;
     if (!_active || _restoring || lifecycleGeneration != _lifecycleGeneration) {
-      return;
+      return false;
     }
     // Input authority leaves with the terminal: whatever the user is holding
     // will be released into the shell, and this driver will never see the
@@ -1583,7 +1619,7 @@ class PosixTerminalDriver
     }
     await _releaseInput();
     if (!_active || _restoring || lifecycleGeneration != _lifecycleGeneration) {
-      return;
+      return false;
     }
     // Return a known terminal state before stopping. A partial output release
     // cannot safely hand the shell its terminal; propagate the failure to the
@@ -1601,20 +1637,20 @@ class PosixTerminalDriver
       // already-restored process.
       if (_handoffActive) {
         _suspended = false;
-        return;
+        return false;
       }
       if (!_active ||
           _restoring ||
           lifecycleGeneration != _lifecycleGeneration ||
           !identical(_mode, mode) ||
           !_suspended) {
-        return;
+        return false;
       }
       if (!inputRestored) {
         // Never stop while the shell would inherit a terminal we failed to
         // restore. Re-enter best-effort and leave the process running.
         await _resume();
-        return;
+        return false;
       }
     }
     final selfStop = _selfStopOverride;
@@ -1632,6 +1668,7 @@ class PosixTerminalDriver
     } else if (selfStop == null) {
       await _resume();
     }
+    return stopped;
   }
 
   /// Test seam: drive [_suspend] without a real job-control terminal.
