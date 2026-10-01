@@ -608,16 +608,16 @@ def scenario_no_input_reporting(h):
 def scenario_mismatched_apps(h):
     """Peers that do not speak this shell's protocol are turned away with a
     message that says why, the terminal comes back, and the shell serves the
-    next run: an app from before shell protocol 2 (it hangs up on the INIT),
-    then one from a newer Fleury (it answers at shell protocol 3)."""
+    next run: an app that hangs up on the INIT without answering, then one
+    from a newer Fleury (it answers at shell protocol 3)."""
     h.start_shell()
     ready = h.expect_output(b'fleury shell ready', 60, 'shell ready')
     idle = h.termios('idle')
     h.terminal_state('idle')
-    h.fake_app(None, 'an app from before shell protocol 2')
+    h.fake_app(None, 'an app that hangs up without answering')
     offset = h.expect_output(WAITING, 15, 'the shell to turn it away', ready)
-    h.expect_restored(idle, 'afterOldApp')
-    h.terminal_state('afterOldApp')
+    h.expect_restored(idle, 'afterSilentApp')
+    h.terminal_state('afterSilentApp')
     h.fake_app(
         'cols=80,rows=24,color=truecolor,glyph=unicode,image=halfBlock,'
         'tmux=0,mouse=1,motion=0,paste=1,focus=1,'

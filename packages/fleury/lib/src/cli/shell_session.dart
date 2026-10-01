@@ -477,11 +477,11 @@ final class ShellSession {
       _end(const ShellSessionEnd(ShellSessionEndReason.appDisconnected));
       return;
     }
-    // An app built before shell protocol 2 reads this shell's INIT as
-    // missing its version, rejects it, and hangs up without a word.
+    // An app that cannot decode this shell's INIT, such as one from another
+    // Fleury build, rejects it and hangs up without a word.
     _turnAway(
       'it disconnected before answering the shell\'s handshake. If it was '
-      'built with an older Fleury than this shell, $_matchingShell',
+      'built with another Fleury than this shell, $_matchingShell',
     );
   }
 

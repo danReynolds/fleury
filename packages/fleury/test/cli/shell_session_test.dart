@@ -446,7 +446,7 @@ void main() {
           '${end.error}',
           allOf(
             contains("disconnected before answering the shell's handshake"),
-            contains('older Fleury'),
+            contains('another Fleury'),
             contains('dart run fleury shell'),
           ),
         );

@@ -226,8 +226,8 @@ void main() {
       expect(init, endsWith(',shell=2'), reason: run.describe());
       expect(init, isNot(contains('v=')), reason: run.describe());
 
-      // An app from before shell protocol 2 hangs up on that INIT; one from
-      // a newer Fleury answers at its own version. Neither attaches.
+      // An app that cannot read that INIT hangs up on it; one from a newer
+      // Fleury answers at its own version. Neither attaches.
       expect(
         run.output,
         contains(
@@ -249,7 +249,7 @@ void main() {
         contains('dart run fleury shell'),
         reason: run.describe(),
       );
-      for (final label in ['afterOldApp', 'afterNewApp']) {
+      for (final label in ['afterSilentApp', 'afterNewApp']) {
         expect(run.restoredExactly(label), isTrue, reason: run.describe());
         _expectTerminalHandedBack(run, label);
       }

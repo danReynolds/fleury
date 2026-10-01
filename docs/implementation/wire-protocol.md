@@ -73,8 +73,8 @@ Why two spaces: the shell protocol used to declare itself `v=1`, inside the
 structured space, where the number doubled as the mode switch. It could not
 change without colliding with structured history (v2 is an old structured
 version that the app must reject), so shell protocol 2 moved to its own key.
-`v=1` is now simply an unsupported structured version; the app rejects it with
-a message that names `fleury shell`, since only an older shell sends it.
+`v=1` is now simply an unsupported structured version, rejected like any
+other.
 
 ### Structured protocol
 
@@ -107,8 +107,7 @@ lockstep or to report the skew; on a mismatch the app still answers, then
 fails the session closed. `fleury shell` relays no app output until the answer
 arrives, rejects an answer at another shell version, as the structured
 protocol, or without the terminal input, and reports an app that disconnects
-before answering. An app built before shell protocol 2 does exactly that: it
-reads the shell's INIT as missing `v`, rejects it, and disconnects.
+before answering, as one that cannot decode the shell's INIT does.
 
 The app's mode is fixed for the session — `runApp` takes one `TerminalMode`,
 and its native driver never changes it after startup either — so the answer

@@ -745,13 +745,6 @@ final class RemoteTerminalDriver
             'app speaks v$shellProtocolVersion: run the shell from this '
             'app\'s package (`dart run fleury shell`) so both use the same '
             'Fleury.',
-      // v1 is how `fleury shell` declared itself before the shell protocol
-      // had a version space of its own: name the tool to update.
-      RemoteWireProtocol.structured when version == 1 =>
-        'the peer speaks wire protocol v1, the protocol of a `fleury shell` '
-            'from an older Fleury, but this app speaks shell protocol '
-            'v$shellProtocolVersion: run the shell from this app\'s package '
-            '(`dart run fleury shell`) so both use the same Fleury.',
       RemoteWireProtocol.structured =>
         'the peer speaks wire protocol v$version but this app speaks '
             'v$remoteProtocolVersion; use matching Fleury builds.',

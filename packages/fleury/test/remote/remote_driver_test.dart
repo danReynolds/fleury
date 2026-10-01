@@ -366,6 +366,7 @@ void main() {
       'a structured peer at any other protocol version fails closed',
       () async {
         for (final version in [
+          1,
           2,
           remoteProtocolVersion - 1,
           remoteProtocolVersion + 1,
@@ -395,37 +396,6 @@ void main() {
         }
       },
     );
-
-    test('a `fleury shell` from before the shell protocol had a version '
-        'space of its own (`v=1`) is rejected, naming the shell', () async {
-      // Such a shell neither declares `shell=` nor reads the answer, so it
-      // could only show a blank screen; the app says which tool to update.
-      final transport = _FakeTransport();
-      final driver = RemoteTerminalDriver(transport);
-      final entering = driver.enter(TerminalMode.interactive);
-      transport.emit(_init(protocolVersion: 1));
-
-      await expectLater(
-        entering,
-        throwsA(
-          isA<RemoteProtocolException>()
-              .having((e) => e.recoverable, 'recoverable', isFalse)
-              .having(
-                (e) => e.message,
-                'message',
-                allOf(
-                  contains('wire protocol v1'),
-                  contains('`fleury shell` from an older Fleury'),
-                  contains('shell protocol v$shellProtocolVersion'),
-                  contains('dart run fleury shell'),
-                ),
-              ),
-        ),
-      );
-      expect(transport.sent.whereType<OutputFrame>(), isEmpty);
-      expect(driver.wantsPresentationPlans, isFalse);
-      await driver.restore();
-    });
 
     test('a shell peer at any other shell protocol version fails closed, after '
         'an answer that names this app\'s version', () async {
