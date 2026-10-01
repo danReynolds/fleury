@@ -97,10 +97,10 @@ await runApp(
 
 Ctrl+Z is dispatched to the application first in every session. A focused
 `TextInput` or `TextArea` takes it for undo, so a Ctrl+Z binding fires only
-while no text field has focus. By default, a press that nothing handles
-suspends the app's job — the driver restores the terminal and stops the app
-together with the process that runs it, such as the hot-reload supervisor —
-and `fg` resumes it. `suspendOnCtrlZ: false` removes that fallback, so an
+while no text field has focus. By default, when a job-control shell started
+the app, a press that nothing handles suspends the app's job — the driver
+restores the terminal and stops the app together with the process that runs
+it, such as the hot-reload supervisor — and `fg` resumes it. `suspendOnCtrlZ: false` removes that fallback, so an
 unhandled Ctrl+Z is only an ordinary key. Bind the conceal/close action to a
 key the form's fields leave alone, such as Ctrl+Q, and have it perform the
 form's cleanup and request exit.

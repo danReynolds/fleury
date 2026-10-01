@@ -41,6 +41,10 @@
   either, the app stopped alone and the shell never got the terminal back.
   While the debug shell is expanded over the app, Ctrl+Z skips the hidden
   app; its open Logs search takes the key.
+  Ctrl+Z suspends only when a job-control shell started the app, since only
+  the shell's `fg` can bring it back. Run directly by a terminal profile, a
+  tmux pane, or `ssh -t host app`, the app used to stop for good, leaving the
+  window frozen; the press is now an ordinary key there.
   `PosixTerminalDriver(suspendOnCtrlZ: false)` keeps an unhandled Ctrl+Z an
   ordinary key. Browser, served, and `fleury shell` sessions never suspend.
 
@@ -50,10 +54,11 @@
   `context.scope<TerminalSession>().suspend()`: it suspends exactly as an
   unhandled Ctrl+Z does, stopping the whole job until `fg`, and its future
   completes with `true` once the app is back. `supportsSuspend` says whether
-  the session can: a native macOS or Linux terminal. Under `fleury serve` and
-  `fleury shell`, and on Windows, `suspend()` completes with `false` and does
-  nothing. `suspendOnCtrlZ: false` turns off only the unhandled press, so an
-  app that takes Ctrl+Z itself can close sensitive state and then suspend.
+  the session can: a native macOS or Linux terminal that a job-control shell
+  started. Without one, under `fleury serve` and `fleury shell`, and on
+  Windows, `suspend()` completes with `false` and leaves the terminal alone.
+  `suspendOnCtrlZ: false` turns off only the unhandled press, so an app that
+  takes Ctrl+Z itself can close sensitive state and then suspend.
 
 - **`fleury shell` relays every key.** The shell now puts its terminal in the
   same raw mode a native app uses, so Ctrl+C, Ctrl+Z, Ctrl+\\ and Ctrl+S reach

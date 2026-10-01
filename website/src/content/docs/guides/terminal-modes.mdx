@@ -199,14 +199,18 @@ code. This also works for an editor or an interactive Git command. In inline
 mode, child output can remain above the resumed UI; full-screen mode re-enters
 the alternate screen. On macOS and Linux, a `Ctrl+Z` that nothing in the app
 handles suspends the app through the same release-and-resume lifecycle, and
-`fg` brings it back.
+`fg` brings it back. That happens only when a job-control shell, such as your
+interactive shell, started the app, since only the shell can bring it back. A
+terminal profile, tmux pane, or `ssh -t host app` that runs the app directly
+leaves `Ctrl+Z` an ordinary key.
 
 Your code can ask for the same suspension with `session.suspend()`: for
 example, from a key of its own when a focused text field takes every `Ctrl+Z`
 for undo (see [Key handling](/fleury/guides/key-handling/#keys-handled-by-the-host)).
 The returned future completes once `fg` has brought the app back. Where the app
-isn't a job the shell can suspend, under `fleury serve` or `fleury shell` and
-on Windows, `session.supportsSuspend` is false and `suspend()` does nothing.
+isn't a job the shell can suspend (no job-control shell started it, or it runs
+under `fleury serve`, `fleury shell`, or Windows), `session.supportsSuspend` is
+false and `suspend()` does nothing.
 
 ## Try the native behavior
 
