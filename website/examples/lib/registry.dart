@@ -2356,7 +2356,7 @@ Text('\${summary.health.name}: \${summary.activeTaskCount} of \${summary.taskCou
     cols: 48,
     rows: 12,
     interactive: true,
-    builder: () => const _SnapshotLoadingTour(),
+    builder: () => _framed(const loading.SnapshotExplorer()),
   ),
   ExampleInfo(
     id: 'loading.image',
@@ -2368,7 +2368,7 @@ Text('\${summary.health.name}: \${summary.activeTaskCount} of \${summary.taskCou
     cols: 54,
     rows: 16,
     interactive: true,
-    builder: () => _framed(const _NetworkImageLoadingTour()),
+    builder: () => _framed(const _PhotoPreview()),
   ),
   ExampleInfo(
     id: 'loading.stream',
@@ -2378,7 +2378,7 @@ Text('\${summary.health.name}: \${summary.activeTaskCount} of \${summary.taskCou
     cols: 48,
     rows: 14,
     interactive: true,
-    builder: () => const _StreamLoadingTour(),
+    builder: () => _framed(const loading.TransmissionView()),
   ),
   ExampleInfo(
     id: 'commands.overview',
@@ -5227,32 +5227,16 @@ class _InteractiveStyleTour extends StatelessWidget {
   }
 }
 
-class _SnapshotLoadingTour extends StatelessWidget {
-  const _SnapshotLoadingTour();
+class _PhotoPreview extends StatefulWidget {
+  const _PhotoPreview();
 
   @override
-  Widget build(BuildContext context) => _framed(
-    const Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: <Widget>[
-        Text('PREVIEW ASYNC UI', style: CellStyle(bold: true)),
-        loading.SnapshotExplorer(),
-      ],
-    ),
-  );
-}
-
-class _NetworkImageLoadingTour extends StatefulWidget {
-  const _NetworkImageLoadingTour();
-
-  @override
-  State<_NetworkImageLoadingTour> createState() =>
-      _NetworkImageLoadingTourState();
+  State<_PhotoPreview> createState() => _PhotoPreviewState();
 }
 
 /// Mounts the photo viewer only after the reader asks for it, so opening a
 /// page that embeds this demo sends no request to the photo service.
-class _NetworkImageLoadingTourState extends State<_NetworkImageLoadingTour> {
+class _PhotoPreviewState extends State<_PhotoPreview> {
   var _seed = 0;
   var _started = false;
 
@@ -5269,21 +5253,6 @@ class _NetworkImageLoadingTourState extends State<_NetworkImageLoadingTour> {
             ),
           ],
         );
-}
-
-class _StreamLoadingTour extends StatelessWidget {
-  const _StreamLoadingTour();
-
-  @override
-  Widget build(BuildContext context) => _framed(
-    const Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: <Widget>[
-        Text('STAR MAP TRANSMISSION', style: CellStyle(bold: true)),
-        loading.TransmissionView(),
-      ],
-    ),
-  );
 }
 
 class _OrbitalCourier extends StatefulWidget {
