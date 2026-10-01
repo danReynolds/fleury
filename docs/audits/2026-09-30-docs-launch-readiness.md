@@ -1,5 +1,19 @@
 # Docs launch readiness — 2026-09-30
 
+> **Status, October 1, 2026: resolved.** Every P0 and P1 item below, and the
+> P2 polish, was fixed in [#292](https://github.com/danReynolds/fleury/pull/292),
+> along with product bugs the fixes uncovered (key sequences in dialogs, held
+> keys replayed into a dialog, Ctrl+Z under the dev supervisor, `fleury shell`
+> signal keys, focus reporting, and widget bugs). The decisions at the end were
+> made: restart stays Ctrl+G then F5 with documented caveats; Ctrl+Z is
+> dispatched first and suspends only when unhandled; demos stay dark; debug
+> tooling is on only in development runs; the LineChart lab is a draft page; Pad
+> capacity is unchanged. The items that needed further decisions (a second
+> debug-panel expand key, the mouse under `fleury shell`, a suspend request for
+> apps whose text field always has focus, and editable demos that hid their
+> data) were resolved in the follow-up after #292. The text below is the
+> original audit.
+
 **Verdict: close, not ready.**
 
 The site's machinery is sound: every page builds, every link and anchor resolves, and every demo mounts at its declared grid. The editable Pads also work from the live origin.
