@@ -32,6 +32,7 @@ class Session:
     def __init__(self, dart, *, cols=80, rows=18, supervised=False,
                  fixture="test/fixtures/inline_terminal_fixture.dart", executable=None, arguments=(),
                  guard=True):
+        self.supervised = supervised
         self.master, self.slave = os.openpty()
         self.original_modes = termios.tcgetattr(self.slave)
         self.raw = bytearray()
@@ -115,7 +116,11 @@ class Session:
                 text = text[:tail.start()]
             self.stream.feed(re.sub(r'\x1b\[[<>?][0-9;]*u', '', text))
 
-    def wait(self, predicate, label, timeout=20):
+    def wait(self, predicate, label, timeout=None):
+        # A supervised start pays the VM service and a JIT cold start on top of
+        # the app's own, which a loaded CI runner can stretch past 20 s.
+        if timeout is None:
+            timeout = 60 if self.supervised else 20
         end = time.monotonic() + timeout
         while time.monotonic() < end:
             self.pump()
