@@ -14,6 +14,10 @@ library;
 // launcher) is the process the shell started and waits on. Stopping only the
 // app left that parent running in the foreground, so the shell never got the
 // terminal back — no prompt, and a typed command never ran.
+//
+// An app whose text field always has focus never sees Ctrl+Z reach job
+// control — the field undoes — so it binds its own suspend key to
+// TerminalSession.suspend, which must suspend the same way.
 
 import 'dart:convert';
 import 'dart:io';
@@ -81,11 +85,42 @@ void main() {
       reason: 'the launcher stops with the app\n${run.describe()}',
     );
   });
+
+  test("a composer's own suspend key stops the whole job while Ctrl+Z "
+      'undoes in its field', () async {
+    // The composer's field always has focus, so Ctrl+Z is undo, never job
+    // control. Ctrl+T calls TerminalSession.suspend. Supervised, as a plain
+    // `dart run bin/app.dart` runs it: the supervisor has to stop too.
+    final run = await _runHarness(
+      [dart, packages, fixture, '--supervised', '--suspend-key'],
+      supervised: true,
+      suspendKey: true,
+    );
+
+    run.expectCtrlZUndid('undoBeforeSuspend');
+    run.expectSuspendedAndResumed();
+    expect(
+      run.stateWhileStopped('parent'),
+      startsWith('T'),
+      reason: 'the supervisor stops with the app\n${run.describe()}',
+    );
+    expect(run.appPidAfterFg, run.appPid, reason: run.describe());
+    expect(
+      run.report['suspendResultsWhileStopped'],
+      isEmpty,
+      reason:
+          'the request completes after fg, not when the app stops\n'
+          '${run.describe()}',
+    );
+    expect(run.report['suspendResults'], ['true'], reason: run.describe());
+    run.expectCtrlZUndid('undoAfterFg');
+  });
 }
 
 Future<_HarnessRun> _runHarness(
   List<String> command, {
   bool supervised = false,
+  bool suspendKey = false,
 }) async {
   final packageRoot = Directory.current.absolute.path;
   final workDir = Directory.systemTemp.createTempSync('fleury_job_control_');
@@ -93,7 +128,9 @@ Future<_HarnessRun> _runHarness(
   final result = await Process.run('python3', <String>[
     '$packageRoot/test/fixtures/job_control_pty_harness.py',
     workDir.path,
-    supervised ? 'supervised' : 'direct',
+    if (supervised) '--supervised',
+    if (suspendKey) '--suspend-key',
+    '--',
     ...command,
   ]);
   final reportFile = File('${workDir.path}/report.json');
@@ -131,9 +168,9 @@ final class _HarnessRun {
 
   void expectSuspendedAndResumed() {
     expect(
-      report['promptAfterCtrlZ'],
+      report['promptAfterSuspend'],
       isTrue,
-      reason: 'one Ctrl+Z must give the shell its prompt back\n${describe()}',
+      reason: 'one press must give the shell its prompt back\n${describe()}',
     );
     expect(report['failure'], isNull, reason: describe());
     expect(report['stoppedNotice'], isTrue, reason: describe());
@@ -143,8 +180,19 @@ final class _HarnessRun {
     expect(report['jobExit'], 0, reason: describe());
   }
 
+  /// The composer's field undid a Ctrl+Z, and the job kept running: no
+  /// prompt, and the app not stopped.
+  void expectCtrlZUndid(String step) {
+    final facts = report[step] as Map<String, Object?>?;
+    expect(facts, isNotNull, reason: '$step never ran\n${describe()}');
+    expect(facts!['undone'], isTrue, reason: describe());
+    expect(facts['prompt'], isFalse, reason: describe());
+    expect(facts['appState'], isNot(startsWith('T')), reason: describe());
+  }
+
   String describe() {
     final bootstrap = File('${workDir.path}/bootstrap.log');
+    final events = File('${workDir.path}/app-events.log');
     final tail = output.length > 3000
         ? output.substring(output.length - 3000)
         : output;
@@ -152,6 +200,7 @@ final class _HarnessRun {
       'report: ${const JsonEncoder.withIndent('  ').convert(report)}',
       if (bootstrap.existsSync())
         'bootstrap log:\n${bootstrap.readAsStringSync()}',
+      if (events.existsSync()) 'app events:\n${events.readAsStringSync()}',
       'pty tail: ${jsonEncode(tail)}',
     ].join('\n');
   }

@@ -1,21 +1,25 @@
-"""Presses Ctrl+Z at a Fleury app running as a job of an interactive shell.
+"""Suspends a Fleury app running as a job of an interactive shell.
 
 A real `bash -i` owns a pseudo-terminal as its controlling terminal, so job
 control is the one a user has: the shell starts the command in a process group
 of its own, gives that group the terminal, and gets the terminal back only when
 the job stops or ends. The harness types the command, waits for the app's first
-frame, presses Ctrl+Z, and records whether the shell got its prompt back and
-ran a command — the observable meaning of "suspended" — then brings the job
-back with `fg` and quits the app with Ctrl+Q.
+frame, presses the key that suspends it, and records whether the shell got its
+prompt back and ran a command — the observable meaning of "suspended" — then
+brings the job back with `fg` and quits the app with Ctrl+Q.
 
-usage: job_control_pty_harness.py <work-dir> <wait-for-supervisor> <command...>
+usage: job_control_pty_harness.py <work-dir> [--supervised] [--suspend-key]
+           -- <command...>
 
-<wait-for-supervisor> is `supervised` to wait for the hot-reload supervisor to
-wire the app before pressing Ctrl+Z, anything else not to. The app must be
-test/fixtures/job_control_fixture.dart (or honour its FLEURY_JOB_PID_OUT
-contract). Writes <work-dir>/report.json (the facts; `failure` names the step
-that could not complete) and <work-dir>/pty.bin (every byte the terminal
-received). Exits 0 whenever a report was written; the Dart test asserts.
+--supervised waits for the hot-reload supervisor to wire the app before
+suspending it. --suspend-key drives the fixture's composer
+(test/fixtures/job_control_fixture.dart --suspend-key) instead of pressing an
+unhandled Ctrl+Z: Ctrl+Z must undo in its focused field and leave the job
+running, and Ctrl+T, its suspend key, must suspend. The app must be that
+fixture (or honour its FLEURY_JOB_PID_OUT and FLEURY_JOB_EVENTS_OUT contract).
+Writes <work-dir>/report.json (the facts; `failure` names the step that could
+not complete) and <work-dir>/pty.bin (every byte the terminal received). Exits
+0 whenever a report was written; the Dart test asserts.
 """
 
 import fcntl
@@ -33,17 +37,23 @@ import time
 
 PROMPT = b'FLEURY-JOB-PROMPT$ '
 
+CTRL_Z = b'\x1a'
+CTRL_T = b'\x14'
+CTRL_Q = b'\x11'
+
 
 class StepFailed(Exception):
     pass
 
 
 class Harness:
-    def __init__(self, work_dir, supervised, command):
+    def __init__(self, work_dir, supervised, suspend_key, command):
         self.work_dir = work_dir
         self.supervised = supervised
+        self.suspend_key = suspend_key
         self.command = command
         self.pid_file = os.path.join(work_dir, 'app.pid')
+        self.events_file = os.path.join(work_dir, 'app-events.log')
         self.bootstrap_log = os.path.join(work_dir, 'bootstrap.log')
         self.output = bytearray()
         self.trace = []
@@ -72,6 +82,7 @@ class Harness:
             'BASH_SILENCE_DEPRECATION_WARNING': '1',
             'HISTFILE': '/dev/null',
             'FLEURY_JOB_PID_OUT': self.pid_file,
+            'FLEURY_JOB_EVENTS_OUT': self.events_file,
             'FLEURY_DEV_BOOTSTRAP_LOG': self.bootstrap_log,
         })
         pid = os.fork()
@@ -123,6 +134,11 @@ class Harness:
             return
         raise StepFailed(what)
 
+    def settle(self, seconds):
+        deadline = time.monotonic() + seconds
+        while time.monotonic() < deadline:
+            self.pump(0.05)
+
     def output_after(self, offset):
         return bytes(self.output[offset:])
 
@@ -138,6 +154,22 @@ class Harness:
             return int(text) if text else None
         except (OSError, ValueError):
             return None
+
+    def app_events(self):
+        try:
+            with open(self.events_file) as f:
+                return f.read().splitlines()
+        except OSError:
+            return []
+
+    def field_text(self):
+        """The composer's text as its last change left it, or None."""
+        fields = [e for e in self.app_events() if e.startswith('field:')]
+        return fields[-1][len('field:'):] if fields else None
+
+    def suspend_results(self):
+        return [e[len('suspended:'):] for e in self.app_events()
+                if e.startswith('suspended:')]
 
     @staticmethod
     def ps(pid, field):
@@ -178,15 +210,22 @@ class Harness:
         self.report['shellPid'] = self.shell_pid
         self.note('app running')
 
-        # The user's Ctrl+Z: the app hands the terminal back and stops.
+        if self.suspend_key:
+            # The focused field takes Ctrl+Z: it undoes, and the job runs on.
+            self.report['undoBeforeSuspend'] = self.ctrl_z_undoes('x', app)
+            suspend = CTRL_T
+        else:
+            suspend = CTRL_Z
+
+        # The app hands the terminal back and stops.
         start = len(self.output)
-        self.send(b'\x1a')
+        self.send(suspend)
         try:
             self.wait_for(lambda: PROMPT in self.output_after(start),
-                          'the shell prompt after Ctrl+Z', 15)
-            self.report['promptAfterCtrlZ'] = True
+                          'the shell prompt after the suspend key', 15)
+            self.report['promptAfterSuspend'] = True
         except StepFailed:
-            self.report['promptAfterCtrlZ'] = False
+            self.report['promptAfterSuspend'] = False
             self.report['whileStopped'] = {
                 'app': self.ps(app, 'stat'),
                 'parent': self.ps(parent, 'stat'),
@@ -197,6 +236,8 @@ class Harness:
             'parent': self.ps(parent, 'stat'),
         }
         self.report['stoppedNotice'] = b'Stopped' in self.output_after(start)
+        # A stopped process records nothing: the request has not completed.
+        self.report['suspendResultsWhileStopped'] = self.suspend_results()
         self.note('prompt returned')
 
         # The shell owns the terminal again: a command runs.
@@ -221,9 +262,16 @@ class Harness:
         }
         self.note('resumed')
 
+        if self.suspend_key:
+            self.wait_for(lambda: self.suspend_results(),
+                          'the suspend request to complete after fg', 15)
+            self.report['suspendResults'] = self.suspend_results()
+            # The same field still has focus and still undoes.
+            self.report['undoAfterFg'] = self.ctrl_z_undoes('y', app)
+
         # Ctrl+Q ends the app; the shell reports the job's exit status.
         start = len(self.output)
-        self.send(b'\x11')
+        self.send(CTRL_Q)
         self.wait_for(lambda: PROMPT in self.output_after(start),
                       'the prompt after the app exits', 30)
         start = len(self.output)
@@ -236,6 +284,24 @@ class Harness:
         self.run_in_shell('exit')
         self.wait_for(lambda: self.shell_status is not None, 'shell exit', 15)
         self.note('done')
+
+    def ctrl_z_undoes(self, text, app):
+        """Types [text] into the composer, presses Ctrl+Z, and records what
+        the field and the job did."""
+        self.send(text.encode())
+        self.wait_for(lambda: self.field_text() == text,
+                      f'the field to show {text!r}', 15)
+        start = len(self.output)
+        self.send(CTRL_Z)
+        self.wait_for(lambda: self.field_text() == '',
+                      f'Ctrl+Z to undo {text!r}', 15)
+        # A suspension would have stopped the job by now and printed a prompt.
+        self.settle(0.5)
+        return {
+            'undone': self.field_text() == '',
+            'appState': self.ps(app, 'stat'),
+            'prompt': PROMPT in self.output_after(start),
+        }
 
     def cleanup(self):
         # A failed step can leave the job stopped: continue its whole group so
@@ -261,11 +327,18 @@ class Harness:
 
 
 def main():
-    if len(sys.argv) < 4:
+    args = sys.argv[1:]
+    if '--' not in args or args.index('--') < 1 or args[-1] == '--':
         print(__doc__, file=sys.stderr)
         return 2
-    work_dir = sys.argv[1]
-    harness = Harness(work_dir, sys.argv[2] == 'supervised', sys.argv[3:])
+    split = args.index('--')
+    work_dir, options, command = args[0], set(args[1:split]), args[split + 1:]
+    unknown = options - {'--supervised', '--suspend-key'}
+    if unknown:
+        print(f'unknown options: {sorted(unknown)}\n{__doc__}', file=sys.stderr)
+        return 2
+    harness = Harness(work_dir, '--supervised' in options,
+                      '--suspend-key' in options, command)
     try:
         harness.run()
     except StepFailed as failure:
