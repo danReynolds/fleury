@@ -1,5 +1,5 @@
 ---
-title: Full-screen and inline UIs
+title: Full-screen & inline UIs
 description: Choose how your UI fits into a terminal session, understand the buffers it uses, and return cleanly to the shell.
 ---
 
@@ -47,8 +47,8 @@ workflow and the surrounding output provides useful context. Duration alone
 doesn't decide it: a compact status display can run for a long time.
 
 For ordinary command output, a report, or a single text prompt, plain CLI output
-may be enough. If your design needs a growing transcript above a live prompt,
-Fleury's current inline mode does not yet support that arrangement.
+may be enough. Before you design around inline mode, check what it
+[doesn't support yet](#current-inline-support).
 
 ## What the terminal does
 
@@ -73,8 +73,7 @@ selection modifiers and scrollback behavior still apply.
 
 The alternate screen normally has no scrollback of its own. A `ScrollView` or
 `ListView` scrolls content inside your UI, independently of terminal scrollback.
-Redrawing frames does not create a durable history of the interaction, and
-Fleury's inline mode clears its final frame on exit.
+Redrawing frames does not create a durable history of the interaction.
 
 ## Choose the mode at startup
 
@@ -91,7 +90,8 @@ the terminal's size. Mouse input is optional in both.
 </Tabs>
 
 `InlineSetup` is the sample form used above. These commands disable hot reload
-so their startup and completion code run once.
+so their startup and completion code run once
+([why](/fleury/guides/hot-reload/#keep-startup-work-inside-the-app)).
 
 ### Finish back at the prompt
 
@@ -153,10 +153,10 @@ use [handoff](#let-another-program-use-the-terminal).
 
 ## Output and subprocesses
 
-By default, `runApp` captures stray output while it owns the terminal and replays
-the retained output after exit. Calling `print` during the UI is not a way to
-append permanent lines above it. Render live messages as widgets; print the
-command's final result after awaiting `runApp`.
+On macOS and Linux, `runApp` captures stray output by default while it owns
+the terminal and replays the retained output after exit. Calling `print` during the UI is
+not a way to append permanent lines above it. Render live messages as widgets;
+print the command's final result after awaiting `runApp`.
 
 ### Let another program use the terminal
 
@@ -197,8 +197,9 @@ The native host reads `session` from `context.scope<TerminalSession>()` and crea
 `previewFile` before the handoff. The form itself needs no process or terminal
 code. This also works for an editor or an interactive Git command. In inline
 mode, child output can remain above the resumed UI; full-screen mode re-enters
-the alternate screen. On POSIX terminals, Ctrl+Z uses the same release-and-resume
-lifecycle.
+the alternate screen. On macOS and Linux, a `Ctrl+Z` that nothing in the app
+handles suspends the app through the same release-and-resume lifecycle, and
+`fg` brings it back.
 
 ## Try the native behavior
 
@@ -224,12 +225,20 @@ Inline mode currently runs on macOS and Linux. It needs terminal input/output
 and cursor position reporting. If the terminal cannot report its cursor
 position, Fleury restores its modes and reports the error.
 
-Natural content height, permanent log insertion above a running region, and
-retaining the final frame are not implemented. Native image protocols fall back
-to glyph rendering. When exit overlaps a resize, Fleury gets a fresh cursor
-report before clearing the region. If the terminal stops answering, cleanup
-still restores terminal modes and leaves uncertain rows alone to protect
-earlier output.
+Inline mode does not yet support:
+
+- **Natural content height.** The UI asks for an explicit number of rows and
+  can [change it](#resize-an-inline-ui) with `session.resizeInline`.
+- **Permanent lines above a running region**, such as a transcript that grows
+  above a live prompt. Render live messages as widgets, and print lasting
+  output after `runApp` returns.
+- **Keeping the final frame.** Fleury clears the live region on exit, so print
+  the command's result after awaiting `runApp`.
+- **Native image protocols.** Images fall back to glyph rendering.
+
+When exit overlaps a resize, Fleury gets a fresh cursor report before clearing
+the region. If the terminal stops answering, cleanup still restores terminal
+modes and leaves uncertain rows alone to protect earlier output.
 
 Browser embeds take their size from the containing element. A served native
 preview also has a host-controlled viewport; neither demonstrates a native

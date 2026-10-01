@@ -9,8 +9,9 @@ inside a browser element. For a real app, make that root a `FleuryApp`: it owns
 the app-wide theme, command/status scopes, and route stack while the host owns
 terminal or browser services.
 
-`fleury serve` is a third deployment path: it streams a native app to a browser
-as a local preview/debug bridge. It is not another widget-tree entry point.
+`fleury serve` is not a third entry point. It streams a native app's frames to
+a browser as a local development preview; the app itself still starts with
+`runApp`.
 
 ## `runApp` — the terminal
 
@@ -89,6 +90,11 @@ await runApp(
 // Print the result here, after the live region has been cleared.
 ```
 
+The example turns hot reload off so the code around `runApp`, such as printing
+the result, runs once. With hot reload on, a plain `dart run` runs startup code
+in two processes, and each hot restart runs the completion code again; see
+[Hot reload](/fleury/guides/hot-reload/#keep-startup-work-inside-the-app).
+
 Both modes use the same widgets and input model. Inline currently supports
 native macOS/Linux terminals with cursor reporting; its height is explicit.
 [Full-screen and inline UIs](/fleury/guides/terminal-modes/) compares the live
@@ -130,7 +136,7 @@ in a `CommandScope` beside the screen that owns them. The
 [app-shell example](https://github.com/danReynolds/fleury/blob/main/packages/fleury_widgets/example/app_shell_demo.dart)
 shows both scopes together. [Commands](/fleury/guides/commands/)
 develops that model through buttons, shortcuts, palettes, and availability;
-[Key handling](/fleury/guides/focus-and-keyboard/) covers lower-level,
+[Key handling](/fleury/guides/key-handling/) covers lower-level,
 keyboard-specific interaction.
 
 Choose exactly one root mode:

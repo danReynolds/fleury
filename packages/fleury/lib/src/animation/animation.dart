@@ -130,6 +130,12 @@ CellOffset _offsetFromVec(List<double> v) =>
 const Duration _maxStep = Duration(milliseconds: 66);
 
 /// A value that animates toward whatever you retarget it to.
+///
+/// [to] moves with a spring ([Spring.smooth] unless you pass another), so
+/// retargeting mid-flight keeps the current velocity; pass a curve for
+/// fixed-length easing instead. Reading [value] in a build rebuilds that
+/// widget as the value moves. An [Animation] you create is yours to [dispose];
+/// `AnimationBuilder` manages one for you.
 class Animation<T> extends Notifier {
   /// Creates a animation holding [value]. [type] is required only for
   /// non-built-in [T]; built-ins ([double], [int], [RgbColor],
@@ -268,7 +274,8 @@ class Animation<T> extends Notifier {
   /// from the current value+velocity. With a [curve], uses
   /// deterministic easing over [duration] (defaults to 250ms);
   /// interrupting a curve restarts from the current value with zero
-  /// velocity.
+  /// velocity. Passing [duration] without [curve], or both [spring] and
+  /// [curve], throws an [ArgumentError].
   ///
   /// Returns a [TickerFuture]. Append `.delay(...)` and `.to(...)` to describe
   /// later segments in the same run. Awaiting the result waits until the whole

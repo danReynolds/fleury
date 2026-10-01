@@ -28,17 +28,9 @@ click and Enter; the only state this example keeps is the chosen filename.
 
 ## Scroll a large list
 
-`ListView.builder` builds rows as they become visible. Choose a task: its
-green **✓** stays until you choose another. The browsing highlight moves
-independently.
-`ListController(initialIndex: 24)` starts with task 25 highlighted and visible;
-**Selected** stays **None** until you choose a task.
-
-Create the controller once in `State`. Its constructor sets the starting row;
-the list and your code both update its live `currentIndex` afterward.
-
-Try **Scroll to 500**, then **Go to 25**. Scrolling leaves the current item
-alone; **Go to 25** brings it back into view. Neither selects a task.
+`ListView.builder` builds rows as they become visible, so a list can hold
+thousands of items. This one holds a thousand tasks, and a `ListController`
+created with `initialIndex: 24` starts with task 25 highlighted and visible:
 
 <GuidePad id="lists.tasks" layout="code-wide" codeMaxHeight="29rem" codeLabel="Source" demoLabel="Focus and selection">
 <FleuryExample slot="demo" id="lists.tasks" cols={40} rows={22} interactive />
@@ -46,6 +38,12 @@ alone; **Go to 25** brings it back into view. Neither selects a task.
 <ListsGuideCode file="task_browser_test.dart" test />
 </Fragment>
 </GuidePad>
+
+Choose a task: its green **✓** stays until you choose another, and
+**Selected** reads **None** until you do. The browsing highlight moves
+independently. Try **Scroll to 500**, then **Go to 25**. Scrolling leaves the
+current item alone; **Go to 25** brings it back into view. Neither selects a
+task.
 
 `onFocusedItemChanged` reports arrow-key or pointer navigation; `onSelect`
 reports the choice. `ListController.currentIndex` remembers the current item
@@ -55,10 +53,76 @@ when focus moves to a button. Its highlight stays visible, and the demo says
 Changing `currentIndex` from code updates the list without firing either
 interaction callback. A controller listener observes changes from any source.
 
+Create the controller once in `State` and dispose it in the state's `dispose`,
+as `_TaskBrowserState` does. A `ListView` disposes only a controller it created
+itself; it never disposes one you pass in.
+
 **Page Up / Page Down** move by a page; **Home / End** move to the first or last
 item. The wheel and scrollbar scroll without moving focus or selecting an item.
 The scrollbar moves in terminal-cell steps; on a short track over many items,
 the wheel and arrow keys give finer control.
+
+### The list controller
+
+`ListController` is a `Notifier`, so a `NotifierBuilder` or listener can follow
+it, as the demo's **Current** and **Showing** lines do. These are the members
+most apps use:
+
+| Member | What it does |
+|---|---|
+| `ListController(initialIndex: …)` | Starts with that item current and scrolled into view. Without it, the list starts on its first item; `null` starts with no current item |
+| `currentIndex` | The highlighted item. Setting it moves the highlight and scrolls it into view without selecting the item or calling `onFocusedItemChanged` |
+| `jumpToIndex(index)` | Scrolls that item to the start of the viewport, as far as the content allows. The highlight stays put |
+| `scrollBy(cells)` | Scrolls by a number of cells |
+| `jumpToEnd()` | Scrolls to the end of the last item |
+| `visibleRange` | The first and last visible item indices, or `null` before layout |
+| `atStart`, `atEnd` | Whether the viewport shows the start or the end of the content |
+| `followTail`, `isFollowing`, `unseenCount` | Follow a list that grows at the end; see [Follow a growing list](#follow-a-growing-list) |
+| `dispose()` | Releases the controller. Call it from the owning state's `dispose` |
+
+## Follow a growing list
+
+A log, a chat transcript, or command output grows at its end. Create the
+controller with `ListController(followTail: true)`: the list starts at the end
+and keeps the newest item in view while the viewport stays at the end.
+
+<GuidePad id="lists.log" layout="code-wide" codeMaxHeight="29rem" codeLabel="Source" demoLabel="Follow, pause, catch up">
+<FleuryExample slot="demo" id="lists.log" cols={46} rows={14} interactive />
+<Fragment slot="references">
+<ListsGuideCode file="build_log_test.dart" test />
+</Fragment>
+</GuidePad>
+
+Press **Append** a few times; the log stays on the newest step. Then click the
+log, press **Home** to read from the top, and append again. Moving away from
+the end pauses following: `isFollowing` becomes `false`, and `unseenCount`
+counts the entries that arrived since. **Latest** calls `jumpToEnd()`, which
+returns to the end and resumes following. Scrolling back to the end yourself
+does the same.
+
+**Grow last entry** makes the newest entry taller. While the list is following,
+it keeps the end of that entry in view, even once it is taller than the
+viewport.
+
+## Keep items attached to their data
+
+By default, a list tracks positions. When items move, the highlight stays at
+the same index, which now shows a different item. If items can be inserted,
+removed, or reordered, give `ListView.builder` an `itemKeyBuilder` that returns
+each item's stable identity, such as a database ID:
+
+<GuidePad id="lists.reorder" layout="code-wide" codeMaxHeight="29rem" codeLabel="Source" demoLabel="Reorder the data">
+<FleuryExample slot="demo" id="lists.reorder" cols={38} rows={11} interactive />
+<Fragment slot="references">
+<ListsGuideCode file="reorder_tasks_test.dart" test />
+</Fragment>
+</GuidePad>
+
+Press **Reverse order**. The highlight stays on **Build the prototype** as it
+moves from the second row to the third, and `currentIndex` follows it. Keys
+also keep the viewport anchored on the same items, and each mounted row keeps
+its widget state as its item moves. Each key must be unique within the list.
+`ListView.separated` accepts `itemKeyBuilder` too.
 
 ## Horizontal scrolling
 
@@ -149,10 +213,20 @@ leave the surrounding view in place.
 
 ## Go further
 
-The source files and tests above use the same widgets as the live demos.
-Run them with `cd website/examples && dart test test/lists_guide_test.dart`.
+The sources and tests above are the files behind the live demos. The list
+demos live in
+[`website/examples/lib/lists`](https://github.com/danReynolds/fleury/tree/main/website/examples/lib/lists)
+and their tests in
+[`website/examples/test/lists`](https://github.com/danReynolds/fleury/tree/main/website/examples/test/lists).
+To run those tests and the nested scrolling one, use this command from the root
+of a clone of the Fleury repository:
 
-- [ListView reference](/fleury/widgets/listview/) includes `.separated` and controller options.
+```sh
+cd website/examples && dart test test/lists_guide_test.dart
+```
+
+- [ListView reference](/fleury/widgets/listview/) lists every constructor and
+  parameter, including `ListView.separated`.
 - [Focus management](/fleury/guides/focus/) covers traversal between panes and controls.
 - [Input & gestures](/fleury/guides/input-and-gestures/#add-hover-to-a-group-of-controls) explains how hover regions and child controls share input.
 - Use [DataTable](/fleury/widgets/datatable/) for columns and [TreeTable](/fleury/widgets/treetable/) for hierarchical rows.

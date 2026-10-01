@@ -2,6 +2,8 @@
 // in-panel toggles (paint-flashing, no-reflow, …). A small
 // `Notifier` so the shell rebuilds on mode flips.
 
+import 'package:meta/meta.dart';
+
 import '../foundation/change_notifier.dart';
 import '../runtime/runtime_error_overlay.dart' show RuntimeErrorRecord;
 import '../semantics/semantics.dart';
@@ -38,24 +40,30 @@ enum LogSourceFilter {
 /// Top-level config the app declares once via `runApp(debug: ...)`.
 class DebugConfig {
   const DebugConfig({
-    this.enabled = _defaultEnabled,
+    this.enabled,
     this.startMode = DebugMode.off,
     this.side = DebugPanelSide.right,
     this.panelWidth = 32,
     this.panelHeight = 12,
   });
 
-  /// Debug tooling is on for development runs (JIT: `dart run`, tests, hot
-  /// reload) and OFF by default in release builds (`dart compile exe` sets
-  /// `dart.vm.product`) — a shipped binary gets no debug hotkeys or event
-  /// collection unless the app opts back in with `enabled: true`.
-  static const bool _defaultEnabled = !bool.fromEnvironment('dart.vm.product');
-
-  /// When false, the shell becomes a no-op — `DebugShell` returns
-  /// `child` verbatim and no events flow. Defaults to on for development
-  /// (JIT) runs and OFF in product (AOT release) builds; see
-  /// [_defaultEnabled]. Set explicitly to force either way.
-  final bool enabled;
+  /// Whether debug tooling is on: the Ctrl+G debug shell, F12 logs, frame
+  /// recording, and the debug records a served or agent-driven session can
+  /// read. When false, `DebugShell` returns `child` verbatim and no events
+  /// flow. `true` or `false` always wins.
+  ///
+  /// Null, the default, decides from how the app was launched. Development
+  /// runs get debug tooling: the Dart VM running the app's `.dart` source
+  /// entrypoint (`dart run bin/app.dart`, `fleury run`, an editor's debug
+  /// session, and apps `fleury serve --spawn` or `fleury_mcp` start that
+  /// way), or any run with assertions enabled (tests, `--enable-asserts`,
+  /// DDC). Compiled code without assertions does not: a snapshot pub
+  /// precompiles (an app installed with `dart pub global activate`, or an
+  /// executable started by name, as bare `dart run` or
+  /// `dart run <package>:<exe>` do), `dart compile kernel`, `jit-snapshot`
+  /// or `exe` output, and a dart2js bundle. So an app shipped to users never
+  /// exposes debug hotkeys or collects events unless it opts in.
+  final bool? enabled;
 
   /// What state to open in. Default `off` keeps cold-start clean;
   /// set to `docked` (or pass `--debug` from your app's CLI) for
@@ -74,12 +82,47 @@ class DebugConfig {
   final int panelHeight;
 }
 
+/// Whether debug tooling is on for a session configured by [config] — the one
+/// rule behind [DebugConfig.enabled]'s default. An explicit value wins;
+/// otherwise a development run gets debug tooling: one whose host reports
+/// [runsFromSource], or one with assertions enabled.
+///
+/// [runsFromSource] is a launch fact only a native host can observe: the Dart
+/// VM is running the app's `.dart` source entrypoint (`sourceEntrypointBlocker`
+/// in the dev bootstrap, which hot-reload supervision asks too). A browser
+/// bundle is always compiled, so a browser host passes false.
+bool debugToolingEnabled(
+  DebugConfig config, {
+  required bool runsFromSource,
+  @visibleForTesting bool? assertionsEnabled,
+}) =>
+    config.enabled ??
+    (runsFromSource || (assertionsEnabled ?? _assertionsEnabled));
+
+/// Whether this program runs with assertions enabled: tests, `--enable-asserts`
+/// on the VM or `dart compile`, DDC. The setting is program-wide, so asking in
+/// this library answers for the app.
+final bool _assertionsEnabled = () {
+  var enabled = false;
+  assert(enabled = true);
+  return enabled;
+}();
+
 /// Mutable runtime state — flips between modes, switches tabs,
 /// toggles in-panel options. The shell + panel listen and rebuild.
 class DebugController extends Notifier {
-  DebugController(this._config) : _mode = _config.startMode {
+  /// A native host passes [runsFromSource], the launch fact that decides a
+  /// null [DebugConfig.enabled] (see [debugToolingEnabled]). A browser host
+  /// leaves it false: a bundle is compiled code.
+  DebugController(this._config, {bool runsFromSource = false})
+    : enabled = debugToolingEnabled(_config, runsFromSource: runsFromSource),
+      _mode = _config.startMode {
     if (_mode != DebugMode.off) _startFrameRecording();
   }
+
+  /// Whether debug tooling is on for this session: [DebugConfig.enabled]
+  /// when set, otherwise the default for how the app was launched.
+  final bool enabled;
 
   final DebugConfig _config;
   DebugMode _mode;
@@ -101,7 +144,7 @@ class DebugController extends Notifier {
   List<FrameEvent> get frameHistory => _frameLog?.records ?? const [];
 
   void _startFrameRecording() {
-    if (_config.enabled) _frameLog ??= DebugFrameLog(capacity: 60);
+    if (enabled) _frameLog ??= DebugFrameLog(capacity: 60);
   }
 
   /// Scroll position of the current non-Logs report. Logs owns its viewport.
@@ -196,7 +239,8 @@ class DebugController extends Notifier {
     notify();
   }
 
-  /// Shift+Ctrl+G / F11 — docked ↔ fullscreen. No-op when off.
+  /// F11 — docked ↔ fullscreen. No-op when off. (Ctrl+G only opens and
+  /// closes the shell; see [toggleOnOff].)
   void toggleExpand() {
     _checkNotDisposed();
     if (_mode == DebugMode.off) return;

@@ -13,12 +13,24 @@ import 'package:fleury/fleury.dart';
 import 'package:fleury_widgets/fleury_widgets.dart';
 ```
 
+In code that runs in a browser, import
+`package:fleury_widgets/fleury_widgets_web.dart` instead (with
+`package:fleury/fleury_core.dart`). It exports everything the native barrel
+does except `LocalFileSource`, which reads the local disk through `dart:io`.
+
 The lower-level primitives — `Text`, `Row`/`Column`, `Spinner`,
 `TextInput`, `ScrollView`, `Navigator`, focus, animation — live in
 `fleury` itself. This package is the catalog you reach for once the
 layout bones are in place.
 
-## Catalog
+Documentation: [Fleury docs](https://danreynolds.github.io/fleury/) ·
+[widget reference](https://danreynolds.github.io/fleury/widgets/).
+
+## Highlights
+
+A selection from the catalog. The
+[widget reference](https://danreynolds.github.io/fleury/widgets/) covers every
+widget this package exports.
 
 ### Inputs & forms
 

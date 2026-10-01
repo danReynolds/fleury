@@ -3,17 +3,19 @@ import 'package:fleury/fleury_core.dart';
 import 'dialog.dart' show Dialog;
 import 'semantic_roles.dart';
 
-/// Severity for a protocol-neutral approval request.
+/// How serious an [ApprovalRequest] is. It sets the confirm button's color;
+/// `destructive` also adds a "cannot be undone" warning and, by default,
+/// focuses the deny button.
 enum ApprovalSeverity { info, warning, destructive }
 
 /// User decision emitted by [ApprovalPrompt].
 enum ApprovalDecision { approved, denied }
 
-/// Protocol-neutral approval request data.
+/// What an [ApprovalPrompt] asks the user to approve: a title, a message, an
+/// optional subject and detail lines, a severity, and the button labels.
 ///
-/// This intentionally avoids ACP, JSON-RPC, or provider-specific terminology.
-/// Adapter packages can map their own permission or confirmation objects onto
-/// this shape while Fleury owns the reusable UI, semantics, and test surface.
+/// It isn't tied to any agent protocol, so map your own permission or
+/// confirmation objects onto it.
 final class ApprovalRequest {
   const ApprovalRequest({
     required this.id,
@@ -54,8 +56,34 @@ final class ApprovalRequest {
 /// A yes/no decision dialog for one [ApprovalRequest]: title, explanation,
 /// optional subject and detail lines, and Approve/Deny buttons with `y`/`n`
 /// key shortcuts. Destructive requests focus Deny by default, so a stray
-/// Enter can't trigger an irreversible action.
-class ApprovalPrompt extends StatelessWidget {
+/// Enter can't trigger an irreversible action. For half a second after the
+/// prompt appears, or shows a request with a different [ApprovalRequest.id],
+/// it ignores the keys and clicks that approve (`y`, and Enter, Space, or a
+/// click on Approve), so typing or a click meant for what was there before
+/// can't approve it. Denying works at once.
+///
+/// The prompt's semantic submit action approves at once, since an agent or
+/// assistive technology addresses it on purpose. A semantic press of the
+/// Approve button in that half second reports `unsupported` instead: the
+/// button can't tell it from a key or a click.
+///
+/// Esc denies, as the semantic cancel action does. In a dialog shown with
+/// `present`, Esc answers the request through [onDecision] instead of closing
+/// the dialog around it. The route `present` makes can still close it
+/// unanswered, with null as `present`'s result: through the route's semantic
+/// dismiss action, which an agent can invoke, or through
+/// [NavigatorState.maybePop], as a Back command does. Pass
+/// `barrierDismissible: false`, as below, to turn both off, so every way out
+/// goes through [onDecision]. Close the prompt from there; popping with the
+/// decision makes it `present`'s result:
+///
+/// ```dart
+/// final decision = await context.present<ApprovalDecision>(
+///   ApprovalPrompt(request: request, onDecision: context.pop),
+///   barrierDismissible: false,
+/// );
+/// ```
+class ApprovalPrompt extends StatefulWidget {
   const ApprovalPrompt({
     super.key,
     required this.request,
@@ -67,29 +95,81 @@ class ApprovalPrompt extends StatelessWidget {
   /// Request content and severity to present.
   final ApprovalRequest request;
 
-  /// Called whenever the user approves or denies [request].
+  /// Called whenever the user approves or denies [request]: with a button,
+  /// `y` or `n`, Esc (which denies), or a semantic action. The prompt doesn't
+  /// close itself; dismiss it from here.
   final void Function(ApprovalDecision decision) onDecision;
 
   /// Total dialog width, including its border; null sizes to the content.
   final int? width;
 
-  /// Whether the confirm button is focused on open. When null (the default)
-  /// this is severity-aware: a [ApprovalSeverity.destructive] request focuses
-  /// *Deny* so a single Enter can't trigger an irreversible action — the
-  /// safe-default convention used by every agent CLI. Non-destructive requests
+  /// Whether the confirm button is focused on open. When null (the default),
+  /// an [ApprovalSeverity.destructive] request focuses the deny button, so a
+  /// single Enter can't trigger an irreversible action, and other requests
   /// focus confirm. Pass an explicit value to override.
   final bool? autofocusApprove;
 
   bool get _autofocusApprove =>
       autofocusApprove ?? request.severity != ApprovalSeverity.destructive;
 
-  void _approve() => onDecision(ApprovalDecision.approved);
-  void _deny() => onDecision(ApprovalDecision.denied);
+  @override
+  State<ApprovalPrompt> createState() => _ApprovalPromptState();
+}
+
+class _ApprovalPromptState extends State<ApprovalPrompt> {
+  /// How long after the prompt appears it ignores approving keys and clicks.
+  static const _approvalDelay = Duration(milliseconds: 500);
+
+  /// The runtime's clock, which tests drive.
+  Clock _clock = const SystemClock();
+
+  /// When the prompt first built with its current request; null until then.
+  Duration? _shownAt;
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    _clock =
+        TuiBinding.maybeOf(context)?.tickerScheduler.clock ??
+        const SystemClock();
+  }
+
+  @override
+  void didUpdateWidget(ApprovalPrompt oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    // A different request is a new question: keys meant for the last one
+    // must not answer it.
+    if (widget.request.id != oldWidget.request.id) _shownAt = null;
+  }
+
+  /// Whether a key or click may approve yet: true once the prompt has been
+  /// showing its request for [_approvalDelay].
+  bool get _approvable {
+    final shownAt = _shownAt;
+    return shownAt != null && _clock.now - shownAt >= _approvalDelay;
+  }
+
+  void _approve() => widget.onDecision(ApprovalDecision.approved);
+  void _deny() => widget.onDecision(ApprovalDecision.denied);
+
+  /// `y`: does nothing (and still consumes the key) until [_approvable].
+  void _approveFromKey() {
+    if (_approvable) _approve();
+  }
+
+  /// Approve's Enter, Space, click, or semantic press. A decline is ignored
+  /// by a key or click and reported by a semantic press.
+  void _pressApprove() {
+    if (!_approvable) throw const SemanticActionDeclined();
+    _approve();
+  }
 
   @override
   Widget build(BuildContext context) {
+    _shownAt ??= _clock.now;
     final theme = Theme.of(context);
-    final approveFocused = _autofocusApprove;
+    final request = widget.request;
+    final approveFocused = widget._autofocusApprove;
     return Semantics(
       role: WidgetRoles.approval,
       label: request.title,
@@ -105,6 +185,8 @@ class ApprovalPrompt extends StatelessWidget {
       }),
       onAction: (action) {
         switch (action) {
+          // Not held back like a key or click: a semantic action is aimed at
+          // this prompt, so it can't be typing meant for the screen behind.
           case SemanticAction.submit:
             _approve();
             return;
@@ -121,7 +203,7 @@ class ApprovalPrompt extends StatelessWidget {
         bindings: <KeyBinding>[
           KeyBinding(
             KeyCode.char('y'),
-            onTrigger: (_) => _approve(),
+            onTrigger: (_) => _approveFromKey(),
             hideFromHintBar: true,
           ),
           KeyBinding(
@@ -129,10 +211,18 @@ class ApprovalPrompt extends StatelessWidget {
             onTrigger: (_) => _deny(),
             hideFromHintBar: true,
           ),
+          // Esc cancels, and cancelling a request is denying it. Bound here,
+          // it answers before a dialog route's Esc would close the prompt
+          // around a request nobody answered.
+          KeyBinding(
+            KeySequence.escape,
+            onTrigger: (_) => _deny(),
+            hideFromHintBar: true,
+          ),
         ],
         child: Dialog(
           title: request.title,
-          width: width,
+          width: widget.width,
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.stretch,
             mainAxisSize: MainAxisSize.min,
@@ -161,7 +251,7 @@ class ApprovalPrompt extends StatelessWidget {
                     text: request.confirmLabel,
                     variant: _confirmVariant(request.severity),
                     autofocus: approveFocused,
-                    onPressed: _approve,
+                    onPressed: _pressApprove,
                   ),
                   const SizedBox(width: 1),
                   Button(

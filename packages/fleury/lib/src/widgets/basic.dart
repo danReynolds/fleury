@@ -563,15 +563,18 @@ class Flexible extends SingleChildRenderObjectWidget {
 ///
 /// Non-positioned children determine the stack's size (intrinsic of the
 /// largest non-positioned child) and are constrained per [fit]. Positioned
-/// children float on top with explicit offsets and (optional) sizes.
-/// Children paint in declaration order; the cell buffer's eviction rules
-/// handle wide-grapheme overlap correctly.
+/// children float on top with explicit offsets and (optional) sizes, and don't
+/// affect the stack's size. Children paint in declaration order, so a later
+/// child covers an earlier one wherever it draws. Where it covers half of a
+/// wide character (a CJK character or an emoji, say), that whole character is
+/// cleared rather than left half-drawn.
 final class Stack extends MultiChildRenderObjectWidget {
   const Stack({super.key, this.fit = StackFit.loose, super.children});
 
   /// How non-positioned children are constrained. [StackFit.passthrough]
-  /// makes a Stack layout-transparent for its first child — the shape of a
-  /// popup layered over an app that must not move the app.
+  /// passes the stack's own constraints through unchanged, so a stack with one
+  /// non-positioned child lays it out exactly as if the stack weren't there —
+  /// the shape of a popup layered over an app that must not move the app.
   final StackFit fit;
 
   @override

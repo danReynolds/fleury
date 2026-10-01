@@ -21,7 +21,9 @@ final class LogEntry {
     this.metadata = const <String, Object?>{},
   });
 
-  /// Stable identity used by semantics and copy callbacks.
+  /// Stable identity used by semantics and copy callbacks. When every shown
+  /// entry has a distinct id, [LogRegion] also uses it to keep the cursor on
+  /// the same entry as rows are added or removed.
   final Object? id;
 
   /// Severity used for styling, filtering, and aggregate semantics.
@@ -33,7 +35,9 @@ final class LogEntry {
   /// Optional timestamp associated with the entry.
   final DateTime? timestamp;
 
-  /// Sanitized display message for the row.
+  /// The row's text. Line breaks and tabs show as spaces, and terminal escape
+  /// sequences are made harmless; a message wider than the region wraps onto
+  /// more rows.
   final String message;
 
   /// App-specific semantic state carried by the row.
@@ -49,7 +53,8 @@ final class LogRegionFilterDescriptor {
     this.caseSensitive = false,
   });
 
-  /// Text query matched against message, source, severity, and metadata.
+  /// Text to find in each entry's message, source, severity label (such as
+  /// `WARN`), or id. Matching ignores case unless [caseSensitive] is true.
   final String query;
 
   /// Optional set of source labels to include.
@@ -87,7 +92,8 @@ final class LogRegionExportOptions {
   /// Maximum number of entries to export.
   final int? maxEntries;
 
-  /// Maximum message length per exported row.
+  /// Cuts each exported message to this many characters, with no ellipsis;
+  /// null never cuts. The prefix doesn't count.
   final int? maxLineLength;
 }
 
@@ -168,6 +174,10 @@ class LogRegionController extends Notifier {
 
   ListController get _listController => _list;
 
+  /// Index of the row under the cursor among the rows shown (after
+  /// [LogRegion.filter]), or null when there is none. Setting it moves the
+  /// cursor, which then stops riding the newest entry until End or
+  /// [scrollToBottom].
   int? get currentIndex => _list.currentIndex;
   set currentIndex(int? value) {
     _checkNotDisposed();
@@ -182,10 +192,19 @@ class LogRegionController extends Notifier {
     _list.followTail = value;
   }
 
+  /// Whether the view is following new entries right now: false while the
+  /// user reads history, even when [followTail] is on.
   bool get isFollowing => _list.isFollowing;
+
+  /// Whether the last row is in view.
   bool get atBottom => _list.atEnd;
+
+  /// How many entries arrived at the end while it was out of view, for an
+  /// "N new" indicator. Resets to zero when the view reaches the end.
   int get unseenCount => _list.unseenCount;
 
+  /// The first and last row indexes in view, including partly visible rows;
+  /// null before the first layout or when no rows are shown.
   ({int first, int last})? get visibleRange => _list.visibleRange;
 
   /// Scrolls to an item without changing which item is selected.
@@ -266,7 +285,25 @@ List<int> buildLogRegionEntryOrder(
   return List<int>.unmodifiable(order);
 }
 
-/// Keyboard-navigable, tail-following log/output region.
+/// A scrolling log view that keeps the newest entry in view as entries
+/// arrive, with severity styling, filtering, and copy.
+///
+/// To stream output, keep the entries in your state, append each new
+/// [LogEntry], and rebuild (with `setState`, for example); the region shows
+/// the new rows. If you also drop old entries from the front, give every
+/// entry a unique [LogEntry.id] so the cursor stays on its entry and
+/// [LogRegionController.unseenCount] stays accurate.
+///
+/// The region follows the tail by default, with the cursor on the newest
+/// entry. Scrolling up to read history pauses following, and
+/// [LogRegionController.unseenCount] counts the entries that arrive
+/// meanwhile. Scrolling back to the end, pressing End, or calling
+/// [LogRegionController.scrollToBottom] resumes it.
+///
+/// Up and Down move the cursor; PageUp, PageDown, and Home jump. Clicking a
+/// row moves the cursor to it. Ctrl+C copies the entry under the cursor (see
+/// [copySelection] and [copyOptions]). [filter] narrows the rows shown by
+/// text, source, or severity without changing [entries].
 class LogRegion extends StatefulWidget {
   const LogRegion({
     super.key,
@@ -284,10 +321,12 @@ class LogRegion extends StatefulWidget {
     this.onCopy,
   }) : assert(maxLineLength == null || maxLineLength >= 0);
 
-  /// Source log rows to render, filter, and copy.
+  /// The log rows, oldest first. To add rows, append to the list (or pass a
+  /// new one) and rebuild.
   final List<LogEntry> entries;
 
-  /// External selection and tail-follow controller.
+  /// Reads and moves the cursor and controls tail following. If null, the
+  /// region creates its own.
   final LogRegionController? controller;
 
   /// Focus node used for keyboard navigation.
@@ -299,22 +338,29 @@ class LogRegion extends StatefulWidget {
   /// Semantic label (the accessibility name; not rendered) for the region.
   final String semanticLabel;
 
-  /// Whether rows render severity/source/timestamp prefixes.
+  /// Whether each row starts with a `[timestamp SEVERITY source]` prefix,
+  /// leaving out the parts an entry doesn't have.
   final bool showPrefix;
 
-  /// Maximum displayed message length per row.
+  /// Cuts each message to this many characters, with no ellipsis, on screen
+  /// and when copied; null never cuts. The prefix doesn't count.
   final int? maxLineLength;
 
-  /// Optional filter applied before rendering rows.
+  /// Narrows the rows shown by text, source, or severity; [entries] is left
+  /// unchanged.
   final LogRegionFilterDescriptor? filter;
 
-  /// Optional prebuilt search index for large log collections.
+  /// Optional prebuilt search index for large log collections. The region
+  /// uses it only when it was built over the same list object passed as
+  /// [entries]; otherwise it filters without it.
   final LogRegionSearchIndex? searchIndex;
 
-  /// Whether Ctrl+C and semantic copy export the selected row.
+  /// Whether Ctrl+C (and the semantic copy action) copies the entry under the
+  /// cursor.
   final bool copySelection;
 
-  /// Clipboard/export options for the selected row.
+  /// Whether copied text includes the row prefix, and the clipboard write
+  /// policy.
   final LogRegionCopyOptions copyOptions;
 
   /// Called after a copy attempt completes.
@@ -647,7 +693,7 @@ bool _entryMatchesFilter(LogEntry entry, _CompiledLogRegionFilter filter) {
   if (entry.id != null && matcher.matches(entry.id.toString())) return true;
   if (entry.source != null && matcher.matches(entry.source!)) return true;
   if (matcher.matches(_severityLabel(entry.severity))) return true;
-  return matcher.matches(_sanitizeLogMessage(entry.message));
+  return matcher.matches(_sanitizeLogText(entry.message));
 }
 
 final class _CompiledLogRegionFilter {
@@ -797,7 +843,7 @@ String _searchTextFor(LogEntry entry) {
     if (entry.id != null) entry.id.toString(),
     if (entry.source != null) entry.source!,
     _severityLabel(entry.severity),
-    _sanitizeLogMessage(entry.message),
+    _sanitizeLogText(entry.message),
   ].join('\u{0}');
 }
 
@@ -1022,7 +1068,7 @@ _FormattedLogLine _formatLogLine(
   required int? maxLineLength,
 }) {
   final original = entry.message;
-  final sanitized = _sanitizeLogMessage(original);
+  final sanitized = _sanitizeLogText(original);
   final truncatedMessage = _truncateGraphemes(sanitized, maxLineLength);
   final prefix = includePrefix ? _prefixFor(entry) : '';
   return _FormattedLogLine(
@@ -1034,28 +1080,7 @@ _FormattedLogLine _formatLogLine(
   );
 }
 
-String _sanitizeLogMessage(String original) {
-  if (!_needsLogSanitization(original)) return original;
-  return sanitizeSingleLine(original);
-}
-
-bool _needsLogSanitization(String text) {
-  for (final codeUnit in text.codeUnits) {
-    if (codeUnit == 0x1b ||
-        codeUnit == 0x9b ||
-        codeUnit == 0x9d ||
-        codeUnit == 0x90 ||
-        codeUnit == 0x98 ||
-        codeUnit == 0x9e ||
-        codeUnit == 0x9f ||
-        codeUnit == 0x0a ||
-        codeUnit == 0x0d ||
-        codeUnit == 0x09) {
-      return true;
-    }
-  }
-  return false;
-}
+String _sanitizeLogText(String text) => sanitizeSingleLine(text);
 
 String _truncateGraphemes(String text, int? maxLineLength) {
   if (maxLineLength == null) return text;
@@ -1069,7 +1094,8 @@ String _prefixFor(LogEntry entry) {
   final parts = <String>[
     if (entry.timestamp != null) entry.timestamp!.toIso8601String(),
     _severityLabel(entry.severity),
-    if (entry.source != null && entry.source!.isNotEmpty) entry.source!,
+    if (entry.source != null && entry.source!.isNotEmpty)
+      _sanitizeLogText(entry.source!),
   ];
   return parts.isEmpty ? '' : '[${parts.join(' ')}] ';
 }

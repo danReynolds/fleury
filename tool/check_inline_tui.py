@@ -212,40 +212,81 @@ def lifecycle(dart, supervised=False, crash=False, abrupt=False):
                 app.finish()
         else:
             pid = app.app_pid()
-            app.send(b"\x1a")
-            end = time.monotonic() + 5
-            stopped = False
-            while time.monotonic() < end:
-                # Deliberately fragment reads: stopping is not evidence that
-                # the emulator has consumed every preceding terminal write.
-                app.pump(max_bytes=8)
-                status = subprocess.run(['ps', '-o', 'stat=', '-p', str(pid)],
-                                        capture_output=True, text=True).stdout
-                if 'T' in status:
-                    stopped = True
-                    break
-            assert stopped, "Ctrl+Z did not suspend"
-            # The stopped app has flushed its cleanup output, but that output
-            # may still be queued on the PTY. Drain it before inspecting the
-            # screen; no sleep or relaxed screen assertion is needed.
-            while select.select([app.master], [], [], 0)[0]:
-                app.pump(0, max_bytes=8)
-            assert "INLINE-READY" not in app.text(), "suspend left the live region"
-            restored_modes = termios.tcgetattr(app.slave)
-            expected_modes = app.original_modes.copy()
-            # macOS may set PENDIN when canonical input resumes. It describes
-            # pending input retyping, not a mode configured by the app.
-            pending_input = getattr(termios, "PENDIN", 0)
-            restored_modes[3] &= ~pending_input
-            expected_modes[3] &= ~pending_input
-            assert restored_modes == expected_modes, "suspend left terminal modes changed"
-            os.kill(pid, signal.SIGCONT)
-            app.wait(lambda: "INLINE-READY" in app.text(), "resume frame")
+            # The job is the guard's process group: the guard stands where a
+            # shell's command would, the process the shell waits on.
+            suspend_and_resume(app, [pid, app.child.pid])
             app.send(b"\x03")
             app.finish(130)  # Raw Ctrl+C preserves the same outcome as SIGINT.
         print(f"PASS inline lifecycle supervised={supervised} crash={crash} abrupt={abrupt}")
     finally:
         app.close()
+
+
+def supervised_suspend(dart):
+    """Ctrl+Z under the hot-reload supervisor stops the whole job.
+
+    The supervisor is the app's parent and shares its process group. Stopping
+    the app alone left the supervisor running in the foreground, so a shell
+    never got its prompt back.
+    """
+    app = Session(dart, supervised=True)
+    try:
+        app.wait(lambda: app.app_pid() is not None, "initial supervised frame")
+        pid = app.app_pid()
+        supervisor = int(subprocess.run(['ps', '-o', 'ppid=', '-p', str(pid)],
+                                        capture_output=True, text=True).stdout)
+        # The supervisor attaches after the first frame; let it finish before
+        # the job stops, as the restart case does.
+        for _ in range(10):
+            app.pump(0.1)
+        suspend_and_resume(app, [pid, supervisor, app.child.pid])
+        assert app.app_pid() == pid, "the supervisor replaced the stopped app"
+        app.send(b"\x11")
+        app.finish()
+        print("PASS inline supervised suspend")
+    finally:
+        app.close()
+
+
+def suspend_and_resume(app, job):
+    """Presses Ctrl+Z, checks that every process in [job] stopped and that
+    the terminal is the shell's again, then continues the job as `fg` does."""
+    # Ctrl+Z reaches the app first, and the autofocused field would take it as
+    # undo. Focus the button, which leaves the chord unhandled, so it becomes
+    # the terminal's job control.
+    app.click(app.row("Click me"))
+    app.wait(lambda: "clicks=1" in app.text(), "focus the button")
+    app.send(b"\x1a")
+    end = time.monotonic() + 5
+    states = []
+    while time.monotonic() < end:
+        # Deliberately fragment reads: stopping is not evidence that the
+        # emulator has consumed every preceding terminal write.
+        app.pump(max_bytes=8)
+        states = [subprocess.run(['ps', '-o', 'stat=', '-p', str(pid)],
+                                 capture_output=True, text=True).stdout.strip()
+                  for pid in job]
+        if all('T' in state for state in states):
+            break
+    assert all('T' in state for state in states), \
+        f"Ctrl+Z did not suspend the job: {dict(zip(job, states))}"
+    # The stopped app has flushed its cleanup output, but that output may
+    # still be queued on the PTY. Drain it before inspecting the screen; no
+    # sleep or relaxed screen assertion is needed.
+    while select.select([app.master], [], [], 0)[0]:
+        app.pump(0, max_bytes=8)
+    assert "INLINE-READY" not in app.text(), "suspend left the live region"
+    restored_modes = termios.tcgetattr(app.slave)
+    expected_modes = app.original_modes.copy()
+    # macOS may set PENDIN when canonical input resumes. It describes pending
+    # input retyping, not a mode configured by the app.
+    pending_input = getattr(termios, "PENDIN", 0)
+    restored_modes[3] &= ~pending_input
+    expected_modes[3] &= ~pending_input
+    assert restored_modes == expected_modes, "suspend left terminal modes changed"
+    # fg continues the job's whole process group, not only the app.
+    os.killpg(os.getpgid(job[0]), signal.SIGCONT)
+    app.wait(lambda: "INLINE-READY" in app.text(), "resume frame")
 
 
 def signals(dart):
@@ -316,6 +357,7 @@ if __name__ == "__main__":
     signals(args.dart)
     resize_exit(args.dart)
     if not args.skip_supervisor:
+        supervised_suspend(args.dart)
         lifecycle(args.dart, supervised=True)
         lifecycle(args.dart, supervised=True, crash=True)
         lifecycle(args.dart, supervised=True, abrupt=True)

@@ -7,8 +7,8 @@ import 'scaffold.dart';
 
 /// An htop-style live system dashboard built entirely from Fleury widgets:
 /// per-core CPU gauges, a streaming history chart, memory/swap/IO meters, and a
-/// live, sortable process table. The data is synthetic (a bounded random walk)
-/// so the demo runs identically in a terminal or in the browser over
+/// live process table sorted by CPU. The data is synthetic (a bounded random
+/// walk) so the demo runs identically in a terminal or in the browser over
 /// `fleury serve` — no host system access required.
 class DashboardApp extends StatelessWidget {
   const DashboardApp({super.key});

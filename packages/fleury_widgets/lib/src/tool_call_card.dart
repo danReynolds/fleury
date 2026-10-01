@@ -5,10 +5,10 @@ import 'package:fleury/fleury_core.dart';
 
 import 'semantic_roles.dart';
 
-/// Protocol-neutral status for one tool call.
+/// Status of one tool call.
 enum ToolCallStatus { queued, running, succeeded, failed, cancelled }
 
-/// Protocol-neutral tool call data rendered by [ToolCallCard].
+/// One tool call's data, rendered by [ToolCallCard].
 final class ToolCallRecord {
   const ToolCallRecord({
     required this.id,
@@ -77,7 +77,8 @@ final class ToolCallCopyOptions {
   /// Whether copied summaries include output or error text.
   final bool includeOutput;
 
-  /// Maximum copied output/error length.
+  /// Cuts the output or error text to this many characters, with no
+  /// ellipsis, both on the card and in copies; null never cuts.
   final int? maxOutputLength;
 
   /// Clipboard write behavior for copied tool-call text.
@@ -121,9 +122,11 @@ String exportToolCallSummary(
 }
 
 /// A card that renders one tool/function call — name, status, arguments, and
-/// output — as a single transcript entry. Tool text is sanitized before it
-/// reaches the screen, and the card offers a Copy action plus Cancel while
-/// the call is still running.
+/// output — as a single transcript entry.
+///
+/// Tool text is sanitized before it reaches the screen. The card shows a Copy
+/// button when [copyEnabled] is true (the default), and a Cancel button while
+/// the call is queued or running if [onCancel] is set.
 class ToolCallCard extends StatefulWidget {
   const ToolCallCard({
     super.key,
@@ -141,7 +144,9 @@ class ToolCallCard extends StatefulWidget {
   /// Whether the card exposes copy UI and semantic copy.
   final bool copyEnabled;
 
-  /// Clipboard/export options for copied tool-call summaries.
+  /// Clipboard/export options for copied tool-call summaries. Its
+  /// [ToolCallCopyOptions.maxOutputLength] also cuts the output shown on the
+  /// card.
   final ToolCallCopyOptions copyOptions;
 
   /// Called after a copy attempt completes.
@@ -322,28 +327,7 @@ String _formatArguments(Map<String, Object?> arguments) {
   return parts.join(' ');
 }
 
-String _sanitizeToolText(String original) {
-  if (!_needsToolSanitization(original)) return original;
-  return sanitizeSingleLine(original);
-}
-
-bool _needsToolSanitization(String text) {
-  for (final codeUnit in text.codeUnits) {
-    if (codeUnit == 0x1b ||
-        codeUnit == 0x9b ||
-        codeUnit == 0x9d ||
-        codeUnit == 0x90 ||
-        codeUnit == 0x98 ||
-        codeUnit == 0x9e ||
-        codeUnit == 0x9f ||
-        codeUnit == 0x0a ||
-        codeUnit == 0x0d ||
-        codeUnit == 0x09) {
-      return true;
-    }
-  }
-  return false;
-}
+String _sanitizeToolText(String text) => sanitizeSingleLine(text);
 
 String _truncateGraphemes(String text, int? maxLineLength) {
   if (maxLineLength == null) return text;

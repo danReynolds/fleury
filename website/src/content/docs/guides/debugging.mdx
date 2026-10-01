@@ -1,20 +1,21 @@
 ---
 title: Debugging
-description: Trace slow frames, unexpected rebuilds, and runtime errors with Fleury’s built-in debugger.
+description: Trace slow frames, unexpected rebuilds, and runtime errors with the debug shell, and step through your code under a debugger.
 ---
 
 import DebuggingDemo from '../../../components/DebuggingDemo.astro';
 
-Fleury’s debugger connects a rendered frame to its phase timings, invalidation
-sources, logs, and errors. Open it with **Ctrl+G** in a native development run;
-it overlays the app without changing the app’s layout.
+The debug shell connects a rendered frame to its phase timings, invalidation
+sources, logs, and errors. Open it with **Ctrl+G** in a development run
+([when it’s on](#configuring-it)); it overlays the app without changing the
+app’s layout.
 
 ## Reproduce a slow frame
 
 Click **Slow build** below, then find **Worst build** in Rebuilds. The app
 blocks one build for about 100 ms; the panel measures the actual frame. Switch
 to **Errors** after clicking **Throw error**, or **Logs** after **Write logs**.
-Use **Fullscreen demo** for more room; **Expand panel** gives the debugger
+Use **Fullscreen demo** for more room; **Expand panel** gives the debug shell
 the whole app surface.
 
 <DebuggingDemo />
@@ -46,24 +47,26 @@ To inspect the events leading to a failure, click **Write logs** and open
 keeps the filter, **Esc** clears it, and **s** switches between stdout, stderr,
 and both.
 
-## Use the debugger locally
+## Use the debug shell locally
 
-Press **Ctrl+G** in a native development run, or launch the fuller playground
-from the `packages/samples` directory of a Fleury checkout:
+Press **Ctrl+G** while your app runs from source, or launch the fuller
+playground from the `packages/samples` directory of a Fleury checkout:
 
 ```sh
 cd packages/samples
 dart run bin/samples.dart debug
 ```
 
-Open the debugger once to start recording, then close it so the app receives
+Open the debug shell once to start recording, then close it so the app receives
 its normal keys. Trigger **Spike a slow frame**, reopen the panel, and select
 **Rebuilds**. The recording keeps the last 60 frames while hidden. Inspect the
 worst frame: reopening the panel can produce a newer, faster one.
 
-Native sessions also capture ordinary prints and descriptor-level output,
-including FFI writes, so stray output does not overwrite the app. Captured
-output replays after exit. With `fleury serve`, check the server console.
+On macOS and Linux, a terminal session also captures ordinary prints and
+descriptor-level output, including FFI writes, so stray output does not
+overwrite the app. Captured output replays after exit. Windows doesn’t capture
+output, and `FLEURY_FD_CAPTURE=0` or an app that passes its own `driver:` to
+`runApp` turns capture off. With `fleury serve`, check the server console.
 
 ## Find unnecessary work
 
@@ -73,10 +76,10 @@ origins, not a CPU stack trace. Look for state or notifier updates that reach a
 larger subtree than necessary. Close the panel and **Stop live stream** when done.
 
 Opening the panel also schedules work, so the latest sources can belong to the
-debugger. **Worst sources** retains the origins of the single frame with the
+debug shell. **Worst sources** retains the origins of the single frame with the
 highest total duration; it does not summarize the recording.
 
-Press **p** while the debugger is open to enable paint flash. Close the panel
+Press **p** while the panel is open to enable paint flash. Close the panel
 and repeat the interaction: the flash remains active, so you can compare the
 changed region with the update you intended. Reopen it and press **p** again to
 turn it off.
@@ -103,40 +106,59 @@ tree. Use the up/down arrows to select a node and page through its details.
 
 A missing or disabled semantic action points to the control or command wiring.
 If the action works through an agent but the physical key does not, inspect
-**Live → Keyboard** and the binding’s scope. See [Key handling](/fleury/guides/focus-and-keyboard/)
+**Live → Keyboard** and the binding’s scope. See [Key handling](/fleury/guides/key-handling/)
 and [Focus management](/fleury/guides/focus/) for those contracts. The terminal
 profile in Tree also helps separate app behavior from a
 [terminal fallback](/fleury/guides/terminal-capabilities/).
 
-## Keep the debugger out of the reproduction
+## Keep the debug shell out of the reproduction
 
-The app continues running beneath the panel. **Ctrl+G and F12 stay reserved
-whenever debug tooling is enabled**, including when the panel is closed. The
-other shortcuts below apply while the panel is open. To reproduce app bindings
-for Ctrl+G or F12, disable the tooling with
-`debug: const DebugConfig(enabled: false)` when calling `runApp`.
-See [Key handling](/fleury/guides/focus-and-keyboard/#keys-handled-by-the-host)
-for native Ctrl+Z and Ctrl+C behavior.
+The app keeps running beneath the panel, but Fleury gives the debug shell its
+keys before any of your app’s bindings see them. **Ctrl+G** and **F12** belong
+to the debug shell whenever it is on, even while the panel is closed, so an
+app’s own `Ctrl+G` or `F12` binding works only with the debug shell off (see
+[Configuring it](#configuring-it)). While the panel is open, it also takes the
+other keys below; close it to reproduce normal keyboard behavior.
+[Key handling](/fleury/guides/key-handling/#keys-handled-by-the-host)
+lists the other keys Fleury handles itself, including Ctrl+C and Ctrl+Z.
 
 | Key | Action |
 | --- | --- |
 | Ctrl+G | Open or close; preserve the recording. |
+| F12 | Open Logs; press again there to close. |
 | F11 | Expand or dock the open panel. |
 | Tab / Shift+Tab, or left/right | Switch tabs. |
 | Page Up / Page Down | Scroll Live, Tree, Rebuilds, or Errors. |
-| F12 | Open Logs; press again there to close. |
-| Esc | Clear a log filter, otherwise dock a fullscreen panel. |
+| Up / Down, Home | Select a node in Tree; Home returns to the first. |
+| / and s | Search Logs; switch between stdout, stderr, and both. |
+| p | Turn paint flash on or off. |
+| Esc | Clear a log filter, otherwise dock an expanded panel. |
 | F5 | Hot restart while the panel is open and a development supervisor is attached; application state is lost. |
 
-F5 must reach the terminal for the in-app restart to work. If your editor or
-terminal intercepts it during a `fleury run` session, press `Ctrl+C` and rerun
-the command. If you launched with VS Code's F5, use the editor's **Restart**
-action instead: the editor owns that session and Fleury's restart is unavailable.
+F5 and F11 work only when the key reaches the app.
+[When F5 doesn’t restart](/fleury/guides/hot-reload/#when-f5-doesnt-restart)
+covers F5, including the editor debug sessions where the restart is the
+editor’s. F11 is often taken before it reaches the app: VS Code’s integrated
+terminal on Windows and Linux, Windows Terminal, and GNOME Terminal use it for
+full screen, and macOS uses it to show the desktop. The panel has no other
+expand key. To work expanded, open the panel that way at launch with
+`startMode: DebugMode.fullscreen` (**Esc** docks it); for a roomier docked
+panel, raise `panelWidth` or dock it at the bottom (see
+[Configuring it](#configuring-it)). In VS Code, adding
+`"-workbench.action.toggleFullScreen"` to `terminal.integrated.commandsToSkipShell`
+sends F11 to the app, the same fix that page describes for F5.
 
 ## Configuring it
 
-Debug tooling defaults to enabled in JIT runs and disabled in product builds.
-To record from startup, open the panel at launch:
+The debug shell and its **F12** logs are on when the app runs from a `.dart`
+source file (`fleury run`, `dart run bin/run_app.dart`,
+`fleury serve --spawn dart run …`, `fleury_mcp -- dart run …`) or with assertions enabled (`--enable-asserts`).
+They’re off in AOT executables (`dart compile exe`) and in snapshots, such as
+the ones `dart pub global activate` installs; browser bundles don’t include
+them. A `dart run` without a file path, or `dart run package:exe`, also runs a
+precompiled snapshot, so name the file (`dart run bin/run_app.dart`) or use
+`fleury run` during development. Pass a `DebugConfig` to `runApp` to change that either way, or to open
+the panel at launch and record from startup:
 
 ```dart
 await runApp(
@@ -148,9 +170,52 @@ await runApp(
 );
 ```
 
-Set `enabled: false` to disable the shell, its recording, and its shortcuts.
-A bottom panel uses `side: DebugPanelSide.bottom` and `panelHeight`. For restarting and editor
-integration, see [Hot reload](/fleury/guides/hot-reload/).
+`enabled: false` turns off the shell, its hotkeys, and its recording;
+`enabled: true` turns them on in a compiled build.
+`startMode: DebugMode.fullscreen` opens the panel expanded. A bottom panel
+uses `side: DebugPanelSide.bottom` and `panelHeight`. For restarting and
+editor integration, see [Hot reload](/fleury/guides/hot-reload/).
+
+## Debug with breakpoints
+
+The debug shell shows what the framework did. To step through your own code,
+run the app under a Dart debugger.
+
+In VS Code with the
+[Dart extension](https://marketplace.visualstudio.com/items?itemName=Dart-Code.dart-code),
+press **F5**. `fleury create` writes a `.vscode/launch.json` that runs
+`bin/run_app.dart` under the debugger in the integrated terminal, where the app
+draws as usual, and a `.vscode/settings.json` that reloads on save.
+Breakpoints, stepping, and the debug console work as they do for any Dart
+program. **Ctrl+G** still opens the debug shell, but it offers no restart
+there; use the editor’s **Restart**. [Hot reload](/fleury/guides/hot-reload/#in-an-editor-debug-session)
+shows how to set this up in an existing project.
+
+IntelliJ IDEA and Android Studio run the app in a console that isn’t a
+terminal, where `runApp` stops with “runApp needs an interactive terminal”.
+`fleury shell` gives the app a terminal to draw in:
+
+1. In a terminal, from the app’s package directory, run `fleury shell`. It
+   prints `fleury shell ready` and waits.
+2. Run or debug the app from the IDE. The app finds the shell through the
+   `.fleury/handle` file the shell wrote, draws in the shell’s terminal, and
+   reads keys from it, while the IDE keeps its console and debugger.
+3. Leave the shell running. When the app exits, or you stop or restart it
+   from the IDE, the shell waits for the next run, which attaches to it.
+
+While an app is attached, every key goes to the app, Ctrl+C and Ctrl+Z
+included: a focused text field undoes on Ctrl+Z, and a Ctrl+C the app doesn’t
+handle ends it, as in a terminal of its own. A Ctrl+Z the app doesn’t handle
+suspends nothing, though: the app runs in the IDE, not as a job of the
+shell’s terminal. With no app attached, Ctrl+C quits the shell, and keys typed
+then reach no app.
+
+The app finds the shell when its working directory is that package directory
+or one below it. If the IDE runs the app from somewhere else, set the
+`FLEURY_HANDLE` environment variable in the run configuration to the socket
+path the shell prints. Under the IDE’s debugger, which turns on the Dart VM
+service, saving a file also reloads the app. `fleury shell` runs on macOS and
+Linux.
 
 ## Share a reproducible investigation
 

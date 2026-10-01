@@ -54,6 +54,15 @@ Future<void> main(List<String> args) async {
     ).writeAsStringSync(jsonEncode(result));
     _exitWith(appExit);
   }
+  final undoArg = args.where((a) => a.startsWith('--undo-result=')).firstOrNull;
+  if (undoArg != null) {
+    final edits = <String>[];
+    final appExit = await runApp(_PtyUndoApp(edits), enableHotReload: false);
+    File(
+      undoArg.substring('--undo-result='.length),
+    ).writeAsStringSync(jsonEncode(edits));
+    _exitWith(appExit);
+  }
   final hookArg = args.where((a) => a.startsWith('--stray-hook=')).firstOrNull;
   if (hookArg != null) {
     final hookFile = File(hookArg.substring('--stray-hook='.length));
@@ -256,6 +265,30 @@ class _BoomRender extends RenderObject {
 
   @override
   void performPaint(CellBuffer buffer, CellOffset offset) {}
+}
+
+/// A focused field that records its edits and ends the session once an edit
+/// is undone — the proof that Ctrl+Z reached the field. Had the press been
+/// taken for job control instead, the process would stop, never exit, and the
+/// capture would time out.
+class _PtyUndoApp extends StatelessWidget {
+  const _PtyUndoApp(this.edits);
+  final List<String> edits;
+
+  @override
+  Widget build(BuildContext context) => Column(
+    children: [
+      const Text('UNDO-READY'),
+      TextInput(
+        autofocus: true,
+        enableBlink: false,
+        onChanged: (text) {
+          edits.add(text);
+          if (text.isEmpty) exitApp();
+        },
+      ),
+    ],
+  );
 }
 
 class _PtyPointerApp extends StatefulWidget {

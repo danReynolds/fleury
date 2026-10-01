@@ -11,16 +11,19 @@ import 'package:fleury/fleury_core.dart';
 /// )
 /// ```
 ///
-/// The border and title resolve from the ambient [Theme]: muted at rest, the
-/// [ColorScheme.primary] accent when the pane is active, so the user can see
+/// The border and title resolve from the ambient [Theme]: at rest the border
+/// is muted and the title is bold in the normal text color; when the pane is
+/// active, both take the [ColorScheme.primary] accent, so the user can see
 /// where input goes. **Active-ness is detected, not declared** — the panel
-/// watches the focus tree ([FocusDetector]) and accents itself whenever focus is
-/// anywhere inside it. Nesting resolves innermost-first, so an inner pane
-/// lights up without also lighting its ancestors.
+/// watches the focus tree ([FocusDetector]) and accents itself while focus is
+/// anywhere inside it, including inside a `LogRegion`, `DataTable`, or other
+/// focusable widget in its body. Nested panels all accent: focus in an inner
+/// pane lights that pane and every pane around it.
 ///
 /// Set [focused] only to override that: `true`/`false` pins the chrome
 /// regardless of where focus is, which is what a static showcase or a pane
-/// whose "active" notion isn't focus wants.
+/// whose "active" notion isn't focus wants. The panel's semantics still
+/// report where focus is.
 ///
 /// The panel is a semantic **region** named by [title] (override with
 /// [semanticLabel]), so tests and agents can address each pane directly.
@@ -50,8 +53,12 @@ class Panel extends StatefulWidget {
   /// Optional right-aligned widget on the title row (e.g. a status string).
   final Widget? trailing;
 
-  /// Overrides the detected active state. Null (default) means "follow focus":
-  /// the panel accents itself while focus is inside it.
+  /// Pins the chrome: `true` draws the border and title in the accent and
+  /// `false` draws them at rest, wherever focus is. Null (the default)
+  /// follows focus, accenting them while focus is anywhere inside the panel.
+  ///
+  /// Only the chrome is pinned: the panel's semantic region reports focus
+  /// exactly while focus is inside it, as an unpinned panel's does.
   final bool? focused;
 
   /// When true (default) the child is wrapped in [Expanded] so it fills the
@@ -67,12 +74,8 @@ class Panel extends StatefulWidget {
   /// paint chain.
   ///
   /// Panels are the shape this pays for: chrome that is expensive to paint and
-  /// usually static, sitting beside something that churns. Measured on a
-  /// three-panel screen where one panel updates and two do not, this cut the
-  /// frame from 80.1 to 68.9 us — 14%; on a synthetic screen with larger static
-  /// bodies, 38%. The cost is one reused cache buffer per panel, bounded by the
-  /// panel's own size, and panels are counted in single digits — unlike list
-  /// items, which is why [ListView] makes the same call per row.
+  /// usually static, sitting beside something that churns. The cost is one
+  /// reused cache buffer per panel, bounded by the panel's own size.
   ///
   /// Turn off for a panel whose body changes every frame anyway, where the
   /// cache would be filled and discarded without ever being blitted.
@@ -83,18 +86,19 @@ class Panel extends StatefulWidget {
 }
 
 class _PanelState extends State<Panel> {
-  /// Whether focus is inside this panel, tracked by [FocusDetector]. Only
-  /// consulted when the caller left [Panel.focused] null.
+  /// Whether focus is inside this panel, tracked by [FocusDetector]. The
+  /// semantic region always reports it; the chrome follows it unless
+  /// [Panel.focused] pins it.
   bool _focusWithin = false;
 
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final accent = theme.colorScheme.primary;
-    final focused = widget.focused ?? _focusWithin;
+    final active = widget.focused ?? _focusWithin;
     final titleStyle = CellStyle(
       bold: true,
-      foreground: focused ? accent : theme.colorScheme.foreground,
+      foreground: active ? accent : theme.colorScheme.foreground,
     );
     final body = widget.addRepaintBoundary
         ? RepaintBoundary(child: widget.child)
@@ -102,19 +106,16 @@ class _PanelState extends State<Panel> {
     return Semantics(
       role: SemanticRole.region,
       label: widget.semanticLabel ?? widget.title,
-      focused: focused,
-      // Always mounted so the subtree shape doesn't change when a caller
-      // toggles `focused` between null and a pinned value; the listener is
-      // idle when the panel isn't following focus.
+      // Where focus is, pinned or not: a pin styles the chrome only.
+      focused: _focusWithin,
       child: FocusDetector(
         onFocusChange: (within) {
-          if (widget.focused != null || within == _focusWithin) return;
-          setState(() => _focusWithin = within);
+          if (within != _focusWithin) setState(() => _focusWithin = within);
         },
         child: Container(
           border: BoxBorder(
             style: theme.borderStyle,
-            cellStyle: focused
+            cellStyle: active
                 ? CellStyle(foreground: accent)
                 : theme.mutedStyle,
           ),

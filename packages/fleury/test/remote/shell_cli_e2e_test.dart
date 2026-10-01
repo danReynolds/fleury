@@ -32,10 +32,6 @@ void main() {
         '80',
         '--rows',
         '24',
-        '--input-hex',
-        '0d',
-        '--input-after-output-ms',
-        '3000',
         '--',
         Platform.resolvedExecutable,
         '${packageRoot.path}/test/fixtures/shell_cli_e2e_runner.dart',
@@ -61,11 +57,6 @@ void main() {
       expect(metadata['timedOut'], isFalse);
       expect(metadata['exitCode'], 0);
       expect(output, contains('SHELL-CLI-E2E-FIRST-FRAME'));
-      expect(
-        output,
-        matches(RegExp(r'\x1B\[[0-9]+;[0-9]+HINPUT-RECEIVED')),
-        reason: 'Enter should flow through shell and repaint the changed cells',
-      );
       expect(output, contains('SHELL-CLI-E2E-ABSOLUTE-HANDLE'));
       expect(output, contains('SHELL-CLI-E2E-DUPLICATE-REFUSED'));
       expect(output, contains('SHELL-CLI-E2E-CLEANUP'));

@@ -95,10 +95,17 @@ await runApp(
 );
 ```
 
-Bind Ctrl+Z in the application to conceal/close the form, perform its cleanup,
-and request exit. With the option above, interactive raw startup requires native
-termios support; it fails if only Dart's line/echo fallback is available. The
-default remains the driver's restore/stop/resume behavior. External SIGTSTP,
-SIGSTOP and process termination are not converted into application callbacks by
-this option. Foreground checks, clipboard transport, idle timeout and storage
-security remain application responsibilities.
+Ctrl+Z is dispatched to the application first in every session. A focused
+`TextInput` or `TextArea` takes it for undo, so a Ctrl+Z binding fires only
+while no text field has focus. By default, a press that nothing handles
+suspends the app's job — the driver restores the terminal and stops the app
+together with the process that runs it, such as the hot-reload supervisor —
+and `fg` resumes it. `suspendOnCtrlZ: false` removes that fallback, so an
+unhandled Ctrl+Z is only an ordinary key. Bind the conceal/close action to a
+key the form's fields leave alone, such as Ctrl+Q, and have it perform the
+form's cleanup and request exit.
+With the option above, interactive raw startup requires native termios
+support; it fails if only Dart's line/echo fallback is available. External
+SIGTSTP, SIGSTOP and process termination are not converted into application
+callbacks by this option. Foreground checks, clipboard transport, idle timeout
+and storage security remain application responsibilities.

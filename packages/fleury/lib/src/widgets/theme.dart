@@ -41,7 +41,7 @@ final class ColorScheme {
   final Color? background;
 
   /// Opaque fill for raised surfaces and modal content — a `Container.filled`
-  /// widget, or content shown via [NavigatorState.present]. Unlike [background]
+  /// widget, or content shown via `NavigatorState.present`. Unlike [background]
   /// (nullable = the terminal's own, i.e. effectively transparent), a surface
   /// must fully cover the cells it occupies so nothing painted beneath shows
   /// through. null derives a concrete fill from the theme brightness
@@ -174,7 +174,8 @@ final class ThemeData {
   /// with [extension]; the first assignable entry wins.
   final List<Object> extensions;
 
-  /// Base style cascaded onto [Text] via [DefaultTextStyle] at the root.
+  /// Base style a [Theme] cascades onto the `Text` below it, as the
+  /// [DefaultTextStyle].
   final CellStyle textStyle;
 
   /// Attribute cue for de-emphasized text (dim) — separators, hints, disabled
@@ -275,8 +276,21 @@ final class ThemeData {
 }
 
 /// Shares a [ThemeData] with its subtree. Read it with `Theme.of(context)`
-/// (which falls back to [ThemeData.fallback] when absent, so widgets can
-/// always resolve a theme without a required ancestor).
+/// or the `context.theme` shorthand (which fall back to [ThemeData.fallback]
+/// when absent, so widgets can always resolve a theme without a required
+/// ancestor).
+///
+/// An app usually sets its theme once, with `FleuryApp(theme: ...)`, which
+/// installs a [Theme] above the whole app. Nest another [Theme] to restyle one
+/// subtree. The inner theme replaces the outer one below it; nothing is
+/// merged, so derive it from the enclosing theme to change only some fields:
+///
+/// ```dart
+/// Theme(
+///   data: Theme.of(context).copyWith(borderStyle: BorderStyle.double),
+///   child: sidebar,
+/// )
+/// ```
 ///
 /// Wrapping a subtree in a [Theme] also cascades [ThemeData.textStyle] as
 /// the [DefaultTextStyle], so a base text color/dim can be set app-wide in
@@ -284,12 +298,29 @@ final class ThemeData {
 class Theme extends StatelessWidget {
   const Theme({super.key, required this.data, required this.child});
 
+  /// The theme for everything below this widget, replacing any theme above
+  /// it rather than merging with it.
+  ///
+  /// Descendants read it with [Theme.of], `context.theme`, or `context.colors`
+  /// (its [ThemeData.colorScheme]), and those readers rebuild when [data]
+  /// changes (compared with `==`). To override only a few fields, pass the
+  /// enclosing theme's `Theme.of(context).copyWith(...)`, read where you build
+  /// this widget. Its [ThemeData.textStyle] likewise replaces the subtree's
+  /// [DefaultTextStyle].
   final ThemeData data;
+
+  /// The subtree that reads [data].
   final Widget child;
 
+  /// The [ThemeData] of the nearest [Theme] above [context], or
+  /// [ThemeData.fallback] when there is none.
+  ///
+  /// [context] rebuilds when that theme's data changes. `context.theme` is the
+  /// same call.
   static ThemeData of(BuildContext context) =>
       dependOnScope<ThemeData>(context) ?? ThemeData.fallback;
 
+  /// Like [of], but null when there is no [Theme] above [context].
   static ThemeData? maybeOf(BuildContext context) =>
       dependOnScope<ThemeData>(context);
 
@@ -300,7 +331,7 @@ class Theme extends StatelessWidget {
   );
 }
 
-/// Cascades a base [CellStyle] onto descendant [Text] widgets, which merge
+/// Cascades a base [CellStyle] onto descendant `Text` widgets, which merge
 /// their own style on top. Nest it to restyle a subtree (e.g. dim a whole
 /// panel) without touching each `Text`.
 class DefaultTextStyle extends StatelessWidget {

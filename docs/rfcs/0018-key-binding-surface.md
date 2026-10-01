@@ -10,7 +10,9 @@ always receive the event (`onTrigger: (e) => …`); `KeyBinding.any` becomes the
 `aliases:` parameter and `KeyBinding.event` is folded into the unnamed
 constructor; `Focus.onKey` is removed in favor of `KeyDetector`; sequence
 lifecycle corners (Esc-cancel as a non-competing side effect, no prefix replay
-on cancellation, repeat/timeout/scope-exit rules) are pinned by RFC 0020 §14.4.
+on cancellation, repeat/timeout/scope-exit rules) are pinned by RFC 0020 §14.4
+(see its 2026-09-30 implementation note for how cancel, Esc and modal scopes
+shipped).
 This RFC's matching model, precedence, DSL, and hint/which-key surfaces carry
 forward unchanged.
 **Supersedes:** the authoring surface of RFC 0008 (`KeyChord`, `KeyBinding` constructors, `KeyEvent` shape). The dispatch architecture of RFC 0008 §7 (precedence, modal scopes, text-input claim order, central `InputDispatcher`) carries forward unchanged.

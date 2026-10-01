@@ -1,7 +1,9 @@
 // Syncs canonical architecture docs from the repo's `docs/` folder into the
 // Starlight content collection. The docs stay plain Markdown in `docs/` (where
 // repo contributors find them); this step derives Starlight frontmatter from
-// the H1, strips that H1, and rewrites inter-doc links to site routes.
+// the H1, strips that H1, and rewrites inter-doc links to site routes. The
+// synced pages are gitignored, so each page's "Edit page" link opens its source
+// in `docs/`.
 //
 // A doc may embed a LIVE example with an HTML-comment placeholder (invisible on
 // GitHub):
@@ -17,6 +19,7 @@ const DOCS_SRC = join(here, '..', '..', 'docs');
 const OUT_DIR = join(here, '..', 'src', 'content', 'docs', 'architecture');
 const COMPONENT = '../../../components/FleuryExample.astro';
 const GITHUB = 'https://github.com/danReynolds/fleury/blob/main/docs';
+const EDIT = 'https://github.com/danReynolds/fleury/edit/main/docs';
 
 const ROUTES = {
   'architecture-overview.md': '/fleury/architecture/overview/',
@@ -27,6 +30,8 @@ const ROUTES = {
   'performance.md': '/fleury/architecture/performance/',
 };
 
+// `title` overrides the H1 where it names the product: Starlight already
+// appends the site name to every page title ("Core and targets | Fleury").
 const DOCS = [
   {
     src: 'architecture-overview.md',
@@ -46,6 +51,7 @@ const DOCS = [
   },
   {
     src: 'core-and-targets.md',
+    title: 'Core and targets',
     description:
       'How Fleury is layered: a platform-neutral core that produces a cell ' +
       'grid, and pluggable targets that paint it to a terminal or a browser ' +
@@ -53,6 +59,7 @@ const DOCS = [
   },
   {
     src: 'serving-and-embedding.md',
+    title: 'Serving and embedding',
     description:
       'Two ways to run Fleury in a browser — embed it client-side with ' +
       'dart2js, or preview a native process through the local serve bridge.',
@@ -99,7 +106,7 @@ mkdirSync(OUT_DIR, { recursive: true });
 
 for (const doc of DOCS) {
   const raw = readFileSync(join(DOCS_SRC, doc.src), 'utf8');
-  const title = (raw.match(/^#\s+(.+)$/m)?.[1] ?? doc.src).trim();
+  const title = doc.title ?? (raw.match(/^#\s+(.+)$/m)?.[1] ?? doc.src).trim();
   let body = rewriteLinks(raw.replace(/^#\s+.+\r?\n+/m, ''));
 
   const hasExample = EXAMPLE_RE.test(body);
@@ -111,6 +118,7 @@ for (const doc of DOCS) {
     `---\n` +
     `title: ${JSON.stringify(title)}\n` +
     `description: ${JSON.stringify(doc.description)}\n` +
+    `editUrl: ${JSON.stringify(`${EDIT}/${doc.src}`)}\n` +
     `---\n\n` +
     (hasExample ? `import FleuryExample from '${COMPONENT}';\n\n` : '');
 

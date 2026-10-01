@@ -119,6 +119,55 @@ void main() {
       expect(picked?.path, endsWith('a.txt'));
     });
 
+    testWidgets('a click on a link row does nothing and leaves the keys '
+        'working', (tester) {
+      FileEntry? picked;
+      tester.pumpWidget(
+        FilePicker(
+          initialDirectory: '/p',
+          source: const _FixedSource({
+            '/p': [
+              FileEntry(
+                path: '/p/a.txt',
+                name: 'a.txt',
+                type: FileEntryType.file,
+              ),
+              FileEntry(
+                path: '/p/b.lnk',
+                name: 'b.lnk',
+                type: FileEntryType.link,
+              ),
+              FileEntry(
+                path: '/p/c.txt',
+                name: 'c.txt',
+                type: FileEntryType.file,
+              ),
+            ],
+          }),
+          autofocus: true,
+          onSelect: (f) => picked = f,
+        ),
+      );
+      String? selectedPath() =>
+          tester
+                  .semantics()
+                  .single(role: SemanticRole.tree)
+                  .state['selectedPath']
+              as String?;
+      // row0=path, row1='▴ ..', row2=a.txt, row3=b.lnk, row4=c.txt.
+      final lines = tester
+          .renderToString(size: const CellSize(40, 8), emptyMark: ' ')
+          .split('\n');
+      expect(lines[3], contains('b.lnk'));
+      _clickAt(tester, col: 4, row: 3);
+      expect(picked, isNull, reason: 'a link cannot be chosen');
+      expect(selectedPath(), '/p/a.txt', reason: 'the click is inert');
+
+      tester.sendKey(const KeyEvent(KeyCode.arrowUp)); // wraps to c.txt
+      tester.sendKey(const KeyEvent(KeyCode.enter));
+      expect(picked?.path, '/p/c.txt');
+    });
+
     testWidgets('lists files and directories in the initial dir', (tester) {
       final dir = _scratchDir();
       tester.pumpWidget(FilePicker(initialDirectory: dir, onSelect: (_) {}));
@@ -447,4 +496,176 @@ void main() {
       expect(tester.target(role: SemanticRole.tree, label: 'Files'), isFocused);
     });
   });
+
+  group('FilePicker across parent rebuilds', () {
+    String? selectedPath(FleuryTester tester) =>
+        tester.semantics().single(role: SemanticRole.tree).state['selectedPath']
+            as String?;
+
+    testWidgets('an inline filter keeps the cursor and reads nothing', (
+      tester,
+    ) {
+      final source = _CountingSource(
+        MemoryFileSource(['/p/a.txt', '/p/b.txt', '/p/c.txt', '/p/d.log']),
+      );
+      final rebuild = ValueNotifier<int>(0);
+      tester.pumpWidget(
+        NotifierBuilder(
+          notifier: rebuild,
+          builder: (context, _) => FilePicker(
+            initialDirectory: '/p',
+            source: source,
+            autofocus: true,
+            // A new closure on every build of the parent.
+            filter: (entry) => !entry.name.endsWith('.log'),
+            onSelect: (_) {},
+          ),
+        ),
+      );
+      tester.sendKey(const KeyEvent(KeyCode.arrowDown));
+      tester.sendKey(const KeyEvent(KeyCode.arrowDown));
+      expect(selectedPath(tester), '/p/c.txt');
+      final reads = source.reads;
+
+      rebuild.value++;
+      tester.pump();
+      expect(selectedPath(tester), '/p/c.txt', reason: 'cursor stays put');
+      expect(source.reads, reads, reason: 'the directory was not read again');
+    });
+
+    testWidgets('a filter that changes what it hides applies at once, keeping '
+        'the cursor on its entry', (tester) {
+      final source = _CountingSource(
+        MemoryFileSource(['/p/a.md', '/p/b.txt', '/p/c.txt']),
+      );
+      final hideMarkdown = ValueNotifier<bool>(false);
+      tester.pumpWidget(
+        NotifierBuilder(
+          notifier: hideMarkdown,
+          builder: (context, notifier) {
+            final hide = notifier.value;
+            return FilePicker(
+              initialDirectory: '/p',
+              source: source,
+              autofocus: true,
+              filter: (entry) => !(hide && entry.name.endsWith('.md')),
+              onSelect: (_) {},
+            );
+          },
+        ),
+      );
+      tester.sendKey(const KeyEvent(KeyCode.arrowDown));
+      tester.sendKey(const KeyEvent(KeyCode.arrowDown));
+      expect(selectedPath(tester), '/p/c.txt');
+      final reads = source.reads;
+
+      hideMarkdown.value = true;
+      tester.pump();
+      var tree = tester.semantics().single(role: SemanticRole.tree);
+      expect(tree.state.collectionRowCount, 2, reason: 'a.md is hidden now');
+      expect(tree.state['selectedPath'], '/p/c.txt');
+      expect(tree.state['currentIndex'], 1);
+      expect(source.reads, reads, reason: 'filtering needs no read');
+
+      // An entry the filter now hides can't keep the cursor: first row.
+      tester.sendKey(const KeyEvent(KeyCode.home));
+      hideMarkdown.value = false;
+      tester.pump();
+      tree = tester.semantics().single(role: SemanticRole.tree);
+      expect(tree.state.collectionRowCount, 3);
+      expect(tree.state['selectedPath'], '/p/b.txt');
+    });
+
+    testWidgets('toggling showHidden applies at once, keeping the cursor and '
+        'reading nothing', (tester) {
+      final source = _CountingSource(
+        MemoryFileSource(['/p/.env', '/p/a.txt', '/p/b.txt']),
+      );
+      final showHidden = ValueNotifier<bool>(false);
+      tester.pumpWidget(
+        NotifierBuilder(
+          notifier: showHidden,
+          builder: (context, notifier) => FilePicker(
+            initialDirectory: '/p',
+            source: source,
+            autofocus: true,
+            showHidden: notifier.value,
+            onSelect: (_) {},
+          ),
+        ),
+      );
+      tester.sendKey(const KeyEvent(KeyCode.arrowDown));
+      expect(selectedPath(tester), '/p/b.txt');
+      final reads = source.reads;
+
+      showHidden.value = true;
+      tester.pump();
+      final tree = tester.semantics().single(role: SemanticRole.tree);
+      expect(tree.state.collectionRowCount, 3, reason: '.env is shown now');
+      expect(tree.state['selectedPath'], '/p/b.txt');
+      expect(source.reads, reads, reason: 'the directory was not read again');
+    });
+
+    testWidgets('a different source re-reads the directory, keeping the '
+        'cursor on its entry', (tester) {
+      Widget picker(FileSource source) => FilePicker(
+        initialDirectory: '/p',
+        source: source,
+        autofocus: true,
+        onSelect: (_) {},
+      );
+      tester.pumpWidget(picker(MemoryFileSource(['/p/a.txt', '/p/b.txt'])));
+      tester.sendKey(const KeyEvent(KeyCode.arrowDown));
+      expect(selectedPath(tester), '/p/b.txt');
+
+      tester.pumpWidget(
+        picker(MemoryFileSource(['/p/0.txt', '/p/a.txt', '/p/b.txt'])),
+      );
+      final tree = tester.semantics().single(role: SemanticRole.tree);
+      expect(tree.state.collectionRowCount, 3, reason: 'read from the new one');
+      expect(tree.state['selectedPath'], '/p/b.txt');
+    });
+  });
+}
+
+/// Counts directory reads, so a test can tell a re-read from a re-filter.
+final class _CountingSource implements FileSource {
+  _CountingSource(this._inner);
+
+  final FileSource _inner;
+  int reads = 0;
+
+  @override
+  String absolute(String path) => _inner.absolute(path);
+
+  @override
+  String parent(String path) => _inner.parent(path);
+
+  @override
+  List<FileEntry> list(String directory) {
+    reads++;
+    return _inner.list(directory);
+  }
+}
+
+/// Lists fixed entries per directory, so a test can show entry types a
+/// [MemoryFileSource] cannot, such as a link.
+final class _FixedSource implements FileSource {
+  const _FixedSource(this._entries);
+
+  final Map<String, List<FileEntry>> _entries;
+
+  @override
+  String absolute(String path) => path;
+
+  @override
+  String parent(String path) {
+    final cut = path.lastIndexOf('/');
+    return cut <= 0 ? '/' : path.substring(0, cut);
+  }
+
+  @override
+  List<FileEntry> list(String directory) =>
+      _entries[directory] ??
+      (throw FileSourceException('No such directory: $directory'));
 }

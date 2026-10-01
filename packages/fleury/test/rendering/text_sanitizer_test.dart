@@ -163,6 +163,16 @@ void main() {
 
     test('leaves clean single-line text untouched', () {
       expect(sanitizeSingleLine('already clean'), 'already clean');
+      const clean = 'already clean';
+      expect(identical(sanitizeSingleLine(clean), clean), isTrue);
+    });
+
+    test('rewrites a lone control that no break or escape accompanies', () {
+      // Widgets once pre-checked for escapes and breaks before calling this,
+      // and copied BEL, NUL, DEL and C1 controls through untouched.
+      for (final control in ['\x00', '\x07', '\x7F', '\x85', '\x9C']) {
+        expect(sanitizeSingleLine('a${control}b'), 'a${replacementCharacter}b');
+      }
     });
   });
 

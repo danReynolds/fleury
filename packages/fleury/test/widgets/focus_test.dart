@@ -637,6 +637,66 @@ void main() {
       title.requestFocus();
       expect(changes, [true, false, true]);
     });
+
+    testWidgets('every enclosing detector reports focus inside it', (tester) {
+      final deep = FocusNode(debugLabel: 'deep');
+      final sibling = FocusNode(debugLabel: 'sibling');
+      final outside = FocusNode(debugLabel: 'outside');
+      final outer = <bool>[];
+      final middle = <bool>[];
+      final inner = <bool>[];
+
+      tester.pumpWidget(
+        Column(
+          children: [
+            FocusDetector(
+              onFocusChange: outer.add,
+              child: Column(
+                children: [
+                  FocusDetector(
+                    onFocusChange: middle.add,
+                    child: FocusDetector(
+                      onFocusChange: inner.add,
+                      child: Focus(
+                        focusNode: deep,
+                        autofocus: true,
+                        child: const Text('Deep'),
+                      ),
+                    ),
+                  ),
+                  Focus(focusNode: sibling, child: const Text('Sibling')),
+                ],
+              ),
+            ),
+            Focus(focusNode: outside, child: const Text('Outside')),
+          ],
+        ),
+      );
+      tester.render(size: const CellSize(20, 4));
+
+      expect(outer, [true], reason: 'focus deep inside is inside the outer');
+      expect(middle, [true]);
+      expect(inner, [true]);
+
+      sibling.requestFocus();
+      expect(
+        outer,
+        [true],
+        reason: 'moving between the outer region\'s descendants is no leave',
+      );
+      expect(middle, [true, false]);
+      expect(inner, [true, false]);
+
+      deep.requestFocus();
+      expect(outer, [true]);
+      expect(middle, [true, false, true]);
+      expect(inner, [true, false, true]);
+
+      outside.requestFocus();
+      expect(outer, [true, false]);
+      expect(middle, [true, false, true, false]);
+      expect(inner, [true, false, true, false]);
+    });
   });
 }
 

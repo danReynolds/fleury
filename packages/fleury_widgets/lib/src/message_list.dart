@@ -6,7 +6,7 @@ import 'package:fleury/fleury_core.dart';
 import 'internal/collection_notifications.dart';
 import 'semantic_roles.dart';
 
-/// Protocol-neutral role for one message in a [MessageList].
+/// Role of one message in a [MessageList].
 enum MessageRole { user, assistant, system, tool, log, event }
 
 /// Lifecycle/status attached to one message in a [MessageList].
@@ -33,7 +33,7 @@ final class MessageEntry {
   /// message through a prepend or reorder.
   final Object? id;
 
-  /// Protocol-neutral role for the message.
+  /// The message's role, shown in the row's prefix and used for its color.
   final MessageRole role;
 
   /// Status for streamed or workflow-owned messages.
@@ -63,7 +63,7 @@ final class MessageListExportOptions {
        assert(maxMessages == null || maxMessages >= 0),
        assert(maxLineLength == null || maxLineLength >= 0);
 
-  /// Whether exported rows include role/status/author prefixes.
+  /// Whether exported rows start with a `[role author]` prefix.
   final bool includePrefix;
 
   /// First message index to export.
@@ -72,7 +72,8 @@ final class MessageListExportOptions {
   /// Maximum number of messages to export.
   final int? maxMessages;
 
-  /// Maximum copied/displayed message length per row.
+  /// Cuts each exported message to this many characters, with no ellipsis;
+  /// null never cuts. The prefix doesn't count.
   final int? maxLineLength;
 }
 
@@ -98,7 +99,7 @@ final class MessageListCopyOptions {
     this.clipboardPolicy = ClipboardWritePolicy.standard,
   });
 
-  /// Whether copied rows include role/status/author prefixes.
+  /// Whether copied rows start with a `[role author]` prefix.
   final bool includePrefix;
 
   /// Clipboard write behavior for copied message text.
@@ -147,6 +148,9 @@ class MessageListController extends Notifier {
 
   ListController get _listController => _list;
 
+  /// Index of the selected message, or null when there is none. Setting it
+  /// moves the selection, which then stops riding the newest message until
+  /// End or [scrollToBottom].
   int? get currentIndex => _list.currentIndex;
   set currentIndex(int? value) {
     _checkNotDisposed();
@@ -161,10 +165,19 @@ class MessageListController extends Notifier {
     _list.followTail = value;
   }
 
+  /// Whether the view is following new messages right now: false while the
+  /// user reads history, even when [followTail] is on.
   bool get isFollowing => _list.isFollowing;
+
+  /// Whether the last message is in view.
   bool get atBottom => _list.atEnd;
+
+  /// How many messages arrived at the end while it was out of view, for an
+  /// "N new" indicator. Resets to zero when the view reaches the end.
   int get unseenCount => _list.unseenCount;
 
+  /// The first and last message indexes in view, including partly visible
+  /// rows; null before the first layout or when the list is empty.
   ({int first, int last})? get visibleRange => _list.visibleRange;
 
   /// Scrolls to an item without changing which item is selected.
@@ -227,9 +240,15 @@ MessageListExportResult exportMessages(
 }
 
 /// A conversation transcript: one row per message, prefixed and colored by
-/// role (`[user]`, `[assistant]`, `[tool]`…), selectable and copyable with
-/// the keyboard. By default the list follows the tail as messages stream in;
-/// [MessageListController] owns selection and the tail-follow switch.
+/// role (`[user]`, `[assistant]`, `[tool]`…).
+///
+/// By default the list follows the tail as messages stream in: scrolling up
+/// to read history pauses following, and End or
+/// [MessageListController.scrollToBottom] resumes it. Up and Down move the
+/// selected message; PageUp, PageDown, and Home jump; clicking a message
+/// selects it. Ctrl+C copies the selected message (see [copySelection] and
+/// [copyOptions]). [MessageListController] owns selection and the
+/// tail-follow switch.
 class MessageList extends StatefulWidget {
   const MessageList({
     super.key,
@@ -261,7 +280,9 @@ class MessageList extends StatefulWidget {
   /// Semantic label (the accessibility name; not rendered) for the message list.
   final String semanticLabel;
 
-  /// Whether rows render role/status/author prefixes.
+  /// Whether each row shows a `[role author]` prefix, such as `[assistant]`
+  /// (the author appears only when set), before the message's text. A
+  /// timestamp shown by [showTimestamp] comes before the prefix.
   final bool showPrefix;
 
   /// Prefix each row with the message's [MessageEntry.timestamp] as a
@@ -271,10 +292,12 @@ class MessageList extends StatefulWidget {
   /// stays aligned only where times exist.
   final bool showTimestamp;
 
-  /// Maximum displayed message length per row.
+  /// Cuts each message to this many characters, with no ellipsis, on screen
+  /// and when copied; null never cuts. The prefix and timestamp don't count.
   final int? maxLineLength;
 
-  /// Whether Ctrl+C and semantic copy export the selected message.
+  /// Whether Ctrl+C (and the semantic copy action) copies the selected
+  /// message.
   final bool copySelection;
 
   /// Clipboard/export options for selected-message copy.
@@ -626,28 +649,7 @@ _FormattedMessageLine _formatMessageLine(
   );
 }
 
-String _sanitizeMessageText(String original) {
-  if (!_needsMessageSanitization(original)) return original;
-  return sanitizeSingleLine(original);
-}
-
-bool _needsMessageSanitization(String text) {
-  for (final codeUnit in text.codeUnits) {
-    if (codeUnit == 0x1b ||
-        codeUnit == 0x9b ||
-        codeUnit == 0x9d ||
-        codeUnit == 0x90 ||
-        codeUnit == 0x98 ||
-        codeUnit == 0x9e ||
-        codeUnit == 0x9f ||
-        codeUnit == 0x0a ||
-        codeUnit == 0x0d ||
-        codeUnit == 0x09) {
-      return true;
-    }
-  }
-  return false;
-}
+String _sanitizeMessageText(String text) => sanitizeSingleLine(text);
 
 String _truncateGraphemes(String text, int? maxLineLength) {
   if (maxLineLength == null) return text;
@@ -660,7 +662,8 @@ String _truncateGraphemes(String text, int? maxLineLength) {
 String _prefixFor(MessageEntry message) {
   final parts = <String>[
     message.role.name,
-    if (message.author != null && message.author!.isNotEmpty) message.author!,
+    if (message.author != null && message.author!.isNotEmpty)
+      _sanitizeMessageText(message.author!),
   ];
   return '[${parts.join(' ')}] ';
 }

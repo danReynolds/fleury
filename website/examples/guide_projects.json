@@ -48,7 +48,7 @@
     {
       "label": "package_route.dart",
       "source": "website/examples/lib/registry.dart",
-      "declaration": "_AnimationProgressTourState"
+      "declaration": "_PackageRouteState"
     }
   ],
   "animation.timing": [
@@ -67,42 +67,42 @@
     {
       "label": "manual_route.dart",
       "source": "website/examples/lib/registry.dart",
-      "declaration": "_ManualAnimationTourState"
+      "declaration": "_ManualRouteState"
     }
   ],
   "animation.effects": [
     {
       "label": "connection_status.dart",
       "source": "website/examples/lib/registry.dart",
-      "declaration": "_EntranceEffectTourState"
+      "declaration": "_ConnectionStatusState"
     }
   ],
   "animation.trigger": [
     {
       "label": "pilot_validation.dart",
       "source": "website/examples/lib/registry.dart",
-      "declaration": "_ValidationFeedbackTourState"
+      "declaration": "_PilotValidationState"
     }
   ],
   "animation.presence": [
     {
       "label": "effect_picker.dart",
       "source": "website/examples/lib/registry.dart",
-      "declaration": "_EffectPickerTourState"
+      "declaration": "_EffectPickerState"
     }
   ],
   "animation.frames": [
     {
       "label": "packet_transfer.dart",
       "source": "website/examples/lib/registry.dart",
-      "declaration": "_FrameCadenceTourState"
+      "declaration": "_PacketTransferState"
     }
   ],
   "animation.ticker": [
     {
       "label": "ticker_simulation.dart",
       "source": "website/examples/lib/registry.dart",
-      "declaration": "_TickerSimulationTourState"
+      "declaration": "_TickerSimulationState"
     }
   ],
   "lists.files": [
@@ -113,6 +113,16 @@
   "lists.tasks": [
     {
       "source": "website/examples/lib/lists/task_browser.dart"
+    }
+  ],
+  "lists.log": [
+    {
+      "source": "website/examples/lib/lists/build_log.dart"
+    }
+  ],
+  "lists.reorder": [
+    {
+      "source": "website/examples/lib/lists/reorder_tasks.dart"
     }
   ],
   "lists.horizontal": [
@@ -289,44 +299,74 @@
       "label": "context.listen",
       "source": "website/examples/lib/state_management_guide.dart",
       "region": "cart-listen"
+    },
+    {
+      "label": "Shared cart",
+      "source": "website/examples/lib/state_management_guide.dart",
+      "region": "cart-owner"
     }
   ],
   "navigation.basics": [
     {
-      "label": "navigation_demo.dart",
+      "label": "home_screen.dart",
       "source": "website/examples/lib/registry.dart",
-      "declaration": "_NavigationBasicsTourState"
+      "declaration": "_HomeScreenState"
+    },
+    {
+      "label": "details_screen.dart",
+      "source": "website/examples/lib/registry.dart",
+      "declaration": "_DetailsScreenState"
+    },
+    {
+      "label": "confirm_dialog.dart",
+      "source": "website/examples/lib/registry.dart",
+      "declaration": "_ConfirmDialog"
     }
   ],
   "navigation.placement": [
     {
       "label": "dialog_placement.dart",
       "source": "website/examples/lib/registry.dart",
-      "declaration": "_DialogPlacementTourState"
+      "declaration": "_DialogPlacementState"
+    },
+    {
+      "label": "placed_dialog.dart",
+      "source": "website/examples/lib/registry.dart",
+      "declaration": "_PlacedDialog"
     }
   ],
   "navigation.guard": [
     {
       "label": "guarded_editor.dart",
       "source": "website/examples/lib/registry.dart",
-      "declaration": "_GuardedEditorTourState"
+      "declaration": "_GuardedEditorState"
+    },
+    {
+      "label": "drafts_screen.dart",
+      "source": "website/examples/lib/registry.dart",
+      "declaration": "_DraftsScreenState"
     }
   ],
   "navigation.nested-flow": [
     {
       "label": "projects_screen.dart",
       "source": "website/examples/lib/registry.dart",
-      "declaration": "_NestedProjectsTour"
+      "declaration": "_ProjectsScreen"
     },
     {
       "label": "setup_flow.dart",
       "source": "website/examples/lib/registry.dart",
-      "declaration": "_NestedSetupTour"
+      "declaration": "_SetupFlow"
     },
     {
       "label": "setup_step.dart",
       "source": "website/examples/lib/registry.dart",
-      "declaration": "_NestedFlowStepTour"
+      "declaration": "_SetupStep"
+    },
+    {
+      "label": "project_ready.dart",
+      "source": "website/examples/lib/registry.dart",
+      "declaration": "_ProjectReady"
     }
   ],
   "testing.counter": [
@@ -394,8 +434,7 @@
       "label": "local_interactive_style.dart",
       "source": "website/examples/lib/registry.dart",
       "declaration": "_LocalStateTour",
-      "member": "build",
-      "expression": "Row"
+      "member": "build"
     }
   ],
   "themes.invalid_none": [

@@ -23,7 +23,7 @@ Open the directory in VS Code and press F5, or run
 `dart run bin/run_app.dart` from an interactive terminal. For the fastest start
 use `dart run fleury run` (`fleury run` once activated globally): the same
 save-to-reload session, but the app is compiled once instead of twice (see
-[the hot-reload guide](https://github.com/danReynolds/fleury/blob/main/packages/fleury/doc/hot_reload.md)).
+[the hot-reload guide](https://danreynolds.github.io/fleury/guides/hot-reload/)).
 The generated VS Code
 configuration uses the integrated terminal so input, rendering, breakpoints,
 and Dart hot reload share one normal debug session. The Git-source flag is only
@@ -112,8 +112,6 @@ hover/focus style covers the allocated bounds; wrap it in
 `Align(alignment: Alignment.centerLeft, child: ...)` when a stretching layout
 should keep the hit target at the content width.
 
-Existing `Button(label: ...)` calls migrate to `Button(text: ...)`.
-
 ## What's in the box
 
 - **Framework**: `Widget` / `StatefulWidget` / `State`, `BuildContext`,
@@ -143,7 +141,7 @@ Existing `Button(label: ...)` calls migrate to `Button(text: ...)`.
   value-driven) and `FrameBuilder` / `FrameTicker` (frame-indexed),
   sharing one per-runtime scheduler. See below.
 - **Hot reload**: state-preserving reload wired for VS Code — see
-  [the hot-reload guide](https://github.com/danReynolds/fleury/blob/main/packages/fleury/doc/hot_reload.md).
+  [the hot-reload guide](https://danreynolds.github.io/fleury/guides/hot-reload/).
 - **Widgets**: a deep catalog lives in the companion `fleury_widgets`
   package — inputs, selects, tables, trees, charts, an image widget
   with Kitty/iTerm2 progressive enhancement, experimental Sixel, and portable

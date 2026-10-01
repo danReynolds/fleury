@@ -73,18 +73,11 @@ final class WebFocusCoordinator {
   }) {
     syncFromFleuryFocus(
       WebFocusSnapshot(
-        activeSemanticNode: _focusedNodeId(tree),
+        activeSemanticNode: tree.focusedNode?.id,
         activeCaretRect: activeCaretRect,
       ),
     );
   }
 
   bool shouldRestoreKeyboardCaptureAfterSemanticActivation() => true;
-}
-
-SemanticNodeId? _focusedNodeId(SemanticTree tree) {
-  for (final node in tree.nodes) {
-    if (node.focused) return node.id;
-  }
-  return null;
 }

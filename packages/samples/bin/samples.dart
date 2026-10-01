@@ -16,7 +16,10 @@ _apps = <String, (String, Widget Function())>{
   'dashboard': ('htop-style live system monitor', DashboardApp.new),
   'files': ('two-pane keyboard file manager', FileManagerApp.new),
   'editor': ('nano/vim file editor you can toggle live', EditorApp.new),
-  'agent': ('Claude-Code-style coding-agent TUI', AgentApp.new),
+  'agent': (
+    'coding-agent TUI: streaming turns, tool calls, diffs',
+    AgentApp.new,
+  ),
   'agent-guide': (
     'small release checklist used by the agent-driving guide',
     AgentGuideApp.new,

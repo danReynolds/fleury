@@ -7,9 +7,8 @@ Fleury is a **Dart UI framework for the terminal** — and, it turns out, the
 browser. You describe the UI as a tree of widgets, and the framework keeps that
 tree between frames and updates only what changed.
 
-The fastest-growing terminal programs aren't utilities anymore; they're
-*applications* — agent consoles, dev-tool dashboards, LLM chat surfaces, deploy
-monitors — with the screen complexity, input handling, and update rates the word
+Many new terminal programs aren't utilities; they're *applications* — agent
+consoles, dev-tool dashboards, LLM chat surfaces, deploy monitors — with the screen complexity, input handling, and update rates the word
 implies. Many TUI toolkits still fit utility-style screens best. Fleury is built
 for application-scale terminal UIs: incremental rendering, real input and focus
 management, a widget set deep enough to skip the hand-rolling, and safe display
@@ -25,7 +24,7 @@ Fleury paints to a grid of character **cells**, not pixels. A fourth
 **semantics** tree rides alongside, exposing roles and actions for tests and
 agents.
 
-The framework itself never mentions a terminal: it paints into an abstract cell
+The framework itself never writes to a terminal: it paints into an abstract cell
 grid, and a **target** turns that grid into something real — diffed ANSI, a
 browser DOM, or a streamed session. The
 [architecture overview](/fleury/architecture/overview/) walks the whole pipeline.

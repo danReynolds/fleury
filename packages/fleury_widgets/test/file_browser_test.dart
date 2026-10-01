@@ -283,6 +283,54 @@ void main() {
     );
   });
 
+  testWidgets('a filter that changes what it hides applies at once, keeping '
+      'the selected entry', (tester) {
+    // As in FilePicker: a new predicate narrows the entries already read,
+    // without reading the directory again.
+    final source = _CountingSource(
+      MemoryFileSource(['/p/a.md', '/p/b.txt', '/p/c.txt']),
+    );
+    final hiddenSuffix = ValueNotifier<String?>(null);
+    tester.pumpWidget(
+      NotifierBuilder(
+        notifier: hiddenSuffix,
+        builder: (context, notifier) {
+          final suffix = notifier.value;
+          return FileBrowser(
+            initialDirectory: '/p',
+            source: source,
+            autofocus: true,
+            entryFilter: (entry) =>
+                suffix == null || !entry.name.endsWith(suffix),
+          );
+        },
+      ),
+    );
+    tester.sendKey(const KeyEvent(KeyCode.arrowDown));
+    tester.sendKey(const KeyEvent(KeyCode.arrowDown));
+    SemanticNode browserNode() =>
+        tester.semantics().single(role: SemanticRole.tree);
+    expect(browserNode().state['selectedPath'], '/p/c.txt');
+    final reads = source.reads;
+
+    hiddenSuffix.value = '.md';
+    tester.pump();
+    var browser = browserNode();
+    expect(browser.state.collectionRowCount, 2, reason: 'a.md is hidden now');
+    expect(browser.state['selectedPath'], '/p/c.txt');
+    expect(browser.state['currentIndex'], 1);
+    expect(source.reads, reads, reason: 'filtering needs no read');
+
+    // Hiding the selected entry selects the first row. a.md comes back from
+    // the entries already read.
+    hiddenSuffix.value = '.txt';
+    tester.pump();
+    browser = browserNode();
+    expect(browser.state.collectionRowCount, 1);
+    expect(browser.state['selectedPath'], '/p/a.md');
+    expect(source.reads, reads);
+  });
+
   testWidgets('a query change keeps the selected entry selected', (tester) {
     final dir = _scratchDir();
     final controller = FileBrowserController();
@@ -614,4 +662,24 @@ void main() {
     expect(row.state.outputSanitized, isTrue);
     expect(row.state['path'], isNot(contains('secret')));
   });
+}
+
+/// Counts directory reads, so a test can tell a re-read from a re-filter.
+final class _CountingSource implements FileSource {
+  _CountingSource(this._inner);
+
+  final FileSource _inner;
+  int reads = 0;
+
+  @override
+  String absolute(String path) => _inner.absolute(path);
+
+  @override
+  String parent(String path) => _inner.parent(path);
+
+  @override
+  List<FileEntry> list(String directory) {
+    reads++;
+    return _inner.list(directory);
+  }
 }

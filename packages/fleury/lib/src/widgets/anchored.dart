@@ -106,13 +106,20 @@ class AnchoredFloat extends StatelessWidget {
 // Anchored
 // ---------------------------------------------------------------------------
 
-/// Floats [overlay] against [child], declaratively.
+/// Shows [overlay] floating next to [child] while [visible] is true, such as a
+/// flyout below a button.
 ///
-/// The composite over [BoundsObserver] + [BoundsAnchor]: it owns the
-/// [BoundsNotifier],
-/// inserts and removes the overlay entry as [visible] flips, and releases it
-/// when the widget leaves the tree — the bookkeeping every hand-rolled flyout
-/// otherwise repeats (and occasionally leaks).
+/// The overlay appears in the nearest [Overlay] (the app root has one), above
+/// the rest of the app, and stays attached to [child]: it moves in the same
+/// frame [child] moves, flips to the other side of [child] when it would run
+/// off an edge (opening upward near the bottom of the screen, say), stays
+/// within the screen, and hides while [child] is scrolled out of view. It is
+/// removed when [visible] turns false or this widget leaves the tree, and it
+/// uses the [Theme] in effect where this widget sits.
+///
+/// Clicks outside the overlay still reach the widgets beneath it. To absorb
+/// them, or to dismiss the overlay on an outside click, manage the overlay
+/// entry yourself and build it with [AnchoredFloat].
 ///
 /// ```dart
 /// Anchored(

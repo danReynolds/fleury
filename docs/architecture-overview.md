@@ -81,9 +81,10 @@ the changed cells to a thin browser client. Same widget tree, different place th
 code lives.
 
 The targets share the framework above the seam; each host supplies its input,
-clipboard, and presentation services. Parity tests compare terminal, embedded,
-and served output for covered fixtures, including scrolling and overlays. They
-catch regressions in those paths; terminal capabilities, browser focus, and
+clipboard, and presentation services. Parity tests check the browser DOM against
+the core cell buffer through scroll and overlay sequences, and an equivalence
+test checks that the terminal's ANSI output reproduces the buffer. They catch
+regressions in those paths; terminal capabilities, browser focus, and
 accessibility still need testing in the environments an app supports.
 
 ## How this section is organized

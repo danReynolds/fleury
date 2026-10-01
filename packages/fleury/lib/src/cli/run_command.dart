@@ -126,8 +126,8 @@ const String runCommandUsage = '''
 usage: fleury run [vm options] [script.dart] [app args...]
 
 Runs a Fleury app with hot reload from a launcher that never compiles it, so
-the app is compiled once instead of twice. Save a source file to reload; press
-F5 in the app to restart. With no script, runs the project's entrypoint from
+the app is compiled once instead of twice. Save a source file to reload; to
+restart, press Ctrl+G to open the debug shell, then F5. With no script, runs the project's entrypoint from
 bin/ (its only Dart file, else main.dart, else run_app.dart, else the file
 named after the package). VM options
 before the script go to the app's VM (for example --enable-asserts or

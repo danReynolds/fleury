@@ -5,10 +5,10 @@ import 'package:fleury/fleury_core.dart';
 import 'internal/collection_notifications.dart';
 import 'semantic_roles.dart';
 
-/// Protocol-neutral status for a node in a [TaskGraph].
+/// Status of a node in a [TaskGraph].
 enum TaskGraphStatus { pending, running, succeeded, failed, cancelled, skipped }
 
-/// One node in a compact protocol-neutral task/plan graph.
+/// One task in a [TaskGraph].
 final class TaskGraphNode {
   const TaskGraphNode({
     required this.id,
@@ -154,10 +154,13 @@ String exportTaskGraphNode(
 }
 
 /// A live view of a task plan: one row per task with a status marker (`[ ]`
-/// pending, `[>]` running, `[x]` done), its description, the tasks it waits
-/// on, and progress. Rows navigate with the keyboard, Ctrl+C copies the
-/// selected task, and selection stays on the same task id as nodes are
-/// rebuilt mid-run.
+/// pending, `[>]` running, `[x]` done, `[!]` failed), its description, the
+/// tasks it waits on, and progress.
+///
+/// Up and Down move the selected task; PageUp, PageDown, Home, and End jump;
+/// clicking a task selects it. Ctrl+C copies the selected task. When you pass
+/// a new [nodes] list mid-run, the selection stays on the task with the same
+/// id.
 class TaskGraph extends StatefulWidget {
   const TaskGraph({
     super.key,
@@ -186,7 +189,7 @@ class TaskGraph extends StatefulWidget {
   /// Semantic label (the accessibility name; not rendered) for the task graph.
   final String semanticLabel;
 
-  /// Whether Ctrl+C and semantic copy export the selected task.
+  /// Whether Ctrl+C (and the semantic copy action) copies the selected task.
   final bool copySelection;
 
   /// Clipboard/export options for selected-task copy.
@@ -571,28 +574,7 @@ String _progressText(TaskGraphNode node) {
   return 'Progress: pending';
 }
 
-String _sanitizeTaskText(String original) {
-  if (!_needsTaskSanitization(original)) return original;
-  return sanitizeSingleLine(original);
-}
-
-bool _needsTaskSanitization(String text) {
-  for (final codeUnit in text.codeUnits) {
-    if (codeUnit == 0x1b ||
-        codeUnit == 0x9b ||
-        codeUnit == 0x9d ||
-        codeUnit == 0x90 ||
-        codeUnit == 0x98 ||
-        codeUnit == 0x9e ||
-        codeUnit == 0x9f ||
-        codeUnit == 0x0a ||
-        codeUnit == 0x0d ||
-        codeUnit == 0x09) {
-      return true;
-    }
-  }
-  return false;
-}
+String _sanitizeTaskText(String text) => sanitizeSingleLine(text);
 
 CellStyle _styleForStatus(TaskGraphStatus status) {
   return switch (status) {

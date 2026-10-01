@@ -47,6 +47,28 @@ import 'tui_binding.dart';
 /// A multi-line editable text widget. Pair with a [TextEditingController]
 /// to read/drive the text; newlines live in the text like any character.
 ///
+/// While focused, the area takes typed characters. With the default [keymap]
+/// ([TextEditingKeymap.defaultMultiline]):
+///
+/// - Enter inserts a newline.
+/// - The arrow keys move the caret, Up and Down between lines; they never pass
+///   on at the edges of the text. Ctrl+Left and Ctrl+Right (or Alt+Left and
+///   Alt+Right) move by word, Home and End jump to the start and end of the
+///   line, and Ctrl+Home and Ctrl+End to the start and end of the text. Add
+///   Shift to any of these to extend the selection.
+/// - Backspace, Delete, Ctrl+A, Ctrl+C, Ctrl+X, Ctrl+Z, Ctrl+Y, and their
+///   variants work as they do in `TextInput`. Ctrl+C and Ctrl+X pass on when
+///   nothing is selected, and the area consumes Ctrl+Z even with nothing to
+///   undo, so a terminal app doesn't suspend on it while the area has focus.
+/// - Tab passes on, so it can move focus. Escape calls [onEscape], or passes
+///   on when [onEscape] is null.
+///
+/// For a chat composer or prompt, [TextEditingKeymap.chat] makes Enter call
+/// [onSubmit] and Alt+Enter (or Shift+Enter, where the terminal reports it)
+/// insert a newline. [TextEditingKeymap.emacsMultiline] adds Emacs-style keys:
+/// among others, Ctrl+A and Ctrl+E jump to the start and end of the line,
+/// Ctrl+K cuts to its end, and Ctrl+Y pastes what was cut.
+///
 /// Newlines are the only control rune a [TextArea] keeps. Everything else —
 /// `\r`, `\t`, ESC and the whole escape sequence behind it — is replaced when
 /// the text enters the model, so a row's characters and its painted cells stay
@@ -93,7 +115,7 @@ class TextArea extends StatefulWidget {
 
   /// Called with the accepted text after an editing interaction changes it.
   ///
-  /// Like [TextInput.onChanged], reports user and semantic edits. Programmatic
+  /// Like `TextInput.onChanged`, reports user and semantic edits. Programmatic
   /// controller writes notify controller listeners instead.
   final void Function(String text)? onChanged;
 
@@ -124,7 +146,8 @@ class TextArea extends StatefulWidget {
   /// Whether the area can receive focus and editing input.
   final bool enabled;
 
-  /// Whether navigation and selection remain available while edits are blocked.
+  /// Whether the area refuses edits while still allowing focus, caret
+  /// movement, selection, and copy.
   final bool readOnly;
 
   /// Validation message attached directly to this area, or null when valid.
@@ -142,7 +165,9 @@ class TextArea extends StatefulWidget {
   /// Extra semantic state merged into the text-area node.
   final SemanticState semanticState;
 
-  /// Policy future copy/cut actions should use for this area.
+  /// How copy, cut, and the kill ring treat this area's text. While
+  /// [obscureText] is on, any policy other than [TextClipboardPolicy.disabled]
+  /// acts as [TextClipboardPolicy.redacted].
   final TextClipboardPolicy clipboardPolicy;
 
   /// Mask every UTF-16 code unit except line breaks. Selection offsets remain
@@ -153,7 +178,10 @@ class TextArea extends StatefulWidget {
   /// retain that policy after turning masking off.
   final bool obscureText;
 
-  /// Keymap used to resolve non-text key events into editing actions.
+  /// Which keys trigger which editing actions. Defaults to
+  /// [TextEditingKeymap.defaultMultiline]; [TextEditingKeymap.chat] makes
+  /// Enter submit, and [TextEditingKeymap.emacsMultiline] adds Emacs-style
+  /// keys such as Ctrl+A, Ctrl+E, and Ctrl+K.
   final TextEditingKeymap keymap;
 
   /// Policy for chunking large bracketed paste payloads.

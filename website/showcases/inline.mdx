@@ -2,6 +2,8 @@
 title: Interactive CLI commands
 description: A real setup flow that lives below your shell prompt. Configure, review, and return to your command line.
 tableOfContents: false
+# The page is copied into a gitignored directory; edit this source instead.
+editUrl: https://github.com/danReynolds/fleury/edit/main/website/showcases/inline.mdx
 ---
 
 import InlineShowcase from '../../../components/InlineShowcase.astro';
@@ -38,10 +40,10 @@ The recording captures the native app in a real PTY. Earlier output stays in
 the main terminal buffer, the live region grows for review, and completion
 clears that region before the command prints its result.
 
-Want to mix several UI steps with ordinary CLI work? The
-[Mix UI and CLI steps](/fleury/guides/terminal-modes/#mix-ui-and-cli-steps)
-lets you open fresh forms with a text prompt between them, plus the native host loop
-that makes it work.
+To mix several UI steps with ordinary CLI work, see
+[Mix UI and CLI steps](/fleury/guides/terminal-modes/#mix-ui-and-cli-steps): a
+text prompt between forms decides whether to open a fresh one, and the native
+command awaits `runApp`, reads the answer, then calls `runApp` again.
 
 ## One form. A small host boundary.
 

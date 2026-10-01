@@ -412,10 +412,10 @@ Ordered by what I'd take first. Each names **what makes it hard**, so we can dec
   **Perverse second arm:** two stuck keys re-pressed trip the phase-violation counter and **permanently demote an honest kitty/ghostty to press-only** — on evidence Fleury manufactured itself.
   **Notes:** LANDED: the driver emits a focus-out on suspend and on handoff start, and a focus-in (before the resume resize) on return; the existing focus-out recovery releases held keys, which also removes the manufactured phase violations. Lifecycle test red before. The suspend half applies to whatever 3.a decides.
 
-- [ ] **3.a** `P1` Ctrl+Z swallowed as job control; `TextInput` undo unreachable — `posix_driver.dart:679`
+- [x] **3.a** `P1` Ctrl+Z swallowed as job control; `TextInput` undo unreachable — `posix_driver.dart:679`
   **Your call:** it's a **policy collision**, not a code bug — suspend was deliberate, undo-on-Ctrl+Z is in both shipped default keymaps, and nothing reconciles them. The Ctrl+C path already models the answer (dispatch first, self-stop only if unhandled). Deciding to move suspend behind an unhandled-chord fallback is yours; the wiring after that is small.
   **Sharpens it:** the Sprite Studio sample renders a hint bar advertising `^Z undo`, and the showcase page tells the reader to press it. Works on serve, not terminal — the two surfaces disagree.
-  **Notes:**
+  **Notes:** LANDED (branch `fix/launch-product`), decided as proposed: dispatch first, suspend only if unhandled. The POSIX driver no longer consumes the chord — Ctrl+Z (0x1a, Kitty CSI u, modifyOtherKeys) is parsed and dispatched like any key. runApp, beside the Ctrl+C exit guard and on the same signal (`KeyEventResult.handled`), asks the driver to suspend (`requestCtrlZSuspend`) only for a down press of exactly Ctrl+Z that nothing handled, before `onEvent`; so `TextInput`/`TextArea` undo and app bindings win, and Ctrl+Shift+Z (redo), releases and repeats never suspend. The driver still owns whether it suspends at all: `suspendOnCtrlZ` (false → the chord is only a key, never a suspend), native raw mode, a live session, no handoff. The suspend/resume routine itself is unchanged, including 2.d's focus-out/in. Browser, served, remote and Windows drivers have no job control, so the chord stays an ordinary key there. Tests: `test/runtime/ctrl_z_suspend_test.dart` drives runApp over a real `PosixTerminalDriver` on fake stdio — TextInput/TextArea undo and an app binding were red before (the driver suspended and the field kept its text); unhandled legacy and Kitty presses suspend, the exact-chord, `suspendOnCtrlZ: false` and no-job-control cases each go red under a matching mutation. PTY: a focused field's Ctrl+Z undoes and the process never stops (red before: the capture timed out on a stopped process); the unhandled Ctrl+Z → SIGSTOP/SIGCONT PTY proof still passes. Driver tests now request the suspension instead of expecting the byte to be consumed. input-alloc-gate +0.0%, runtime-gate pass. **Follow-up for you:** an app that claims Ctrl+Z everywhere (an always-focused composer) now has no keyboard route to job control; a public suspend request (e.g. on `TerminalSession`) would let it bind one elsewhere.
 
 - [x] **3.c** `P1` ✎ Terminal handoff unreachable from a default `runApp` — `external_editor.dart:200`
   **Hard because:** needs an **API decision** — publish the session driver via an inherited scope, or a runtime-owned reference plus a top-level helper? A global is friendlier but is a second source of truth about who owns the terminal.
@@ -517,7 +517,7 @@ These block or shape work above and are not mine to answer:
 3. **10.a** — sanitizer: model boundary, offset map, or length-preserving?
 4. **13.c** — bridge handshake: protocol addition, or serve sends INIT at accept?
 5. **15.c** — `main()` twice: document + diagnose, or RFC a launcher and lose "plain `dart run`"?
-6. **3.a** — Ctrl+Z: move suspend behind an unhandled-chord fallback?
+6. ~~**3.a** — Ctrl+Z: move suspend behind an unhandled-chord fallback?~~ ANSWERED and landed (`fix/launch-product`): yes — Ctrl+Z is dispatched first and only an unhandled press suspends, the Ctrl+C rule.
 7. **11.d** — `AnimationPolicy`: ship it or cut it?
 8. **10.e / 10.d / 10.c** — forms and editing policy: hook vs document; undo granularity; draft retention.
 9. **6.a** — should `barrierDismissible` also mean click-outside?
@@ -568,7 +568,7 @@ order I would take them in.
 
 1. **13.b + 13.c + 13.d** — serve is a pillar and the app-first axis has zero coverage. Send the handshake at accept (no protocol change); 13.d reuses the 4001 close + reason the client now shows.
 2. **3.c** — an app that opens `$EDITOR` looks frozen under the default `runApp` (the child inherits the capture pipe). Agent TUIs open editors. Needs the session-driver API decision.
-3. **3.a** (then **2.d**) — dispatch Ctrl+Z first, suspend only if unhandled, like Ctrl+C. Both keymaps and the samples advertise `^Z undo`.
+3. ~~**3.a** (then **2.d**)~~ **LANDED** — Ctrl+Z is dispatched first and suspends only if unhandled, like Ctrl+C; 2.d's focus-out/in recovery is unchanged on the suspend path. Both keymaps' `^Z undo` now works in the terminal.
 4. ~~**11.b + 11.e**~~ **LANDED** — edges now expire on the consumer's clock (the ticker), with the frame clock as the ticker-free fallback; one live publisher, arbitrated by the session. The harness shares the host wiring and latches at `render()`, so a widget test sees it.
 5. **10.a** — serve and programmatic writes are unshielded; shift-select + Delete removes the wrong span. Direction (a): sanitize at the model boundary, document dropped bytes.
 6. **15.a** (ack) — under the default dev supervisor a Ctrl+C on an app with a >300 ms teardown takes the force path. The raw-death half is fixed.

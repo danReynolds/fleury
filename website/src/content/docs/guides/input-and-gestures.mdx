@@ -16,9 +16,10 @@ controls need.
 
 ## Customize a control's feedback
 
-Use `CellStyle.interactive` to style a button while it is held. Fleury clears the
-pressed state on release or cancellation and preserves the button's keyboard
-and semantic actions.
+Use `CellStyle.interactive` to style a button while it is held. The `pressed`
+entry applies only while a primary pointer press is held, and Fleury clears it
+on release or cancellation. Keyboard and semantic activation still work; they
+run the action at once, without a pressed state.
 
 <GuidePad id="input.actions" codeMaxHeight="32rem" codeLabel="Pressed feedback on a standard button" demoLabel="Hold the button, then drag away to cancel" referencesLabel="Full source">
 <FleuryExample slot="demo" id="input.actions" cols={38} rows={11} interactive />
@@ -27,10 +28,10 @@ and semantic actions.
 </Fragment>
 </GuidePad>
 
-Pressed styling currently follows primary pointer input; keyboard and semantic
-activation are immediate. For a custom tile, use the button's custom content
-and plain appearance. The [button reference](/fleury/widgets/button/) also
-covers secondary-click actions.
+For a custom tile, pass your own content with `Button(child: …)` and remove
+the brackets with `appearance: ButtonAppearance.plain`; the pressed style and
+actions work the same. The [button reference](/fleury/widgets/button/) also
+covers `onSecondaryPressed` for secondary-click actions.
 
 ## Turn dragging into a resize
 
@@ -92,10 +93,11 @@ if the target disappears, the gesture is cancelled.
 
 Wrap a row in `MouseRegion` when its hover state should include child controls.
 This adds enter/exit callbacks without intercepting the children's presses.
-For hover in a native terminal, start the app with
-`runApp(const MyApp(), mode: const TerminalMode(mouseMotion: true))`;
-`mouse: true` alone enables clicks and drags but not hover. Browser demos
-receive pointer motion automatically.
+In a native terminal, hover needs `TerminalMode(mouseMotion: true)`; the
+`bin/run_app.dart` that `fleury create` generates sets only `mouse: true`, which
+reports presses, drags, and the wheel but not plain motion. See
+[Enable mouse input in a terminal](#enable-mouse-input-in-a-terminal). Browser
+demos receive pointer motion automatically.
 
 <GuidePad id="input.nesting" codeMaxHeight="32rem" codeLabel="Hover on the parent, action on the button" demoLabel="Move from the filename to Pin, then outside the row" referencesLabel="Full source">
 <FleuryExample slot="demo" id="input.nesting" cols={38} rows={9} interactive />
@@ -138,5 +140,6 @@ runApp(const MyApp(), mode: const TerminalMode(mouseMotion: true));
 This enables clicks, drags, scrolling, and hover; `mouse: true` omits hover.
 Reporting is opt-in because it takes over the terminal's native text selection.
 
-Continue with [key bindings](/fleury/guides/focus-and-keyboard/),
-[forms](/fleury/guides/forms/), or [interactive styles](/fleury/guides/theming/).
+Continue with [key bindings](/fleury/guides/key-handling/),
+[forms](/fleury/guides/forms/), or
+[interactive styles](/fleury/guides/theming/#interactive-styles).

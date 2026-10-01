@@ -112,6 +112,49 @@ void main() {
       );
       expect(out.contains('[Ctrl+R] Go to Runs'), isTrue);
     });
+
+    testWidgets('inside a presented dialog, lists only keys that reach a '
+        'binding', (tester) {
+      // The dialog's route is a modal key scope: keys it doesn't handle
+      // stop there, so the app's `q` can't fire while the dialog is up.
+      var quits = 0;
+      var answers = 0;
+      late BuildContext home;
+      tester.pumpWidget(
+        KeyBindings(
+          bindings: [
+            KeyBinding(KeyCode.q, onTrigger: (_) => quits++, label: 'Quit'),
+          ],
+          child: Navigator(home: _Home((context) => home = context)),
+        ),
+      );
+      Navigator.of(home).present<void>(
+        KeyBindings(
+          bindings: [
+            KeyBinding(KeyCode.y, onTrigger: (_) => answers++, label: 'Yes'),
+          ],
+          child: const Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Focus(autofocus: true, child: Text('Delete it?')),
+              KeyHintBar(),
+            ],
+          ),
+        ),
+        transition: RouteTransition.none,
+      );
+      tester.pump();
+
+      final out = _render(tester, rows: 6);
+      expect(out, contains('[y] Yes'));
+      expect(out, isNot(contains('Quit')), reason: 'q never reaches it');
+
+      // Dispatch agrees with the bar.
+      tester.sendKey(const KeyEvent(KeyCode.q));
+      tester.sendKey(const KeyEvent(KeyCode.y));
+      expect(quits, 0);
+      expect(answers, 1);
+    });
   });
 
   group('F8: overflow + combined labels', () {
@@ -284,4 +327,14 @@ void main() {
       expect(_render(tester), contains('[q] Quit'));
     });
   });
+}
+
+class _Home extends StatelessWidget {
+  const _Home(this.sink);
+  final void Function(BuildContext) sink;
+  @override
+  Widget build(BuildContext context) {
+    sink(context);
+    return const Focus(autofocus: true, child: Text('Home'));
+  }
 }

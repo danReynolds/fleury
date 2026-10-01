@@ -22,13 +22,26 @@ typedef _ScrollbarMetrics = (int, int, int);
 /// position shows how far you've scrolled; when everything fits, the thumb
 /// fills the track unless [showWhenFits] is false.
 ///
+/// `ScrollView(scrollbar: true)` and `ListView(scrollbar: true)` add one that
+/// shares the view's own controller. Wrap a view yourself to style the bar,
+/// giving it and the view the same controller.
+///
 /// When the mouse is enabled, click the track or drag the thumb to scroll
 /// — the drag is captured, so it keeps tracking even past the bar's edge.
 /// Metrics are read at paint (after the scrollable lays out), so the thumb
 /// is correct on the first frame and follows scrolling automatically.
+///
+/// The bar takes its gutter from its own space, so it needs a bounded width
+/// (vertical) or height (horizontal); laid out without one, it throws a
+/// [StateError].
 class Scrollbar extends StatefulWidget {
   Scrollbar({
     super.key,
+
+    /// The controller of the scroll view in [child]; give that view the same
+    /// controller. The thumb follows the controller's extents and
+    /// [ScrollController.offset], and a click or drag on the bar sets that
+    /// offset.
     required ScrollController controller,
     required this.child,
     this.thickness = 1,
@@ -44,11 +57,17 @@ class Scrollbar extends StatefulWidget {
        _scrollTo = ((f) =>
            controller.offset = (controller.maxOffset * f).round());
 
-  /// Scrollbar for a [ListView], including partial visibility within oversized items.
+  /// Scrollbar for a `ListView`, including partial visibility within oversized items.
   /// Unmeasured items count equally, so geometry is approximate for mixed
   /// sizes. Dragging to either endpoint reaches the actual content edge.
   Scrollbar.list({
     super.key,
+
+    /// The controller of the list in [child]; give that list the same
+    /// controller. The thumb follows [ListController.scrollFraction] and
+    /// [ListController.visibleFraction], and a click or drag on the bar calls
+    /// [ListController.jumpToFraction], which scrolls without moving the
+    /// list's cursor.
     required ListController controller,
     required this.child,
     this.thickness = 1,
@@ -71,12 +90,30 @@ class Scrollbar extends StatefulWidget {
 
   final _ScrollbarMetrics Function() _metrics;
   final void Function(double fraction) _scrollTo;
+
+  /// The scrolling view the bar reflects, which must scroll with the
+  /// controller the bar was given. It gets all the space except the bar's
+  /// gutter.
   final Widget child;
+
+  /// How thick the bar is: the glyph columns of a vertical bar's gutter, or
+  /// the rows of a horizontal bar's. Each column or row repeats the same track
+  /// and thumb.
+  ///
+  /// A bar glyph is one cell wide, or two on a terminal measured to draw
+  /// ambiguous-width glyphs double-width, so a vertical gutter is `thickness`
+  /// or twice that many cells wide.
   final int thickness;
 
   /// Must match the axis of the owning view. Horizontal bars use a bottom gutter.
   final Axis scrollDirection;
+
+  /// The style of the track, the part of the bar the thumb doesn't cover,
+  /// drawn with `│` (vertical) or `─` (horizontal). Defaults to dim.
   final CellStyle trackStyle;
+
+  /// The style of the thumb, drawn with `█`. Defaults to [CellStyle.none],
+  /// the terminal's own colors: the bar doesn't read the theme.
   final CellStyle thumbStyle;
 
   /// Whether to draw the bar when all content is visible. When false, a fitting

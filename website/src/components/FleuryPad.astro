@@ -23,8 +23,9 @@ const frameUrl = `${compilerUrl}/frame.html`;
         <div class="pad-help-content">
           <strong>Make a change. Keep your place.</strong>
           <p>The example starts automatically. Click its counter and write a draft, then edit the code and hot reload: your state stays with you.</p>
-          <dl><dt>⌘ / Ctrl + Enter</dt><dd>Run or hot reload</dd><dt>Ctrl + Space</dt><dd>Dart completions</dd><dt>Restart</dt><dd>Run again with fresh state</dd></dl>
-          <p>Your code is saved in this browser. Restored custom code waits for Run. Download it to keep a copy. Reset restores the original example. Define <code>Widget buildApp()</code> to return your app; the Pad supplies the browser entry point and supports one file with Fleury’s bundled packages.</p>
+          <dl><dt>⌘/Ctrl+Enter or ⌘/Ctrl+S</dt><dd>Run or hot reload</dd><dt>Ctrl+Space</dt><dd>Dart completions</dd><dt>Restart</dt><dd>Run again with fresh state</dd></dl>
+          <p>Your code is saved in this browser. When you come back, your last edit is restored; press Run to see it. Download it to keep a copy. Reset restores the original example.</p>
+          <p>Pad code is one file: define <code>Widget buildApp()</code> to return your app, and the Pad supplies the browser entry point. The code runs in your browser, so it imports <code>package:fleury/fleury_core.dart</code> and Fleury’s other bundled packages, not <code>dart:io</code> or the native <code>package:fleury/fleury.dart</code>. To run it in a terminal from a Fleury project, import <code>package:fleury/fleury.dart</code> and add <code>void main() =&gt; runApp(buildApp());</code>.</p>
           <a href="/fleury/guides/hot-reload/">About hot reload <Icon name="right-arrow" size="0.9rem" /></a>
         </div>
       </details>
@@ -64,7 +65,7 @@ const frameUrl = `${compilerUrl}/frame.html`;
           <h2 class="pad-loading-heading">Starting your app…</h2>
             <p>Run your code, make it your own,<br />and hot reload without losing your place.</p>
             <button class="pad-empty-run" data-pad="start">Run your code <Icon name="right-arrow" size="1rem" /></button>
-            <span class="pad-shortcut">⌘ / Ctrl + Enter</span>
+            <span class="pad-shortcut">⌘/Ctrl+Enter</span>
           </div>
         </div>
       </section>
@@ -135,13 +136,14 @@ const frameUrl = `${compilerUrl}/frame.html`;
   .pad-metrics { margin-left: auto; white-space: nowrap; color: var(--sl-color-gray-2); font-variant-numeric: tabular-nums; }
   .pad-storage { margin-left: auto; color: var(--sl-color-gray-3); white-space: nowrap; }
   .pad-metrics:not(:empty) + .pad-storage { display: none; }
-  .pad-diagnostics { max-height: 8rem; overflow: auto; margin: 0; padding: 0.85rem 1rem; border-top: 1px solid var(--sl-color-red); background: var(--sl-color-red-low); color: var(--sl-color-red-high); font: 0.75rem/1.6 var(--sl-font-mono); white-space: pre-wrap; overflow-wrap: anywhere; }
+  .pad-diagnostics { max-height: 8rem; overflow: auto; margin: 0; padding: 0.85rem 1rem; border-top: 1px solid var(--sl-color-red); background: var(--sl-color-red-low); color: var(--sl-color-red-high); font: 0.75rem/1.6 var(--sl-font-mono, ui-monospace, monospace); white-space: pre-wrap; overflow-wrap: anywhere; }
   .pad-help { position: relative; z-index: 5; }
   .pad-help summary { list-style: none; }
   .pad-help summary::-webkit-details-marker { display: none; }
   .pad-help-content { position: absolute; right: 0; top: calc(100% + 0.75rem); width: min(22rem, calc(100vw - 2rem)); padding: 1.15rem; border: 1px solid var(--sl-color-gray-4); border-radius: 0.65rem; background: var(--sl-color-gray-6); box-shadow: 0 12px 40px #0003; font-size: 0.8rem; line-height: 1.65; }
   .pad-help-content strong { color: var(--sl-color-white); }
   .pad-help-content p { margin: 0.65rem 0; color: var(--sl-color-gray-2); }
+  .pad-help-content code { font: 0.72rem/1.5 var(--sl-font-mono, ui-monospace, monospace); color: var(--sl-color-gray-1); overflow-wrap: anywhere; }
   .pad-help-content dl { display: grid; grid-template-columns: auto 1fr; gap: 0.45rem 1rem; padding-block: 0.65rem; border-block: 1px solid var(--sl-color-gray-5); }
   .pad-help-content dt { color: var(--sl-color-gray-1); font-size: 0.75rem; }
   .pad-help-content dd { margin: 0; color: var(--sl-color-gray-2); }

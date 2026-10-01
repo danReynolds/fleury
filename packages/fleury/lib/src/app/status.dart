@@ -106,8 +106,10 @@ final class StatusItem {
 /// Two sources feed it. An app or command sets the items it reports itself —
 /// a task's progress, a command's result — with [put], [remove] and
 /// [update]. [FleuryApp] also derives items from its `status` builder and
-/// extensions, and re-derives them after every command and rebuild; those
-/// never replace a set item. [items] shows the derived items, each replaced
+/// extensions, and re-derives them when the [FleuryApp] widget updates and
+/// after each command its own registry runs (a command a nested
+/// `CommandScope` runs doesn't re-derive them). Derived items never replace a
+/// set item. [items] shows the derived items, each replaced
 /// by a set item with the same id, then the set items with ids of their own.
 ///
 /// ```dart

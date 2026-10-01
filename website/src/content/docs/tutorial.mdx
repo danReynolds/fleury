@@ -4,16 +4,19 @@ description: Build a small interactive TUI end-to-end — state, a text input, l
 ---
 
 import FleuryExample from '../../components/FleuryExample.astro';
+import SourceExcerpt from '../../components/SourceExcerpt.astro';
+import finishedApp from '../../../examples/doc_snippets/filterable_list.dart?raw';
 
 In about fifteen minutes you'll build a list that narrows live as you type —
 touching the three things every Fleury app is made of:
 [state](/fleury/concepts/widgets-and-state/), [layout](/fleury/guides/layout/), and input.
 
-Use the `my_app` project from [Getting started](/fleury/getting-started/), or
-create a fresh one:
+Continue in the `my_app` project from [Getting started](/fleury/getting-started/).
+If you skipped it, create the project now:
 
 ```sh
 fleury create my_app --dependency-source=git
+cd my_app
 ```
 
 The code below imports `package:my_app` and names its root widget `MyApp`, the
@@ -30,8 +33,8 @@ app, running in your browser; **type into it** and watch the list narrow:
 
 ## 1. A static list
 
-Start with a stateless screen that just renders some data — replace what the
-generator put there:
+Start with a stateless screen that just renders some data — replace everything
+in `lib/app.dart`:
 
 ```dart title="lib/app.dart"
 import 'package:fleury/fleury.dart';
@@ -66,8 +69,8 @@ class FilterApp extends StatelessWidget {
 }
 ```
 
-The generated counter test also needs to follow the screen you just replaced.
-Use this small smoke for the rest of the tutorial:
+The existing test also needs to follow the screen you just replaced. Use this
+small smoke test for the rest of the tutorial:
 
 ```dart title="test/app_test.dart"
 import 'package:fleury_test/fleury_test.dart';
@@ -82,13 +85,13 @@ void main() {
 }
 ```
 
-Run `dart test` to check the smoke. Then start the app with `fleury run` (or
-press F5 in VS Code). The list appears one item per row, padded a cell off the
-edge. Nothing moves yet — let's make it react.
+Run `dart test` to check it. Then start the app with `fleury run` (or press F5
+in VS Code). The list appears one item per row, padded a cell off the edge.
+Nothing moves yet — let's make it react.
 
-Leave the app running for the rest of the tutorial. Each time you save, it
-reloads in place and keeps its state, so you see every step as soon as you save
-it. (`Ctrl-C` quits.)
+Leave the app running for the rest of the tutorial. Saving reloads it in place
+and keeps its state, so you see most steps as soon as you save them; step 2 is
+the one change that needs a restart. (`Ctrl+C` quits.)
 
 ## 2. Hold state
 
@@ -128,10 +131,10 @@ always `''`, so nothing's filtered — until we wire up the input. (Until then t
 analyzer suggests making `_query` final; step 3 assigns it.)
 
 Turning a stateless widget into a stateful one is a change a reload can't
-apply, so restart after saving this step. In a terminal-owned `fleury run`
-session, press `Ctrl+G` to open the debug shell, then `F5`. If your editor or
-terminal intercepts F5, press `Ctrl+C` and rerun the command. If you launched
-with VS Code's F5, use the editor's **Restart** action instead.
+apply, so restart after saving this step: in a `fleury run` session, press
+`Ctrl+G`, then `F5`, or use the editor's **Restart** action if you launched
+with VS Code's F5. If F5 doesn't reach the app, see
+[When F5 doesn't restart](/fleury/guides/hot-reload/#when-f5-doesnt-restart).
 
 ## 3. Add the text field
 
@@ -157,7 +160,7 @@ class _FilterAppState extends State<FilterApp> {
           placeholder: 'Filter languages…',
           onChanged: (value) => setState(() => _query = value),
         ),
-        SizedBox(height: 1),
+        const SizedBox(height: 1),
         for (final name in _matches) Text(name),
       ],
     ),
@@ -167,9 +170,9 @@ class _FilterAppState extends State<FilterApp> {
 
 Save, and the field appears above the list; type, and the list narrows.
 `onChanged` calls `setState` on every edit; `build` recomputes `_matches` from
-`_query`, and the framework repaints only the rows that changed. That's the
-whole reactive loop. `autofocus: true` gives the field keyboard focus as soon as
-it appears, so you can type straight away.
+`_query`, and Fleury writes only the cells that changed to the terminal. That's
+the whole reactive loop. `autofocus: true` gives the field keyboard focus as
+soon as it appears, so you can type straight away.
 
 ## 4. Layout and polish
 
@@ -191,10 +194,12 @@ Widget build(BuildContext context) {
           placeholder: 'Filter languages…',
           onChanged: (value) => setState(() => _query = value),
         ),
-        SizedBox(height: 1),
-        Text('${matches.length} of ${_languages.length}',
-            style: const CellStyle(dim: true)),
-        SizedBox(height: 1),
+        const SizedBox(height: 1),
+        Text(
+          '${matches.length} of ${_languages.length}',
+          style: const CellStyle(dim: true),
+        ),
+        const SizedBox(height: 1),
         Expanded(
           child: matches.isEmpty
               ? const Text('No matches', style: CellStyle(dim: true))
@@ -216,6 +221,9 @@ don't fit are cut off; a `ListView` scrolls instead, which
 
 That's a complete, interactive Fleury app: state held in a `State`, an input
 reported through `onChanged`, a derived list, and a layout that fills the screen.
+Here is the finished `lib/app.dart`:
+
+<SourceExcerpt code={finishedApp} region="app" />
 
 ## Where to go next
 
@@ -228,7 +236,8 @@ reported through `onChanged`, a derived list, and a layout that fills the screen
   [`DataTable`](/fleury/widgets/datatable/), or [`Select`](/fleury/widgets/select/) — from the
   [widget reference](/fleury/widgets/). (Those live in `fleury_widgets`; add
   `import 'package:fleury_widgets/fleury_widgets.dart';` when you reach for them.)
-- Open the app in a browser: `fleury serve` streams the running app to a tab,
-  as in step 5 of [Getting started](/fleury/getting-started/).
+- Preview the app in a browser on macOS or Linux: `fleury serve --spawn` runs
+  it and streams it to a tab, as in step 5 of
+  [Getting started](/fleury/getting-started/).
 - Browse the [guides](/fleury/guides/) for forms, navigation, key handling, and
   more.

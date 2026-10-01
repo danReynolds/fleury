@@ -1,9 +1,11 @@
 import 'package:fleury/fleury_core.dart';
 
-// Return your app from buildApp; Fleury Pad supplies main() and the browser host.
-Widget buildApp() => Theme(
-  data: ThemeData.dark(),
-  child: const FocusTraversalGroup(child: Counter()),
+// Return your app from buildApp(). Fleury Pad supplies main()
+// and runs it in your browser, so it can't import dart:io.
+Widget buildApp() => FleuryApp(
+  title: 'Fleury Pad',
+  theme: ThemeData.dark(),
+  home: const Counter(),
 );
 
 class Counter extends StatefulWidget {
@@ -33,12 +35,14 @@ class _CounterState extends State<Counter> {
           const Text('Hello, Fleury Pad!', style: CellStyle(bold: true)),
           const SizedBox(height: 1),
           Text('Count: $_count'),
-          Button(
-            child: const Text('Increment'),
-            onPressed: () => setState(() => _count++),
-          ),
+          Button(text: 'Increment', onPressed: () => setState(() => _count++)),
           const SizedBox(height: 2),
-          TextArea(controller: _draft, placeholder: 'Write a draft…', minLines: 3, maxLines: 3),
+          TextArea(
+            controller: _draft,
+            placeholder: 'Write a draft…',
+            minLines: 3,
+            maxLines: 3,
+          ),
         ],
       ),
     );

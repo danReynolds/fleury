@@ -23,13 +23,16 @@ restored.
 |---|---|
 | Open the next screen | `context.push(screen)` |
 | Show a temporary dialog or sheet | `context.present(dialog)` |
-| Return to the previous route | `context.pop()` |
+| Close the current route | `context.pop()` |
 | Return a value | `context.pop(result)` |
+| Go back, respecting guards | `Navigator.of(context).maybePop()` |
 
 ## Push, present, and pop
 
 This first example stays deliberately literal. Each screen labels its stack
-depth, and each action names the operation it performs:
+depth, and each action names the operation it performs. The tabs hold its three
+routes: the home screen, the details screen it pushes, and the dialog that
+screen presents:
 
 <GuidePad id="navigation.basics" layout="demo-wide">
 <FleuryExample
@@ -69,11 +72,11 @@ final result = await context.push<ProjectResult>(
 );
 ```
 
-Fleury does not expose Flutter-style `RouteSettings` or a named-route table.
-The navigator stores the typed screen widget itself, and any screen data uses
-its ordinary constructor. `popUntil<ProjectScreen>()` therefore matches by
-widget type; the runtime type is otherwise only a diagnostic and semantics
-label.
+Routes are widgets, not named route strings: Fleury has no Flutter-style
+`RouteSettings` or named-route table. The navigator stores the screen widget
+itself, so screen data travels through its ordinary, typed constructor, and
+`popUntil<ProjectScreen>()` finds a route by its widget type. Otherwise the
+type only labels the route in diagnostics and semantics.
 
 Use `present` for a temporary decision or tool that belongs over the current
 screen. The covered screen remains painted, while focus and unhandled keys stay
@@ -91,8 +94,8 @@ Both methods return a `Future<T?>`. The route supplies `T` when it closes:
 context.pop(true); // completes the awaiting Future<bool?>
 ```
 
-An ordinary back or dismissal returns `null`. Use a non-nullable result value
-only when the user completed an explicit action.
+An ordinary back or dismissal returns `null`. Pop with a non-null result only
+when the user completed an explicit action.
 
 ### Dialog placement
 
@@ -107,8 +110,10 @@ context.present<void>(
 );
 ```
 
-Set `barrierDismissible: false` when Esc must not dismiss the route. Close it
-explicitly with `context.pop()` after the required action succeeds.
+Esc dismisses a presented route; clicking outside it never does. The area
+around the dialog only blocks pointer input to the screen behind. Set
+`barrierDismissible: false` when Esc must not dismiss the route either, and
+close it explicitly with `context.pop()` after the required action succeeds.
 
 Choose a placement below. Selecting an option immediately presents the same
 dialog there; close it to try another position:
@@ -141,13 +146,16 @@ should pause—for example, while an editor has unsaved changes:
 When `canPop` is false, the screen stays open and `onBlocked` runs. This guard
 applies to `maybePop`, including Fleury's Esc handling. A programmatic
 `context.pop()` is unconditional, so a successful confirmation can still close
-the screen.
+the screen. A Back button in your own UI should therefore call
+`Navigator.of(context).maybePop()`, as the editor's **Back** does, so the guard
+applies to it too.
 
 In the demo, open the editor and **Back** immediately: it succeeds because
 nothing changed. Open it again, type in the field, and choose Back; the guard now
 blocks the request. **Save** clears the dirty state so the same back action can
-close the screen. Reopen the editor and the saved value is still there.
-**Discard** demonstrates an intentional programmatic pop.
+close the screen. Reopen the editor and the saved value is still there: the
+drafts screen in the second tab keeps it and passes it to each editor it
+pushes. **Discard** demonstrates an intentional programmatic pop.
 
 ## Advanced patterns
 
@@ -162,8 +170,20 @@ context.push(
 );
 ```
 
-Fleury includes `fade`, `slide`, and `none`. You can also set the default once on
-a custom `Navigator` with its `transition` property.
+Routes fade in and out by default. Fleury includes `fade`, `slide`, and `none`.
+To change the default for every route on a navigator, set its `transition`.
+`FleuryApp` has no transition parameter, so for an app-wide default, give it
+your own root navigator as its `child`:
+
+```dart
+FleuryApp(
+  title: 'Projects',
+  child: Navigator(
+    transition: RouteTransition.slide,
+    home: const ProjectsScreen(),
+  ),
+)
+```
 
 The built-in presets share one motion path in both directions: pop uses the
 flipped forward curve so it retraces the push. A custom `RouteTransition` can
@@ -192,9 +212,6 @@ cases:
 | `popUntil<Screen>()` | Return to a known screen type |
 | `popToRoot()` | Return to this navigator's first screen |
 
-Routes are widgets, not named route strings. Passing the screen directly keeps
-constructor arguments typed and makes `popUntil<T>()` type-safe.
-
 ### Nested navigators
 
 `FleuryApp(home: ...)` inserts the root navigator automatically. Add another
@@ -204,9 +221,9 @@ flow, a file browser beside an editor, or a tab with its own back stack.
 Follow the files from left to right: the projects screen sits on the root
 navigator (`FleuryApp` inserts it in an app) and pushes one setup route onto it,
 the setup flow declares the second navigator, and each setup step pushes onto
-that nearest inner navigator. Finishing replaces the one outer setup route,
-removing its whole inner history together; Back then returns directly to
-Projects:
+that nearest inner navigator. Finishing replaces the one outer setup route with
+the project-ready screen in the last tab, removing the whole inner history
+together; its Back then returns directly to Projects:
 
 <GuidePad id="navigation.nested-flow" layout="demo-wide">
 <FleuryExample
@@ -231,6 +248,7 @@ finishing or cancelling the whole flow, or for opening an app-wide route.
 | `context.push<T>(screen)` | Pushes a full screen and awaits its result |
 | `context.present<T>(screen)` | Presents a focus-contained route over the current screen |
 | `context.pop([result])` | Closes the current route, optionally with a result |
+| `Navigator.of(context).maybePop()` | Goes back unless a `PopScope` or a non-dismissible dialog refuses |
 | `Navigator.of(context)` | Gets the nearest navigator state |
 | `context.rootNavigator` | Gets the app's root navigator state |
 | `PopScope` | Guards user-initiated back attempts |
@@ -240,7 +258,7 @@ finishing or cancelling the whole flow, or for opening an app-wide route.
 
 - [Focus management](/fleury/guides/focus/) explains traversal, focus memory,
   and presented-route containment in detail.
-- [Key handling](/fleury/guides/focus-and-keyboard/) shows how keyboard
+- [Key handling](/fleury/guides/key-handling/) shows how keyboard
   shortcuts invoke screen-owned actions.
 - [App entry points](/fleury/concepts/app-entry/) covers `home`, `child`, and
   custom root shells.

@@ -16,7 +16,7 @@ export 'fleury_core.dart';
 // services and route escape-hatch shortcuts ahead of application input.
 export 'src/debug/debug_events.dart' show DebugEvents;
 export 'src/debug/debug_shell.dart'
-    show tryConsumeDebugKey, tryConsumeDebugText;
+    show debugShellWithholdsKey, tryConsumeDebugKey, tryConsumeDebugText;
 export 'src/debug/debug_state.dart'
     show DebugConfig, DebugController, DebugMode, DebugPanelSide, DebugTab;
 export 'src/runtime/runtime_error_overlay.dart'

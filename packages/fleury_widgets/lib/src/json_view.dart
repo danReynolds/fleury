@@ -386,9 +386,15 @@ String exportJsonViewRow(
 }
 
 /// A collapsible tree view of a JSON value: `▸`/`▾` rows expand and collapse
-/// in place, values are colored by type, and Ctrl+C copies the selected
-/// node's subtree as JSON (or just its visible line). Invalid source is
-/// rendered as a parse-error state instead of throwing.
+/// in place, and values are colored by type. Invalid source is rendered as a
+/// parse-error state instead of throwing.
+///
+/// Up and Down move the selected row; PageUp, PageDown, Home, and End jump.
+/// Right expands a collapsed object or array or, on an expanded one, steps
+/// into its first child. Left collapses an expanded one or steps out to the
+/// parent. Enter or a click expands or collapses an object or array. Ctrl+C
+/// copies the selected node as JSON, or only its visible row when
+/// [copyOptions] sets [JsonViewCopyMode.line].
 ///
 /// The viewer bounds its own height: it renders at most [maxVisible] rows
 /// (fewer for a shorter document) and scrolls the rest, so it composes
@@ -494,10 +500,13 @@ class JsonView extends StatefulWidget {
   /// child, say); the internal list cannot window its rows without one.
   final int maxVisible;
 
-  /// Maximum displayed row length.
+  /// Cuts each displayed row, indentation included, to this many characters,
+  /// ending it with `…`; null never cuts. Copying a node still copies all of
+  /// its JSON.
   final int? maxLineLength;
 
-  /// Whether Ctrl+C and semantic copy export the selected row/node.
+  /// Whether Ctrl+C (and the semantic copy action) copies the selected node,
+  /// or its row if [copyOptions] says so.
   final bool copySelection;
 
   /// Clipboard/export options for copied JSON text.
@@ -932,16 +941,22 @@ class _JsonRowWidget extends StatelessWidget {
     if (activeSelection) return Text(row.line, style: theme.selectionStyle);
     if (selected) return Text(row.line, style: theme.mutedStyle);
     // Color just the value by type (jless / fx convention) without changing the
-    // text: the preview is the line's suffix, so split there.
-    if (row.preview.isEmpty || row.preview.length > row.line.length) {
+    // text. The preview ends the row's full text, so the value starts at the
+    // same offset in [JsonViewRow.line] whether or not the row was cut: a cut
+    // row keeps the start of that text and ends with `…`. A row cut before the
+    // value starts shows no value to color.
+    final valueStart = row.outputOriginalLength - row.preview.length;
+    if (row.preview.isEmpty || valueStart >= row.line.length) {
       return Text(row.line);
     }
-    final prefix = row.line.substring(0, row.line.length - row.preview.length);
     return RichText(
       text: TextSpan(
-        text: prefix,
+        text: row.line.substring(0, valueStart),
         children: <TextSpan>[
-          TextSpan(text: row.preview, style: _jsonTypeStyle(row.type, theme)),
+          TextSpan(
+            text: row.line.substring(valueStart),
+            style: _jsonTypeStyle(row.type, theme),
+          ),
         ],
       ),
     );

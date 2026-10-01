@@ -7,5 +7,8 @@ interface Props { file: string; test?: boolean; focus?: string }
 const { file, test = false, focus } = Astro.props;
 const code = sources[`../../examples/${test ? 'test' : 'lib'}/lists/${file}`];
 if (!code) throw new Error(`Lists guide file is missing: ${file}`);
+// The width pragma keeps these files narrow in the repository; it is not code
+// the reader needs to see.
+const shown = code.replace(/^\/\/ dart format width=\d+[ \t]*\r?\n/m, '');
 ---
-<DemoSource code={code} focus={focus} />
+<DemoSource code={shown} focus={focus} />

@@ -212,7 +212,9 @@ class Project {
   }
 
   /// [file] as written, with local package imports made relative and the
-  /// docregion marker lines removed. Records where each region's blocks land.
+  /// docregion marker and `// dart format width=` pragma lines removed: both
+  /// are tooling for this repository, not code a reader edits. Records where
+  /// each region's blocks land.
   String renderWhole(String file) {
     final src = source(file);
     var text = src.text;
@@ -229,10 +231,12 @@ class Project {
       );
     }
     final marker = RegExp(r'^[ \t]*// #(end)?docregion ([\w-]+)[ \t]*$');
+    final formatPragma = RegExp(r'^// dart format width=\d+[ \t]*$');
     final open = <String, int>{};
     final found = <String, List<Block>>{};
     final out = StringBuffer();
     for (final line in const LineSplitter().convert(text)) {
+      if (formatPragma.hasMatch(line)) continue;
       final match = marker.firstMatch(line);
       if (match == null) {
         out.writeln(line);

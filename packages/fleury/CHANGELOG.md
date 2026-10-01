@@ -2,6 +2,66 @@
 
 ## 0.1.0
 
+- **`FocusDetector` nests like CSS `:focus-within`.** Every detector around
+  the focused widget reports focus, not only the nearest one. A `Panel` now
+  accents while focus is inside a `LogRegion`, `DataTable`, or another widget
+  that watches focus itself; nested panels all accent; and a `Tooltip` around
+  such a widget shows.
+
+- **"What has focus" names the node that holds it.** A semantic node's
+  `focused` flag is also set by a region with focus inside it, such as a
+  `Panel` around a focused `Button` or `LogRegion`, and that region comes
+  first in tree order. The inspection snapshot's `focusedNodeId` (what agents
+  read through `fleury_mcp`), `AccessibilitySnapshot.focusedNode`, the browser
+  host's active semantic node, and the debug shell's focus rows named the
+  panel. They now take the deepest focused node, which the new
+  `SemanticTree.focusedNode` returns: the control with the keys, or the row a
+  focused `DataTable` marks as current.
+
+- **Debug tooling defaults on only for development runs.** A null
+  `DebugConfig.enabled` (the default) enables the Ctrl+G debug shell, F12 logs,
+  and the `read_frames`/`read_logs`/`read_errors` records when the Dart VM runs
+  the app's `.dart` source entrypoint (`dart run bin/app.dart`, `fleury run`,
+  and apps that `fleury serve --spawn` or `fleury_mcp` start that way) or
+  assertions are enabled. Compiled code gets none: snapshots pub precompiles
+  (`dart pub global activate` installs, and executables started by name with a
+  bare `dart run` or `dart run <package>:<exe>`), `dart compile` output, and
+  dart2js bundles. Previously every JIT run had it, so globally activated apps
+  shipped the debug shell to their users. `DebugConfig.enabled` is now
+  `bool?`; an explicit value still wins, and `DebugController.enabled` reports
+  the session's answer.
+
+- **Ctrl+Z is dispatched first.** In a native POSIX terminal, Ctrl+Z now
+  reaches the application like any key: a focused `TextInput` or `TextArea`
+  undoes, and application bindings fire. Only a press nothing handles suspends
+  — the rule Ctrl+C already follows for exit. Suspending restores the
+  terminal and stops the whole job the shell started, including the
+  hot-reload supervisor of a plain `dart run` and the `fleury run` launcher,
+  so one press returns the prompt and `fg` resumes the app; before, under
+  either, the app stopped alone and the shell never got the terminal back.
+  While the debug shell is expanded over the app, Ctrl+Z skips the hidden
+  app; its open Logs search takes the key.
+  `PosixTerminalDriver(suspendOnCtrlZ: false)` keeps an unhandled Ctrl+Z an
+  ordinary key. Browser, served, and `fleury shell` sessions never suspend.
+
+- **`fleury shell` relays every key.** The shell now puts its terminal in the
+  same raw mode a native app uses, so Ctrl+C, Ctrl+Z, Ctrl+\\ and Ctrl+S reach
+  the attached app instead of signaling the shell. It restores the terminal
+  exactly on every exit path (the app exits or is killed, SIGINT, SIGTERM,
+  SIGHUP, or a hangup, which now exits 129), keeps serving later runs until
+  you press Ctrl+C with no app attached, and discards keys typed while no app
+  was attached.
+
+- **Key sequences work in dialogs, and Esc aborts them cleanly.** A
+  multi-key sequence bound inside a `KeyBindings(modal: true)` scope, such as
+  every dialog `Navigator.present` shows, now starts and completes there;
+  bindings outside the modal scope stay out of reach. An unmodified Esc that
+  can't continue a pending sequence aborts it: the held keys are dropped and
+  the Esc does nothing else. `KeyBindings.cancelPending` aborts the same way.
+  If focus moves away mid-sequence, as when a dialog opens in front of it, the
+  sequence ends and the keys typed so far are dropped, so a held `y` can never
+  answer a prompt that appeared after it was typed.
+
 - The CLI reports its package version through `--version` and `diagnose`.
   `serve` reports invalid or occupied ports cleanly, releases startup resources,
   and prints the selected browser URL when `--port=0` chooses a free port.
@@ -345,7 +405,7 @@
   `ListController.pinToBottom` (use `followTail` and `isFollowing`). The
   vertical spellings `atTop` / `atBottom` / `jumpToBottom` on `ListController`
   and `atTop` / `atBottom` / `scrollToTop` / `scrollToBottom` on
-  `ScrollController` are removed in favour of `atStart` / `atEnd` /
+  `ScrollController` are removed in favor of `atStart` / `atEnd` /
   `jumpToEnd` / `scrollToStart` / `scrollToEnd`.
 - **Breaking:** `RenderObject.markNeedsPaint()` is removed. It invalidated
   layout as well as paint, as a safe default for unaudited setters; call
@@ -472,8 +532,10 @@
   disabled clipboard policy. Reveal/hide keeps the same editing controller;
   masked mouse selection does not disclose word boundaries.
 - **Application-owned suspension.** `PosixTerminalDriver(suspendOnCtrlZ: false)`
-  delivers Ctrl+Z to the application. Raw startup fails if native termios is
-  unavailable, rather than silently restoring kernel-owned suspension.
+  turns off the suspend fallback, so an unhandled Ctrl+Z is only a key (every
+  session delivers Ctrl+Z to the application first). Raw startup fails if
+  native termios is unavailable, rather than silently restoring kernel-owned
+  suspension.
   Terminal restoration uses an owned close-on-exec descriptor even after
   stdin closes.
 - **RichText spaces.** Ordinary spaces retain their source span's styling,
@@ -557,7 +619,7 @@
 - **Reentrant paste.** Synchronous model listeners can start another paste
   without truncating accepted content or splitting its undo transaction.
 - **Navigation cancellation.** Removing an entering replacement or stack-clear
-  route no longer lets its cancelled transition delete the revealed route.
+  route no longer lets its canceled transition delete the revealed route.
 - **Overlay ownership.** Invalid insertions and initial entry lists are checked
   before attachment, preserving the original owner and allowing safe retries.
 - **Remote startup.** Teardown resolves pending handshakes, overlapping startup
@@ -684,7 +746,7 @@ elements, state, layout) and terminal-native internals.
 - **Keyboard lifecycle (RFC 0020).** Key releases and held-state work out of
   the box: `runApp` requests the full Kitty keyboard protocol and capable
   drivers negotiate down transactionally — no flags, no tiers to declare, and a
-  terminal that only partly honours the protocol is rolled back to the safe
+  terminal that only partly honors the protocol is rolled back to the safe
   tier before the app sees a keystroke (inside tmux/screen the automatic ask
   stops at the safe tier; `FLEURY_KEYBOARD` overrides). New DX surface:
   `Keyboard.of(context)` (latched `snapshot` with `isHeld` / `wasPressed` /
@@ -707,10 +769,11 @@ elements, state, layout) and terminal-native internals.
   — any editor, no flags, no extension. Reload telemetry and compile errors
   surface in the debug shell (Logs / Errors tabs). Opt out with
   `FLEURY_HOT_RELOAD=0` or `runApp(enableHotReload: false)`.
-- Hot restart: `ext.fleury.restart` tears the app down gracefully and
-  re-runs `main()` fresh in the same terminal session (for the edits reload
-  can't apply). `ext.fleury.shutdown` and `ext.fleury.reloadReport` complete
-  the dev-tooling service-extension surface.
+- Hot restart: Ctrl+G, then F5, while the dev supervisor runs the app, tears
+  the app down gracefully and re-runs `main()` fresh in the same terminal
+  session (for the edits reload can't apply). The `ext.fleury.restart`,
+  `ext.fleury.shutdown` and `ext.fleury.reloadReport` service extensions are
+  the supervisor's hooks, not an entry point for other tools.
 - Apps spawned under `fleury serve --spawn` self-reload on save when the
   spawn command itself enables the VM service (e.g. `dart
   --enable-vm-service=0 run bin/main.dart`) — the browser preview updates

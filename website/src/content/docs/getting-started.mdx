@@ -79,7 +79,7 @@ entrypoint that `fleury run` starts.
 
 Leave it running and try a hot reload: in `lib/app.dart`, change the `Count:`
 label to `Clicks:` and save. The running app updates in place, and the count
-keeps its value. Press `Ctrl-C` in the terminal to quit.
+keeps its value. Press `Ctrl+C` in the terminal to quit.
 
 In VS Code with the [Dart extension](https://marketplace.visualstudio.com/items?itemName=Dart-Code.dart-code),
 you can press F5 instead: the generated launch configuration runs the app in an
@@ -156,11 +156,12 @@ class _StatusAppState extends State<StatusApp> {
 ```
 
 This edit changes the app's structure and starts a timer in `initState`, which a
-reload doesn't rerun, so **restart** instead. In a terminal-owned `fleury run`
-session, press `Ctrl+G` to open the debug shell, then `F5`. If your editor or
-terminal intercepts F5, press `Ctrl+C` and run `fleury run` again. If you launched
-with VS Code's F5, use the editor's **Restart** action instead. The uptime line
-ticks every second, and the progress bar fills over the minute.
+reload doesn't rerun, so **restart** instead: in a `fleury run` session, press
+`Ctrl+G` to open the debug shell, then `F5`. If F5 doesn't reach the app, as on
+a Mac laptop's top row or in VS Code's integrated terminal, see
+[When F5 doesn't restart](/fleury/guides/hot-reload/#when-f5-doesnt-restart).
+If you launched with VS Code's F5, use the editor's **Restart** action instead.
+The uptime line ticks every second, and the progress bar fills over the minute.
 
 The scaffold's test describes the counter you just replaced, so update it at
 the same time:
@@ -185,9 +186,9 @@ Then run `dart test`.
 
 ## 4. Compose widgets
 
-The widget library is broad — [browse the reference](/fleury/widgets/) for API
-details and live examples of every widget. Charts, meters, and the rest compose
-like any other widget. Replace `lib/app.dart` with the stateless panel behind
+The widget library is broad — [browse the reference](/fleury/widgets/) for
+every widget's API and, for most, a live example. Charts, meters, and the rest
+compose like any other widget. Replace `lib/app.dart` with the stateless panel behind
 the live example at the top of this page — the whole file: `MyApp` stays, the
 timer and its `dart:async` import go:
 
@@ -239,8 +240,9 @@ screen gets.
 
 ## 5. Open it in a browser
 
-The same app runs in a browser tab without any changes. The `serve` bridge
-starts the native app and streams its frames to the page:
+On macOS and Linux, you can preview the same app in a browser tab without any
+changes. `fleury serve --spawn` starts the native app and streams its frames to
+the page:
 
 ```sh
 fleury serve --spawn dart --enable-vm-service=0 run bin/run_app.dart
@@ -249,14 +251,15 @@ fleury serve --spawn dart --enable-vm-service=0 run bin/run_app.dart
 Open the printed URL. That's your panel, in a browser, streamed from the native
 process. Saving a file reloads it here too: `--enable-vm-service=0` is what lets
 the served app reload, and without it the session runs but never reloads.
-Stop the preview with `Ctrl-C` in the terminal running `serve`.
+Stop the preview with `Ctrl+C` in the terminal running `serve`.
 
 ## 6. Optional: ship a browser bundle
 
 `serve` needs the native process running. To ship the app as a static page with
-no backend, compile it to JavaScript instead. That requires a **web-safe**
-library: one that doesn't import `dart:io`, so the compiler can target the
-browser.
+no backend, compile it to JavaScript instead. The app code in the bundle must
+use the **web-safe** libraries, `fleury_core.dart` instead of `fleury.dart` and
+`fleury_widgets_web.dart` instead of `fleury_widgets.dart`: dart2js compiles
+code that imports `dart:io`, but that code throws when it runs in the browser.
 
 Add `fleury_web` and `web` to `pubspec.yaml`, merging these entries into the
 existing `dependencies:` section (do not add a second section):
@@ -321,7 +324,7 @@ dart compile js web/main.dart -o web/app.js -O2
 
 The output is static files you can host anywhere.
 [Deployment & distribution](/fleury/guides/deployment/) covers hosting, and when
-to choose the bundle or the serve bridge.
+a local `serve` preview fits better than a bundle.
 
 ## Where to next
 
@@ -331,8 +334,8 @@ to choose the bundle or the serve bridge.
   lists, forms, navigation, key handling, testing, and more.
 - [Widgets & state](/fleury/concepts/widgets-and-state/) — how `build`,
   `setState`, and the widget lifecycle fit together.
-- [Widget reference](/fleury/widgets/) — every widget, with live examples and
-  generated API tables.
+- [Widget reference](/fleury/widgets/) — every widget, with generated API
+  tables and, for most, a live example.
 - [Hot reload](/fleury/guides/hot-reload/) — what survives a reload, and when
   to restart.
 - [Built for agents](/fleury/architecture/agents-and-semantics/) — the semantic

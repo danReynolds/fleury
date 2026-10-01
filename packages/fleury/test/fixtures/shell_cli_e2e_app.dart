@@ -2,6 +2,11 @@ import 'dart:io';
 
 import 'package:fleury/fleury.dart';
 
+// Attaches to the shell, paints one frame, and exits. Keys typed through the
+// shell are covered by test/remote/shell_pty_test.dart, whose harness types
+// only once the app is on screen; this smoke test's capture types on a timer,
+// and the shell discards what is typed before an app attaches.
+
 Never _exitWith(AppExit appExit) => exit(switch (appExit.signal) {
   AppSignal.interrupt => 130,
   AppSignal.terminate => 143,
@@ -21,18 +26,11 @@ class _ShellCliE2eApp extends StatefulWidget {
 }
 
 class _ShellCliE2eAppState extends State<_ShellCliE2eApp> {
-  var _activated = false;
   var _scheduledExit = false;
-
-  KeyEventResult _onKey(KeyEvent event) {
-    if (event.code != KeyCode.enter) return KeyEventResult.ignored;
-    setState(() => _activated = true);
-    return KeyEventResult.handled;
-  }
 
   @override
   Widget build(BuildContext context) {
-    if (_activated && !_scheduledExit) {
+    if (!_scheduledExit) {
       _scheduledExit = true;
       TuiBinding.of(context).addPostFrameCallback((_) {
         if (!exitApp()) {
@@ -40,18 +38,6 @@ class _ShellCliE2eAppState extends State<_ShellCliE2eApp> {
         }
       });
     }
-    return KeyDetector(
-      onKey: (event) {
-        if ((_onKey)(event) == KeyEventResult.handled) event.consume();
-      },
-      child: Focus(
-        autofocus: true,
-        child: Text(
-          _activated
-              ? 'SHELL-CLI-E2E-INPUT-RECEIVED'
-              : 'SHELL-CLI-E2E-FIRST-FRAME',
-        ),
-      ),
-    );
+    return const Text('SHELL-CLI-E2E-FIRST-FRAME');
   }
 }

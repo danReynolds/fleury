@@ -18,10 +18,11 @@ import 'panel.dart';
 /// [KeyBindings.pendingOf], so it updates as the sequence advances and
 /// vanishes the moment it completes, cancels, or times out.
 ///
-/// Only completions whose binding carries a [KeyBinding.label] are listed
-/// (the same discoverability rule as `KeyHintBar`); an unlabeled binding still
-/// fires but isn't advertised. For a custom layout, read
-/// [KeyBindings.pendingOf] directly instead of using this widget.
+/// Only completions whose binding carries a [KeyBinding.label] are listed; an
+/// unlabeled binding still fires but isn't advertised. Unlike `KeyHintBar`,
+/// the popup lists a labeled binding even when it sets `hideFromHintBar`.
+/// For a custom layout, read [KeyBindings.pendingOf] directly instead of
+/// using this widget.
 class WhichKey extends StatefulWidget {
   const WhichKey({
     super.key,
@@ -39,8 +40,9 @@ class WhichKey extends StatefulWidget {
   final Duration showDelay;
 
   /// Cap on how many completions the popup lists before collapsing the rest
-  /// into a trailing `+N more` — so a leader with many bindings can't render a
-  /// popup taller than the screen (which would clip its own title).
+  /// into a trailing `+N more`, so a leader with many bindings doesn't produce
+  /// a very tall popup. The cap is a count, not the screen height; lower it
+  /// for short terminals.
   final int maxCompletions;
 
   @override

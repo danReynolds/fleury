@@ -67,9 +67,7 @@ void main() {
     // off — fine in use, awkward to assert against).
     const tall = CellSize(120, 60);
 
-    testWidgets('streams a Claude-Code-style turn: todos, tools, diff', (
-      tester,
-    ) {
+    testWidgets('streams an agent turn: todos, tools, diff', (tester) {
       tester.viewportSize = tall;
       tester.pumpWidget(const AgentApp());
       tester.pump(const Duration(seconds: 6)); // drain the streamed reply

@@ -1,7 +1,7 @@
 // Compile-checked source behind the Key handling guide.
 //
 // The public API patterns in
-// `website/src/content/docs/guides/focus-and-keyboard.mdx` have compile-checked
+// `website/src/content/docs/guides/key-handling.mdx` have compile-checked
 // counterparts here, so the guide cannot drift to APIs that no longer exist.
 
 import 'package:fleury/fleury.dart';

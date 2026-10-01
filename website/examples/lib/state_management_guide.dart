@@ -220,6 +220,7 @@ class CartDemo extends StatefulWidget {
   State<CartDemo> createState() => _CartDemoState();
 }
 
+// #docregion cart-owner
 class _CartDemoState extends State<CartDemo> {
   final cart = Cart();
 
@@ -241,3 +242,5 @@ class _CartDemoState extends State<CartDemo> {
     ],
   );
 }
+
+// #enddocregion cart-owner

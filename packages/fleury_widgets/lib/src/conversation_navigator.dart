@@ -6,7 +6,7 @@ import 'package:fleury/fleury_core.dart';
 import 'internal/collection_notifications.dart';
 import 'semantic_roles.dart';
 
-/// Protocol-neutral lifecycle for a conversation/session row.
+/// Lifecycle state of a conversation or session.
 enum ConversationStatus {
   active,
   idle,
@@ -41,7 +41,8 @@ final class ConversationEntry {
   /// Primary row text.
   final String title;
 
-  /// Secondary row text displayed under or beside [title].
+  /// Secondary text. Search matches it and screen readers get it as a hint,
+  /// but the row doesn't show it.
   final String? subtitle;
 
   /// Current lifecycle status for the conversation.
@@ -65,7 +66,8 @@ final class ConversationEntry {
   /// Whether this conversation should be visually marked as pinned.
   final bool pinned;
 
-  /// Whether this row can be selected and activated.
+  /// Whether activating this row calls [ConversationNavigator.onSelect]. A
+  /// disabled row can still be browsed and copied.
   final bool enabled;
 
   /// App-specific semantic state carried by the row.
@@ -241,7 +243,17 @@ String exportConversation(
   return parts.where((part) => part.trim().isNotEmpty).join(' | ');
 }
 
-/// Queryable conversation/session list for agent and developer-tool surfaces.
+/// A searchable list of conversations or sessions. Each row shows a title,
+/// status, and latest message (plus an unread count or pinned mark when they
+/// apply), and typing in the query field filters the rows.
+///
+/// By default a query keeps conversations that match it exactly, by prefix,
+/// as a substring, or as a fuzzy subsequence, listed in that order; pass
+/// [matcher] to decide matches yourself. Up and Down move the selected
+/// conversation from the query field or the list; in the list, PageUp,
+/// PageDown, Home, and End also jump. Enter or a click activates an enabled
+/// conversation and calls [onSelect]. Ctrl+C copies the selected
+/// conversation (in the query field, selected query text is copied instead).
 class ConversationNavigator extends StatefulWidget {
   const ConversationNavigator({
     super.key,
@@ -301,13 +313,15 @@ class ConversationNavigator extends StatefulWidget {
   /// Whether the query input should request focus when mounted.
   final bool autofocus;
 
-  /// Whether Ctrl+C and semantic copy export the selected row.
+  /// Whether Ctrl+C (and the semantic copy action) copies the selected
+  /// conversation.
   final bool copySelection;
 
   /// Clipboard/export options for selected-row copy.
   final ConversationNavigatorCopyOptions copyOptions;
 
-  /// Called when a conversation row is activated.
+  /// Called when the user activates an enabled conversation: Enter in the
+  /// query field or the list, or a click on its row.
   final void Function(ConversationNavigatorSelectResult result)? onSelect;
 
   /// Called after a copy attempt completes.
