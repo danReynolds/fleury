@@ -280,8 +280,9 @@ class MessageList extends StatefulWidget {
   /// Semantic label (the accessibility name; not rendered) for the message list.
   final String semanticLabel;
 
-  /// Whether each row starts with a `[role author]` prefix, such as
-  /// `[assistant]` (the author appears only when set).
+  /// Whether each row shows a `[role author]` prefix, such as `[assistant]`
+  /// (the author appears only when set), before the message's text. A
+  /// timestamp shown by [showTimestamp] comes before the prefix.
   final bool showPrefix;
 
   /// Prefix each row with the message's [MessageEntry.timestamp] as a

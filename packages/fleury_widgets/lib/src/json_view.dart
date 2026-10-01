@@ -941,16 +941,22 @@ class _JsonRowWidget extends StatelessWidget {
     if (activeSelection) return Text(row.line, style: theme.selectionStyle);
     if (selected) return Text(row.line, style: theme.mutedStyle);
     // Color just the value by type (jless / fx convention) without changing the
-    // text: the preview is the line's suffix, so split there.
-    if (row.preview.isEmpty || row.preview.length > row.line.length) {
+    // text. The preview ends the row's full text, so the value starts at the
+    // same offset in [JsonViewRow.line] whether or not the row was cut: a cut
+    // row keeps the start of that text and ends with `…`. A row cut before the
+    // value starts shows no value to color.
+    final valueStart = row.outputOriginalLength - row.preview.length;
+    if (row.preview.isEmpty || valueStart >= row.line.length) {
       return Text(row.line);
     }
-    final prefix = row.line.substring(0, row.line.length - row.preview.length);
     return RichText(
       text: TextSpan(
-        text: prefix,
+        text: row.line.substring(0, valueStart),
         children: <TextSpan>[
-          TextSpan(text: row.preview, style: _jsonTypeStyle(row.type, theme)),
+          TextSpan(
+            text: row.line.substring(valueStart),
+            style: _jsonTypeStyle(row.type, theme),
+          ),
         ],
       ),
     );

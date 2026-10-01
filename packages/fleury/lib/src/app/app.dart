@@ -269,9 +269,12 @@ class FleuryApp extends StatefulWidget {
   /// Ids must be unique within the list; a duplicate throws an
   /// [ArgumentError]. Commands contributed by [FleuryAppExtension]s follow
   /// these, and one with the same id as a command here is dropped. A
-  /// [CommandScope] adds screen-level commands; inside it, a command with the
-  /// same id takes precedence over the app's. Rebuilding with a new list
-  /// replaces the commands.
+  /// [CommandScope] adds screen-level commands. A lookup by id from inside
+  /// it, as a registry-backed command palette or [CommandRegistry.command]
+  /// makes, finds the scope's command before an app command with the same id.
+  /// The app's own shortcut and semantic node still run the app's command; a
+  /// scope command bound to the same shortcut takes the key first, as a
+  /// deeper binding does. Rebuilding with a new list replaces the commands.
   final List<AppCommand> commands;
 
   /// App-owned objects that descendants and commands look up by type, such

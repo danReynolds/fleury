@@ -65,7 +65,9 @@ import 'tui_binding.dart';
 ///
 /// For a chat composer or prompt, [TextEditingKeymap.chat] makes Enter call
 /// [onSubmit] and Alt+Enter (or Shift+Enter, where the terminal reports it)
-/// insert a newline. [TextEditingKeymap.emacsMultiline] adds readline keys.
+/// insert a newline. [TextEditingKeymap.emacsMultiline] adds Emacs-style keys:
+/// among others, Ctrl+A and Ctrl+E jump to the start and end of the line,
+/// Ctrl+K cuts to its end, and Ctrl+Y pastes what was cut.
 ///
 /// Newlines are the only control rune a [TextArea] keeps. Everything else —
 /// `\r`, `\t`, ESC and the whole escape sequence behind it — is replaced when
@@ -178,7 +180,8 @@ class TextArea extends StatefulWidget {
 
   /// Which keys trigger which editing actions. Defaults to
   /// [TextEditingKeymap.defaultMultiline]; [TextEditingKeymap.chat] makes
-  /// Enter submit, and [TextEditingKeymap.emacsMultiline] adds readline keys.
+  /// Enter submit, and [TextEditingKeymap.emacsMultiline] adds Emacs-style
+  /// keys such as Ctrl+A, Ctrl+E, and Ctrl+K.
   final TextEditingKeymap keymap;
 
   /// Policy for chunking large bracketed paste payloads.

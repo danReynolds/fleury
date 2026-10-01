@@ -292,6 +292,76 @@ void main() {
       expect(after.atColRow(bounds.left, bounds.top).grapheme, '[');
     });
 
+    testWidgets('Ctrl+Z undoes a paint and Ctrl+Y redoes it', (tester) {
+      tester.viewportSize = size;
+      tester.pumpWidget(const AnsiSpriteStudioApp());
+      final bounds = tester
+          .semantics()
+          .single(role: SemanticRole.image, label: 'Editable sprite canvas')
+          .bounds!;
+      RgbColor? topLeft() =>
+          tester
+                  .render(size: size)
+                  .atColRow(bounds.left, bounds.top)
+                  .style
+                  .background
+              as RgbColor?;
+      final transparent = topLeft();
+
+      for (var i = 0; i < 6; i++) {
+        tester.sendKey(const KeyEvent(KeyCode.arrowLeft));
+      }
+      for (var i = 0; i < 4; i++) {
+        tester.sendKey(const KeyEvent(KeyCode.arrowUp));
+      }
+      tester.sendKey(const KeyEvent(KeyCode.space));
+      expect(topLeft(), mint);
+
+      tester.press(KeySequence.ctrl.z);
+      expect(topLeft(), transparent, reason: 'the paint is undone');
+      tester.press(KeySequence.ctrl.y);
+      expect(topLeft(), mint, reason: 'and redone');
+    });
+
+    testWidgets('a held-Space stroke survives the rebuilds it causes and '
+        'undoes as one unit', (tester) {
+      tester.viewportSize = size;
+      tester.keyboardCapabilities = KeyboardCapabilities.full;
+      tester.pumpWidget(const AnsiSpriteStudioApp());
+      final bounds = tester
+          .semantics()
+          .single(role: SemanticRole.image, label: 'Editable sprite canvas')
+          .bounds!;
+      List<Color?> topRow() {
+        final buffer = tester.render(size: size);
+        return [
+          for (var x = 0; x < 3; x++)
+            buffer.atColRow(bounds.left + x * 2, bounds.top).style.background,
+        ];
+      }
+
+      final before = topRow();
+      void tap(KeyCode key) {
+        tester.holdKey(key);
+        tester.releaseKey(key);
+      }
+
+      for (var i = 0; i < 6; i++) {
+        tap(KeyCode.arrowLeft);
+      }
+      for (var i = 0; i < 4; i++) {
+        tap(KeyCode.arrowUp);
+      }
+      tester.holdKey(KeyCode.space); // pen down: paints (0, 0)
+      tap(KeyCode.arrowRight); // paints (1, 0)
+      tap(KeyCode.arrowRight); // paints (2, 0)
+      tester.releaseKey(KeyCode.space);
+      expect(topRow(), [mint, mint, mint]);
+
+      tester.press(KeySequence.ctrl.z);
+      expect(topRow(), before, reason: 'one undo takes back the stroke');
+    });
+
     testWidgets(
       'Play advances the live preview and Pause returns to selection',
       (tester) {

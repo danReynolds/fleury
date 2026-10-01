@@ -58,14 +58,18 @@ class _AnsiSpriteStudioBodyState extends State<_AnsiSpriteStudioBody> {
   @override
   Widget build(BuildContext context) {
     if (_importing) return _importSurface(context);
-    return KeyBindings(
-      // Reading capabilities here is build-legal AND reactive: when a terminal
-      // finishes negotiating, this rebuilds and the control scheme upgrades
-      // itself (RFC 0020 §7.6).
-      bindings: _bindings(Keyboard.of(context).capabilities),
-      child: NotifierBuilder(
-        notifier: _model,
-        builder: (context, _) => _studioSurface(context),
+    // The bindings are built with the surface, on every model change: undo,
+    // redo and delete-frame are enabled by model state, which only this
+    // builder follows. A hold in progress survives the rebuild, since the
+    // same KeyBindings keeps the binding that opened it.
+    return NotifierBuilder(
+      notifier: _model,
+      builder: (context, _) => KeyBindings(
+        // Reading capabilities here is build-legal AND reactive: when a
+        // terminal finishes negotiating, this rebuilds and the control scheme
+        // upgrades itself (RFC 0020 §7.6).
+        bindings: _bindings(Keyboard.of(context).capabilities),
+        child: _studioSurface(context),
       ),
     );
   }

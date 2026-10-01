@@ -134,6 +134,45 @@ void main() {
     expect(ran, 'close');
   });
 
+  testWidgets('a click on a disabled command does nothing and leaves the '
+      'keys working', (tester) async {
+    final ran = <String>[];
+    tester.pumpWidget(Navigator(home: _Capture((c) => ctx = c)));
+    _open(tester, ctx, [
+      CommandPaletteItem(label: 'Alpha', onInvoke: () => ran.add('alpha')),
+      CommandPaletteItem(
+        label: 'Bravo',
+        enabled: false,
+        onInvoke: () => ran.add('bravo'),
+      ),
+      CommandPaletteItem(label: 'Charlie', onInvoke: () => ran.add('charlie')),
+    ]);
+    final lines = tester.renderToString(emptyMark: ' ').split('\n');
+    final row = lines.indexWhere((l) => l.contains('Bravo'));
+    expect(row, isNonNegative);
+    for (final kind in [MouseEventKind.down, MouseEventKind.up]) {
+      tester.sendMouse(
+        MouseEvent(
+          kind: kind,
+          button: MouseButton.left,
+          col: lines[row].indexOf('Bravo'),
+          row: row,
+        ),
+      );
+    }
+    expect(ran, isEmpty, reason: 'a disabled command cannot run');
+    expect(Navigator.of(ctx).depth, 2, reason: 'the palette stays open');
+    expect(
+      _paletteCommandRows(tester).singleWhere((r) => r.selected).label,
+      'Alpha',
+      reason: 'the click is inert',
+    );
+
+    tester.sendKey(const KeyEvent(KeyCode.arrowUp)); // wraps to Charlie
+    tester.sendKey(const KeyEvent(KeyCode.enter));
+    expect(ran, ['charlie']);
+  });
+
   testWidgets('Esc dismisses without invoking', (tester) async {
     var ran = false;
     tester.pumpWidget(Navigator(home: _Capture((c) => ctx = c)));

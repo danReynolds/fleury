@@ -408,7 +408,7 @@ final class ActiveKeyBinding {
 /// Resolution follows the same rules as key dispatch: the deepest local
 /// binding wins each sequence, and the walk ends at a [KeyBindings] with
 /// [KeyBindings.modal] set, such as the one around a dialog shown with
-/// `Navigator.present`, so bindings beyond it are left out. The modal scope's
+/// `context.present`, so bindings beyond it are left out. The modal scope's
 /// own bindings are listed, including one that lets its key through with
 /// [KeyBindingEvent.bubble]: whether a handler bubbles is decided when it
 /// runs, so the key is listed under that binding's label. Resolution also
@@ -490,6 +490,12 @@ List<ActiveKeyBinding> resolveActiveKeyBindings(FocusManager manager) {
 /// Keyboard shortcuts for a subtree: each [KeyBinding] fires while focus is
 /// inside [child].
 ///
+/// While nothing has focus, such as before anything has claimed it, keys go
+/// to every [KeyBindings] instead, the deepest first, so the bindings of
+/// sibling panes fire too. While a dialog or another focus trap is open, that
+/// is only the ones inside it and the ones enclosing it. A subtree under
+/// [ExcludeFocus], such as a route covered by another, takes no part.
+///
 /// ```dart
 /// KeyBindings(
 ///   bindings: [
@@ -525,13 +531,13 @@ List<ActiveKeyBinding> resolveActiveKeyBindings(FocusManager manager) {
 /// doesn't continue the sequence ends it. Esc backs out and does nothing else:
 /// the keys typed so far are dropped, and the Esc doesn't also close a dialog
 /// or go back a page. Any other key cancels the sequence and is then handled
-/// as usual. When a single-key binding in the same list shares the first key
-/// (`g` beside `g g`), it fires once a key other than Esc rules out the
-/// sequence, or after the sequence timeout (500 ms by default; see `runApp`'s
-/// `sequenceTimeout`). If focus moves away from these bindings partway through,
-/// for example into a dialog that opens in front of them, the sequence ends
-/// there and the keys typed so far are dropped: they never reach what has
-/// focus now.
+/// as usual. When a single-key binding in the same list or an enclosing one
+/// shares the first key (`g` beside `g g`), it fires once a key other than Esc
+/// rules out the sequence, or after the sequence timeout (500 ms by default;
+/// see `runApp`'s `sequenceTimeout`). If focus moves away from these bindings
+/// partway through, for example into a dialog that opens in front of them, the
+/// sequence ends there and the keys typed so far are dropped: they never reach
+/// what has focus now.
 ///
 /// With [modal] set, keys that nothing inside this subtree handles stop here.
 /// `Navigator` sets it for dialogs shown with `present`.
@@ -543,10 +549,10 @@ class KeyBindings extends StatefulWidget {
     required this.child,
   });
 
-  /// The shortcuts that fire while focus is inside [child]; if two match the
-  /// same key, the first in the list wins. Hint bars and help overlays list
-  /// the bindings that have a [KeyBinding.label] (see [activeOf]); a binding
-  /// without one still fires.
+  /// The shortcuts that fire while focus is inside [child], or while nothing
+  /// has focus (see [KeyBindings]); if two match the same key, the first in
+  /// the list wins. Hint bars and help overlays list the bindings that have a
+  /// [KeyBinding.label] (see [activeOf]); a binding without one still fires.
   ///
   /// A binding here shadows a binding for the same key in an enclosing
   /// [KeyBindings], without either one knowing about the other.
@@ -568,8 +574,9 @@ class KeyBindings extends StatefulWidget {
   /// that binding a label to show it.
   final bool modal;
 
-  /// The subtree these bindings cover. A key fires them when focus is on this
-  /// subtree — the scope is where the widget sits, not the whole app.
+  /// The subtree these bindings cover. While something has focus, a key fires
+  /// them only when focus is in this subtree — the scope is where the widget
+  /// sits, not the whole app. While nothing has focus, see [KeyBindings].
   final Widget child;
 
   /// The discoverable bindings active in [context]'s focus context — hint
@@ -585,7 +592,7 @@ class KeyBindings extends StatefulWidget {
 
   /// The multi-key sequence the user is partway through typing, or null when
   /// none is in progress. [context] rebuilds as a sequence starts, advances,
-  /// completes, or is cancelled, which is what a which-key popup needs. Always
+  /// completes, or is canceled, which is what a which-key popup needs. Always
   /// null outside a Fleury runtime such as `runApp`.
   static PendingKeySequenceMatch? pendingOf(BuildContext context) =>
       dependOnScope<PendingSequenceNotifier>(context)?.value;

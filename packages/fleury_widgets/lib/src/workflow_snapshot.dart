@@ -13,10 +13,19 @@ import 'tool_call_card.dart';
 import 'trace_timeline.dart';
 
 /// Overall state of a [WorkflowSnapshot], as [WorkflowSummary.health]
-/// reports it: `failed` when anything has failed; otherwise `needsAttention`
-/// when there is an approval request, a patch in review or with changes
-/// requested, a warning, or a degraded or offline model; otherwise `active`
-/// while anything is queued or running; and `idle` when nothing is.
+/// reports it: the first of these that applies.
+///
+/// - `failed`: a message, tool call, task, or trace event failed, a log entry
+///   is an error, a patch file failed or was rejected, or the model reports
+///   an error.
+/// - `needsAttention`: there is an approval request, a patch file in review
+///   or with changes requested, a warning trace event or log entry, or a
+///   degraded or offline model.
+/// - `active`: a message is queued or streaming, a tool call is queued or
+///   running, a task is pending or running, a trace event is running (a
+///   queued one doesn't count), or the model is connecting, streaming, or
+///   busy.
+/// - `idle`: none of these.
 enum WorkflowHealth { idle, active, needsAttention, failed }
 
 /// One immutable bundle of the records an agent or developer-tool app shows:

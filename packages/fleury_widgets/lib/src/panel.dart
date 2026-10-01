@@ -55,7 +55,7 @@ class Panel extends StatefulWidget {
 
   /// Pins the chrome: `true` draws the border and title in the accent and
   /// `false` draws them at rest, wherever focus is. Null (the default)
-  /// follows focus, as the class doc describes.
+  /// follows focus, accenting them while focus is anywhere inside the panel.
   ///
   /// Only the chrome is pinned: the panel's semantic region reports focus
   /// exactly while focus is inside it, as an unpinned panel's does.

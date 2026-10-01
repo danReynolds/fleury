@@ -9,8 +9,8 @@ import 'file_source_default_stub.dart'
 ///
 /// Up and Down move the cursor, wrapping at the ends, and Home and End jump.
 /// Enter, Right, or a click on a row opens a folder in place or chooses a
-/// file. Left or Backspace, or a click on the `..` row, goes to the parent
-/// directory.
+/// file; on a link or other entry, they do nothing. Left or Backspace, or a
+/// click on the `..` row, goes to the parent directory.
 ///
 /// ```dart
 /// FilePicker(
@@ -225,6 +225,8 @@ class _FilePickerState extends State<FilePicker> {
 
   bool _canOpen(FileEntry entry) => entry.isDirectory || entry.isFile;
 
+  static void _ignorePress() {}
+
   void _activateEntryAt(int index) {
     if (index < 0 || index >= _entries.length) return;
     _node.requestFocus();
@@ -336,8 +338,10 @@ class _FilePickerState extends State<FilePicker> {
       }),
       // Click a row to activate it: a directory opens in place, a file is
       // selected — the same single action the keyboard's Enter/Right performs.
+      // A row that can't open still owns its press and ignores it. Otherwise
+      // the list's own row gesture takes the press and moves the cursor.
       child: GestureDetector(
-        onTap: canOpen ? () => _activateEntryAt(i) : null,
+        onTap: canOpen ? () => _activateEntryAt(i) : _ignorePress,
         child: Row(
           children: [
             Text(' ', style: style),
@@ -362,13 +366,17 @@ class _FilePickerState extends State<FilePicker> {
               : _entries.length);
     // A controller-driven ListView windows long directories and scrolls to keep
     // the cursor in view; keys are still handled by the outer Focus (preserving
-    // the wrap-around Up/Down), so the list itself stays non-focusable.
+    // the wrap-around Up/Down), so the list itself is kept out of focus. A
+    // press that focused it would hand the arrows and Enter to its plain
+    // cursor instead.
     final Widget listing = _entries.isEmpty
         ? const Text('  (empty)', style: CellStyle(dim: true))
-        : ListView.builder(
-            controller: _list,
-            itemCount: _entries.length,
-            itemBuilder: (context, i, _) => _entryRow(theme, i, focused),
+        : ExcludeFocus(
+            child: ListView.builder(
+              controller: _list,
+              itemCount: _entries.length,
+              itemBuilder: (context, i, _) => _entryRow(theme, i, focused),
+            ),
           );
     // A clickable parent-directory row so the mouse can climb out of a folder
     // without the keyboard (Backspace / Left). Hidden at the filesystem root.

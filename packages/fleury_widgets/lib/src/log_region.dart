@@ -35,8 +35,9 @@ final class LogEntry {
   /// Optional timestamp associated with the entry.
   final DateTime? timestamp;
 
-  /// The row's text. It displays on one line: line breaks and tabs show as
-  /// spaces, and terminal escape sequences are made harmless.
+  /// The row's text. Line breaks and tabs show as spaces, and terminal escape
+  /// sequences are made harmless; a message wider than the region wraps onto
+  /// more rows.
   final String message;
 
   /// App-specific semantic state carried by the row.

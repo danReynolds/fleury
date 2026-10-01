@@ -18,6 +18,9 @@ ApprovalRequest _request() {
   );
 }
 
+/// How long a prompt ignores approving keys and clicks after it appears.
+const _approvalDelay = Duration(milliseconds: 500);
+
 void main() {
   group('ApprovalPrompt', () {
     testWidgets('renders request content and action buttons', (tester) {
@@ -143,8 +146,119 @@ void main() {
       );
       tester.sendKey(const KeyEvent(KeyCode.char('n')));
       expect(decision, ApprovalDecision.denied);
+      tester.pump(_approvalDelay);
       tester.sendKey(const KeyEvent(KeyCode.char('y')));
       expect(decision, ApprovalDecision.approved);
+    });
+
+    group('just after it appears', () {
+      testWidgets('y does nothing for half a second, then approves', (tester) {
+        final decisions = <ApprovalDecision>[];
+        tester.pumpWidget(
+          ApprovalPrompt(request: _request(), onDecision: decisions.add),
+        );
+        tester.sendKey(const KeyEvent(KeyCode.char('y')));
+        expect(decisions, isEmpty, reason: 'typed before the prompt was seen');
+        tester.pump(_approvalDelay - const Duration(milliseconds: 1));
+        tester.sendKey(const KeyEvent(KeyCode.char('y')));
+        expect(decisions, isEmpty);
+
+        tester.pump(const Duration(milliseconds: 1));
+        tester.sendKey(const KeyEvent(KeyCode.char('y')));
+        expect(decisions, [ApprovalDecision.approved]);
+      });
+
+      testWidgets('Enter on the focused Approve and a click on it do nothing '
+          'until then', (tester) {
+        final decisions = <ApprovalDecision>[];
+        tester.pumpWidget(
+          ApprovalPrompt(request: _request(), onDecision: decisions.add),
+        );
+        final lines = tester
+            .renderToString(size: const CellSize(64, 11), emptyMark: ' ')
+            .split('\n');
+        final row = lines.indexWhere((l) => l.contains('[ Deploy ]'));
+        final col = lines[row].indexOf('[ Deploy ]') + 2;
+        void click() {
+          for (final kind in [MouseEventKind.down, MouseEventKind.up]) {
+            tester.sendMouse(
+              MouseEvent(
+                kind: kind,
+                button: MouseButton.left,
+                col: col,
+                row: row,
+              ),
+            );
+          }
+        }
+
+        tester.sendKey(const KeyEvent(KeyCode.enter)); // Approve has focus
+        click();
+        expect(decisions, isEmpty);
+
+        tester.pump(_approvalDelay);
+        click();
+        expect(decisions, [ApprovalDecision.approved]);
+        tester.sendKey(const KeyEvent(KeyCode.enter));
+        expect(decisions, [
+          ApprovalDecision.approved,
+          ApprovalDecision.approved,
+        ]);
+      });
+
+      testWidgets('denying works at once', (tester) {
+        final decisions = <ApprovalDecision>[];
+        tester.pumpWidget(
+          ApprovalPrompt(request: _request(), onDecision: decisions.add),
+        );
+        tester.sendKey(const KeyEvent(KeyCode.char('y')));
+        tester.sendKey(const KeyEvent(KeyCode.char('n')));
+        tester.sendKey(const KeyEvent(KeyCode.escape));
+        expect(decisions, [ApprovalDecision.denied, ApprovalDecision.denied]);
+      });
+
+      testWidgets('the semantic submit approves at once; a semantic press of '
+          'Approve is declined', (tester) async {
+        final decisions = <ApprovalDecision>[];
+        tester.pumpWidget(
+          ApprovalPrompt(request: _request(), onDecision: decisions.add),
+        );
+        final press = await tester.invokeSemanticAction(
+          SemanticAction.activate,
+          role: SemanticRole.button,
+          label: 'Deploy',
+          allowFailure: true,
+        );
+        expect(press.status, SemanticActionInvocationStatus.unsupported);
+        expect(decisions, isEmpty);
+
+        await tester
+            .target(role: WidgetRoles.approval, label: 'Approve deploy?')
+            .submit();
+        expect(decisions, [ApprovalDecision.approved]);
+      });
+
+      testWidgets('a request with a new id starts the half second again', (
+        tester,
+      ) {
+        final decisions = <ApprovalDecision>[];
+        Widget prompt(String id) => ApprovalPrompt(
+          request: ApprovalRequest(id: id, title: 'Run $id?', message: 'Run.'),
+          onDecision: decisions.add,
+        );
+        tester.pumpWidget(prompt('first'));
+        tester.pump(_approvalDelay);
+        tester.pumpWidget(prompt('first'));
+        tester.sendKey(const KeyEvent(KeyCode.char('y')));
+        expect(decisions, [ApprovalDecision.approved], reason: 'same request');
+
+        tester.pumpWidget(prompt('second'));
+        tester.sendKey(const KeyEvent(KeyCode.char('y')));
+        expect(decisions, hasLength(1), reason: 'meant for the first one');
+        tester.pump(_approvalDelay);
+        tester.sendKey(const KeyEvent(KeyCode.char('y')));
+        expect(decisions, hasLength(2));
+      });
     });
 
     testWidgets(
@@ -180,6 +294,80 @@ void main() {
         expect(home.navigator.depth, 1);
       },
     );
+
+    group('presented', () {
+      ({
+        List<ApprovalDecision> decisions,
+        bool Function() closed,
+        NavigatorState navigator,
+      })
+      present(FleuryTester tester, {required bool barrierDismissible}) {
+        late BuildContext home;
+        tester.pumpWidget(Navigator(home: _Home((context) => home = context)));
+        final decisions = <ApprovalDecision>[];
+        var closed = false;
+        unawaited(
+          home
+              .present<ApprovalDecision>(
+                ApprovalPrompt(
+                  request: _request(),
+                  onDecision: (decision) {
+                    decisions.add(decision);
+                    home.pop(decision);
+                  },
+                ),
+                transition: RouteTransition.none,
+                barrierDismissible: barrierDismissible,
+              )
+              .then((_) => closed = true),
+        );
+        tester.pump();
+        return (
+          decisions: decisions,
+          closed: () => closed,
+          navigator: home.navigator,
+        );
+      }
+
+      testWidgets('by default, the route\'s semantic dismiss closes it '
+          'unanswered', (tester) async {
+        final prompt = present(tester, barrierDismissible: true);
+
+        final result = await tester.invokeSemanticAction(
+          SemanticAction.dismiss,
+          role: SemanticRole.route,
+          label: 'ApprovalPrompt',
+        );
+        await Future<void>.delayed(Duration.zero);
+        tester.pump();
+
+        expect(result.status, SemanticActionInvocationStatus.completed);
+        expect(prompt.closed(), isTrue);
+        expect(prompt.decisions, isEmpty);
+      });
+
+      testWidgets('with barrierDismissible false, only a decision closes it', (
+        tester,
+      ) async {
+        final prompt = present(tester, barrierDismissible: false);
+
+        final dismiss = await tester.invokeSemanticAction(
+          SemanticAction.dismiss,
+          role: SemanticRole.route,
+          label: 'ApprovalPrompt',
+          allowFailure: true,
+        );
+        expect(dismiss.status, isNot(SemanticActionInvocationStatus.completed));
+        expect(prompt.navigator.maybePop(), isFalse, reason: 'nor a Back');
+        expect(prompt.closed(), isFalse);
+        tester.sendKey(const KeyEvent(KeyCode.escape)); // denies
+        await Future<void>.delayed(Duration.zero);
+        tester.pump();
+
+        expect(prompt.decisions, [ApprovalDecision.denied]);
+        expect(prompt.closed(), isTrue);
+      });
+    });
   });
 }
 

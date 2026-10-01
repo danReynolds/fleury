@@ -89,8 +89,9 @@ class Autocomplete<T extends Object> extends StatefulWidget {
 
   /// Marks the current value invalid: the field draws in the theme's error
   /// style and reports this message through semantics, but doesn't show the
-  /// text. Use it outside a `FormField`; inside one, the field supplies its
-  /// own error and shows the message below the input.
+  /// text. Inside a `FormField`, this message wins over the `FormField`'s
+  /// validator, though not over its own `error`, and the `FormField` shows
+  /// the winning message below the input.
   final String? validationError;
 
   /// Called with the selected option when the user picks a suggestion.
@@ -370,61 +371,67 @@ class _AutocompleteState<T extends Object> extends State<Autocomplete<T>> {
         child: SizedBox(
           width: boxWidth,
           height: height,
-          child: ListView.builder(
-            controller: _list,
+          // The field keeps focus and owns the keys; the list only lays out,
+          // scrolls, and reveals the highlight. A press that focused it would
+          // take focus from the field, which closes the dropdown before the
+          // release can pick the row.
+          child: ExcludeFocus(
+            child: ListView.builder(
+              controller: _list,
 
-            itemCount: _filtered.length,
-            itemBuilder: (_, i, selected) {
-              final label = sanitizeOptionLabel(_display(_filtered[i]));
-              return Semantics(
-                role: SemanticRole.menuItem,
-                label: label,
-                value: label,
-                focused: _focusNode.hasFocus && selected,
-                selected: selected,
-                actions: const <SemanticAction>{
-                  SemanticAction.select,
-                  SemanticAction.activate,
-                },
-                state: SemanticState({
-                  'menuDepth': 0,
-                  'menuItemIndex': i,
-                  'menuItemPosition': i + 1,
-                  'menuItemCount': _filtered.length,
-                  'entryKind': 'suggestion',
-                  'completionQuery': _controller.text,
-                }),
-                onAction: (action) {
-                  switch (action) {
-                    case SemanticAction.select:
-                    case SemanticAction.activate:
+              itemCount: _filtered.length,
+              itemBuilder: (_, i, selected) {
+                final label = sanitizeOptionLabel(_display(_filtered[i]));
+                return Semantics(
+                  role: SemanticRole.menuItem,
+                  label: label,
+                  value: label,
+                  focused: _focusNode.hasFocus && selected,
+                  selected: selected,
+                  actions: const <SemanticAction>{
+                    SemanticAction.select,
+                    SemanticAction.activate,
+                  },
+                  state: SemanticState({
+                    'menuDepth': 0,
+                    'menuItemIndex': i,
+                    'menuItemPosition': i + 1,
+                    'menuItemCount': _filtered.length,
+                    'entryKind': 'suggestion',
+                    'completionQuery': _controller.text,
+                  }),
+                  onAction: (action) {
+                    switch (action) {
+                      case SemanticAction.select:
+                      case SemanticAction.activate:
+                        _list.currentIndex = i;
+                        _pick();
+                        return;
+                      case _:
+                        return;
+                    }
+                  },
+                  // Click a suggestion to accept it — the same select+pick the
+                  // keyboard's Tab/Enter performs.
+                  child: GestureDetector(
+                    onTap: () {
                       _list.currentIndex = i;
                       _pick();
-                      return;
-                    case _:
-                      return;
-                  }
-                },
-                // Click a suggestion to accept it — the same select+pick the
-                // keyboard's Tab/Enter performs.
-                child: GestureDetector(
-                  onTap: () {
-                    _list.currentIndex = i;
-                    _pick();
-                  },
-                  child: Text(
-                    '${selected ? '› ' : '  '}$label',
-                    style: selected ? theme.selectionStyle : CellStyle.none,
-                    // One row per option, always: a label too wide for the box
-                    // is cut with an ellipsis rather than wrapped into the row
-                    // that belongs to the next option.
-                    softWrap: false,
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
+                    },
+                    child: Text(
+                      '${selected ? '› ' : '  '}$label',
+                      style: selected ? theme.selectionStyle : CellStyle.none,
+                      // One row per option, always: a label too wide for the
+                      // box is cut with an ellipsis rather than wrapped into
+                      // the row that belongs to the next option.
+                      softWrap: false,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                    ),
                   ),
-                ),
-              );
-            },
+                );
+              },
+            ),
           ),
         ),
       ),
