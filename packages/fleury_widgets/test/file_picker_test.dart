@@ -576,6 +576,36 @@ void main() {
       expect(tree.state['selectedPath'], '/p/b.txt');
     });
 
+    testWidgets('toggling showHidden applies at once, keeping the cursor and '
+        'reading nothing', (tester) {
+      final source = _CountingSource(
+        MemoryFileSource(['/p/.env', '/p/a.txt', '/p/b.txt']),
+      );
+      final showHidden = ValueNotifier<bool>(false);
+      tester.pumpWidget(
+        NotifierBuilder(
+          notifier: showHidden,
+          builder: (context, notifier) => FilePicker(
+            initialDirectory: '/p',
+            source: source,
+            autofocus: true,
+            showHidden: notifier.value,
+            onSelect: (_) {},
+          ),
+        ),
+      );
+      tester.sendKey(const KeyEvent(KeyCode.arrowDown));
+      expect(selectedPath(tester), '/p/b.txt');
+      final reads = source.reads;
+
+      showHidden.value = true;
+      tester.pump();
+      final tree = tester.semantics().single(role: SemanticRole.tree);
+      expect(tree.state.collectionRowCount, 3, reason: '.env is shown now');
+      expect(tree.state['selectedPath'], '/p/b.txt');
+      expect(source.reads, reads, reason: 'the directory was not read again');
+    });
+
     testWidgets('a different source re-reads the directory, keeping the '
         'cursor on its entry', (tester) {
       Widget picker(FileSource source) => FilePicker(

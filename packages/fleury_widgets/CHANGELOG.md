@@ -12,13 +12,17 @@
   half second reports `unsupported`.
 - `KeyHintBar` inside a dialog shows only the bindings that can fire there: key
   hint resolution stops at a modal `KeyBindings` scope, as dispatch does.
-- `FilePicker` keeps its cursor and listing when a parent rebuild passes a new
-  but equivalent `filter` or `source`: a new filter re-filters the listing it
-  already read, and a new source re-reads the directory, keeping the cursor on
-  the same entry when it's still listed.
-- Copies strip every control character. CR, LF and TAB become spaces, as on
-  screen; other controls become U+FFFD, and an escape sequence collapses to one.
-  `LogRegion` sources and `MessageList` authors are sanitized too.
+- `FilePicker` keeps its cursor and listing across parent rebuilds. A new
+  `filter` or a `showHidden` change applies to the entries already read,
+  without reading the directory again, so an inline filter closure no longer
+  re-reads the disk; a new `source` reads the directory again. Either way the
+  cursor stays on its entry while that is still shown.
+- `ToolCallCard`, `LogRegion`, `MessageList` and `TaskGraph` sanitize all the
+  text they copy: CR, LF and TAB become spaces, as on screen; other controls
+  become U+FFFD, and an escape sequence collapses to one. `LogRegion` sources
+  and `MessageList` authors are sanitized too. No copy from the library
+  carries a control character other than TAB and LF; a table copy, for one,
+  separates its cells with TAB and its rows with LF.
 - `Form`'s semantic submit action reports an `onSubmit` error through the
   runtime instead of dropping it.
 - `Bar.stacked` with no segments paints nothing instead of throwing.
@@ -36,10 +40,10 @@
   unselected cut row used to show its whole value after part of the label.
 - `Image` in half-block mode draws a transparent top pixel as empty instead of
   in the terminal's default text color.
-- A pinned `Panel` keeps tracking focus, so unpinning it shows current chrome.
-- `Panel.focused` pins only the border and title. The panel's semantic region
-  reports focus exactly while focus is inside it, so a panel pinned `true` no
-  longer tells agents and assistive technology it has focus, and one pinned
+- `Panel.focused` pins only the border and title. A pinned panel keeps
+  tracking focus, so unpinning it shows current chrome, and its semantic
+  region reports focus exactly while focus is inside it: a panel pinned `true`
+  no longer tells agents and assistive technology it has focus, and one pinned
   `false` no longer hides focus inside it.
 
 - **Breaking:** `FileBrowser` and `FilePicker` read directories through a
