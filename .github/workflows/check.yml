@@ -5,6 +5,10 @@ on:
     branches: [main]
   pull_request:
 
+# TEMPORARY (draft PR A/B): the stop fix off.
+env:
+  AB_STOP_FIX: "off"
+
 jobs:
   check:
     runs-on: ubuntu-latest
@@ -91,6 +95,9 @@ jobs:
       - name: TEMP suspend loop
         continue-on-error: true
         run: python tool/experiments/job_control_flakes/suspend_loop.py --loops 25
+      - name: TEMP suspend loop (origin/main's harness and guard)
+        continue-on-error: true
+        run: python tool/experiments/job_control_flakes/suspend_loop.py --loops 25 --old-harness
       - name: TEMP sequential loop
         continue-on-error: true
         run: python tool/experiments/job_control_flakes/sequential_loop.py --loops 40

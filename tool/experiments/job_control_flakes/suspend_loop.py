@@ -10,13 +10,18 @@ from pathlib import Path
 import sys
 import time
 
-sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
-from check_inline_tui import lifecycle, supervised_suspend  # noqa: E402
-
 parser = argparse.ArgumentParser()
 parser.add_argument('--loops', type=int, required=True)
 parser.add_argument('--dart', default='dart')
+parser.add_argument('--old-harness', action='store_true',
+                    help="origin/main's harness and guard (old_check_inline_tui.py)")
 args = parser.parse_args()
+if args.old_harness:
+    sys.path.insert(0, str(Path(__file__).resolve().parent))
+    from old_check_inline_tui import lifecycle, supervised_suspend  # noqa: E402
+else:
+    sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
+    from check_inline_tui import lifecycle, supervised_suspend  # noqa: E402
 failures = []
 started = time.monotonic()
 for iteration in range(args.loops):
@@ -29,6 +34,6 @@ for iteration in range(args.loops):
             print(f'LOOP-FAIL iteration={iteration} {name}: {error}', flush=True)
     print(f'LOOP iteration {iteration + 1}/{args.loops} '
           f'failures={len(failures)} elapsed={time.monotonic() - started:.0f}s', flush=True)
-print(f'LOOP-SUMMARY iterations={args.loops} scenarios={2 * args.loops} '
+print(f'LOOP-SUMMARY old_harness={args.old_harness} iterations={args.loops} scenarios={2 * args.loops} '
       f'failures={len(failures)} {failures}', flush=True)
 sys.exit(1 if failures else 0)
