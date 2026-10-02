@@ -731,24 +731,32 @@ project for any library those don't import. This takes about 15 seconds on a
 warm compiler. A deploy enables Run only when every one compiles. Otherwise it
 still deploys, with `PUBLIC_FLEURY_PAD_COMPILER_URL` empty: demos are read-only
 beside their prebuilt previews, the Pad page shows its example read-only, and
-nothing offers a Run that would fail. The run carries an error annotation and a
-job summary naming each failing project and its first error.
+nothing offers a Run that would fail. The build carries an error annotation and
+a job summary naming each failing project and its first error. Then the run's
+last job, **Pad compiler**, fails, after the deploy has shipped: the run ends
+red, `main` shows an X, and GitHub sends its failed-run email. After #291, a
+broken Run went unnoticed for over an hour; this is the signal.
 
 When a deploy reports that the compiler can't compile the docs:
 
 1. Release the Pad compiler from that commit: build its image, qualify it
    (`container_check.py --guides` and `startup_check.py`), and release it with
    `deploy.py … --cpu-boost --promote --public`, as in the releases above.
-2. Re-run the docs workflow: **Re-run all jobs** on that run, or
-   `gh workflow run docs --ref main`. The check now passes, and the deploy
-   enables Run again.
+2. Re-run the docs workflow: `gh workflow run docs --ref main`, or **Re-run
+   all jobs** on `main`'s newest docs run (re-running an older one would
+   deploy older docs). The check now passes, the deploy enables Run again, and
+   the run is green. **Re-run failed jobs** is not enough: it repeats only the
+   Pad compiler job, which reads the same verdict, and the deployed docs stay
+   read-only.
 
 Because Run is enabled only on evidence that it works, a deploy is also
-read-only when the check gets no answer: after three attempts of up to 65
-seconds each (long enough for a cold start), the compiler still hasn't
-responded or keeps returning 429 or 5xx, or it refuses the docs origin. Re-run
-the workflow once the compiler serves the docs again. To withdraw the compiler
-on purpose, also unset `FLEURY_PAD_COMPILER_URL`; the check then skips.
+read-only, and its run red, when the check gets no answer: after three attempts
+of up to 65 seconds each (long enough for a cold start), the compiler still
+hasn't responded or keeps returning 429 or 5xx, or it refuses the docs origin.
+Re-run the workflow once the compiler serves the docs again. The same goes for
+a check that fails before reaching a verdict. To withdraw the compiler on
+purpose, also unset `FLEURY_PAD_COMPILER_URL`; the check then skips, and the
+run stays green.
 
 A pull request that changes the docs' examples, or what the docs send the
 compiler, gets the same check as a warning, never a failure: "Needs a Pad
