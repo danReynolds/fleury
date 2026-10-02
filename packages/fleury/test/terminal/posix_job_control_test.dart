@@ -12,6 +12,7 @@
 library;
 
 import 'dart:async';
+import 'dart:convert';
 import 'dart:io';
 
 import 'package:fleury/src/terminal/posix_driver.dart'
@@ -172,6 +173,36 @@ void main() {
     test('a process that does not exist reads as null', () {
       expect(PosixJobControl.readProcess(0x3fffffff), isNull);
     });
+
+    test(
+      'reads a process whose name the kernel cut mid-character',
+      () async {
+        // Linux keeps 15 bytes of a process name: here 14 ASCII bytes and
+        // the first byte of a three-byte character, so /proc holds a name
+        // that isn't UTF-8. Dart names its own process `dart:<script>`, and
+        // a script named in Japanese ends the same way.
+        final dir = Directory.systemTemp.createTempSync('fleury_name_');
+        addTearDown(() => dir.deleteSync(recursive: true));
+        final link = Link('${dir.path}/aaaaaaaaaaaaaa\u30a2\u30d7\u30ea')
+          ..createSync('/bin/sleep');
+        final process = await Process.start(link.path, ['30']);
+        addTearDown(() {
+          process.kill(ProcessSignal.sigkill);
+          return process.exitCode;
+        });
+        final name = File('/proc/${process.pid}/comm').readAsBytesSync();
+        expect(
+          () => utf8.decode(name),
+          throwsFormatException,
+          reason: 'the name should not be UTF-8: $name',
+        );
+        final read = PosixJobControl.readProcess(process.pid);
+        expect(read, isNotNull);
+        expect(read!.parent, pid);
+        await _expectMatchesPs(process.pid, read);
+      },
+      skip: Platform.isLinux ? false : 'only Linux reads process names',
+    );
   });
 }
 

@@ -12,6 +12,7 @@
 // interface; the console-mode dance is different enough to stay separate.
 
 import 'dart:async';
+import 'dart:convert' show latin1;
 import 'dart:ffi';
 import 'dart:io';
 
@@ -2527,12 +2528,16 @@ final class PosixJobControl {
 
   static JobControlProcess? _readLinuxProcess(int pid) {
     try {
+      // Latin-1, not UTF-8: both files hold the process name, which the
+      // kernel cuts to 15 bytes, mid-character for `dart:` followed by a
+      // script named in Japanese. Only ASCII fields are parsed here.
       // pid (comm) state ppid pgrp ...; comm can hold spaces and parentheses.
-      final stat = File('/proc/$pid/stat').readAsStringSync();
+      final stat = File('/proc/$pid/stat').readAsStringSync(encoding: latin1);
       final fields = stat.substring(stat.lastIndexOf(')') + 2).split(' ');
       var ignored = 0;
       var caught = 0;
-      for (final line in File('/proc/$pid/status').readAsLinesSync()) {
+      final status = File('/proc/$pid/status');
+      for (final line in status.readAsLinesSync(encoding: latin1)) {
         if (line.startsWith('SigIgn:')) ignored = _lowSignals(line);
         if (line.startsWith('SigCgt:')) caught = _lowSignals(line);
       }
