@@ -215,6 +215,12 @@ class Session:
                 os.killpg(group, signal.SIGKILL)
             except (ProcessLookupError, PermissionError):
                 pass
+        # Keep reading while the guard exits: on macOS a session leader's
+        # exit waits for its terminal's output to drain.
+        end = time.monotonic() + 5
+        while self.master >= 0 and self.child.poll() is None and time.monotonic() < end:
+            if not self.pump(0.05):
+                time.sleep(0.01)
         self.child.wait(timeout=5)
         os.close(self.slave)
         if self.master >= 0:
