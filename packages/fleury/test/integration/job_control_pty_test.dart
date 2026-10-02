@@ -149,6 +149,45 @@ void main() {
       reason: 'the supervisor keeps running\n${run.describe()}',
     );
   });
+
+  // The orderly suspend restores the terminal, stops the job, and re-enters
+  // the moment the stop returns. Linux gives a signal sent to the whole
+  // process to its main thread, which the Dart VM leaves waiting while the
+  // isolate runs on a worker: the isolate's thread came back from killpg and
+  // ran on until the main thread stopped the process, long enough to put the
+  // terminal back in raw mode before the shell's prompt.
+  test('a stopped job is stopped when stopJob returns', () async {
+    const iterations = 200;
+    final workDir = Directory.systemTemp.createTempSync('fleury_stop_job_');
+    addTearDown(() => workDir.deleteSync(recursive: true));
+    final result = await Process.run('python3', <String>[
+      '$packageRoot/test/fixtures/stop_job_pty_harness.py',
+      workDir.path,
+      '--',
+      dart,
+      packages,
+      '$packageRoot/test/fixtures/stop_job_fixture.dart',
+      '$iterations',
+    ]);
+    final reportFile = File('${workDir.path}/report.json');
+    expect(
+      reportFile.existsSync(),
+      isTrue,
+      reason: 'stdout:\n${result.stdout}\nstderr:\n${result.stderr}',
+    );
+    final report =
+        jsonDecode(reportFile.readAsStringSync()) as Map<String, Object?>;
+    expect(report['failure'], isNull, reason: '$report');
+    expect(report['stops'], iterations, reason: '$report');
+    expect(
+      report['early'],
+      isEmpty,
+      reason:
+          'stopJob returned and the app ran on before these stops took '
+          'effect: ${report['early']}',
+    );
+    expect(report['exit'], 0, reason: '$report');
+  });
 }
 
 Future<_HarnessRun> _runHarness(

@@ -2330,6 +2330,10 @@ final class PosixJobControl {
     required this.getsid,
     required this.tcgetpgrp,
     required this.killpg,
+    required this.pthreadSigmask,
+    required this.sigemptyset,
+    required this.sigaddset,
+    required this.sigismember,
   });
 
   static final PosixJobControl? _native = _load();
@@ -2354,6 +2358,26 @@ final class PosixJobControl {
               Int32 Function(Int32, Int32),
               int Function(int, int)
             >('killpg'),
+        pthreadSigmask: libc
+            .lookupFunction<
+              Int32 Function(Int32, Pointer<Uint8>, Pointer<Uint8>),
+              int Function(int, Pointer<Uint8>, Pointer<Uint8>)
+            >('pthread_sigmask'),
+        sigemptyset: libc
+            .lookupFunction<
+              Int32 Function(Pointer<Uint8>),
+              int Function(Pointer<Uint8>)
+            >('sigemptyset'),
+        sigaddset: libc
+            .lookupFunction<
+              Int32 Function(Pointer<Uint8>, Int32),
+              int Function(Pointer<Uint8>, int)
+            >('sigaddset'),
+        sigismember: libc
+            .lookupFunction<
+              Int32 Function(Pointer<Uint8>, Int32),
+              int Function(Pointer<Uint8>, int)
+            >('sigismember'),
       );
     } on Object {
       return null;
@@ -2364,11 +2388,33 @@ final class PosixJobControl {
   final int Function(int pid) getsid;
   final int Function(int fd) tcgetpgrp;
   final int Function(int group, int signal) killpg;
+  final int Function(int how, Pointer<Uint8> set, Pointer<Uint8> old)
+  pthreadSigmask;
+  final int Function(Pointer<Uint8> set) sigemptyset;
+  final int Function(Pointer<Uint8> set, int signal) sigaddset;
+  final int Function(Pointer<Uint8> set, int signal) sigismember;
+
+  static final bool _darwin = Platform.isMacOS || Platform.isIOS;
 
   /// The operating system's SIGSTOP: 17 on Darwin, 19 on Linux. Not
   /// `ProcessSignal.sigstop.signalNumber`, which is Dart's own id for
   /// `Process.killPid` to translate — sent raw on macOS, that id is SIGCONT.
-  static final int _sigstop = Platform.isMacOS || Platform.isIOS ? 17 : 19;
+  static final int _sigstop = _darwin ? 17 : 19;
+
+  /// `SIG_BLOCK` and `SIG_SETMASK`: 1 and 3 on Darwin, 0 and 2 on Linux.
+  static final int _sigBlock = _darwin ? 1 : 0;
+  static final int _sigSetmask = _darwin ? 3 : 2;
+
+  /// Room for a `sigset_t`: 128 bytes with glibc, 4 on Darwin.
+  static const _sigsetBytes = 128;
+
+  /// Signals [_takePendingStop] may block for an instant to change this
+  /// thread's mask: SIGUSR2, SIGUSR1, SIGWINCH, SIGURG. Nothing in Fleury
+  /// or the Dart VM needs them delivered within that instant; a blocked one
+  /// stays pending and arrives when the mask is restored.
+  static final List<int> _maskSignals = _darwin
+      ? const [31, 30, 28, 16]
+      : const [12, 10, 28, 23];
 
   /// Whether this process runs as a job of a job-control shell, which can
   /// continue it after a stop: [terminalFd] is its controlling terminal, its
@@ -2400,17 +2446,59 @@ final class PosixJobControl {
   }
 
   /// Stops this process's job with SIGSTOP, which cannot be caught or
-  /// discarded; the signal reaches this process before the call returns, and
-  /// the call returns only after `fg` sends SIGCONT. Returns whether the stop
-  /// was sent: false, stopping nothing, unless this process's group still
-  /// owns the terminal's foreground, as a shell's job does ([isShellJob]).
+  /// discarded, and returns only after `fg` sends SIGCONT: the calling thread
+  /// takes the stop before it runs any further. Returns whether the stop was
+  /// sent: false, stopping nothing, unless this process's group still owns
+  /// the terminal's foreground, as a shell's job does ([isShellJob]).
   /// [terminalFd] is the session's terminal input.
   static bool stopJob({int terminalFd = 0}) {
     final native = _native;
     if (native == null) return false;
     final group = native.getpgrp();
     if (group <= 0 || native.tcgetpgrp(terminalFd) != group) return false;
-    return native.killpg(group, _sigstop) == 0;
+    if (native.killpg(group, _sigstop) != 0) return false;
+    native._takePendingStop();
+    return true;
+  }
+
+  /// Makes the calling thread take the job's pending stop now.
+  ///
+  /// `killpg` makes SIGSTOP pending for this whole process, and POSIX only
+  /// promises that the caller takes it before `kill` returns when no other
+  /// thread could. In the Dart VM many could, and Linux hands a
+  /// process-directed signal to the main thread, which the VM leaves waiting
+  /// while the isolate runs on a worker. The isolate's thread returned and ran
+  /// on until the main thread woke and stopped the process: on Linux, often
+  /// long enough for the driver's resume to put the terminal back in raw mode
+  /// and write the enter sequences before the stop landed, so the shell got
+  /// its prompt back in the app's modes. (macOS suspends the whole task in
+  /// `kill` itself, so it never raced there.)
+  ///
+  /// A change to this thread's signal mask closes the window: "if there are
+  /// any pending unblocked signals after the call to pthread_sigmask(), at
+  /// least one of those signals shall be delivered before the call returns".
+  /// A stop still pending is taken right there, by this thread; once the stop
+  /// has happened and SIGCONT has discarded it, nothing is pending and
+  /// nothing stops twice. The mask must actually change (Linux skips an
+  /// unchanged one), so this blocks a signal it isn't blocking yet, then puts
+  /// the mask back.
+  void _takePendingStop() {
+    final previous = calloc<Uint8>(_sigsetBytes);
+    final probe = calloc<Uint8>(_sigsetBytes);
+    try {
+      if (pthreadSigmask(_sigBlock, nullptr, previous) != 0) return;
+      for (final signal in _maskSignals) {
+        if (sigismember(previous, signal) != 0) continue;
+        sigemptyset(probe);
+        sigaddset(probe, signal);
+        pthreadSigmask(_sigBlock, probe, nullptr);
+        pthreadSigmask(_sigSetmask, previous, nullptr);
+        return;
+      }
+    } finally {
+      calloc.free(previous);
+      calloc.free(probe);
+    }
   }
 }
 
