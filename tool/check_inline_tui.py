@@ -103,8 +103,8 @@ class Session:
 
     def resize(self, cols, rows):
         # Commit old-size output before changing the emulator's geometry.
-        while select.select([self.master], [], [], 0)[0]:
-            self.pump(0)
+        while self.pump(0):
+            pass
         # pyte clips from the top but does not shift its saved cursor with
         # those lines. Keep the cursor attached to the retained content.
         y = max(0, self.screen.cursor.y - max(0, self.screen.lines - rows))
@@ -119,34 +119,53 @@ class Session:
         os.write(self.master, data)
 
     def pump(self, timeout=0.1, *, max_bytes=65536):
+        """Feeds what the terminal receives within [timeout] to the emulator.
+        Returns whether anything arrived: false at end of file, which a macOS
+        PTY reads at once from the moment its session leader exits."""
         ready, _, _ = select.select([self.master], [], [], timeout)
-        if ready:
-            chunk = os.read(self.master, max_bytes)
-            self.raw.extend(chunk)
-            text = self.keyboard_tail + self.decoder.decode(chunk)
-            # pyte predates the Kitty keyboard stack and prints a '<1u'
-            # suffix instead of ignoring the unknown CSI. Model an ordinary
-            # legacy terminal: ignore stack operations and decline '?u'.
-            tail = re.search(r'\x1b(?:\[(?:[<>?][0-9;]*)?)?$', text)
-            self.keyboard_tail = tail[0] if tail else ''
-            if tail:
-                text = text[:tail.start()]
-            self.stream.feed(re.sub(r'\x1b\[[<>?][0-9;]*u', '', text))
+        if not ready:
+            return False
+        chunk = os.read(self.master, max_bytes)
+        if not chunk:
+            return False
+        self.raw.extend(chunk)
+        text = self.keyboard_tail + self.decoder.decode(chunk)
+        # pyte predates the Kitty keyboard stack and prints a '<1u'
+        # suffix instead of ignoring the unknown CSI. Model an ordinary
+        # legacy terminal: ignore stack operations and decline '?u'.
+        tail = re.search(r'\x1b(?:\[(?:[<>?][0-9;]*)?)?$', text)
+        self.keyboard_tail = tail[0] if tail else ''
+        if tail:
+            text = text[:tail.start()]
+        self.stream.feed(re.sub(r'\x1b\[[<>?][0-9;]*u', '', text))
+        return True
 
     def wait(self, predicate, label, timeout=None):
         # A supervised start pays the VM service and a JIT cold start on top of
         # the app's own, which a loaded CI runner can stretch past 20 s.
         if timeout is None:
             timeout = 60 if self.supervised else 20
-        end = time.monotonic() + timeout
-        while time.monotonic() < end:
+        start = time.monotonic()
+        while True:
             self.pump()
+            # Read the guard's exit before the predicate, so a predicate on
+            # that exit, or on what the guard wrote last, sees everything up
+            # to it. Checked after the predicate, an exit landing between the
+            # two failed the wait as a timeout: a session leader's exit
+            # revokes a macOS terminal, the PTY then reads end of file at
+            # once, and this loop spun through the exit until one did.
+            exited = self.child.poll() is not None
+            if exited:
+                # Nothing more arrives once the guard is gone; take the rest.
+                while self.pump(0):
+                    pass
             if predicate():
                 return
-            if self.child.poll() is not None:
+            if exited or time.monotonic() - start >= timeout:
                 break
         raise AssertionError(
-            f"{label}\n{self.text()}\n{bytes(self.raw[-1500:])!r}\n"
+            f"{label} (gave up after {time.monotonic() - start:.1f} s "
+            f"of {timeout} s)\n{self.text()}\n{bytes(self.raw[-1500:])!r}\n"
             f"guard exit status: {self.child.poll()}\n"
             f"processes:\n{session_processes(self)}")
 
@@ -385,8 +404,8 @@ def suspend_and_resume(app, job):
     # The stopped app has flushed its cleanup output, but that output may
     # still be queued on the PTY. Drain it before inspecting the screen; no
     # sleep or relaxed screen assertion is needed.
-    while select.select([app.master], [], [], 0)[0]:
-        app.pump(0, max_bytes=8)
+    while app.pump(0, max_bytes=8):
+        pass
     assert "INLINE-READY" not in app.text(), "suspend left the live region"
     restored_modes = termios.tcgetattr(app.slave)
     expected_modes = app.original_modes.copy()
