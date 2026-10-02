@@ -2,7 +2,10 @@ import 'package:fleury/fleury.dart';
 import 'package:fleury/src/widgets/rich_text.dart' show RenderRichText;
 import 'package:test/test.dart';
 
+import '../support/harness.dart';
+
 void main() {
+  textWrapCacheTests();
   for (final rich in [false, true]) {
     test(
       'resized unwrapped text matches fresh layout and selection, rich=$rich',
@@ -128,4 +131,15 @@ void main() {
       },
     );
   }
+}
+
+void textWrapCacheTests() {
+  test('narrow → wide → narrow re-wraps instead of reusing stale lines', () {
+    final t = FleuryTester(viewportSize: const CellSize(8, 6));
+    addTearDown(t.dispose);
+    t.pumpWidget(const Text('hello world foo bar'));
+    final narrow = t.renderToString(size: const CellSize(8, 6));
+    t.renderToString(size: const CellSize(40, 6));
+    expect(t.renderToString(size: const CellSize(8, 6)), narrow);
+  });
 }

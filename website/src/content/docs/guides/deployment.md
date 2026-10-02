@@ -160,7 +160,9 @@ prints the URL that carries it. If you deliberately expose it on a trusted
 network, also choose explicit origins, and prefer a trusted tunnel or
 authenticating reverse proxy. `serve` is not a hardened public hosting layer:
 any client that passes its gates can drive the app and read its redacted
-semantic tree.
+semantic tree. It also cannot bound the size of a WebSocket message before it is
+in memory, so a client that holds the token can make the server allocate
+arbitrarily large buffers; keep the token private.
 
 ## Embed or serve?
 

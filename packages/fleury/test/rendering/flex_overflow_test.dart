@@ -69,6 +69,24 @@ void main() {
     expect(buf.atColRow(7, 0).style.foreground, const AnsiColor(1));
   });
 
+  testWidgets('an absurdly large overflowing child paints in box-sized work', (
+    tester,
+  ) {
+    tester.pumpWidget(
+      const Row(
+        children: [
+          SizedBox(width: 4, height: 1, child: Text('aaaa')),
+          SizedBox(width: 1 << 30, height: 1, child: Text('bbbb')),
+        ],
+      ),
+    );
+    final sw = Stopwatch()..start();
+    final buf = tester.render(size: const CellSize(8, 1));
+    expect(sw.elapsedMilliseconds, lessThan(2000));
+    expect(buf.atColRow(0, 0).grapheme, 'a');
+    expect(buf.atColRow(4, 0).grapheme, 'b');
+  });
+
   testWidgets('a vertical overflow marks the bottom edge', (tester) {
     RenderFlex.debugShowOverflow = true;
     tester.pumpWidget(

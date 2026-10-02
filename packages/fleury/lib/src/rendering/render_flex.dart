@@ -493,18 +493,14 @@ class RenderFlex extends RenderObject implements RenderObjectWithChildren {
 
   void _paintClipped(CellBuffer buffer, CellOffset offset) {
     if (size.isEmpty) return;
-    // Scratch large enough to hold every child at its offset, so painting
-    // never runs off the edge; we then blit only the box region.
-    var w = size.cols;
-    var h = size.rows;
-    for (final c in _children) {
-      final co = _childOffsets[c] ?? CellOffset.zero;
-      final reachCol = co.col + c.size.cols;
-      final reachRow = co.row + c.size.rows;
-      if (reachCol > w) w = reachCol;
-      if (reachRow > h) h = reachRow;
-    }
-    final scratch = _scratch = CellBuffer.acquire(_scratch, CellSize(w, h));
+    // Scratch covering the box plus one column, so the compositor can see a
+    // wide glyph's continuation at the clip edge. Children paint into it
+    // clipped like any buffer, so a child far larger than the box costs the
+    // box's area, not its own.
+    final scratch = _scratch = CellBuffer.acquire(
+      _scratch,
+      CellSize(size.cols + 1, size.rows),
+    );
     for (final c in _children) {
       c.paint(scratch, _childOffsets[c] ?? CellOffset.zero);
     }
