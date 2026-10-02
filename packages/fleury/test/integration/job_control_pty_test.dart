@@ -25,6 +25,7 @@ library;
 
 import 'dart:convert';
 import 'dart:io';
+import 'dart:math';
 
 import 'package:test/test.dart';
 
@@ -277,10 +278,21 @@ final class _HarnessRun {
     // the app's modes again.
     final suspended = _between('suspend', 'fg');
     final prompt = suspended.indexOf('FLEURY-JOB-PROMPT\$ ');
+    var restored = 0;
     for (final restore in ['\x1B[?1000l', '\x1B[?25h', '\x1B[?1049l']) {
       final at = suspended.indexOf(restore);
       expect(at, greaterThanOrEqualTo(0), reason: '$restore\n${describe()}');
       expect(at, lessThan(prompt), reason: '$restore\n${describe()}');
+      restored = max(restored, suspended.lastIndexOf(restore, prompt));
+    }
+    // Nor did the app enter its modes again before it stopped, leaving the
+    // prompt on the alternate screen with the cursor hidden.
+    for (final enter in ['\x1B[?1049h', '\x1B[?25l']) {
+      expect(
+        suspended.substring(restored, prompt),
+        isNot(contains(enter)),
+        reason: 'the app re-entered $enter before the prompt\n${describe()}',
+      );
     }
     final resumed = _between('fg', 'quit');
     for (final enter in ['\x1B[?1049h', '\x1B[?25l']) {

@@ -56,7 +56,10 @@
   window frozen; the press is now an ordinary key there. A few launchers
   still look like a shell's job without being one, such as fish's
   `exec app` in a macOS terminal tab or `docker run --init`; there a
-  suspended app stays stopped until it gets SIGCONT.
+  suspended app stays stopped until it gets SIGCONT. On Linux, the shell's
+  prompt could come back in the app's terminal modes: the app went on
+  re-entering them before its stop took effect. It now stops before it
+  touches the terminal again.
   `PosixTerminalDriver(suspendOnCtrlZ: false)` keeps an unhandled Ctrl+Z an
   ordinary key. Browser, served, and `fleury shell` sessions never suspend.
 
