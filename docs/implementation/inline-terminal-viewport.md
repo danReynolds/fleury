@@ -48,7 +48,11 @@ See the [consumer guide](../../packages/fleury/doc/inline_terminal.md) and
 - The presenter reports the final local caret, or a stable bottom-left
   resting cursor. Resize obtains the actual terminal cursor, recovers the
   origin, and repaints. Geometry changing during a query causes a retry with
-  painting still gated; each query is bounded and teardown cancels the wait.
+  painting still gated. A live session keeps one query in flight and waits
+  up to 10 s for a slow report rather than re-sending it: replies carry no
+  query identity, so a duplicate could be answered with stale geometry and
+  leave the other reply to be parsed as an F3 press. Suspend, handoff, and
+  teardown cancel the wait; startup keeps its fixed one-second deadline.
 - Frame writes and mouse delivery are gated while allocation is uncertain,
   suspended, or handed off. A lifecycle generation prevents pending queries
   from reactivating a restored session. Coalesced height requests emit a final

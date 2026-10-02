@@ -53,9 +53,24 @@ final class TerminalQueryRunner
   bool _disposed = false;
   bool _suspended = false;
 
+  /// Sends [bytes] and resolves with the reply, up to its DA1 sentinel.
+  ///
+  /// [interruptible] marks a long wait whose answer stops mattering once the
+  /// terminal changes hands: [suspend] ends it at once, as if its deadline
+  /// had passed, instead of draining it for the rest of [timeout]. Its reply
+  /// still gets the late-reply quarantine, so it cannot become input.
   @override
-  Future<List<int>> request(String bytes, {required Duration timeout}) async {
-    final replies = await _enqueue(bytes, timeout: timeout, sentinels: 1);
+  Future<List<int>> request(
+    String bytes, {
+    required Duration timeout,
+    bool interruptible = false,
+  }) async {
+    final replies = await _enqueue(
+      bytes,
+      timeout: timeout,
+      sentinels: 1,
+      interruptible: interruptible,
+    );
     final reply = replies.single;
     if (reply == null) {
       throw TimeoutException('Terminal query timed out.', timeout);
@@ -93,6 +108,7 @@ final class TerminalQueryRunner
     String bytes, {
     required Duration timeout,
     required int sentinels,
+    bool interruptible = false,
   }) {
     if (_disposed || _suspended) {
       return Future.error(
@@ -140,7 +156,12 @@ final class TerminalQueryRunner
         if (remaining <= Duration.zero) {
           throw TimeoutException('Terminal query deadline elapsed.', timeout);
         }
-        final response = await _run(bytes, remaining, sentinels);
+        final response = await _run(
+          bytes,
+          remaining,
+          sentinels,
+          interruptible: interruptible,
+        );
         if (!result.isCompleted) result.complete(response);
       } on Object catch (error, stack) {
         if (!result.isCompleted) result.completeError(error, stack);
@@ -152,11 +173,17 @@ final class TerminalQueryRunner
     return result.future;
   }
 
-  Future<List<List<int>?>> _run(String bytes, Duration timeout, int sentinels) {
+  Future<List<List<int>?>> _run(
+    String bytes,
+    Duration timeout,
+    int sentinels, {
+    required bool interruptible,
+  }) {
     final exchange = _QueryExchange(
       expectation: _expectationFor(bytes),
       timeout: timeout,
       sentinels: sentinels,
+      interruptible: interruptible,
     );
     _active = exchange;
     _parser.responseExpectation = exchange.expectation;
@@ -291,8 +318,12 @@ final class TerminalQueryRunner
 
   /// Stops admitting queries and drains the current exchange and its bounded
   /// late-response quarantine before another terminal owner starts reading.
+  /// An interruptible exchange ends here instead of running out its
+  /// deadline; its reply is quarantined like any late one.
   Future<void> suspend() async {
     _suspended = true;
+    final active = _active;
+    if (active != null && active.interruptible) _timeout(active);
     await _tail;
     final quarantine = _quarantine;
     if (quarantine != null) await quarantine.done.future;
@@ -352,10 +383,14 @@ final class _QueryExchange {
     required this.expectation,
     required this.timeout,
     required this.sentinels,
+    required this.interruptible,
   });
 
   final TerminalResponseExpectation expectation;
   final Duration timeout;
+
+  /// Whether [TerminalQueryRunner.suspend] may end this exchange early.
+  final bool interruptible;
 
   /// How many DA1 replies end this exchange: one per batched query.
   final int sentinels;

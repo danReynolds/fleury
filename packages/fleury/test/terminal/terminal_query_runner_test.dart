@@ -50,6 +50,42 @@ void main() {
     },
   );
 
+  test('suspend ends an interruptible wait at once and still quarantines its '
+      'late reply', () async {
+    final parser = InputParser();
+    final input = _InputSink();
+    final written = Completer<void>();
+    final runner = TerminalQueryRunner(
+      parser: parser,
+      inputSink: input,
+      write: (_) async {
+        if (!written.isCompleted) written.complete();
+      },
+      lateResponseGrace: const Duration(seconds: 1),
+    );
+    final query = runner.request(
+      '\x1b[6n\x1b[c',
+      timeout: const Duration(seconds: 30),
+      interruptible: true,
+    );
+    final interrupted = expectLater(query, throwsA(isA<TimeoutException>()));
+    await written.future;
+    final clock = Stopwatch()..start();
+    var released = false;
+    final suspending = runner.suspend().then((_) => released = true);
+    await interrupted;
+    expect(
+      clock.elapsed,
+      lessThan(const Duration(seconds: 1)),
+      reason: 'not held for the rest of its 30 s deadline',
+    );
+    expect(released, isFalse, reason: 'its reply can still be on the way');
+    parser.feed('\x1b[4;5R\x1b[?1;2c'.codeUnits, input, responseSink: runner);
+    await suspending;
+    expect(input.events, isEmpty, reason: 'the late reply never became F3');
+    runner.dispose();
+  });
+
   test(
     'fragmented OSC 22 replies are consumed without losing typed input',
     () async {

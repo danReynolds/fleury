@@ -238,7 +238,11 @@ input should work again. This recording captures the inline run on a native PTY:
 
 Inline mode currently runs on macOS and Linux. It needs terminal input/output
 and cursor position reporting. If the terminal cannot report its cursor
-position, Fleury restores its modes and reports the error.
+position at startup, Fleury restores its modes and reports the error. Once the
+UI is running, a resize, or a return from a suspend or another program, waits
+for the terminal's report before painting again, so a slow reply, as over a
+congested SSH link, only delays the redraw. A terminal that sends no report
+for 10 seconds ends the session with an error.
 
 Inline mode does not yet support:
 

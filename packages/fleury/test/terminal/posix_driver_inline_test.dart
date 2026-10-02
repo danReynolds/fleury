@@ -73,6 +73,18 @@ class _Modes implements PosixTerminalModeController {
 Future<void> _settle() =>
     Future<void>.delayed(const Duration(milliseconds: 20));
 
+/// Waits until [condition] holds, or gives up after [timeout] and lets the
+/// caller's expectations report what did not happen.
+Future<void> _eventually(
+  bool Function() condition, {
+  Duration timeout = const Duration(seconds: 3),
+}) async {
+  final clock = Stopwatch()..start();
+  while (!condition() && clock.elapsed < timeout) {
+    await Future<void>.delayed(const Duration(milliseconds: 10));
+  }
+}
+
 void main() {
   late _Input input;
   late _Output output;
@@ -84,6 +96,7 @@ void main() {
   late CellOffset cursor;
   late bool answerCursor;
   late bool holdCursor;
+  late Duration? cursorDelay;
   late int cursorQueries;
   const mode = TerminalMode.inline(
     rows: 4,
@@ -101,11 +114,24 @@ void main() {
     cursor = const CellOffset(0, 7);
     answerCursor = true;
     holdCursor = false;
+    cursorDelay = null;
     cursorQueries = 0;
     output.onWrite = (bytes) {
       final cpr = bytes.contains('\x1B[6n');
       if (cpr) cursorQueries++;
       if (cpr && holdCursor) return;
+      final delay = cursorDelay;
+      if (cpr && delay != null) {
+        // A slow link or a busy terminal: the whole reply, as the terminal
+        // computed it when the query arrived, lands later.
+        final reply = answerCursor
+            ? '\x1B[${cursor.row + 1};${cursor.col + 1}R\x1B[?1;2c'
+            : '\x1B[?1;2c';
+        Timer(delay, () {
+          if (!input.controller.isClosed) input.send(reply);
+        });
+        return;
+      }
       if (cpr && answerCursor) {
         input.send('\x1B[${cursor.row + 1};${cursor.col + 1}R');
       }
@@ -521,7 +547,11 @@ void main() {
       output.terminalColumns = 60;
       signals[ProcessSignal.sigwinch]!(ProcessSignal.sigwinch);
       await _settle();
-      await driver.restore();
+      // Bounded by restore's own cleanup query, not by how long a live
+      // session would go on waiting for the resize's report.
+      final clock = Stopwatch()..start();
+      await driver.restore().timeout(const Duration(seconds: 3));
+      expect(clock.elapsed, lessThan(const Duration(seconds: 3)));
       final restored = output.bytes.toString();
       await _settle();
       expect(output.bytes.toString(), restored);
@@ -529,4 +559,182 @@ void main() {
       expect(errors, isEmpty);
     },
   );
+
+  group('a slow cursor report in a live session', () {
+    test('arriving 1.5 s after a resize keeps the session and settles on the '
+        'new size', () async {
+      await driver.enter(mode);
+      driver.recordInlineCursor(const CellOffset(3, 1));
+      output.bytes.clear();
+      events.clear();
+      // A narrower window, answered as a congested SSH link or a busy
+      // terminal answers: correctly, but late.
+      output.terminalColumns = 60;
+      cursor = const CellOffset(3, 7);
+      cursorDelay = const Duration(milliseconds: 1500);
+      signals[ProcessSignal.sigwinch]!(ProcessSignal.sigwinch);
+      await Future<void>.delayed(const Duration(milliseconds: 1250));
+      // Past the old fixed 1 s deadline: still waiting, painting gated.
+      expect(errors, isEmpty);
+      expect(driver.isActive, isTrue);
+      driver.write('MUST-NOT-PAINT');
+      expect(output.bytes.toString(), isNot(contains('MUST-NOT-PAINT')));
+      await _eventually(() => driver.size == const CellSize(60, 4));
+      await _settle();
+      expect(errors, isEmpty);
+      expect(driver.size, const CellSize(60, 4));
+      expect(driver.renderTarget.top, 6, reason: 'late cursor minus caret');
+      expect(
+        cursorQueries,
+        2,
+        reason:
+            'entry, then one resize query left in flight until it was '
+            'answered',
+      );
+      expect(
+        events.whereType<KeyEvent>(),
+        isEmpty,
+        reason:
+            'the late report answered its own query; it never became '
+            'an F3 press',
+      );
+      expect(events.whereType<ResizeEvent>(), hasLength(1));
+      driver.write('REPAINTED-FRAME');
+      expect(output.bytes.toString(), contains('REPAINTED-FRAME'));
+    });
+
+    test('a window drag answered slowly settles on the latest size, one query '
+        'at a time', () async {
+      await driver.enter(mode);
+      cursorDelay = const Duration(milliseconds: 1200);
+      output.terminalColumns = 60;
+      signals[ProcessSignal.sigwinch]!(ProcessSignal.sigwinch);
+      await _settle();
+      // The drag goes on while the first report is still on its way.
+      output.terminalColumns = 40;
+      cursor = const CellOffset(0, 10);
+      signals[ProcessSignal.sigwinch]!(ProcessSignal.sigwinch);
+      await Future<void>.delayed(const Duration(milliseconds: 1000));
+      expect(
+        cursorQueries,
+        2,
+        reason: 'a second query cannot be told from the first by its reply',
+      );
+      expect(errors, isEmpty);
+      // The first report answers for the 60-column window: stale, so the
+      // driver asks again at 40 columns and waits out that reply too.
+      await _eventually(() => driver.size == const CellSize(40, 4));
+      await _settle();
+      expect(errors, isEmpty);
+      expect(cursorQueries, 3);
+      expect(driver.size, const CellSize(40, 4));
+      expect(driver.renderTarget.top, 7, reason: 'cursor minus resting row');
+    });
+
+    test('a reply without a cursor report is asked again, no sooner than the '
+        'measured round trip allows', () async {
+      await driver.enter(mode);
+      final sent = <Duration>[];
+      final clock = Stopwatch()..start();
+      final terminal = output.onWrite;
+      output.onWrite = (bytes) {
+        if (bytes.contains('\x1B[6n')) {
+          sent.add(clock.elapsed);
+          // The first resize query is answered with the sentinel alone.
+          answerCursor = sent.length > 1;
+        }
+        terminal(bytes);
+      };
+      output.terminalColumns = 60;
+      cursor = const CellOffset(0, 9);
+      signals[ProcessSignal.sigwinch]!(ProcessSignal.sigwinch);
+      await _eventually(() => driver.size == const CellSize(60, 4));
+      await _settle();
+      expect(errors, isEmpty);
+      expect(sent, hasLength(2));
+      expect(
+        sent[1] - sent[0],
+        greaterThanOrEqualTo(const Duration(milliseconds: 150)),
+        reason: 'paced by the round-trip deadline, never a tight loop',
+      );
+      expect(driver.size, const CellSize(60, 4));
+      expect(driver.renderTarget.top, 6);
+    });
+
+    for (final silence in ['never answers', 'answers without a report']) {
+      test('from a terminal that $silence ends the session only at the report '
+          'budget, without painting at a guess', () async {
+        PosixTerminalDriver.inlineCursorReportBudget = const Duration(
+          milliseconds: 1500,
+        );
+        addTearDown(
+          () => PosixTerminalDriver.inlineCursorReportBudget = const Duration(
+            seconds: 10,
+          ),
+        );
+        await driver.enter(mode);
+        output.bytes.clear();
+        output.terminalColumns = 60;
+        if (silence == 'never answers') {
+          holdCursor = true;
+        } else {
+          answerCursor = false;
+        }
+        signals[ProcessSignal.sigwinch]!(ProcessSignal.sigwinch);
+        await Future<void>.delayed(const Duration(milliseconds: 1250));
+        expect(errors, isEmpty, reason: 'still inside the report budget');
+        expect(driver.isActive, isTrue);
+        await Future<void>.delayed(const Duration(milliseconds: 750));
+        expect(
+          errors.single,
+          isA<StateError>().having(
+            (error) => error.message,
+            'message',
+            contains('stopped reporting its cursor position'),
+          ),
+        );
+        final bytes = output.bytes.toString();
+        expect(bytes, isNot(contains('\n')), reason: 'no new allocation');
+        expect(bytes, isNot(contains('\x1B[2K')), reason: 'no guessed clear');
+        await driver.restore();
+        expect(modes.raw, isFalse);
+        expect(output.bytes.toString(), isNot(contains('\x1B[2K')));
+      });
+    }
+
+    for (final transition in ['suspend', 'handoff']) {
+      test('$transition during an unanswered resize goes ahead at once and '
+          'reanchors on return', () async {
+        await driver.enter(mode);
+        output.terminalColumns = 60;
+        holdCursor = true;
+        signals[ProcessSignal.sigwinch]!(ProcessSignal.sigwinch);
+        await _settle();
+        cursor = const CellOffset(0, 12);
+        final clock = Stopwatch()..start();
+        if (transition == 'suspend') {
+          await driver.debugSuspend();
+          expect(clock.elapsed, lessThan(const Duration(milliseconds: 800)));
+          expect(modes.raw, isFalse);
+          holdCursor = false;
+          await driver.debugResume();
+        } else {
+          await driver.runWithTerminalHandoff(() {
+            expect(clock.elapsed, lessThan(const Duration(milliseconds: 800)));
+            expect(modes.raw, isFalse);
+            holdCursor = false;
+          });
+        }
+        await _settle();
+        expect(errors, isEmpty);
+        expect(driver.size, const CellSize(60, 4));
+        expect(driver.renderTarget.top, 12);
+        expect(
+          cursorQueries,
+          3,
+          reason: 'entry, the abandoned resize query, the fresh anchor',
+        );
+      });
+    }
+  });
 }
