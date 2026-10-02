@@ -56,8 +56,7 @@ jobs:
   inline-terminal:
     name: inline terminal (${{ matrix.os }}, Dart ${{ matrix.sdk }})
     runs-on: ${{ matrix.os }}
-    # TEMPORARY (draft PR experiment): 10 normally.
-    timeout-minutes: 45
+    timeout-minutes: 10
     strategy:
       fail-fast: false
       matrix:
@@ -80,17 +79,6 @@ jobs:
           dart pub get
           cd ../..
           python -m pip install -r tool/inline-pty-requirements.txt
-      # TEMPORARY (draft PR experiment, removed before merge): origin/main's
-      # harness and guard (the guard ignoring SIGTSTP, so the new isShellJob
-      # rule admits it), with and without the stop fix.
-      - name: TEMP old-harness suspend loop, stop fix off
-        continue-on-error: true
-        env:
-          AB_STOP_FIX: "off"
-        run: python tool/experiments/job_control_flakes/suspend_loop.py --loops 25 --old-harness
-      - name: TEMP old-harness suspend loop, stop fix on
-        continue-on-error: true
-        run: python tool/experiments/job_control_flakes/suspend_loop.py --loops 25 --old-harness
       - name: Exercise native acquisition and restoration failures
         working-directory: packages/fleury
         run: >-

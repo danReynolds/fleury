@@ -2609,10 +2609,7 @@ final class PosixJobControl {
     final group = native.getpgrp();
     if (group <= 0 || native.tcgetpgrp(terminalFd) != group) return false;
     if (native.killpg(group, _sigstop) != 0) return false;
-    // TEMPORARY (A/B on CI): AB_STOP_FIX=off turns the stop fix off.
-    if (Platform.environment['AB_STOP_FIX'] != 'off') {
-      native._takePendingStop();
-    }
+    native._takePendingStop();
     return true;
   }
 
