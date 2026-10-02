@@ -21,10 +21,12 @@ library;
 //
 // Only a job-control shell can continue a stopped job. A terminal emulator, a
 // tmux pane, or `ssh -t host app` runs the command directly, as the session
-// leader: a stop there is permanent. The app must never suspend then.
+// leader; a launcher that is no shell gives it a group of its own: a stop
+// there is permanent. The app must never suspend then.
 
 import 'dart:convert';
 import 'dart:io';
+import 'dart:math';
 
 import 'package:test/test.dart';
 
@@ -149,6 +151,104 @@ void main() {
       reason: 'the supervisor keeps running\n${run.describe()}',
     );
   });
+
+  // A launcher that is no shell, as tini is under `docker run --init`, gives
+  // the app a foreground process group of its own, as a shell gives a job.
+  // But it leaves SIGTSTP at its default and continues nothing: a stop there
+  // was for good.
+  test('an app a plain launcher started in a group of its own never '
+      'stops', () async {
+    final run = await _runHarness([dart, packages, fixture], launcher: true);
+
+    expect(run.appParentPid, run.leaderPid, reason: run.describe());
+    run.expectNeverSuspended(ownForegroundGroup: true);
+  });
+
+  // macOS's `login` runs a terminal tab's shell; fish and tcsh move into a
+  // process group of their own and keep it when they `exec` the app, so the
+  // app leads a foreground group with only `login` above it. (bash, zsh, and
+  // dash move back into login's group first.)
+  for (final shell in ['fish', 'tcsh']) {
+    test(
+      'an app $shell execs beneath login never stops',
+      () async {
+        final run = await _runHarness([
+          dart,
+          packages,
+          fixture,
+        ], loginExec: shell);
+
+        expect(run.appParentPid, run.leaderPid, reason: run.describe());
+        run.expectNeverSuspended(ownForegroundGroup: true);
+      },
+      skip: _which(shell) == null ? '$shell is not installed' : false,
+    );
+  }
+
+  // A job whose creator exited is left to pid 1. On macOS that is launchd,
+  // which ignores SIGTSTP, as a shell does, but continues nothing: a stop
+  // there was for good. (Linux's pid 1 can be a shell, so this is macOS's.)
+  test(
+    'an orphaned app never stops on macOS',
+    () async {
+      final run = await _runHarness([dart, packages, fixture], orphaned: true);
+
+      expect(run.appParentPid, 1, reason: run.describe());
+      run.expectNeverSuspended(ownForegroundGroup: true);
+    },
+    skip: Platform.isMacOS ? false : 'pid 1 is launchd only on macOS',
+  );
+
+  // The orderly suspend restores the terminal, stops the job, and re-enters
+  // the moment the stop returns. Linux gives a signal sent to the whole
+  // process to its main thread, which the Dart VM leaves waiting while the
+  // isolate runs on a worker: the isolate's thread came back from killpg and
+  // ran on until the main thread stopped the process, long enough to put the
+  // terminal back in raw mode before the shell's prompt.
+  test('a stopped job is stopped when stopJob returns', () async {
+    const iterations = 200;
+    final workDir = Directory.systemTemp.createTempSync('fleury_stop_job_');
+    addTearDown(() => workDir.deleteSync(recursive: true));
+    final result = await Process.run('python3', <String>[
+      '$packageRoot/test/fixtures/stop_job_pty_harness.py',
+      workDir.path,
+      '--',
+      dart,
+      packages,
+      '$packageRoot/test/fixtures/stop_job_fixture.dart',
+      '$iterations',
+    ]);
+    final reportFile = File('${workDir.path}/report.json');
+    expect(
+      reportFile.existsSync(),
+      isTrue,
+      reason: 'stdout:\n${result.stdout}\nstderr:\n${result.stderr}',
+    );
+    final report =
+        jsonDecode(reportFile.readAsStringSync()) as Map<String, Object?>;
+    expect(report['failure'], isNull, reason: '$report');
+    expect(report['stops'], iterations, reason: '$report');
+    expect(
+      report['early'],
+      isEmpty,
+      reason:
+          'stopJob returned and the app ran on before these stops took '
+          'effect: ${report['early']}',
+    );
+    expect(report['exit'], 0, reason: '$report');
+  });
+}
+
+/// The path of [executable] on PATH, or null.
+String? _which(String executable) {
+  final result = Process.runSync('/bin/sh', [
+    '-c',
+    'command -v "\$1"',
+    'which',
+    executable,
+  ]);
+  final path = (result.stdout as String).trim();
+  return result.exitCode == 0 && path.isNotEmpty ? path : null;
 }
 
 Future<_HarnessRun> _runHarness(
@@ -156,6 +256,9 @@ Future<_HarnessRun> _runHarness(
   bool supervised = false,
   bool suspendKey = false,
   bool noShell = false,
+  bool launcher = false,
+  bool orphaned = false,
+  String? loginExec,
 }) async {
   final packageRoot = Directory.current.absolute.path;
   final workDir = Directory.systemTemp.createTempSync('fleury_job_control_');
@@ -166,6 +269,9 @@ Future<_HarnessRun> _runHarness(
     if (supervised) '--supervised',
     if (suspendKey) '--suspend-key',
     if (noShell) '--no-shell',
+    if (launcher) '--launcher',
+    if (orphaned) '--orphaned',
+    if (loginExec != null) '--login-exec=$loginExec',
     '--',
     ...command,
   ]);
@@ -238,10 +344,21 @@ final class _HarnessRun {
     // the app's modes again.
     final suspended = _between('suspend', 'fg');
     final prompt = suspended.indexOf('FLEURY-JOB-PROMPT\$ ');
+    var restored = 0;
     for (final restore in ['\x1B[?1000l', '\x1B[?25h', '\x1B[?1049l']) {
       final at = suspended.indexOf(restore);
       expect(at, greaterThanOrEqualTo(0), reason: '$restore\n${describe()}');
       expect(at, lessThan(prompt), reason: '$restore\n${describe()}');
+      restored = max(restored, suspended.lastIndexOf(restore, prompt));
+    }
+    // Nor did the app enter its modes again before it stopped, leaving the
+    // prompt on the alternate screen with the cursor hidden.
+    for (final enter in ['\x1B[?1049h', '\x1B[?25l']) {
+      expect(
+        suspended.substring(restored, prompt),
+        isNot(contains(enter)),
+        reason: 'the app re-entered $enter before the prompt\n${describe()}',
+      );
     }
     final resumed = _between('fg', 'quit');
     for (final enter in ['\x1B[?1049h', '\x1B[?25l']) {
@@ -253,18 +370,34 @@ final class _HarnessRun {
   /// reached it as an ordinary key, its own suspend key's request completed
   /// with false, neither left a process stopped or the terminal restored for
   /// a shell, and the next key — Ctrl+Q — still ended it normally.
-  void expectNeverSuspended() {
+  ///
+  /// The app runs in the session leader's group, or with
+  /// [ownForegroundGroup] it leads a group of its own that owns the
+  /// terminal, as a shell's job does: then only the process above the group
+  /// tells that no shell started it.
+  void expectNeverSuspended({bool ownForegroundGroup = false}) {
     expect(report['failure'], isNull, reason: describe());
     expect(
       report['supportsSuspend'],
       ['false'],
       reason: 'TerminalSession.supportsSuspend\n${describe()}',
     );
-    expect(
-      _facts('app')['pgid'],
-      leaderPid,
-      reason: "the app runs in the session leader's group\n${describe()}",
-    );
+    if (ownForegroundGroup) {
+      final app = _facts('app');
+      expect(
+        [app['pgid'], app['tpgid']],
+        [appPid, appPid],
+        reason:
+            'the app leads the foreground group, not the leader '
+            '$leaderPid\n${describe()}',
+      );
+    } else {
+      expect(
+        _facts('app')['pgid'],
+        leaderPid,
+        reason: "the app runs in the session leader's group\n${describe()}",
+      );
+    }
     for (final (step, event) in [
       ('ctrlZ', 'key:ctrl+z'),
       ('suspendKey', 'suspended:false'),

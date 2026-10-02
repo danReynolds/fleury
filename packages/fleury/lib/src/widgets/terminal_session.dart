@@ -60,20 +60,20 @@ final class TerminalSession {
   /// Whether this session can [suspend]: a native macOS or Linux terminal
   /// session that reads the keyboard in raw mode, started by a job-control
   /// shell — an interactive shell that ran the app as a job, so its `fg` can
-  /// bring the app back. False when nothing like that started it: a terminal
-  /// emulator, a tmux pane, or `ssh -t host app` running the app directly,
-  /// where a stopped app would stay stopped. Also false under `fleury serve`
-  /// and `fleury shell`, on Windows, and when standard input isn't a
-  /// terminal; an app in the browser has no session at all. It doesn't
-  /// change during the session, so a build can read it to decide whether to
-  /// offer a suspend key.
+  /// bring the app back. False when nothing like that started it — a
+  /// terminal emulator, a tmux pane, or `ssh -t host app` running the app
+  /// directly, or a launcher that isn't a shell, such as `docker run --init`
+  /// or macOS's `login` under a shell's `exec app` — where a stopped app
+  /// would stay stopped. Also false under `fleury serve` and `fleury shell`,
+  /// on Windows, and when standard input isn't a terminal; an app in the
+  /// browser has no session at all. It doesn't change during the session, so
+  /// a build can read it to decide whether to offer a suspend key.
   ///
-  /// A few launchers look like a job-control shell without being one, such
-  /// as fish's `exec app` in a macOS terminal tab, or `docker run --init`.
-  /// There this is true, and a suspended app stays stopped until something
-  /// sends its process group SIGCONT: from another terminal,
-  /// `kill -CONT -- -<pid>` with the pid of the process the launcher started,
-  /// which leads the group.
+  /// One launcher passes for a shell: `sudo` running the app on a terminal
+  /// of its own, as it does by default since sudo 1.9.14, takes the stop
+  /// and stops itself, so a shell's `fg` resumes them both. Run directly by
+  /// `ssh -t host sudo app`, with no shell to resume sudo, a suspended app
+  /// stays stopped until something sends sudo SIGCONT.
   bool get supportsSuspend =>
       driver is TerminalSuspendDriver &&
       (driver as TerminalSuspendDriver).supportsSuspend;

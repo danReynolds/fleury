@@ -53,10 +53,17 @@
   Ctrl+Z suspends only when a job-control shell started the app, since only
   the shell's `fg` can bring it back. Run directly by a terminal profile, a
   tmux pane, or `ssh -t host app`, the app used to stop for good, leaving the
-  window frozen; the press is now an ordinary key there. A few launchers
-  still look like a shell's job without being one, such as fish's
-  `exec app` in a macOS terminal tab or `docker run --init`; there a
-  suspended app stays stopped until it gets SIGCONT.
+  window frozen; the press is now an ordinary key there. The same goes for a
+  launcher that gives the app a process group of its own without being a
+  shell, such as fish's or tcsh's `exec app` in a macOS terminal tab or
+  `docker run --init`: Fleury tells a shell by the SIGTSTP it ignores or
+  catches, which these launchers leave alone. `sudo` still passes for one
+  when it runs the app on a terminal of its own, its default since 1.9.14:
+  it stops itself with the app, so a shell's `fg` resumes both, but run
+  directly by `ssh -t host sudo app`, a suspended app stays stopped until
+  sudo gets SIGCONT. On Linux, the shell's prompt could come back in the
+  app's terminal modes: the app went on re-entering them before its stop took
+  effect. It now stops before it touches the terminal again.
   `PosixTerminalDriver(suspendOnCtrlZ: false)` keeps an unhandled Ctrl+Z an
   ordinary key. Browser, served, and `fleury shell` sessions never suspend.
 
