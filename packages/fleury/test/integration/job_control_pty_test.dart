@@ -21,7 +21,8 @@ library;
 //
 // Only a job-control shell can continue a stopped job. A terminal emulator, a
 // tmux pane, or `ssh -t host app` runs the command directly, as the session
-// leader: a stop there is permanent. The app must never suspend then.
+// leader; a launcher that is no shell gives it a group of its own: a stop
+// there is permanent. The app must never suspend then.
 
 import 'dart:convert';
 import 'dart:io';
@@ -151,6 +152,39 @@ void main() {
     );
   });
 
+  // A launcher that is no shell, as tini is under `docker run --init`, gives
+  // the app a foreground process group of its own, as a shell gives a job.
+  // But it leaves SIGTSTP at its default and continues nothing: a stop there
+  // was for good.
+  test('an app a plain launcher started in a group of its own never '
+      'stops', () async {
+    final run = await _runHarness([dart, packages, fixture], launcher: true);
+
+    expect(run.appParentPid, run.leaderPid, reason: run.describe());
+    run.expectNeverSuspended(ownForegroundGroup: true);
+  });
+
+  // macOS's `login` runs a terminal tab's shell; fish and tcsh move into a
+  // process group of their own and keep it when they `exec` the app, so the
+  // app leads a foreground group with only `login` above it. (bash, zsh, and
+  // dash move back into login's group first.)
+  for (final shell in ['fish', 'tcsh']) {
+    test(
+      'an app $shell execs beneath login never stops',
+      () async {
+        final run = await _runHarness([
+          dart,
+          packages,
+          fixture,
+        ], loginExec: shell);
+
+        expect(run.appParentPid, run.leaderPid, reason: run.describe());
+        run.expectNeverSuspended(ownForegroundGroup: true);
+      },
+      skip: _which(shell) == null ? '$shell is not installed' : false,
+    );
+  }
+
   // The orderly suspend restores the terminal, stops the job, and re-enters
   // the moment the stop returns. Linux gives a signal sent to the whole
   // process to its main thread, which the Dart VM leaves waiting while the
@@ -191,11 +225,25 @@ void main() {
   });
 }
 
+/// The path of [executable] on PATH, or null.
+String? _which(String executable) {
+  final result = Process.runSync('/bin/sh', [
+    '-c',
+    'command -v "\$1"',
+    'which',
+    executable,
+  ]);
+  final path = (result.stdout as String).trim();
+  return result.exitCode == 0 && path.isNotEmpty ? path : null;
+}
+
 Future<_HarnessRun> _runHarness(
   List<String> command, {
   bool supervised = false,
   bool suspendKey = false,
   bool noShell = false,
+  bool launcher = false,
+  String? loginExec,
 }) async {
   final packageRoot = Directory.current.absolute.path;
   final workDir = Directory.systemTemp.createTempSync('fleury_job_control_');
@@ -206,6 +254,8 @@ Future<_HarnessRun> _runHarness(
     if (supervised) '--supervised',
     if (suspendKey) '--suspend-key',
     if (noShell) '--no-shell',
+    if (launcher) '--launcher',
+    if (loginExec != null) '--login-exec=$loginExec',
     '--',
     ...command,
   ]);
@@ -304,18 +354,34 @@ final class _HarnessRun {
   /// reached it as an ordinary key, its own suspend key's request completed
   /// with false, neither left a process stopped or the terminal restored for
   /// a shell, and the next key — Ctrl+Q — still ended it normally.
-  void expectNeverSuspended() {
+  ///
+  /// The app runs in the session leader's group, or with
+  /// [ownForegroundGroup] it leads a group of its own that owns the
+  /// terminal, as a shell's job does: then only the process above the group
+  /// tells that no shell started it.
+  void expectNeverSuspended({bool ownForegroundGroup = false}) {
     expect(report['failure'], isNull, reason: describe());
     expect(
       report['supportsSuspend'],
       ['false'],
       reason: 'TerminalSession.supportsSuspend\n${describe()}',
     );
-    expect(
-      _facts('app')['pgid'],
-      leaderPid,
-      reason: "the app runs in the session leader's group\n${describe()}",
-    );
+    if (ownForegroundGroup) {
+      final app = _facts('app');
+      expect(
+        [app['pgid'], app['tpgid']],
+        [appPid, appPid],
+        reason:
+            'the app leads the foreground group, not the leader '
+            '$leaderPid\n${describe()}',
+      );
+    } else {
+      expect(
+        _facts('app')['pgid'],
+        leaderPid,
+        reason: "the app runs in the session leader's group\n${describe()}",
+      );
+    }
     for (final (step, event) in [
       ('ctrlZ', 'key:ctrl+z'),
       ('suspendKey', 'suspended:false'),

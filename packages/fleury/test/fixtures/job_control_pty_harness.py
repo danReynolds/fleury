@@ -9,7 +9,7 @@ prompt back and ran a command — the observable meaning of "suspended" — then
 brings the job back with `fg` and quits the app with Ctrl+Q.
 
 usage: job_control_pty_harness.py <work-dir> [--supervised] [--suspend-key]
-           [--no-shell] -- <command...>
+           [--no-shell | --launcher | --login-exec=<shell>] -- <command...>
 
 --supervised waits for the hot-reload supervisor to wire the app before
 suspending it. --suspend-key drives the fixture's composer
@@ -18,10 +18,15 @@ unhandled Ctrl+Z: Ctrl+Z must undo in its focused field and leave the job
 running, and Ctrl+T, its suspend key, must suspend. --no-shell runs the command
 with no shell at all, the way a terminal emulator, a tmux pane, or `ssh -t host
 app` does: the command is the session leader and the PTY's controlling
-process, so nothing could continue it if it stopped. The harness then presses
-Ctrl+Z and Ctrl+T and records whether each reached the app and whether the
-terminal and the processes were left alone. The app must be that fixture (or
-honour its FLEURY_JOB_PID_OUT and FLEURY_JOB_EVENTS_OUT contract).
+process, so nothing could continue it if it stopped. --launcher runs it under
+a launcher that is no shell but gives it a foreground process group of its own,
+as tini does under `docker run --init`. --login-exec=<shell> has a `login`
+stand-in run an interactive <shell>, which `exec`s the command: fish and tcsh
+keep the process group they made for themselves, so the command leads a
+foreground group of its own with no shell above it. In these three the harness
+presses Ctrl+Z and Ctrl+T and records whether each reached the app and whether
+the terminal and the processes were left alone. The app must be that fixture
+(or honour its FLEURY_JOB_PID_OUT and FLEURY_JOB_EVENTS_OUT contract).
 Writes <work-dir>/report.json (the facts; `failure` names the step that could
 not complete) and <work-dir>/pty.bin (every byte the terminal received). Exits
 0 whenever a report was written; the Dart test asserts.
@@ -33,6 +38,7 @@ import os
 import re
 import select
 import shlex
+import shutil
 import signal
 import struct
 import subprocess
@@ -80,9 +86,11 @@ class Harness:
 
     # -- the terminal and its session leader ----------------------------
 
-    def start_session(self, path, argv, extra_env):
+    def start_session(self, path, argv, extra_env, leader=None):
         """Forks [argv] as the session leader of a new PTY, with the PTY as its
-        controlling terminal."""
+        controlling terminal. With [leader], the session leader is that
+        function instead, run in the forked process with ([argv], env); it
+        returns the leader's exit status."""
         master, slave = os.openpty()
         fcntl.ioctl(slave, termios.TIOCSWINSZ, struct.pack('HHHH', 24, 80, 0, 0))
         env = {
@@ -109,6 +117,8 @@ class Harness:
                 if slave > 2:
                     os.close(slave)
                 os.chdir(self.work_dir)
+                if leader is not None:
+                    os._exit(leader(argv, env))
                 os.execve(path, argv, env)
             finally:
                 os._exit(127)
@@ -326,13 +336,42 @@ class Harness:
             'prompt': PROMPT in self.output_after(start),
         }
 
-    # -- the scenario: no shell -----------------------------------------
+    # -- the scenarios: no job-control shell ----------------------------
 
     def run_without_shell(self):
         path = self.command[0]
         self.start_session(path, self.command, {})
         self.note('command started as the session leader')
-        app = self.wait_for_app(0)
+        self.expect_no_suspension(self.wait_for_app(0))
+
+    def run_under_launcher(self):
+        """The command runs under a launcher that is no shell (plain_launcher),
+        in a process group of its own that owns the terminal."""
+        self.start_session(self.command[0], self.command, {},
+                           leader=plain_launcher)
+        self.note('command started by a plain launcher')
+        self.expect_no_suspension(self.wait_for_app(0))
+
+    def run_exec_under_login(self, shell):
+        """A `login` stand-in (login_standin) runs an interactive [shell], and
+        the shell `exec`s the command."""
+        argv = [shutil.which(shell), *INTERACTIVE_FLAGS[shell]]
+        self.start_session(argv[0], argv, {'HISTFILE': '/dev/null'},
+                           leader=login_standin)
+        self.note(f'{shell} started by login')
+        start = len(self.output)
+        # The typed line holds RE%sY; only the shell's output holds READY.
+        self.send(b"printf 'RE%sY\\n' AD\r")
+        self.wait_for(lambda: b'READY' in self.output_after(start),
+                      f'{shell} to run a command', 30)
+        start = len(self.output)
+        self.run_in_shell('exec ' + ' '.join(shlex.quote(part)
+                                             for part in self.command))
+        self.expect_no_suspension(self.wait_for_app(start))
+
+    def expect_no_suspension(self, app):
+        """Nothing could continue a stopped [app]: records its facts, presses
+        Ctrl+Z and the fixture's suspend key, and quits it with Ctrl+Q."""
         self.report['app'] = self.process_facts(app)
         self.report['leader'] = self.process_facts(self.leader_pid)
         self.report['leaderPid'] = self.leader_pid
@@ -403,13 +442,66 @@ class Harness:
             try:
                 os.kill(self.leader_pid, signal.SIGCONT)
                 os.kill(self.leader_pid, signal.SIGKILL)
-                os.waitpid(self.leader_pid, 0)
-            except ChildProcessError:
-                pass
             except ProcessLookupError:
                 pass
+            # Keep reading the terminal while the leader exits: on macOS an
+            # exiting process can wait for the terminal's output to drain.
+            try:
+                self.wait_for(lambda: self.leader_status is not None,
+                              'the session leader to exit', 15)
+            except StepFailed:
+                self.report.setdefault('failure', 'the session leader never exited')
         if self.master is not None:
             os.close(self.master)
+
+
+# How each shell runs interactively without the user's configuration, for
+# run_exec_under_login.
+INTERACTIVE_FLAGS = {
+    'bash': ['--norc', '--noprofile', '-i'],
+    'zsh': ['-f', '-i'],
+    'fish': ['--no-config', '-i'],
+    'tcsh': ['-f', '-i'],
+    'dash': ['-i'],
+}
+
+
+def _status_code(status):
+    code = os.waitstatus_to_exitcode(status)
+    return code if code >= 0 else 128 - code
+
+
+def plain_launcher(argv, env):
+    """A launcher that is no shell, as tini is under `docker run --init`: it
+    starts the command in a process group of its own, gives that group the
+    terminal, and waits for it. SIGTSTP keeps its default, which would stop
+    the launcher itself, and nothing continues a stopped job."""
+    signal.signal(signal.SIGTTOU, signal.SIG_IGN)
+    child = os.fork()
+    if child == 0:
+        try:
+            os.setpgid(0, 0)
+            os.tcsetpgrp(0, os.getpgrp())
+            signal.signal(signal.SIGTTOU, signal.SIG_DFL)
+            os.execvpe(argv[0], argv, env)
+        finally:
+            os._exit(127)
+    _, status = os.waitpid(child, 0)
+    return _status_code(status)
+
+
+def login_standin(argv, env):
+    """What macOS's `login` does for a terminal tab: runs the user's shell as
+    its child and waits for it, with no job control of its own (SIGTSTP keeps
+    its default)."""
+    child = os.fork()
+    if child == 0:
+        try:
+            os.execvpe(argv[0], argv, env)
+        finally:
+            os._exit(127)
+    _, status = os.waitpid(child, 0)
+    return _status_code(status)
 
 
 def main():
@@ -419,15 +511,23 @@ def main():
         return 2
     split = args.index('--')
     work_dir, options, command = args[0], set(args[1:split]), args[split + 1:]
-    unknown = options - {'--supervised', '--suspend-key', '--no-shell'}
-    if unknown:
-        print(f'unknown options: {sorted(unknown)}\n{__doc__}', file=sys.stderr)
+    login_exec = next((option.split('=', 1)[1] for option in options
+                       if option.startswith('--login-exec=')), None)
+    unknown = {option for option in options
+               if not option.startswith('--login-exec=')} - {
+        '--supervised', '--suspend-key', '--no-shell', '--launcher'}
+    if unknown or (login_exec and login_exec not in INTERACTIVE_FLAGS):
+        print(f'unknown options: {sorted(options)}\n{__doc__}', file=sys.stderr)
         return 2
     harness = Harness(work_dir, '--supervised' in options,
                       '--suspend-key' in options, command)
     try:
         if '--no-shell' in options:
             harness.run_without_shell()
+        elif '--launcher' in options:
+            harness.run_under_launcher()
+        elif login_exec:
+            harness.run_exec_under_login(login_exec)
         else:
             harness.run()
     except StepFailed as failure:

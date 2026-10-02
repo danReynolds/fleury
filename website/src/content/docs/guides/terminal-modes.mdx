@@ -202,11 +202,12 @@ handles suspends the app through the same release-and-resume lifecycle, and
 `fg` brings it back. That happens only when a job-control shell, such as your
 interactive shell, started the app, since only the shell can bring it back. A
 terminal profile, tmux pane, or `ssh -t host app` that runs the app directly
-leaves `Ctrl+Z` an ordinary key. A few launchers look like a shell's job
-without being one, such as fish's `exec app` in a macOS terminal tab; there a
-suspended app stays stopped until you continue its process group from
-another terminal: `kill -CONT -- -<pid>`, with the pid of the process the
-launcher started.
+leaves `Ctrl+Z` an ordinary key, and so does a launcher that isn't a shell,
+such as `docker run --init`, or a shell's `exec app` in a macOS terminal tab.
+One launcher still passes for a shell: `sudo`, which by default runs the app
+on a terminal of its own and stops itself along with the app. Under your
+shell, `fg` resumes both; run directly by `ssh -t host sudo app`, with no
+shell to resume `sudo`, a suspended app stays stopped.
 
 Your code can ask for the same suspension with `session.suspend()`: for
 example, from a key of its own when a focused text field takes every `Ctrl+Z`

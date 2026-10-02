@@ -478,7 +478,10 @@ def run_as_foreground_job(command):
     - when the job ends, it takes the terminal back.
 
     Fleury suspends on Ctrl+Z only for a job a job-control shell started: the
-    job's own process group, in the terminal's foreground. The session
+    job's own process group, in the terminal's foreground, made by a process
+    that ignores or catches SIGTSTP, as every interactive shell does. That is
+    why this guard has to ignore it: a launcher that leaves SIGTSTP at its
+    default is no shell, and Fleury no longer suspends under one. The session
     leader's own group, where a command started with no shell runs, has
     nothing above it to continue a stopped app."""
     terminal = 0

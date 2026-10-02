@@ -2334,6 +2334,7 @@ final class PosixJobControl {
     required this.sigemptyset,
     required this.sigaddset,
     required this.sigismember,
+    required this.sysctl,
   });
 
   static final PosixJobControl? _native = _load();
@@ -2378,6 +2379,28 @@ final class PosixJobControl {
               Int32 Function(Pointer<Uint8>, Int32),
               int Function(Pointer<Uint8>, int)
             >('sigismember'),
+        // Linux reads other processes from /proc instead; glibc 2.32
+        // removed sysctl.
+        sysctl: _darwin
+            ? libc.lookupFunction<
+                Int32 Function(
+                  Pointer<Int32>,
+                  Uint32,
+                  Pointer<Uint8>,
+                  Pointer<Size>,
+                  Pointer<Void>,
+                  Size,
+                ),
+                int Function(
+                  Pointer<Int32>,
+                  int,
+                  Pointer<Uint8>,
+                  Pointer<Size>,
+                  Pointer<Void>,
+                  int,
+                )
+              >('sysctl')
+            : null,
       );
     } on Object {
       return null;
@@ -2393,8 +2416,20 @@ final class PosixJobControl {
   final int Function(Pointer<Uint8> set) sigemptyset;
   final int Function(Pointer<Uint8> set, int signal) sigaddset;
   final int Function(Pointer<Uint8> set, int signal) sigismember;
+  final int Function(
+    Pointer<Int32> name,
+    int length,
+    Pointer<Uint8> old,
+    Pointer<Size> oldLength,
+    Pointer<Void> update,
+    int updateLength,
+  )?
+  sysctl;
 
   static final bool _darwin = Platform.isMacOS || Platform.isIOS;
+
+  /// The operating system's SIGTSTP: 18 on Darwin, 20 on Linux.
+  static final int sigtstp = _darwin ? 18 : 20;
 
   /// The operating system's SIGSTOP: 17 on Darwin, 19 on Linux. Not
   /// `ProcessSignal.sigstop.signalNumber`, which is Dart's own id for
@@ -2418,31 +2453,148 @@ final class PosixJobControl {
 
   /// Whether this process runs as a job of a job-control shell, which can
   /// continue it after a stop: [terminalFd] is its controlling terminal, its
-  /// process group is that terminal's foreground group, and the group isn't
-  /// the session leader's.
+  /// process group is that terminal's foreground group, the group isn't the
+  /// session leader's, and the process that created the group ignores or
+  /// catches SIGTSTP ([createdByJobControl]).
   ///
-  /// A job-control shell runs each job in a process group of its own and
-  /// gives that group the terminal, and it continues the job after a stop
-  /// (as `sudo`, itself run as such a job, does for a command on a pty of its
-  /// own). A command started with no shell stays in the session leader's
-  /// group — the leader being the command itself, its supervisor, or a
-  /// `sh -c` wrapper — and nothing above that group would continue it.
-  /// Without a controlling terminal, nothing does job control at all.
+  /// A job-control shell runs each job in a process group of its own, gives
+  /// that group the terminal, and continues the job after a stop. A command
+  /// started with no shell stays in the session leader's group — the leader
+  /// being the command itself, its supervisor, or a `sh -c` wrapper — and
+  /// nothing above that group would continue it. Without a controlling
+  /// terminal, nothing does job control at all.
   ///
-  /// The test reads process groups only, so a launcher that gives the app a
-  /// foreground group of its own without doing job control passes it too: a
-  /// shell that `exec`s the app after moving itself into its own group, under
-  /// a session leader that isn't a shell (fish does this beneath macOS's
-  /// `login`; bash and zsh move back first), or a wrapper with no shell above
-  /// it, such as `sudo` run directly by `ssh -t` or `docker run --init`.
-  /// There a stopped app stays stopped until something sends it SIGCONT.
+  /// Process groups alone can't tell a shell from a launcher that gives the
+  /// app a foreground group of its own without doing job control: fish's or
+  /// tcsh's `exec app` beneath macOS's `login` (both move into a group of
+  /// their own, and `exec` keeps it; bash, zsh, and dash move back first), or
+  /// tini under `docker run --init`. A shell is never stopped by its own
+  /// terminal's job control, so every interactive one ignores SIGTSTP (bash,
+  /// zsh, dash, fish, tcsh) or catches it (ksh); `login`, tini, and other
+  /// plain launchers leave it at its default, which stops them.
+  ///
+  /// One launcher passes without a shell above it: `sudo` running the command
+  /// on a pty of its own (its default since 1.9.14). Its monitor catches
+  /// SIGTSTP and hands a stop on to sudo itself, which stops its own job —
+  /// the right thing under a shell, but run directly by `ssh -t`, sudo then
+  /// stays stopped, and the app with it, until something sends it SIGCONT.
   static bool isShellJob({int terminalFd = 0}) {
     final native = _native;
     if (native == null) return false;
     final group = native.getpgrp();
     return group > 0 &&
         native.tcgetpgrp(terminalFd) == group &&
-        native.getsid(0) != group;
+        native.getsid(0) != group &&
+        createdByJobControl(pid, group, readProcess);
+  }
+
+  /// Whether the process that created [group] — the nearest ancestor of
+  /// [self] outside it, which for a group a shell made is the group leader's
+  /// parent — ignores or catches SIGTSTP. Walks up from [self] rather than
+  /// from the leader because a pipeline's leader may already have exited.
+  /// False when a process on the way can't be read ([read] returns null) or
+  /// the chain ends first: without knowing who would continue a stopped job,
+  /// a session doesn't stop.
+  @visibleForTesting
+  static bool createdByJobControl(
+    int self,
+    int group,
+    JobControlProcess? Function(int pid) read,
+  ) {
+    var process = read(self);
+    // A bound: process trees are acyclic, but /proc is read one entry at a
+    // time while processes come and go.
+    for (var depth = 0; process != null && depth < 64; depth++) {
+      final parentPid = process.parent;
+      if (parentPid <= 0) return false;
+      final parent = read(parentPid);
+      if (parent == null) return false;
+      if (parent.group != group) return parent.handlesSignal(sigtstp);
+      process = parent;
+    }
+    return false;
+  }
+
+  /// Reads process [pid]: on Linux from `/proc`, on macOS from the kernel's
+  /// process table (`sysctl` `KERN_PROC_PID`). Null when there is no such
+  /// process or it can't be read.
+  static JobControlProcess? readProcess(int pid) {
+    if (Platform.isLinux || Platform.isAndroid) return _readLinuxProcess(pid);
+    final native = _native;
+    if (native == null) return null;
+    return native._readDarwinProcess(pid);
+  }
+
+  static JobControlProcess? _readLinuxProcess(int pid) {
+    try {
+      // pid (comm) state ppid pgrp ...; comm can hold spaces and parentheses.
+      final stat = File('/proc/$pid/stat').readAsStringSync();
+      final fields = stat.substring(stat.lastIndexOf(')') + 2).split(' ');
+      var ignored = 0;
+      var caught = 0;
+      for (final line in File('/proc/$pid/status').readAsLinesSync()) {
+        if (line.startsWith('SigIgn:')) ignored = _lowSignals(line);
+        if (line.startsWith('SigCgt:')) caught = _lowSignals(line);
+      }
+      return JobControlProcess(
+        parent: int.parse(fields[1]),
+        group: int.parse(fields[2]),
+        ignored: ignored,
+        caught: caught,
+      );
+    } on Object {
+      return null;
+    }
+  }
+
+  /// Signals 1 to 32 of a `/proc/<pid>/status` mask line: its last eight hex
+  /// digits.
+  static int _lowSignals(String line) {
+    final mask = line.substring(line.indexOf(':') + 1).trim();
+    return int.parse(mask.substring(mask.length - 8), radix: 16);
+  }
+
+  /// `struct kinfo_proc` (sys/sysctl.h), the same on arm64 and x86_64: its
+  /// size and the offsets of `kp_proc.p_pid`, `kp_proc.p_sigignore`,
+  /// `kp_proc.p_sigcatch`, `kp_eproc.e_ppid`, and `kp_eproc.e_pgid`.
+  static const _kinfoProcBytes = 648;
+  static const _pidOffset = 40;
+  static const _sigignoreOffset = 232;
+  static const _sigcatchOffset = 236;
+  static const _ppidOffset = 560;
+  static const _pgidOffset = 564;
+
+  JobControlProcess? _readDarwinProcess(int pid) {
+    final read = sysctl;
+    if (read == null) return null;
+    final name = calloc<Int32>(4);
+    final info = calloc<Uint8>(_kinfoProcBytes);
+    final length = calloc<Size>();
+    try {
+      // CTL_KERN, KERN_PROC, KERN_PROC_PID, pid.
+      name
+        ..[0] = 1
+        ..[1] = 14
+        ..[2] = 1
+        ..[3] = pid;
+      length.value = _kinfoProcBytes;
+      // A pid with no process reads as success with nothing in it.
+      if (read(name, 4, info, length, nullptr, 0) != 0 ||
+          length.value != _kinfoProcBytes ||
+          (info + _pidOffset).cast<Int32>().value != pid) {
+        return null;
+      }
+      return JobControlProcess(
+        parent: (info + _ppidOffset).cast<Int32>().value,
+        group: (info + _pgidOffset).cast<Int32>().value,
+        ignored: (info + _sigignoreOffset).cast<Uint32>().value,
+        caught: (info + _sigcatchOffset).cast<Uint32>().value,
+      );
+    } finally {
+      calloc.free(name);
+      calloc.free(info);
+      calloc.free(length);
+    }
   }
 
   /// Stops this process's job with SIGSTOP, which cannot be caught or
@@ -2500,6 +2652,34 @@ final class PosixJobControl {
       calloc.free(probe);
     }
   }
+}
+
+/// One process as [PosixJobControl] reads it from the kernel: its parent, its
+/// process group, and the signals it ignores and catches, signal n as bit
+/// n - 1 (signals 1 to 32).
+@internal
+final class JobControlProcess {
+  const JobControlProcess({
+    required this.parent,
+    required this.group,
+    this.ignored = 0,
+    this.caught = 0,
+  });
+
+  final int parent;
+  final int group;
+  final int ignored;
+  final int caught;
+
+  /// Whether [signal] is ignored or caught here: not left at its default.
+  bool handlesSignal(int signal) =>
+      (ignored | caught) & (1 << (signal - 1)) != 0;
+
+  @override
+  String toString() =>
+      'JobControlProcess(parent: $parent, group: $group, '
+      'ignored: 0x${ignored.toRadixString(16)}, '
+      'caught: 0x${caught.toRadixString(16)})';
 }
 
 /// Whether [error], from terminal I/O, says the terminal itself is
