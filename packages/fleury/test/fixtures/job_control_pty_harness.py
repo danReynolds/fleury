@@ -481,11 +481,20 @@ def _status_code(status):
     return code if code >= 0 else 128 - code
 
 
+def _default_job_control():
+    """Puts SIGTSTP back to its default, as a launcher that is no shell has
+    it: an ignored SIGTSTP survives fork and exec, so a test runner started
+    with it ignored would otherwise hand every stand-in a shell's disposition.
+    """
+    signal.signal(signal.SIGTSTP, signal.SIG_DFL)
+
+
 def plain_launcher(argv, env):
     """A launcher that is no shell, as tini is under `docker run --init`: it
     starts the command in a process group of its own, gives that group the
     terminal, and waits for it. SIGTSTP keeps its default, which would stop
     the launcher itself, and nothing continues a stopped job."""
+    _default_job_control()
     signal.signal(signal.SIGTTOU, signal.SIG_IGN)
     child = os.fork()
     if child == 0:
@@ -504,6 +513,7 @@ def login_standin(argv, env):
     """What macOS's `login` does for a terminal tab: runs the user's shell as
     its child and waits for it, with no job control of its own (SIGTSTP keeps
     its default)."""
+    _default_job_control()
     child = os.fork()
     if child == 0:
         try:
@@ -520,6 +530,7 @@ def orphaning_launcher(argv, env):
     job does. The command is left to pid 1, launchd on macOS, which ignores
     SIGTSTP but continues nothing. The leader stays, as `login` would, until
     the command ends."""
+    _default_job_control()
     signal.signal(signal.SIGTTOU, signal.SIG_IGN)
     read_end, write_end = os.pipe()
     creator = os.fork()

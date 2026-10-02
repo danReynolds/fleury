@@ -237,8 +237,19 @@ void main() {
 /// Starts `/bin/sh -c [script]`, which ends up sleeping, and waits until its
 /// trap is set up (a `ps` round trip is enough: the script's first command is
 /// the trap).
+///
+/// The shell starts with SIGTSTP at its default whatever this test runner
+/// was started with: an ignored SIGTSTP survives exec, and a non-interactive
+/// shell can neither trap nor reset a signal that was ignored when it
+/// started. Python puts it back, then becomes the shell.
 Future<Process> _sleeper(String script) async {
-  final process = await Process.start('/bin/sh', ['-c', script]);
+  final process = await Process.start('python3', [
+    '-c',
+    'import os, signal, sys; '
+        'signal.signal(signal.SIGTSTP, signal.SIG_DFL); '
+        'os.execv("/bin/sh", ["/bin/sh", "-c", sys.argv[1]])',
+    script,
+  ]);
   addTearDown(() {
     process.kill(ProcessSignal.sigkill);
     return process.exitCode;
