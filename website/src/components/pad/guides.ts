@@ -147,7 +147,8 @@ for (const root of document.querySelectorAll<HTMLDialogElement>('.guide-pad')) {
     if (value) {
       previousOverflow = document.documentElement.style.overflow;
       document.documentElement.style.overflow = 'hidden'; root.setAttribute('role', 'dialog'); root.showModal();
-      void mountEditor();
+      // Expanded code stays read-only without a compiler, as it does inline.
+      if (root.dataset.compiler) void mountEditor();
     } else { root.open = true; root.setAttribute('role', 'group'); document.documentElement.style.overflow = previousOverflow; }
     expand.setAttribute('aria-expanded', String(value));
     expand.setAttribute('aria-label', value ? 'Exit fullscreen' : `Expand ${project.id} playground`);

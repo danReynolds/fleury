@@ -1,5 +1,6 @@
 ---
-import { Icon } from '@astrojs/starlight/components';
+import { Code, Icon } from '@astrojs/starlight/components';
+import sample from '../../../experiments/fleury_pad/lib/main.dart?raw';
 const proxyTarget = import.meta.env.DEV ? import.meta.env.FLEURY_PAD_PROXY_TARGET?.replace(/\/$/, '') : undefined;
 const compilerUrl = proxyTarget ? '/fleury/__pad' : (import.meta.env.PUBLIC_FLEURY_PAD_COMPILER_URL?.replace(/\/$/, '') ?? '');
 if (compilerUrl && !proxyTarget) {
@@ -9,8 +10,12 @@ if (compilerUrl && !proxyTarget) {
   }
 }
 const frameUrl = `${compilerUrl}/frame.html`;
+// Without a compiler nothing here can run, so the page shows its example
+// read-only, as every GuidePad does. Docs deploys leave the compiler out when
+// the live one can't compile them (website/scripts/pad-compiler-guard.mjs).
 ---
 
+{compilerUrl ? (
 <dialog open role="group" aria-labelledby="_top" class="fleury-pad not-content" data-compiler={compilerUrl} data-frame={frameUrl} data-compact="true" data-mode="editor" data-running="false" data-busy="false">
   <header class="pad-toolbar">
     <div class="pad-heading">
@@ -77,12 +82,24 @@ const frameUrl = `${compilerUrl}/frame.html`;
   </div>
   <noscript>Enable JavaScript to edit and run Dart in Fleury Pad.</noscript>
 </dialog>
+) : (
+  <section class="pad-offline not-content" aria-labelledby="_top">
+    <div class="pad-heading">
+      <h1 id="_top">Fleury Pad<span class="pad-dot" aria-hidden="true"></span></h1>
+      <p>Fleury Pad can't run code right now, so here is its example to read. The live previews throughout the docs still work.</p>
+    </div>
+    <Code code={sample} lang="dart" title="main.dart" />
+  </section>
+)}
 <script>
   if (document.querySelector('.fleury-pad')) import('./pad/client');
 </script>
 
 <style is:global>
   #fleury-pad-main { padding: 0; }
+  .pad-offline { max-width: 56rem; padding: 1.15rem 1.5rem 1.5rem; }
+  .pad-offline .pad-heading { margin-bottom: 1.15rem; }
+  .pad-offline .pad-dot { background: var(--sl-color-gray-4); }
   .fleury-pad { container: fleury-pad / inline-size; box-sizing: border-box; position: relative; inset: auto; width: 100%; max-width: none; max-height: none; margin: 0; border: 0; padding: 0 1.5rem 1.25rem; height: calc(100dvh - var(--sl-nav-height)); min-height: 360px; display: flex; flex-direction: column; background: var(--sl-color-black); color: var(--sl-color-text); font-family: var(--sl-font); }
   .fleury-pad:modal { position: fixed; inset: 0; width: 100vw; height: 100dvh; }
   .fleury-pad::backdrop { background: var(--sl-color-black); }

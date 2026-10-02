@@ -10,6 +10,10 @@ on:
   # push to main meant that surfaced *after* merge, with main's docs left
   # broken until someone noticed.
   pull_request:
+  # Deploys main again, such as after a Pad compiler release (see "Check the
+  # live Pad compiler" below): Actions > docs > Run workflow on main, or
+  # `gh workflow run docs --ref main`. The github-pages environment deploys
+  # only from main.
   workflow_dispatch:
 
 permissions:
@@ -24,9 +28,16 @@ concurrency:
 jobs:
   build:
     runs-on: ubuntu-latest
+    outputs:
+      # The compiler check's verdict, for the "Pad compiler" job below. Empty
+      # when the check didn't reach one.
+      pad-verdict: ${{ steps.pad.outputs.verdict }}
     steps:
       - name: Checkout
         uses: actions/checkout@v6
+        with:
+          # A PR's merge commit and its base, which the compiler check diffs.
+          fetch-depth: 2
       - name: Set up Dart
         uses: dart-lang/setup-dart@v1
         with:
@@ -34,9 +45,61 @@ jobs:
       - name: Resolve Dart documentation examples
         working-directory: website/examples
         run: dart pub get
+      - name: Generate the docs' Pad projects
+        working-directory: website/examples
+        run: dart run bin/guide_projects.dart
+      - name: Set up Node
+        uses: actions/setup-node@v7
+        with:
+          node-version: 24
+      # The docs deploy on every push to main, but the Pad compiler behind their
+      # Run buttons is released by hand. When the docs need a library or API the
+      # serving compiler predates, every editable demo's Run fails to compile
+      # (after #291, for over an hour). So before building, compile a sample of
+      # the docs' projects on the live compiler, as a reader's Run sends them.
+      #
+      # On main, Run is enabled only if they compile. Otherwise this deploy
+      # still ships, with the compiler URL left empty: Pads are read-only beside
+      # their prebuilt demos, and the build carries an error annotation and a
+      # job summary naming each failing project. Then the "Pad compiler" job
+      # fails the run, after the deploy, so main shows an X and GitHub emails.
+      # To restore Run, release the Pad compiler from that commit
+      # (experiments/fleury_pad/DEPLOYMENT.md), then re-run this workflow
+      # (workflow_dispatch on main, or "Re-run all jobs" on main's newest run).
+      #
+      # On a pull request it only warns that the PR needs a compiler release
+      # after it merges; its build is unchanged. A PR that changes nothing the
+      # docs send the compiler skips the check: each one wakes the
+      # scale-to-zero compiler, which bills for its idle minutes afterward.
+      #
+      # The step never fails the job. If it errors, its outputs are empty: the
+      # deploy is read-only rather than unchecked, and the run still ends red.
+      - name: Check the live Pad compiler
+        id: pad
+        continue-on-error: true
+        timeout-minutes: 8
+        env:
+          COMPILER_URL: ${{ vars.FLEURY_PAD_COMPILER_URL }}
+          EVENT: ${{ github.event_name }}
+        run: |
+          mode=deploy
+          if [ "$EVENT" = pull_request ]; then
+            mode=pull-request
+            # HEAD^1 is the PR's base: the first parent of GitHub's merge commit.
+            if git diff --quiet HEAD^1 HEAD -- website/examples packages/samples \
+                experiments/fleury_pad/lib experiments/fleury_pad/dartpad/web \
+                website/src/components/pad website/scripts/pad-compiler-guard.mjs \
+                .github/workflows/pages.yml; then
+              echo "This PR doesn't change what the docs send the Pad compiler; not checking it."
+              exit 0
+            fi
+          fi
+          node website/scripts/pad-compiler-guard.mjs --mode "$mode" --compiler "$COMPILER_URL"
       - name: Build GitHub Pages artifact
         env:
-          PUBLIC_FLEURY_PAD_COMPILER_URL: ${{ vars.FLEURY_PAD_COMPILER_URL }}
+          # A PR builds with the configured compiler whatever the check found;
+          # a deploy uses only the compiler the check verified.
+          PUBLIC_FLEURY_PAD_COMPILER_URL: ${{ github.event_name == 'pull_request' && vars.FLEURY_PAD_COMPILER_URL || steps.pad.outputs.compiler-url }}
         uses: withastro/action@v6
         with:
           path: website
@@ -59,3 +122,37 @@ jobs:
       - name: Deploy GitHub Pages
         id: deployment
         uses: actions/deploy-pages@v4
+
+  # Ends a deploy's run red when the docs shipped without Run, so a stale or
+  # unreachable compiler gets noticed: main shows an X and GitHub emails. (After
+  # #291, every Run failed for over an hour before anyone noticed.) It runs
+  # after the deploy, so the docs stay current either way. Push fires only for
+  # main; a pull request skips this job, as it skips the deploy.
+  pad-compiler:
+    name: Pad compiler
+    needs: [build, deploy]
+    if: github.event_name == 'push' || github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Fail unless the deployed docs can run their Pads
+        env:
+          VERDICT: ${{ needs.build.outputs.pad-verdict }}
+          SHA: ${{ github.sha }}
+        run: |
+          case "$VERDICT" in
+            compatible)
+              echo "The live Pad compiler compiled the docs' sample: the deployed docs have Run."
+              exit 0 ;;
+            skipped)
+              echo "FLEURY_PAD_COMPILER_URL is empty: Pads are read-only by configuration."
+              exit 0 ;;
+            incompatible)
+              echo "The live Pad compiler can't compile this commit's docs; the build job's summary names the projects." ;;
+            unavailable)
+              echo "The live Pad compiler didn't answer, or refused the docs origin; see the build job's summary. If it's down rather than stale, re-run once it answers." ;;
+            *)
+              echo "The compiler check reached no verdict (see the build job's log), so the docs deployed read-only." ;;
+          esac
+          echo "::error title=Pad compiler::Pad compiler can't run these docs; Run is disabled. Release the compiler from $SHA (experiments/fleury_pad/DEPLOYMENT.md), then re-run this workflow."
+          echo "Run the workflow on main, or Re-run all jobs on main's newest run. Re-running only this job reads the same verdict, and the deployed docs stay read-only."
+          exit 1
