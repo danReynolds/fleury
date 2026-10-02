@@ -22,10 +22,10 @@ import sys
 import termios
 import time
 
-import pyte
-
 ROOT = Path(__file__).resolve().parents[1]
 PACKAGE = ROOT / "packages/fleury"
+# What Session.fg sends the guard (run_as_foreground_job) for `fg`.
+GUARD_FG = signal.SIGUSR1
 
 
 class Session:
@@ -41,6 +41,9 @@ class Session:
         self.hold_replies = False
         self.held_replies = []
         self.set_size(cols, rows)
+        # Only the harness emulates a terminal; the guard process imports
+        # this module without the emulator.
+        import pyte
         owner = self
 
         class Screen(pyte.HistoryScreen):
@@ -83,6 +86,20 @@ class Session:
         children = subprocess.run(['pgrep', '-P', str(self.child.pid)],
                                   capture_output=True, text=True).stdout
         return [int(pid) for pid in children.split()]
+
+    def foreground_group(self):
+        """The terminal's foreground process group, as ps reports it. Only a
+        process in the PTY's session may ask the terminal itself."""
+        out = subprocess.run(['ps', '-o', 'tpgid=', '-p', str(self.child.pid)],
+                             capture_output=True, text=True).stdout.strip()
+        return int(out) if out else None
+
+    def fg(self):
+        """`fg`: asks the guard to give its stopped job the terminal again and
+        continue it (see run_as_foreground_job). The guard leads the PTY's
+        session; this process is outside it and cannot give the terminal to
+        anyone."""
+        os.kill(self.child.pid, GUARD_FG)
 
     def resize(self, cols, rows):
         # Commit old-size output before changing the emulator's geometry.
@@ -128,7 +145,10 @@ class Session:
                 return
             if self.child.poll() is not None:
                 break
-        raise AssertionError(f"{label}\n{self.text()}\n{bytes(self.raw[-1500:])!r}")
+        raise AssertionError(
+            f"{label}\n{self.text()}\n{bytes(self.raw[-1500:])!r}\n"
+            f"guard exit status: {self.child.poll()}\n"
+            f"processes:\n{session_processes(self)}")
 
     def text(self):
         return "\n".join(self.screen.display)
@@ -165,12 +185,14 @@ class Session:
             assert "INLINE-READY" not in self.text(), "live region survived cleanup"
 
     def close(self):
-        # A failed suspend assertion can leave Dart stopped. Resume the app's
-        # job, which the guard runs in a process group of its own, then the
-        # guard's, so teardown can reap them on macOS as well.
+        # A failed assertion can leave the app's job stopped, with the guard
+        # holding the terminal while it waits for `fg`. SIGKILL ends a stopped
+        # process as well, so end the job's process group (the guard notices,
+        # as a shell notices a stopped job killed from elsewhere), then the
+        # guard's own, without continuing anything into a terminal it no
+        # longer owns.
         for group in dict.fromkeys([*self.job_groups(), self.child.pid]):
             try:
-                os.killpg(group, signal.SIGCONT)
                 os.killpg(group, signal.SIGKILL)
             except (ProcessLookupError, PermissionError):
                 pass
@@ -272,13 +294,25 @@ def supervised_suspend(dart):
 
 
 def session_processes(app):
-    """The processes in the PTY's session, with their groups, the terminal's
-    foreground group, and their states."""
-    sid = os.getsid(app.child.pid)
-    rows = subprocess.run(['ps', '-eo', 'pid,ppid,pgid,sid,tpgid,stat,args'],
+    """The processes on the PTY or descended from its session leader, with
+    their groups, the terminal's foreground group, their states, and what
+    each is waiting in (WCHAN). macOS's ps has no session id, so this goes by
+    terminal and ancestry."""
+    try:
+        tty = os.ttyname(app.slave).removeprefix('/dev/')
+    except OSError:
+        tty = None
+    rows = subprocess.run(['ps', '-A', '-o', 'pid,ppid,pgid,tpgid,stat,wchan,tty,command'],
                           capture_output=True, text=True).stdout.splitlines()
+    parents = {}
+    for row in rows[1:]:
+        fields = row.split()
+        parents[fields[0]] = fields[1]
+    tree = {str(app.child.pid)}
+    for _ in range(8):
+        tree |= {pid for pid, parent in parents.items() if parent in tree}
     return "\n".join(rows[:1] + [row for row in rows[1:]
-                                  if row.split()[3] == str(sid)])
+                                  if row.split()[0] in tree or row.split()[6] == tty])
 
 
 def kernel_view(pids):
@@ -318,17 +352,20 @@ def termios_diff(expected, actual):
 
 def suspend_and_resume(app, job):
     """Presses Ctrl+Z, checks that every process in [job] stopped and that
-    the terminal is the shell's again, then continues the job as `fg` does.
-    Fleury suspends only a job a job-control shell started; the guard runs
-    the app as one (see run_as_foreground_job)."""
+    the terminal is the shell's again, with exactly the modes it had before
+    the app started, then has the guard `fg` the job. Fleury suspends only a
+    job a job-control shell started; the guard runs the app as one (see
+    run_as_foreground_job)."""
     # Ctrl+Z reaches the app first, and the autofocused field would take it as
     # undo. Focus the button, which leaves the chord unhandled, so it becomes
     # the terminal's job control.
     app.click(app.row("Click me"))
     app.wait(lambda: "clicks=1" in app.text(), "focus the button")
+    start = len(app.raw)
     app.send(b"\x1a")
     end = time.monotonic() + 5
     states = []
+    foreground = None
     while time.monotonic() < end:
         # Deliberately fragment reads: stopping is not evidence that the
         # emulator has consumed every preceding terminal write.
@@ -336,10 +373,15 @@ def suspend_and_resume(app, job):
         states = [subprocess.run(['ps', '-o', 'stat=', '-p', str(pid)],
                                  capture_output=True, text=True).stdout.strip()
                   for pid in job]
-        if all('T' in state for state in states):
+        foreground = app.foreground_group()
+        if all('T' in state for state in states) and foreground == app.child.pid:
             break
     assert all('T' in state for state in states), \
         f"Ctrl+Z did not suspend the job: {dict(zip(job, states))}"
+    # The guard, like a shell, took the terminal back when the job stopped.
+    assert foreground == app.child.pid, (
+        f"the guard did not get the terminal back: foreground group "
+        f"{foreground}\nprocesses:\n{session_processes(app)}")
     # The stopped app has flushed its cleanup output, but that output may
     # still be queued on the PTY. Drain it before inspecting the screen; no
     # sleep or relaxed screen assertion is needed.
@@ -359,9 +401,21 @@ def suspend_and_resume(app, job):
         f"processes:\n{session_processes(app)}\n"
         f"kernel view:\n{kernel_view(job)}\n"
         f"output tail: {bytes(app.raw[-600:])!r}")
-    # fg continues the job's whole process group, not only the app.
-    os.killpg(os.getpgid(job[0]), signal.SIGCONT)
+    # Nor did it write anything after restoring them: the exit sequences show
+    # the cursor, and every enter sequence hides it again.
+    suspended = bytes(app.raw[start:])
+    shown = suspended.rfind(b"\x1b[?25h")
+    assert shown >= 0 and b"\x1b[?25l" not in suspended[shown:], (
+        f"the app re-entered its modes before it stopped: "
+        f"{suspended[max(0, shown - 200):]!r}\n"
+        f"processes:\n{session_processes(app)}\n"
+        f"kernel view:\n{kernel_view(job)}")
+    # fg gives the job the terminal again and continues its whole process
+    # group, not only the app.
+    group = os.getpgid(job[0])
+    app.fg()
     app.wait(lambda: "INLINE-READY" in app.text(), "resume frame")
+    assert app.foreground_group() == group, "fg did not give the job the terminal"
 
 
 def signals(dart):
@@ -406,23 +460,82 @@ def resize_exit(dart, *, executable=None):
 
 
 def run_as_foreground_job(command):
-    """Runs [command] the way an interactive shell runs a job, and returns its
-    exit code: in a process group of its own that owns the terminal's
-    foreground. Fleury suspends on Ctrl+Z only for such a job. The session
+    """Runs [command] as an interactive job-control shell runs a job, and
+    returns its exit code (negative for a signal, as Popen reports one).
+
+    It does what `bash -i` does with a job:
+    - it ignores SIGTSTP, SIGTTIN and SIGTTOU, so job control never stops it
+      and it can take the terminal back from the background;
+    - it starts the job in a process group of its own and gives that group
+      the terminal's foreground;
+    - it waits with WUNTRACED, and when the job stops it takes the terminal
+      back (tcsetpgrp to its own group). Unlike a shell, it leaves the
+      terminal's modes as the job left them, so the harness inspects exactly
+      what the app left;
+    - on `fg` (GUARD_FG from the harness, which is outside this session and
+      cannot give the job the terminal itself; see Session.fg) it gives the
+      job the terminal again and continues its whole process group;
+    - when the job ends, it takes the terminal back.
+
+    Fleury suspends on Ctrl+Z only for a job a job-control shell started: the
+    job's own process group, in the terminal's foreground. The session
     leader's own group, where a command started with no shell runs, has
     nothing above it to continue a stopped app."""
-    # A background group's tcsetpgrp raises SIGTTOU; shells ignore it.
-    signal.signal(signal.SIGTTOU, signal.SIG_IGN)
+    terminal = 0
+    shell_group = os.getpgrp()
+    job_control = (signal.SIGTSTP, signal.SIGTTIN, signal.SIGTTOU)
+    for sig in job_control:
+        signal.signal(sig, signal.SIG_IGN)
+    fg_requested = False
 
-    def become_foreground_job():
-        os.setpgid(0, 0)
-        os.tcsetpgrp(0, os.getpgrp())
-        signal.signal(signal.SIGTTOU, signal.SIG_DFL)
+    def request_fg(signum, frame):
+        nonlocal fg_requested
+        fg_requested = True
 
-    job = subprocess.Popen(command, preexec_fn=become_foreground_job)
-    code = job.wait()
-    os.tcsetpgrp(0, os.getpgrp())
-    return code
+    signal.signal(GUARD_FG, request_fg)
+    job = os.fork()
+    if job == 0:
+        try:
+            os.setpgid(0, 0)
+            os.tcsetpgrp(terminal, os.getpgrp())
+            # Ignored signals stay ignored across exec; the job gets the
+            # defaults, as a shell's jobs do.
+            for sig in (*job_control, GUARD_FG):
+                signal.signal(sig, signal.SIG_DFL)
+            os.execvp(command[0], command)
+        except BaseException as error:
+            os.write(2, f'guard: cannot run {command[0]}: {error}\r\n'.encode())
+        finally:
+            os._exit(127)
+    # As a shell does, from both sides, so the job leads its own foreground
+    # group before either process goes on, whichever runs first.
+    try:
+        os.setpgid(job, job)
+        os.tcsetpgrp(terminal, job)
+    except OSError:
+        pass  # The job has already exec'd (EACCES) or exited.
+    while True:
+        _, status = os.waitpid(job, os.WUNTRACED)
+        if not os.WIFSTOPPED(status):
+            break
+        # The job stopped: the shell gets its terminal back, its modes
+        # untouched.
+        os.tcsetpgrp(terminal, shell_group)
+        ended = False
+        while not fg_requested:
+            # A stopped job can still be killed from elsewhere.
+            done, status = os.waitpid(job, os.WNOHANG)
+            if done:
+                ended = True
+                break
+            time.sleep(0.01)
+        if ended:
+            break
+        fg_requested = False
+        os.tcsetpgrp(terminal, job)
+        os.killpg(job, signal.SIGCONT)
+    os.tcsetpgrp(terminal, shell_group)
+    return os.waitstatus_to_exitcode(status)
 
 
 if __name__ == "__main__":
