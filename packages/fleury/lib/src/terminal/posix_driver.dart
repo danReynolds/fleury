@@ -2496,12 +2496,21 @@ final class PosixJobControl {
   /// False when a process on the way can't be read ([read] returns null) or
   /// the chain ends first: without knowing who would continue a stopped job,
   /// a session doesn't stop.
+  ///
+  /// A job whose creator has exited is left to pid 1. On macOS that is
+  /// always launchd, which ignores SIGTSTP but continues nothing, so reaching
+  /// it means no shell. On Linux pid 1 can be the user's shell, in a
+  /// container started as `docker run -it image bash`, so it is judged like
+  /// any other process there. [initCanBeShell] (default: not on macOS) says
+  /// which applies.
   @visibleForTesting
   static bool createdByJobControl(
     int self,
     int group,
-    JobControlProcess? Function(int pid) read,
-  ) {
+    JobControlProcess? Function(int pid) read, {
+    bool? initCanBeShell,
+  }) {
+    final init = initCanBeShell ?? !_darwin;
     var process = read(self);
     // A bound: process trees are acyclic, but /proc is read one entry at a
     // time while processes come and go.
@@ -2510,7 +2519,10 @@ final class PosixJobControl {
       if (parentPid <= 0) return false;
       final parent = read(parentPid);
       if (parent == null) return false;
-      if (parent.group != group) return parent.handlesSignal(sigtstp);
+      if (parent.group != group) {
+        if (parentPid == 1 && !init) return false;
+        return parent.handlesSignal(sigtstp);
+      }
       process = parent;
     }
     return false;

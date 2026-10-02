@@ -115,6 +115,34 @@ void main() {
       );
     });
 
+    test('a job left to pid 1 has no shell on macOS, where pid 1 is '
+        'launchd', () {
+      // launchd ignores SIGTSTP, as a shell does, but continues nothing.
+      final orphaned = {
+        50: const JobControlProcess(parent: 1, group: 50),
+        1: JobControlProcess(parent: 0, group: 1, ignored: tstp),
+      };
+      expect(
+        PosixJobControl.createdByJobControl(
+          50,
+          50,
+          (pid) => orphaned[pid],
+          initCanBeShell: false,
+        ),
+        isFalse,
+      );
+      // On Linux pid 1 can be the shell itself: `docker run -it image bash`.
+      expect(
+        PosixJobControl.createdByJobControl(
+          50,
+          50,
+          (pid) => orphaned[pid],
+          initCanBeShell: true,
+        ),
+        isTrue,
+      );
+    });
+
     test('a chain that never leaves the group says no', () {
       expect(
         created({

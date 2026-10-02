@@ -9,7 +9,8 @@ prompt back and ran a command — the observable meaning of "suspended" — then
 brings the job back with `fg` and quits the app with Ctrl+Q.
 
 usage: job_control_pty_harness.py <work-dir> [--supervised] [--suspend-key]
-           [--no-shell | --launcher | --login-exec=<shell>] -- <command...>
+           [--no-shell | --launcher | --orphaned | --login-exec=<shell>]
+           -- <command...>
 
 --supervised waits for the hot-reload supervisor to wire the app before
 suspending it. --suspend-key drives the fixture's composer
@@ -20,10 +21,11 @@ with no shell at all, the way a terminal emulator, a tmux pane, or `ssh -t host
 app` does: the command is the session leader and the PTY's controlling
 process, so nothing could continue it if it stopped. --launcher runs it under
 a launcher that is no shell but gives it a foreground process group of its own,
-as tini does under `docker run --init`. --login-exec=<shell> has a `login`
-stand-in run an interactive <shell>, which `exec`s the command: fish and tcsh
-keep the process group they made for themselves, so the command leads a
-foreground group of its own with no shell above it. In these three the harness
+as tini does under `docker run --init`. --orphaned has the launcher that gave
+it that group exit at once, leaving the command to pid 1. --login-exec=<shell>
+has a `login` stand-in run an interactive <shell>, which `exec`s the command:
+fish and tcsh keep the process group they made for themselves, so the command
+leads a foreground group of its own with no shell above it. In these the harness
 presses Ctrl+Z and Ctrl+T and records whether each reached the app and whether
 the terminal and the processes were left alone. The app must be that fixture
 (or honour its FLEURY_JOB_PID_OUT and FLEURY_JOB_EVENTS_OUT contract).
@@ -352,6 +354,14 @@ class Harness:
         self.note('command started by a plain launcher')
         self.expect_no_suspension(self.wait_for_app(0))
 
+    def run_orphaned(self):
+        """The command leads a foreground process group whose creator has
+        exited, leaving it to pid 1 (orphaning_launcher)."""
+        self.start_session(self.command[0], self.command, {},
+                           leader=orphaning_launcher)
+        self.note('command orphaned by its launcher')
+        self.expect_no_suspension(self.wait_for_app(0))
+
     def run_exec_under_login(self, shell):
         """A `login` stand-in (login_standin) runs an interactive [shell], and
         the shell `exec`s the command."""
@@ -504,6 +514,40 @@ def login_standin(argv, env):
     return _status_code(status)
 
 
+def orphaning_launcher(argv, env):
+    """A session leader whose child gives the command a foreground process
+    group of its own and exits at once, as a shell killed out from under its
+    job does. The command is left to pid 1, launchd on macOS, which ignores
+    SIGTSTP but continues nothing. The leader stays, as `login` would, until
+    the command ends."""
+    signal.signal(signal.SIGTTOU, signal.SIG_IGN)
+    read_end, write_end = os.pipe()
+    creator = os.fork()
+    if creator == 0:
+        try:
+            os.close(read_end)
+            job = os.fork()
+            if job == 0:
+                os.close(write_end)
+                os.setpgid(0, 0)
+                os.tcsetpgrp(0, os.getpgrp())
+                signal.signal(signal.SIGTTOU, signal.SIG_DFL)
+                os.execvpe(argv[0], argv, env)
+            os.write(write_end, str(job).encode())
+        finally:
+            os._exit(0)
+    os.close(write_end)
+    job = int(os.read(read_end, 32) or b'0')
+    os.waitpid(creator, 0)
+    while job:
+        try:
+            os.kill(job, 0)
+        except ProcessLookupError:
+            break
+        time.sleep(0.05)
+    return 0
+
+
 def main():
     args = sys.argv[1:]
     if '--' not in args or args.index('--') < 1 or args[-1] == '--':
@@ -515,7 +559,7 @@ def main():
                        if option.startswith('--login-exec=')), None)
     unknown = {option for option in options
                if not option.startswith('--login-exec=')} - {
-        '--supervised', '--suspend-key', '--no-shell', '--launcher'}
+        '--supervised', '--suspend-key', '--no-shell', '--launcher', '--orphaned'}
     if unknown or (login_exec and login_exec not in INTERACTIVE_FLAGS):
         print(f'unknown options: {sorted(options)}\n{__doc__}', file=sys.stderr)
         return 2
@@ -526,6 +570,8 @@ def main():
             harness.run_without_shell()
         elif '--launcher' in options:
             harness.run_under_launcher()
+        elif '--orphaned' in options:
+            harness.run_orphaned()
         elif login_exec:
             harness.run_exec_under_login(login_exec)
         else:

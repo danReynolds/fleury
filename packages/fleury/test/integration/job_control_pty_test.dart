@@ -185,6 +185,20 @@ void main() {
     );
   }
 
+  // A job whose creator exited is left to pid 1. On macOS that is launchd,
+  // which ignores SIGTSTP, as a shell does, but continues nothing: a stop
+  // there was for good. (Linux's pid 1 can be a shell, so this is macOS's.)
+  test(
+    'an orphaned app never stops on macOS',
+    () async {
+      final run = await _runHarness([dart, packages, fixture], orphaned: true);
+
+      expect(run.appParentPid, 1, reason: run.describe());
+      run.expectNeverSuspended(ownForegroundGroup: true);
+    },
+    skip: Platform.isMacOS ? false : 'pid 1 is launchd only on macOS',
+  );
+
   // The orderly suspend restores the terminal, stops the job, and re-enters
   // the moment the stop returns. Linux gives a signal sent to the whole
   // process to its main thread, which the Dart VM leaves waiting while the
@@ -243,6 +257,7 @@ Future<_HarnessRun> _runHarness(
   bool suspendKey = false,
   bool noShell = false,
   bool launcher = false,
+  bool orphaned = false,
   String? loginExec,
 }) async {
   final packageRoot = Directory.current.absolute.path;
@@ -255,6 +270,7 @@ Future<_HarnessRun> _runHarness(
     if (suspendKey) '--suspend-key',
     if (noShell) '--no-shell',
     if (launcher) '--launcher',
+    if (orphaned) '--orphaned',
     if (loginExec != null) '--login-exec=$loginExec',
     '--',
     ...command,
