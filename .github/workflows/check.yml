@@ -80,23 +80,17 @@ jobs:
           dart pub get
           cd ../..
           python -m pip install -r tool/inline-pty-requirements.txt
-      # TEMPORARY (draft PR experiment, removed before merge).
-      - name: TEMP stop-race probe
-        run: |
-          for where in main isolate; do
-            for fix in none toggle; do
-              python tool/experiments/job_control_flakes/race.py dart 300 "$where" "$fix"
-            done
-          done
-      - name: TEMP suspend loop
+      # TEMPORARY (draft PR experiment, removed before merge): origin/main's
+      # harness and guard (the guard ignoring SIGTSTP, so the new isShellJob
+      # rule admits it), with and without the stop fix.
+      - name: TEMP old-harness suspend loop, stop fix off
         continue-on-error: true
-        run: python tool/experiments/job_control_flakes/suspend_loop.py --loops 25
-      - name: TEMP suspend loop (origin/main's harness and guard)
+        env:
+          AB_STOP_FIX: "off"
+        run: python tool/experiments/job_control_flakes/suspend_loop.py --loops 25 --old-harness
+      - name: TEMP old-harness suspend loop, stop fix on
         continue-on-error: true
         run: python tool/experiments/job_control_flakes/suspend_loop.py --loops 25 --old-harness
-      - name: TEMP sequential loop
-        continue-on-error: true
-        run: python tool/experiments/job_control_flakes/sequential_loop.py --loops 40
       - name: Exercise native acquisition and restoration failures
         working-directory: packages/fleury
         run: >-

@@ -414,11 +414,15 @@ def run_as_foreground_job(command):
     nothing above it to continue a stopped app."""
     # A background group's tcsetpgrp raises SIGTTOU; shells ignore it.
     signal.signal(signal.SIGTTOU, signal.SIG_IGN)
+    # TEMPORARY A/B: ignore SIGTSTP too, as a shell does, so Fleury's new
+    # isShellJob rule lets the app suspend under this old guard.
+    signal.signal(signal.SIGTSTP, signal.SIG_IGN)
 
     def become_foreground_job():
         os.setpgid(0, 0)
         os.tcsetpgrp(0, os.getpgrp())
         signal.signal(signal.SIGTTOU, signal.SIG_DFL)
+        signal.signal(signal.SIGTSTP, signal.SIG_DFL)
 
     job = subprocess.Popen(command, preexec_fn=become_foreground_job)
     code = job.wait()
