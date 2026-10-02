@@ -204,10 +204,11 @@ interactive shell, started the app, since only the shell can bring it back. A
 terminal profile, tmux pane, or `ssh -t host app` that runs the app directly
 leaves `Ctrl+Z` an ordinary key, and so does a launcher that isn't a shell,
 such as `docker run --init`, or a shell's `exec app` in a macOS terminal tab.
-One launcher still passes for a shell: `sudo`, which by default runs the app
-on a terminal of its own and stops itself along with the app. Under your
-shell, `fg` resumes both; run directly by `ssh -t host sudo app`, with no
-shell to resume `sudo`, a suspended app stays stopped.
+One launcher still passes for a shell: `sudo`, which by default since sudo
+1.9.14 runs the app on a terminal of its own and stops itself along with the
+app. Under your shell, `fg` resumes both; run directly by
+`ssh -t host sudo app`, with no shell to resume `sudo`, a suspended app stays
+stopped.
 
 Your code can ask for the same suspension with `session.suspend()`: for
 example, from a key of its own when a focused text field takes every `Ctrl+Z`

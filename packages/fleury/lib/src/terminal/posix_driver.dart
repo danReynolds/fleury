@@ -2444,10 +2444,13 @@ final class PosixJobControl {
   /// Room for a `sigset_t`: 128 bytes with glibc, 4 on Darwin.
   static const _sigsetBytes = 128;
 
-  /// Signals [_takePendingStop] may block for an instant to change this
-  /// thread's mask: SIGUSR2, SIGUSR1, SIGWINCH, SIGURG. Nothing in Fleury
-  /// or the Dart VM needs them delivered within that instant; a blocked one
-  /// stays pending and arrives when the mask is restored.
+  /// Signals [_takePendingStop] may block on the calling thread to change its
+  /// mask: SIGUSR2, SIGUSR1, SIGWINCH, SIGURG. When the stop is still pending
+  /// on Linux, the thread takes it inside that call and stays stopped, the
+  /// signal still blocked, until `fg`, and restores the mask only then.
+  /// Nothing is lost meanwhile: the whole process is stopped, a signal sent
+  /// to the process goes to any thread that doesn't block it, and one sent
+  /// to this thread stays pending until the mask is restored.
   static final List<int> _maskSignals = _darwin
       ? const [31, 30, 28, 16]
       : const [12, 10, 28, 23];
