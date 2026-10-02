@@ -5,7 +5,7 @@ import 'package:fleury_test/fleury_test.dart';
 import 'package:test/test.dart';
 
 import '../lib/testing_guide.dart';
-import 'scenarios/preferences_test.dart';
+import 'scenarios/preferences_tests.dart';
 
 void main() {
   testWidgets('edits only the work preferences', (tester) async {

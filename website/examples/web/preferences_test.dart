@@ -10,7 +10,7 @@ import 'package:fleury_test/fleury_test.dart';
 import 'package:fleury_web/src/dom_grid/cell_grid_html.dart';
 import 'package:test/test.dart' show Matcher, StringDescription, TestFailure;
 
-import '../test/scenarios/preferences_test.dart';
+import '../test/scenarios/preferences_tests.dart';
 
 @JS('fleuryCreatePreferencesTest')
 external set _createPreferencesTest(JSFunction value);
