@@ -3,7 +3,9 @@ build/
 .flutter-plugins-dependencies
 pubspec.lock
 peer-fixtures/**/.python/
-peer-fixtures/**/__pycache__/
+# Python bytecode from the PTY check scripts and fixtures.
+__pycache__/
+*.pyc
 peer-fixtures/**/.pytest_cache/
 peer-fixtures/**/node_modules/
 peer-fixtures/**/.bun/
