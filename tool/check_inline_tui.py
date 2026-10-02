@@ -199,7 +199,21 @@ def interactions(dart, cols, rows):
         app.send(b"\x0f")
         app.wait(lambda: "AFTER-HANDOFF" in app.text(), "subprocess return")
         assert "CHILD-OUTPUT" in app.text(), app.text()
+        # Answer the narrow resize's cursor query 1.5 s late, as a congested
+        # SSH link or a busy terminal does. A fixed one-second deadline ended
+        # the app here whenever a loaded runner delayed the emulator's reply;
+        # the region must wait for the report, then settle on the new width.
+        app.hold_replies = True
+        start = len(app.raw)
         app.resize(cols - 10, rows)
+        app.wait(lambda: b"\x1b[6n" in app.raw[start:], "narrow resize cursor query")
+        until = time.monotonic() + 1.5
+        while time.monotonic() < until:
+            app.pump(0.05)
+        app.hold_replies = False
+        for reply in app.held_replies:
+            app.send(reply)
+        app.held_replies.clear()
         app.wait(lambda: f"{cols-10}x6" in app.text(), "narrow resize")
         app.resize(cols, rows - 3)
         app.wait(lambda: f"{cols}x6" in app.text(), "height resize")
