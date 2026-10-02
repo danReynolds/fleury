@@ -623,7 +623,9 @@ images with `--public` too; the release workflow passes it when the
 `FLEURY_PAD_PUBLIC` repository variable is `true`. Without it, `deploy.py`
 refuses the now-public service instead of making it private. The Pages build
 reads the compiler origin from `FLEURY_PAD_COMPILER_URL`
-(`https://fleury-pad-staging-vbalblwk3q-uc.a.run.app`).
+(`https://fleury-pad-staging-vbalblwk3q-uc.a.run.app`), and first checks that
+this compiler can run the docs; see
+[Docs deploys check the compiler](#docs-deploys-check-the-compiler).
 
 Verified before and after the release:
 
@@ -715,3 +717,50 @@ is released by hand, so a change to the packages' public libraries needs a
 compiler release alongside it. Revision `00017-yoq` predates #291 and cannot
 compile the current docs, so it is no longer a usable rollback target; roll back
 only to a revision built after #291.
+
+## Docs deploys check the compiler
+
+So that a docs deploy can't leave every Run broken, the
+[Pages workflow](../../.github/workflows/pages.yml) runs
+[`website/scripts/pad-compiler-guard.mjs`](../../website/scripts/pad-compiler-guard.mjs)
+before each build. It compiles a sample of the docs' own projects on the live
+compiler, sending what a reader's unedited Run sends, from the docs origin: the
+home demo, guide demos (two span five files), the theming guide's
+`package:fleury/themes.dart`, widget pages, the Pad page's starter, and a
+project for any library those don't import. This takes about 15 seconds on a
+warm compiler. A deploy enables Run only when every one compiles. Otherwise it
+still deploys, with `PUBLIC_FLEURY_PAD_COMPILER_URL` empty: demos are read-only
+beside their prebuilt previews, the Pad page shows its example read-only, and
+nothing offers a Run that would fail. The run carries an error annotation and a
+job summary naming each failing project and its first error.
+
+When a deploy reports that the compiler can't compile the docs:
+
+1. Release the Pad compiler from that commit: build its image, qualify it
+   (`container_check.py --guides` and `startup_check.py`), and release it with
+   `deploy.py … --cpu-boost --promote --public`, as in the releases above.
+2. Re-run the docs workflow: **Re-run all jobs** on that run, or
+   `gh workflow run docs --ref main`. The check now passes, and the deploy
+   enables Run again.
+
+Because Run is enabled only on evidence that it works, a deploy is also
+read-only when the check gets no answer: after three attempts of up to 65
+seconds each (long enough for a cold start), the compiler still hasn't
+responded or keeps returning 429 or 5xx, or it refuses the docs origin. Re-run
+the workflow once the compiler serves the docs again. To withdraw the compiler
+on purpose, also unset `FLEURY_PAD_COMPILER_URL`; the check then skips.
+
+A pull request that changes the docs' examples, or what the docs send the
+compiler, gets the same check as a warning, never a failure: "Needs a Pad
+compiler release after merge". After merging it, release the compiler from
+`main` and re-run the docs deploy. Other pull requests skip the check. Each
+check wakes the scale-to-zero compiler, which bills its idle minutes before it
+scales down; deploys of `main` are the recurring cost.
+
+To run the check locally, generate the projects (`npm run guides:projects` in
+`website/`), then from the repository root:
+
+```sh
+node website/scripts/pad-compiler-guard.mjs \
+  --compiler https://fleury-pad-staging-vbalblwk3q-uc.a.run.app
+```
