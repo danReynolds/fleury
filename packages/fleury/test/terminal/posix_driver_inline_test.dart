@@ -848,6 +848,11 @@ void main() {
         // The report puts the 4-row region at rows 7-10 (row 9, resting row 3).
         expect(released, contains('\x1B[7;1H\x1B[2K'));
         expect(released, contains('\x1B[10;1H\x1B[2K'));
+        expect(
+          released,
+          isNot(contains('\n')),
+          reason: 'the report placed the release; no region was reserved',
+        );
         expect(driver.size, const CellSize(60, 4));
         expect(driver.renderTarget.top, 15, reason: 'the fresh report');
         expect(cursorQueries, 3);
@@ -857,6 +862,35 @@ void main() {
           reason: 'no reply outlived its query to become an F3 press',
         );
       });
+
+      for (final (label, invalid) in [
+        ('row', const CellOffset(0, 24)),
+        ('column', const CellOffset(60, 7)),
+      ]) {
+        test('$transition while an out-of-bounds $label report is on its way '
+            'cannot authorize a clear, and the session goes on', () async {
+          await driver.enter(mode);
+          output.terminalColumns = 60;
+          cursor = invalid;
+          cursorDelay = const Duration(milliseconds: 300);
+          signals[ProcessSignal.sigwinch]!(ProcessSignal.sigwinch);
+          await _settle();
+          output.bytes.clear();
+          String? released;
+          await leaveAndReturn(transition, () {
+            released = output.bytes.toString();
+            cursorDelay = null;
+            cursor = const CellOffset(0, 12);
+          });
+          await _eventually(() => driver.renderTarget.top == 12);
+          await _settle();
+          expect(errors, isEmpty);
+          expect(released, isNot(contains('\x1B[2K')));
+          expect(driver.isActive, isTrue);
+          expect(driver.size, const CellSize(60, 4));
+          expect(driver.renderTarget.top, 12);
+        });
+      }
 
       test('$transition: a report later than its drain, read only after the '
           'return, is not taken for the fresh anchor', () async {
