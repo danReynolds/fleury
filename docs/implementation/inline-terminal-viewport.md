@@ -51,8 +51,15 @@ See the [consumer guide](../../packages/fleury/doc/inline_terminal.md) and
   painting still gated. A live session keeps one query in flight and waits
   up to 10 s for a slow report rather than re-sending it: replies carry no
   query identity, so a duplicate could be answered with stale geometry and
-  leave the other reply to be parsed as an F3 press. Suspend, handoff, and
-  teardown cancel the wait; startup keeps its fixed one-second deadline.
+  leave the other reply to be parsed as an F3 press. Startup keeps its fixed
+  one-second deadline.
+- Suspend, handoff, and teardown cut a pending report's wait to a drain of
+  max(1 s, the startup probes' round-trip deadline). A report that lands in
+  it, for the size it was asked at, places the release's clear (painting has
+  been gated since the query), so exit clears the region without a second
+  query. One that misses it is owed: the runner quarantines it again on
+  resume, so it can't answer the fresh anchor query. Only a reply later than
+  both reaches the shell or a handed-off child.
 - Frame writes and mouse delivery are gated while allocation is uncertain,
   suspended, or handed off. A lifecycle generation prevents pending queries
   from reactivating a restored session. Coalesced height requests emit a final

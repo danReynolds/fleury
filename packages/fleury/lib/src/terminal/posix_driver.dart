@@ -257,6 +257,11 @@ class PosixTerminalDriver
   int _inlineChanges = 0;
   bool _inlineNeedsRepaint = false;
 
+  /// A cursor report that arrived after suspend, handoff, or restore began
+  /// taking the terminal, with the size it was asked at. The region's
+  /// release uses it to clear where the region actually is.
+  (CellSize, CellOffset)? _inlineReleaseAnchor;
+
   @override
   bool get isInline => _inline != null;
 
@@ -596,13 +601,29 @@ class PosixTerminalDriver
   @visibleForTesting
   static Duration inlineCursorReportBudget = const Duration(seconds: 10);
 
+  /// How much longer a cursor report still has to land once suspend,
+  /// handoff, or restore takes the terminal while it is on its way: the
+  /// second every cursor query had before a live session waited longer, or
+  /// three measured round trips on a slower link ([probeTimeoutFor]).
+  ///
+  /// The reply is waited for, not abandoned. It is still the region's own
+  /// evidence, and the release clears the region where it puts it
+  /// ([_inlineReleaseAnchor]). A reply consumed here also can't reach the
+  /// shell, a handed-off child, or the next query. So a stalled terminal
+  /// holds a suspend for at most this long, plus the late-reply quarantine.
+  Duration get _inlineCursorDrain {
+    final roundTrips = probeTimeoutFor(_queryRunner.measuredRoundTrip);
+    const floor = Duration(seconds: 1);
+    return roundTrips > floor ? roundTrips : floor;
+  }
+
   /// How often a wait for a cursor report checks whether suspend, handoff,
-  /// or teardown has taken the terminal ([_whileInlineLive]).
+  /// or teardown has taken the terminal ([_awaitInlineReply]).
   static const _inlineLivenessPoll = Duration(milliseconds: 50);
 
-  /// The 0-based cursor position in [reply], or null when it holds none: a
-  /// terminal can close the exchange with its DA1 sentinel alone.
-  static CellOffset? _parseCursorReport(List<int> reply) {
+  /// The terminal's cursor report in [reply], 0-based, or null when it has
+  /// none: a terminal can close the exchange with its DA1 sentinel alone.
+  CellOffset? _takeCursorReport(List<int> reply) {
     final match = _cursorReport.firstMatch(String.fromCharCodes(reply));
     if (match == null) return null;
     final row = int.tryParse(match[1]!);
@@ -611,14 +632,17 @@ class PosixTerminalDriver
     return CellOffset(col - 1, row - 1);
   }
 
+  static bool _isInside(CellSize physical, CellOffset cursor) =>
+      cursor.col >= 0 &&
+      cursor.col < physical.cols &&
+      cursor.row >= 0 &&
+      cursor.row < physical.rows;
+
   /// Rejects a [cursor] outside the [physical] size its report was asked
   /// under. An impossible coordinate at a stable size must never become a
   /// guessed allocation via clamping.
   static void _checkInlineCursor(CellSize physical, CellOffset cursor) {
-    if (cursor.col < 0 ||
-        cursor.col >= physical.cols ||
-        cursor.row < 0 ||
-        cursor.row >= physical.rows) {
+    if (!_isInside(physical, cursor)) {
       throw StateError(
         'The terminal reported a cursor outside its '
         '${physical.cols}x${physical.rows} viewport. Inline mode cannot '
@@ -635,7 +659,7 @@ class PosixTerminalDriver
         _inlineCursorQuery,
         timeout: timeout,
       );
-      final cursor = _parseCursorReport(reply);
+      final cursor = _takeCursorReport(reply);
       if (cursor != null) return cursor;
     } on TimeoutException {
       // A cursor report is required ownership evidence, not an optional
@@ -693,9 +717,11 @@ class PosixTerminalDriver
   /// round-trip deadline the startup probes use ([probeTimeoutFor]) and
   /// doubles.
   ///
-  /// Returns null once the answer stops mattering: [restore] has begun, or,
-  /// unless [reacquire], a suspend or handoff is taking the terminal. Each
-  /// releases the region itself, and a return acquires a fresh anchor.
+  /// When restore, or (unless [reacquire]) a suspend or handoff, takes the
+  /// terminal mid-wait, the reply still gets [_inlineCursorDrain] to land.
+  /// A report that does land, for the size it was asked at, is returned for
+  /// the region's release; otherwise this returns null. Each of those
+  /// transitions releases the region, and a return acquires a fresh anchor.
   Future<(CellSize, CellOffset)?> _awaitInlineAnchor({
     required bool reacquire,
   }) async {
@@ -715,16 +741,13 @@ class PosixTerminalDriver
       }
       final remaining = budget - sinceReport.elapsed;
       if (remaining <= Duration.zero) break;
-      final List<int>? reply;
+      final List<int> reply;
       try {
-        // Interruptible: suspend, handoff, and restore release input through
-        // TerminalQueryRunner.suspend, which ends this wait instead of
-        // holding the terminal for the rest of the budget.
-        reply = await _whileInlineLive(
+        reply = await _awaitInlineReply(
           _queryRunner.request(
             _inlineCursorQuery,
             timeout: remaining,
-            interruptible: true,
+            interruptTimeout: _inlineCursorDrain,
           ),
           live,
         );
@@ -735,16 +758,24 @@ class PosixTerminalDriver
         if (!live()) return null;
         rethrow;
       }
-      if (reply == null || !live()) return null;
-      final cursor = _parseCursorReport(reply);
+      final cursor = _takeCursorReport(reply);
+      if (!live()) {
+        // The terminal was taken while this reply was on its way, and it
+        // landed within the drain. Painting has been gated since the query
+        // went out, so a report for the size it was asked at still places
+        // the region, and its release can clear exactly those rows.
+        return cursor != null &&
+                physical == _physicalSize &&
+                _isInside(physical, cursor)
+            ? (physical, cursor)
+            : null;
+      }
       if (cursor == null) {
         final left = budget - sinceReport.elapsed;
         if (left <= Duration.zero) break;
-        final paused = await _whileInlineLive(
-          Future<bool>.delayed(pause < left ? pause : left, () => true),
-          live,
-        );
-        if (paused == null) return null;
+        if (!await _pauseInline(pause < left ? pause : left, live)) {
+          return null;
+        }
         pause = pause * 2 < _maxProbeTimeout ? pause * 2 : _maxProbeTimeout;
         continue;
       }
@@ -766,30 +797,38 @@ class PosixTerminalDriver
     );
   }
 
-  /// [work]'s result, or null as soon as [live] stops holding.
+  /// [request]'s reply, waited for while [live] holds.
   ///
-  /// Suspend, handoff, and restore gate the session without a word to a wait
-  /// in progress, then wait for the geometry change it belongs to before
-  /// they release the terminal. Looking at [live] every
-  /// [_inlineLivenessPoll] lets them go ahead without waiting out a cursor
-  /// report. [work] runs on regardless; its outcome is then ignored.
-  Future<T?> _whileInlineLive<T extends Object>(
-    Future<T> work,
+  /// Suspend, handoff, and restore gate the session without a word to this
+  /// wait, then wait for the geometry change it belongs to before they
+  /// release the terminal. Checking [live] every [_inlineLivenessPoll] is
+  /// how it finds out. It then cuts the exchange to [_inlineCursorDrain]
+  /// ([TerminalQueryRunner.interrupt]), so the reply still resolves soon
+  /// after, if it lands in that time.
+  Future<List<int>> _awaitInlineReply(
+    Future<List<int>> request,
     bool Function() live,
   ) {
-    final result = Completer<T?>();
-    final poll = Timer.periodic(_inlineLivenessPoll, (_) {
-      if (!live() && !result.isCompleted) result.complete(null);
+    final poll = Timer.periodic(_inlineLivenessPoll, (timer) {
+      if (live()) return;
+      timer.cancel();
+      _queryRunner.interrupt();
     });
-    work.then(
-      (value) {
-        if (!result.isCompleted) result.complete(value);
-      },
-      onError: (Object error, StackTrace stack) {
-        if (!result.isCompleted) result.completeError(error, stack);
-      },
-    );
-    return result.future.whenComplete(poll.cancel);
+    return request.whenComplete(poll.cancel);
+  }
+
+  /// Waits [pause], or less once [live] stops holding; returns whether it
+  /// held throughout.
+  Future<bool> _pauseInline(Duration pause, bool Function() live) async {
+    final clock = Stopwatch()..start();
+    while (live()) {
+      final left = pause - clock.elapsed;
+      if (left <= Duration.zero) return true;
+      await Future<void>.delayed(
+        left < _inlineLivenessPoll ? left : _inlineLivenessPoll,
+      );
+    }
+    return false;
   }
 
   @override
@@ -838,16 +877,19 @@ class PosixTerminalDriver
           ),
         );
       }
+      _inlineReleaseAnchor = null;
       final anchor = inline.isAllocated && physical == inline.terminalSize
           ? (physical, inline.terminalCursor)
           : await _awaitInlineAnchor(reacquire: reacquire);
-      // Null: suspend, handoff, or teardown took the terminal while the
-      // report was on its way. Each releases the region itself, and a return
-      // from suspend or handoff acquires a fresh anchor.
-      if (anchor == null ||
-          !_active ||
+      if (anchor == null) return;
+      if (!_active ||
           _restoring ||
-          generation != _lifecycleGeneration) {
+          generation != _lifecycleGeneration ||
+          (!reacquire && (_suspended || _handoffActive))) {
+        // Suspend, handoff, or restore took the terminal while the report
+        // was on its way. Each releases the region, and the report says
+        // where it is; a return from suspend or handoff acquires anew.
+        _inlineReleaseAnchor = anchor;
         return;
       }
       final (terminal, cursor) = anchor;
@@ -884,19 +926,42 @@ class PosixTerminalDriver
       try {
         _recordInlineLease(region: false);
       } catch (_) {}
-      _stdout.write(inline.release(_physicalSize));
+      final physical = _physicalSize;
+      _stdout.write(
+        inline.release(physical, cursor: _takeInlineReleaseAnchor(physical)),
+      );
     }
+  }
+
+  /// The report a pending resize received as the terminal was being taken
+  /// ([_inlineReleaseAnchor]), if it was asked at [physical]. Painting has
+  /// been gated since, so it still places the region.
+  CellOffset? _takeInlineReleaseAnchor(CellSize physical) {
+    final anchor = _inlineReleaseAnchor;
+    _inlineReleaseAnchor = null;
+    if (anchor == null || anchor.$1 != physical) return null;
+    return anchor.$2;
   }
 
   /// Shutdown gates new frames first, but keeps the input lease until this
   /// bounded ownership check completes. A resize can arrive before SIGWINCH is
   /// processed or while another cursor query is pending. Settle that exchange,
-  /// then use a fresh report to clear only the surviving rows, without reserving
-  /// or repainting a new UI on the way out.
+  /// whose report places the region if the window kept the size it was asked
+  /// at; otherwise use a fresh report. Either way, clear only the surviving
+  /// rows, without reserving or repainting a new UI on the way out.
   Future<void> _releaseInlineForRestore() async {
     await _inlineTail;
     final inline = _inline;
     if (inline == null || !inline.isAllocated) return;
+    final settled = _physicalSize;
+    final reported = _takeInlineReleaseAnchor(settled);
+    if (reported != null) {
+      try {
+        _recordInlineLease(region: false);
+      } catch (_) {}
+      _stdout.write(inline.release(settled, cursor: reported));
+      return;
+    }
     final clock = Stopwatch()..start();
     const budget = Duration(seconds: 1);
     while (_physicalSize != inline.terminalSize && clock.elapsed < budget) {

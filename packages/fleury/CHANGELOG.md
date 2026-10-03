@@ -17,9 +17,11 @@
   slower than a second, as over a congested SSH link or from a busy terminal,
   raised an error that ended the app. The UI now waits for the reply with
   painting paused, then repaints; only a terminal that sends no report for
-  10 seconds ends the session with an error. Suspending or handing off the
-  terminal during the wait goes ahead at once. Startup still fails, as
-  before, when the terminal does not report its cursor within a second.
+  10 seconds ends the session with an error. Suspending, handing off, or
+  quitting during the wait gives the reply about a second more to land, then
+  goes ahead, clearing the UI's rows where the reply puts them. Startup still
+  fails, as before, when the terminal does not report its cursor within a
+  second.
 
 - **`FocusDetector` nests like CSS `:focus-within`.** Every detector around
   the focused widget reports focus, not only the nearest one. A `Panel` now
