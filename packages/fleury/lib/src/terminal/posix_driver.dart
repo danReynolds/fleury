@@ -632,7 +632,10 @@ class PosixTerminalDriver
   /// report. A legacy keyboard sends a modified F3 in that shape too: Shift+F3
   /// is `CSI 1;2R`. So a press typed while the report was on its way is in
   /// [reply], ahead of the report. Each such press goes back through a fresh
-  /// parser and reaches the app as the key it was, late but not lost.
+  /// parser and reaches the app as the key it was, after any keys typed
+  /// since. A press is still lost if its exchange times out or it lands in a
+  /// late-reply quarantine, and it is taken for the report itself when the
+  /// terminal answers with its DA1 sentinel alone.
   CellOffset? _takeCursorReport(List<int> reply) {
     final frames = [
       for (final match in _reportShaped.allMatches(String.fromCharCodes(reply)))

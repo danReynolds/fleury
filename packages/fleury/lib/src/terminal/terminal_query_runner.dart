@@ -69,12 +69,13 @@ final class TerminalQueryRunner
   /// [interruptTimeout] marks a long wait that should not hold the terminal
   /// once its answer stops mattering. [interrupt] and [suspend] cut it short:
   /// the reply then has at most [interruptTimeout] more to arrive, and still
-  /// completes the request if it does. If it doesn't, the reply is owed. It
-  /// gets the usual late-reply quarantine, and if the runner is suspended
-  /// meanwhile, a second quarantine of [interruptTimeout] when it resumes. A
-  /// reply later than both can still reach whoever reads the terminal next.
-  /// An interruptible request still queued when [interrupt] runs is never
-  /// sent.
+  /// completes the request if it does. One that misses that drain gets the
+  /// usual late-reply quarantine. If the runner is suspended by the time the
+  /// quarantine ends, a reply landing afterwards reaches whoever reads the
+  /// terminal while it is away, such as a shell or a child process. [resume]
+  /// quarantines it again only if it is still unread then, or lands within
+  /// [interruptTimeout] after. An interruptible request still queued when
+  /// [interrupt] runs is never sent.
   @override
   Future<List<int>> request(
     String bytes, {

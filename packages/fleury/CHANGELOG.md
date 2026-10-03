@@ -20,9 +20,11 @@
   10 seconds ends the session with an error. Suspending, handing off, or
   quitting during the wait gives the reply about a second more to land, then
   goes ahead, clearing the UI's rows where the reply puts them. A
-  Shift-, Ctrl- or Alt-F3 typed while the reply is pending now reaches the app
-  as that key instead of being taken for the reply. Startup still fails, as
-  before, when the terminal does not report its cursor within a second.
+  Shift-, Ctrl- or Alt-F3 typed while the reply is pending no longer
+  displaces the terminal's own report, which put the UI at the top row. The
+  key reaches the app when the reply lands, after any keys typed since, and
+  is lost if the reply never comes. Startup still fails, as before, when the
+  terminal does not report its cursor within a second.
 
 - **`FocusDetector` nests like CSS `:focus-within`.** Every detector around
   the focused widget reports focus, not only the nearest one. A `Panel` now
