@@ -714,6 +714,34 @@ void main() {
       expect(driver.renderTarget.top, 6);
     });
 
+    test('a modified F3 typed while the report is pending is a key, not the '
+        'report', () async {
+      await driver.enter(mode);
+      driver.recordInlineCursor(const CellOffset(3, 1));
+      output.bytes.clear();
+      events.clear();
+      output.terminalColumns = 60;
+      cursor = const CellOffset(3, 7);
+      cursorDelay = const Duration(milliseconds: 800);
+      signals[ProcessSignal.sigwinch]!(ProcessSignal.sigwinch);
+      await Future<void>.delayed(const Duration(milliseconds: 200));
+      // Shift+F3 in a legacy keyboard mode: the shape of a cursor report.
+      input.send('\x1B[1;2R');
+      await _eventually(() => driver.size == const CellSize(60, 4));
+      await _settle();
+      expect(errors, isEmpty);
+      expect(driver.renderTarget.top, 6, reason: 'the terminal\'s report');
+      expect(
+        output.bytes.toString(),
+        isNot(contains('\x1B[1;1H\x1B[2K')),
+        reason: 'the key never placed a region at the top row',
+      );
+      final keys = events.whereType<KeyEvent>().toList();
+      expect(keys, hasLength(1));
+      expect(keys.single.code, KeyCode.f3);
+      expect(keys.single.modifiers, {KeyModifier.shift});
+    });
+
     for (final silence in ['never answers', 'answers without a report']) {
       test('from a terminal that $silence ends the session only at the report '
           'budget, without painting at a guess', () async {

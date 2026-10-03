@@ -578,7 +578,10 @@ class PosixTerminalDriver
   /// exchange.
   static const _inlineCursorQuery = '\x1B[6n\x1B[c';
 
-  static final _cursorReport = RegExp(r'\x1b\[(\d+);(\d+)R');
+  /// Every `CSI ... R` in a reply: the terminal's cursor report, or a key
+  /// press the parser held as one ([_takeCursorReport]).
+  static final _reportShaped = RegExp(r'\x1b\[[0-9;:]*R');
+  static final _cursorReport = RegExp(r'^\x1b\[(\d+);(\d+)R$');
 
   /// How long a live inline session waits for the terminal to report its
   /// cursor before it gives up on the terminal.
@@ -623,13 +626,36 @@ class PosixTerminalDriver
 
   /// The terminal's cursor report in [reply], 0-based, or null when it has
   /// none: a terminal can close the exchange with its DA1 sentinel alone.
+  ///
+  /// The report is the last `CSI <row>;<col> R` before the sentinel. While a
+  /// query is pending, the parser takes every sequence of that shape for the
+  /// report. A legacy keyboard sends a modified F3 in that shape too: Shift+F3
+  /// is `CSI 1;2R`. So a press typed while the report was on its way is in
+  /// [reply], ahead of the report. Each such press goes back through a fresh
+  /// parser and reaches the app as the key it was, late but not lost.
   CellOffset? _takeCursorReport(List<int> reply) {
-    final match = _cursorReport.firstMatch(String.fromCharCodes(reply));
-    if (match == null) return null;
-    final row = int.tryParse(match[1]!);
-    final col = int.tryParse(match[2]!);
-    if (row == null || col == null || row < 1 || col < 1) return null;
-    return CellOffset(col - 1, row - 1);
+    final frames = [
+      for (final match in _reportShaped.allMatches(String.fromCharCodes(reply)))
+        match[0]!,
+    ];
+    CellOffset? report;
+    if (frames.isNotEmpty) {
+      final match = _cursorReport.firstMatch(frames.last);
+      final row = int.tryParse(match?[1] ?? '');
+      final col = int.tryParse(match?[2] ?? '');
+      if (row != null && col != null && row > 0 && col > 0) {
+        report = CellOffset(col - 1, row - 1);
+        frames.removeLast();
+      }
+    }
+    if (frames.isNotEmpty) {
+      final keys = InputParser(keypadDecimal: _parser.keypadDecimal);
+      for (final frame in frames) {
+        keys.feed(frame.codeUnits, _sink);
+      }
+      keys.flush(_sink);
+    }
+    return report;
   }
 
   static bool _isInside(CellSize physical, CellOffset cursor) =>
@@ -722,6 +748,11 @@ class PosixTerminalDriver
   /// A report that does land, for the size it was asked at, is returned for
   /// the region's release; otherwise this returns null. Each of those
   /// transitions releases the region, and a return acquires a fresh anchor.
+  ///
+  /// While the reply is pending, the parser also holds a bare `ESC [` for
+  /// it, so in a legacy keyboard mode Alt+[ and the key typed after it are
+  /// lost, as they are whenever both arrive in one read: `ESC [ b` is
+  /// rxvt's Shift+Down as much as Alt+[ then b.
   Future<(CellSize, CellOffset)?> _awaitInlineAnchor({
     required bool reacquire,
   }) async {

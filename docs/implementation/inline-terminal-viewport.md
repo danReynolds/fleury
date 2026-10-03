@@ -60,6 +60,11 @@ See the [consumer guide](../../packages/fleury/doc/inline_terminal.md) and
   query. One that misses it is owed: the runner quarantines it again on
   resume, so it can't answer the fresh anchor query. Only a reply later than
   both reaches the shell or a handed-off child.
+- The report is the last `CSI row;col R` before the DA1 sentinel. A legacy
+  Shift/Ctrl/Alt+F3 (`CSI 1;m R`) typed while a report is pending is parsed
+  as part of the reply; it is replayed as its key when the reply lands.
+  Alt+[ followed by another key is lost while a report is pending, as it is
+  whenever the two arrive in one read: the parser holds `ESC [` for the reply.
 - Frame writes and mouse delivery are gated while allocation is uncertain,
   suspended, or handed off. A lifecycle generation prevents pending queries
   from reactivating a restored session. Coalesced height requests emit a final

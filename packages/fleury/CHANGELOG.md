@@ -19,9 +19,10 @@
   painting paused, then repaints; only a terminal that sends no report for
   10 seconds ends the session with an error. Suspending, handing off, or
   quitting during the wait gives the reply about a second more to land, then
-  goes ahead, clearing the UI's rows where the reply puts them. Startup still
-  fails, as before, when the terminal does not report its cursor within a
-  second.
+  goes ahead, clearing the UI's rows where the reply puts them. A
+  Shift-, Ctrl- or Alt-F3 typed while the reply is pending now reaches the app
+  as that key instead of being taken for the reply. Startup still fails, as
+  before, when the terminal does not report its cursor within a second.
 
 - **`FocusDetector` nests like CSS `:focus-within`.** Every detector around
   the focused widget reports focus, not only the nearest one. A `Panel` now
