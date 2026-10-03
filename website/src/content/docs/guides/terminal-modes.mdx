@@ -240,7 +240,11 @@ input should work again. This recording captures the inline run on a native PTY:
 
 Inline mode currently runs on macOS and Linux. It needs terminal input/output
 and cursor position reporting. If the terminal cannot report its cursor
-position, Fleury restores its modes and reports the error.
+position at startup, Fleury restores its modes and reports the error. Once the
+UI is running, a resize, or a return from a suspend or another program, waits
+for the terminal's report before painting again, so a slow reply, as over a
+congested SSH link, only delays the redraw. A terminal that sends no report
+for 10 seconds ends the session with an error.
 
 Inline mode does not yet support:
 
@@ -253,9 +257,11 @@ Inline mode does not yet support:
   the command's result after awaiting `runApp`.
 - **Native image protocols.** Images fall back to glyph rendering.
 
-When exit overlaps a resize, Fleury gets a fresh cursor report before clearing
-the region. If the terminal stops answering, cleanup still restores terminal
-modes and leaves uncertain rows alone to protect earlier output.
+When exit overlaps a resize, Fleury clears the region where a cursor report
+places it: the report the resize was waiting for, if it arrives within about a
+second and the window kept its size, or otherwise a fresh one. If the terminal
+stops answering, cleanup still restores terminal modes and leaves uncertain
+rows alone to protect earlier output.
 
 Browser embeds take their size from the containing element. A served native
 preview also has a host-controlled viewport; neither demonstrates a native

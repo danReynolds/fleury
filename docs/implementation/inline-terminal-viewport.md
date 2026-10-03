@@ -48,7 +48,24 @@ See the [consumer guide](../../packages/fleury/doc/inline_terminal.md) and
 - The presenter reports the final local caret, or a stable bottom-left
   resting cursor. Resize obtains the actual terminal cursor, recovers the
   origin, and repaints. Geometry changing during a query causes a retry with
-  painting still gated; each query is bounded and teardown cancels the wait.
+  painting still gated. A live session keeps one query in flight and waits
+  up to 10 s for a slow report rather than re-sending it: replies carry no
+  query identity, so a duplicate could be answered with stale geometry and
+  leave the other reply to be parsed as an F3 press. Startup keeps its fixed
+  one-second deadline.
+- Suspend, handoff, and teardown cut a pending report's wait to a drain of
+  max(1 s, the startup probes' round-trip deadline). A report that lands in
+  it, for the size it was asked at, places the release's clear (painting has
+  been gated since the query), so exit clears the region without a second
+  query. One that misses the drain and the 250 ms late-reply quarantine after
+  it reaches the shell or a handed-off child if it lands while they own the
+  terminal. The runner keeps it as owed: if it is still unread when the app
+  returns, or lands within the drain after that, a second quarantine keeps
+  it from answering the fresh anchor query.
+- The report is the last `CSI row;col R` before the DA1 sentinel. A legacy
+  Shift/Ctrl/Alt+F3 (`CSI 1;m R`) typed while a report is pending is parsed
+  as part of the reply, and replayed as its key when the reply lands; see
+  the limits below.
 - Frame writes and mouse delivery are gated while allocation is uncertain,
   suspended, or handed off. A lifecycle generation prevents pending queries
   from reactivating a restored session. Coalesced height requests emit a final
@@ -118,3 +135,12 @@ are deferred. Stray output retains Fleury's existing capture/replay behavior.
 During supervised development the VM-service banner can remain above the UI.
 If resize is unprocessed when the process exits, uncertain rows may remain;
 preserving shell content takes precedence over speculative clearing.
+
+While a cursor report is pending, the input parser holds report-shaped input
+for it, which costs some keys in a legacy keyboard mode. A Shift/Ctrl/Alt+F3
+(`CSI 1;m R`) reaches the app only when the reply lands, after keys typed
+later. It is lost if its exchange times out or it lands in a late-reply
+quarantine. If the terminal answers that query with its DA1 sentinel alone,
+the press is taken for the cursor report itself; that is rare, and predates
+the patient wait. Alt+[ followed by another key is lost, as it is whenever
+the two arrive in one read: `ESC [ b` is also rxvt's Shift+Down.

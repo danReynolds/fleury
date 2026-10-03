@@ -9,7 +9,10 @@ import 'terminal_response.dart';
 /// The input parser frames terminal replies and sends them here while continuing
 /// to deliver ordinary input. A Device Attributes reply terminates each
 /// exchange. After a timeout, the response expectation remains installed for a
-/// short quarantine so a late reply cannot become a phantom key press.
+/// short quarantine, so a late reply landing within it cannot become a
+/// phantom key press. Replies carry nothing that ties them to their query, so
+/// one later than that is indistinguishable from input or from the next
+/// query's answer.
 final class TerminalQueryRunner
     implements TerminalProbeTransport, TerminalResponseSink {
   TerminalQueryRunner({
@@ -53,9 +56,38 @@ final class TerminalQueryRunner
   bool _disposed = false;
   bool _suspended = false;
 
+  /// Bumped by [interrupt]: an interruptible request queued before it is
+  /// never sent.
+  int _interruptions = 0;
+
+  /// Replies still owed when [suspend] stopped reading, which [resume]
+  /// quarantines again.
+  _QueryQuarantine? _owed;
+
+  /// Sends [bytes] and resolves with the reply, up to its DA1 sentinel.
+  ///
+  /// [interruptTimeout] marks a long wait that should not hold the terminal
+  /// once its answer stops mattering. [interrupt] and [suspend] cut it short:
+  /// the reply then has at most [interruptTimeout] more to arrive, and still
+  /// completes the request if it does. One that misses that drain gets the
+  /// usual late-reply quarantine. If the runner is suspended by the time the
+  /// quarantine ends, a reply landing afterwards reaches whoever reads the
+  /// terminal while it is away, such as a shell or a child process. [resume]
+  /// quarantines it again only if it is still unread then, or lands within
+  /// [interruptTimeout] after. An interruptible request still queued when
+  /// [interrupt] runs is never sent.
   @override
-  Future<List<int>> request(String bytes, {required Duration timeout}) async {
-    final replies = await _enqueue(bytes, timeout: timeout, sentinels: 1);
+  Future<List<int>> request(
+    String bytes, {
+    required Duration timeout,
+    Duration? interruptTimeout,
+  }) async {
+    final replies = await _enqueue(
+      bytes,
+      timeout: timeout,
+      sentinels: 1,
+      interruptTimeout: interruptTimeout,
+    );
     final reply = replies.single;
     if (reply == null) {
       throw TimeoutException('Terminal query timed out.', timeout);
@@ -93,12 +125,14 @@ final class TerminalQueryRunner
     String bytes, {
     required Duration timeout,
     required int sentinels,
+    Duration? interruptTimeout,
   }) {
     if (_disposed || _suspended) {
       return Future.error(
         StateError('TerminalQueryRunner is not accepting queries.'),
       );
     }
+    final interruptions = _interruptions;
     final elapsed = Stopwatch()..start();
     final previous = _tail;
     final released = Completer<void>();
@@ -136,11 +170,22 @@ final class TerminalQueryRunner
         if (_disposed || _suspended) {
           throw StateError('TerminalQueryRunner is not accepting queries.');
         }
+        if (interruptTimeout != null && interruptions != _interruptions) {
+          throw TimeoutException(
+            'Terminal query was interrupted before it was sent.',
+            timeout,
+          );
+        }
         final remaining = timeout - elapsed.elapsed;
         if (remaining <= Duration.zero) {
           throw TimeoutException('Terminal query deadline elapsed.', timeout);
         }
-        final response = await _run(bytes, remaining, sentinels);
+        final response = await _run(
+          bytes,
+          remaining,
+          sentinels,
+          interruptTimeout: interruptTimeout,
+        );
         if (!result.isCompleted) result.complete(response);
       } on Object catch (error, stack) {
         if (!result.isCompleted) result.completeError(error, stack);
@@ -152,11 +197,17 @@ final class TerminalQueryRunner
     return result.future;
   }
 
-  Future<List<List<int>?>> _run(String bytes, Duration timeout, int sentinels) {
+  Future<List<List<int>?>> _run(
+    String bytes,
+    Duration timeout,
+    int sentinels, {
+    Duration? interruptTimeout,
+  }) {
     final exchange = _QueryExchange(
       expectation: _expectationFor(bytes),
       timeout: timeout,
       sentinels: sentinels,
+      interruptTimeout: interruptTimeout,
     );
     _active = exchange;
     _parser.responseExpectation = exchange.expectation;
@@ -243,15 +294,22 @@ final class TerminalQueryRunner
 
   void _quarantineAfter(_QueryExchange exchange) {
     final outstanding = exchange.sentinels - exchange.segments.length;
-    final quarantine = _QueryQuarantine(
-      exchange.expectation,
-      pendingSentinels: outstanding < 1 ? 1 : outstanding,
+    _installQuarantine(
+      _QueryQuarantine(
+        exchange.expectation,
+        pendingSentinels: outstanding < 1 ? 1 : outstanding,
+        resumeGrace: exchange.interruptTimeout ?? lateResponseGrace,
+      ),
+      lateResponseGrace,
     );
+  }
+
+  void _installQuarantine(_QueryQuarantine quarantine, Duration grace) {
     _quarantine = quarantine;
     // Keep the ambiguous response forms owned until the late-reply boundary.
     _parser.responseExpectation = quarantine.expectation;
     quarantine.timer = Timer(
-      lateResponseGrace,
+      grace,
       () => _finishQuarantine(quarantine, discardIncompleteResponses: true),
     );
   }
@@ -289,18 +347,55 @@ final class TerminalQueryRunner
     });
   }
 
-  /// Stops admitting queries and drains the current exchange and its bounded
-  /// late-response quarantine before another terminal owner starts reading.
-  Future<void> suspend() async {
-    _suspended = true;
-    await _tail;
-    final quarantine = _quarantine;
-    if (quarantine != null) await quarantine.done.future;
+  /// Cuts interruptible requests short ([request]'s `interruptTimeout`): the
+  /// one on the wire gets at most that much longer to be answered, never more
+  /// than it already had, and any still queued are never sent.
+  void interrupt() {
+    _interruptions++;
+    final active = _active;
+    final drain = active?.interruptTimeout;
+    if (active == null || drain == null) return;
+    if (active.timeout - active.clock.elapsed <= drain) return;
+    active.timer?.cancel();
+    active.timer = Timer(drain, () => _timeout(active));
   }
 
+  /// Stops admitting queries and drains the current exchange and its bounded
+  /// late-response quarantine before another terminal owner starts reading.
+  /// An interruptible exchange is cut short first ([interrupt]), so a long
+  /// wait costs at most its interruptTimeout here. A reply the quarantine is
+  /// still owed when it ends is remembered for [resume].
+  Future<void> suspend() async {
+    _suspended = true;
+    interrupt();
+    await _tail;
+    final quarantine = _quarantine;
+    if (quarantine == null) return;
+    await quarantine.done.future;
+    if (quarantine.pendingSentinels > 0 && !_disposed) _owed = quarantine;
+  }
+
+  /// Admits queries again.
+  ///
+  /// A reply still owed from before [suspend] may yet arrive, unread in the
+  /// input the other owner left behind or still on its way. It is
+  /// quarantined again for its request's interruptTimeout, so it cannot
+  /// answer the next query, which waits until the reply lands or that time
+  /// passes.
   void resume() {
     if (_disposed) throw StateError('TerminalQueryRunner is disposed.');
     _suspended = false;
+    final owed = _owed;
+    _owed = null;
+    if (owed == null || _quarantine != null) return;
+    _installQuarantine(
+      _QueryQuarantine(
+        owed.expectation,
+        pendingSentinels: owed.pendingSentinels,
+        resumeGrace: owed.resumeGrace,
+      ),
+      owed.resumeGrace,
+    );
   }
 
   /// Cancels active timers and prevents future queries.
@@ -352,10 +447,15 @@ final class _QueryExchange {
     required this.expectation,
     required this.timeout,
     required this.sentinels,
+    this.interruptTimeout,
   });
 
   final TerminalResponseExpectation expectation;
   final Duration timeout;
+
+  /// How much longer this exchange gets once [TerminalQueryRunner.interrupt]
+  /// cuts it short; null when it can't be.
+  final Duration? interruptTimeout;
 
   /// How many DA1 replies end this exchange: one per batched query.
   final int sentinels;
@@ -369,10 +469,18 @@ final class _QueryExchange {
 }
 
 final class _QueryQuarantine {
-  _QueryQuarantine(this.expectation, {this.pendingSentinels = 1});
+  _QueryQuarantine(
+    this.expectation, {
+    this.pendingSentinels = 1,
+    required this.resumeGrace,
+  });
 
   /// Late sentinels still expected before ordinary input is safe again.
   int pendingSentinels;
+
+  /// How long [TerminalQueryRunner.resume] quarantines the replies still
+  /// owed if this quarantine ends with the runner suspended.
+  final Duration resumeGrace;
 
   final TerminalResponseExpectation expectation;
   final Completer<void> done = Completer<void>();

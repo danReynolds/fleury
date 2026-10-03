@@ -50,6 +50,204 @@ void main() {
     },
   );
 
+  group('an interruptible wait', () {
+    test('suspend drains it for its interruptTimeout, not its whole deadline, '
+        'and a reply in that time still answers it', () async {
+      final parser = InputParser();
+      final input = _InputSink();
+      final written = Completer<void>();
+      final runner = TerminalQueryRunner(
+        parser: parser,
+        inputSink: input,
+        write: (_) async {
+          if (!written.isCompleted) written.complete();
+        },
+      );
+      final query = runner.request(
+        '\x1b[6n\x1b[c',
+        timeout: const Duration(seconds: 30),
+        interruptTimeout: const Duration(seconds: 2),
+      );
+      await written.future;
+      var released = false;
+      final suspending = runner.suspend().then((_) => released = true);
+      await Future<void>.delayed(const Duration(milliseconds: 100));
+      expect(released, isFalse, reason: 'its reply can still be on the way');
+      parser.feed('\x1b[4;5R\x1b[?1;2c'.codeUnits, input, responseSink: runner);
+      expect(String.fromCharCodes(await query), '\x1b[4;5R\x1b[?1;2c');
+      await suspending;
+      expect(input.events, isEmpty, reason: 'the reply never became F3');
+      runner.dispose();
+    });
+
+    test('suspend alone cuts it to its interruptTimeout', () async {
+      final runner = TerminalQueryRunner(
+        parser: InputParser(),
+        inputSink: _InputSink(),
+        write: (_) async {},
+        lateResponseGrace: const Duration(milliseconds: 50),
+      );
+      final query = runner.request(
+        '\x1b[6n\x1b[c',
+        timeout: const Duration(seconds: 30),
+        interruptTimeout: const Duration(milliseconds: 100),
+      );
+      final timedOut = expectLater(query, throwsA(isA<TimeoutException>()));
+      await Future<void>.delayed(Duration.zero);
+      final clock = Stopwatch()..start();
+      await runner.suspend();
+      expect(
+        clock.elapsed,
+        lessThan(const Duration(seconds: 1)),
+        reason: 'not the rest of its 30 s deadline',
+      );
+      await timedOut;
+      runner.dispose();
+    });
+
+    test('times out after its interruptTimeout once interrupted, and its '
+        'late reply is quarantined', () async {
+      final parser = InputParser();
+      final input = _InputSink();
+      final runner = TerminalQueryRunner(
+        parser: parser,
+        inputSink: input,
+        write: (_) async {},
+        lateResponseGrace: const Duration(seconds: 1),
+      );
+      final query = runner.request(
+        '\x1b[6n\x1b[c',
+        timeout: const Duration(seconds: 30),
+        interruptTimeout: const Duration(milliseconds: 100),
+      );
+      await Future<void>.delayed(Duration.zero);
+      final clock = Stopwatch()..start();
+      runner.interrupt();
+      await expectLater(query, throwsA(isA<TimeoutException>()));
+      expect(clock.elapsed, lessThan(const Duration(seconds: 1)));
+      parser.feed('\x1b[4;5R\x1b[?1;2c'.codeUnits, input, responseSink: runner);
+      await Future<void>.delayed(Duration.zero);
+      expect(input.events, isEmpty, reason: 'the late reply never became F3');
+      runner.dispose();
+    });
+
+    test('is never sent if interrupted while still queued', () async {
+      final parser = InputParser();
+      final input = _InputSink();
+      final writes = <String>[];
+      final runner = TerminalQueryRunner(
+        parser: parser,
+        inputSink: input,
+        write: (bytes) async => writes.add(bytes),
+      );
+      final first = runner.request(
+        'first\x1b[c',
+        timeout: const Duration(seconds: 5),
+      );
+      final queued = runner.request(
+        '\x1b[6n\x1b[c',
+        timeout: const Duration(seconds: 5),
+        interruptTimeout: const Duration(seconds: 1),
+      );
+      final dropped = expectLater(queued, throwsA(isA<TimeoutException>()));
+      await Future<void>.delayed(Duration.zero);
+      runner.interrupt();
+      parser.feed('\x1b[?1;2c'.codeUnits, input, responseSink: runner);
+      await first;
+      await dropped;
+      expect(writes, ['first\x1b[c']);
+      runner.dispose();
+    });
+
+    test('owed past its drain when suspend ends is quarantined again on '
+        'resume, not taken for the next query\'s answer', () async {
+      final parser = InputParser();
+      final input = _InputSink();
+      final writes = <String>[];
+      final runner = TerminalQueryRunner(
+        parser: parser,
+        inputSink: input,
+        write: (bytes) async => writes.add(bytes),
+        lateResponseGrace: const Duration(milliseconds: 20),
+      );
+      final abandoned = runner.request(
+        '\x1b[6n\x1b[c',
+        timeout: const Duration(seconds: 30),
+        interruptTimeout: const Duration(milliseconds: 50),
+      );
+      final timedOut = expectLater(abandoned, throwsA(isA<TimeoutException>()));
+      await Future<void>.delayed(Duration.zero);
+      await runner.suspend();
+      await timedOut;
+      runner.resume();
+      final next = runner.request(
+        '\x1b[6n\x1b[c',
+        timeout: const Duration(seconds: 5),
+      );
+      await Future<void>.delayed(const Duration(milliseconds: 20));
+      expect(
+        writes,
+        hasLength(1),
+        reason: 'the next query waits for the reply',
+      );
+      // The abandoned query's reply, left unread while another owner had the
+      // terminal, arrives after the resume.
+      parser.feed('\x1b[9;1R\x1b[?1;2c'.codeUnits, input, responseSink: runner);
+      await Future<void>.delayed(Duration.zero);
+      expect(writes, hasLength(2));
+      parser.feed(
+        '\x1b[15;1R\x1b[?1;2c'.codeUnits,
+        input,
+        responseSink: runner,
+      );
+      expect(String.fromCharCodes(await next), '\x1b[15;1R\x1b[?1;2c');
+      expect(input.events, isEmpty);
+      runner.dispose();
+    });
+
+    test('owed on resume holds the next query for at most its interruptTimeout '
+        'when the reply never comes', () async {
+      final parser = InputParser();
+      final input = _InputSink();
+      final writes = <String>[];
+      final runner = TerminalQueryRunner(
+        parser: parser,
+        inputSink: input,
+        write: (bytes) async => writes.add(bytes),
+        lateResponseGrace: const Duration(milliseconds: 20),
+      );
+      final abandoned = runner.request(
+        '\x1b[6n\x1b[c',
+        timeout: const Duration(seconds: 30),
+        interruptTimeout: const Duration(milliseconds: 150),
+      );
+      final timedOut = expectLater(abandoned, throwsA(isA<TimeoutException>()));
+      await Future<void>.delayed(Duration.zero);
+      await runner.suspend();
+      await timedOut;
+      runner.resume();
+      final clock = Stopwatch()..start();
+      final next = runner.request(
+        '\x1b[6n\x1b[c',
+        timeout: const Duration(seconds: 5),
+      );
+      while (writes.length < 2 && clock.elapsed < const Duration(seconds: 2)) {
+        await Future<void>.delayed(const Duration(milliseconds: 5));
+      }
+      expect(writes, hasLength(2));
+      final waited = clock.elapsed;
+      expect(waited, greaterThanOrEqualTo(const Duration(milliseconds: 100)));
+      expect(waited, lessThan(const Duration(milliseconds: 900)));
+      parser.feed(
+        '\x1b[15;1R\x1b[?1;2c'.codeUnits,
+        input,
+        responseSink: runner,
+      );
+      expect(String.fromCharCodes(await next), '\x1b[15;1R\x1b[?1;2c');
+      runner.dispose();
+    });
+  });
+
   test(
     'fragmented OSC 22 replies are consumed without losing typed input',
     () async {

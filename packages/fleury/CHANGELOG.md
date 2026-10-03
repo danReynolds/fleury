@@ -11,6 +11,21 @@
   terminal, Windows Terminal, GNOME Terminal, and macOS often take F11 before
   the app sees it. While the panel is open, `f` expands or docks it.
 
+- **A slow terminal no longer ends an inline session on resize.** After the
+  window is resized, or the app comes back from suspend or handoff, an inline
+  UI asks the terminal where its cursor is before it paints again. A reply
+  slower than a second, as over a congested SSH link or from a busy terminal,
+  raised an error that ended the app. The UI now waits for the reply with
+  painting paused, then repaints; only a terminal that sends no report for
+  10 seconds ends the session with an error. Suspending, handing off, or
+  quitting during the wait gives the reply about a second more to land, then
+  goes ahead, clearing the UI's rows where the reply puts them. A
+  Shift-, Ctrl- or Alt-F3 typed while the reply is pending no longer
+  displaces the terminal's own report, which put the UI at the top row. The
+  key reaches the app when the reply lands, after any keys typed since, and
+  is lost if the reply never comes. Startup still fails, as before, when the
+  terminal does not report its cursor within a second.
+
 - **`FocusDetector` nests like CSS `:focus-within`.** Every detector around
   the focused widget reports focus, not only the nearest one. A `Panel` now
   accents while focus is inside a `LogRegion`, `DataTable`, or another widget
