@@ -1,5 +1,10 @@
 # MVP Completion Audit
 
+> This is the June 2 MVP milestone, including its original package names and
+> evidence. It does not certify a later release candidate. For the October
+> launch scope, current CI/staging evidence, and outstanding terminal and public
+> installation checks, see [Release preparation](release-preparation.md).
+
 **Status:** MVP implementation goal complete
 **Date:** 2026-06-02
 **Purpose:** Keep the current MVP state explicit before calling the broader

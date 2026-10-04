@@ -30,26 +30,20 @@ Dart editor and a live app with hot reload in your browser.
 
 ## 1. Install the CLI and create a project
 
-Until the packages are published, activate the CLI and scaffold against the
-current Git repository:
+:::note[Before the first publication]
+The commands below use packages from pub.dev. Until `fleury` and `fleury_test`
+are available there, use [Install from Git](#install-from-git) instead.
+:::
 
 ```sh
-dart pub global activate --source git \
-  https://github.com/danReynolds/fleury.git \
-  --git-path packages/fleury
-fleury create my_app --dependency-source=git
+dart pub global activate fleury
+fleury create my_app
 cd my_app
 ```
 
-:::note[Once Fleury is on pub.dev]
-Install with `dart pub global activate fleury`, and `fleury create my_app`
-needs no flag. Until then, keep `--dependency-source=git`: the hosted
-packages don't exist yet, so `dart pub get` fails without it.
-:::
-
 `fleury create` writes a small application, its first widget tests, and VS Code
 settings, then runs `dart pub get`. To use an existing empty directory, run
-`fleury create . --dependency-source=git` from inside it.
+`fleury create .` from inside it.
 
 The app has one UI dependency: `fleury`. It includes layout, text editing,
 focus, navigation, theming, and the full catalog of controls, tables, charts,
@@ -263,15 +257,13 @@ existing `dependencies:` section (do not add a second section):
 
 ```yaml
 dependencies:
-  fleury_web:
-    git:
-      url: https://github.com/danReynolds/fleury.git
-      path: packages/fleury_web
+  fleury_web: ^0.1.0
   web: ^1.1.1
 ```
 
-Then run `dart pub upgrade`, so every Fleury package resolves from the same
-commit.
+Then run `dart pub get`. The web host exact-pins its matching Fleury release.
+If you installed from Git, use the [Git browser dependency](#install-from-git)
+below instead.
 
 `lib/app.dart` uses no native-only APIs, so it becomes web-safe by switching its
 Fleury import to `fleury_core.dart`, which includes the whole widget catalog.
@@ -337,3 +329,64 @@ a local `serve` preview fits better than a bundle.
   to restart.
 - [Built for agents](/fleury/architecture/agents-and-semantics/) — the semantic
   tree that lets tests and AI agents drive the UI.
+
+## Install from Git
+
+Use this path before the first publication or to try changes that have not yet
+been released. Activate the CLI and create the project from the same repository:
+
+```sh
+dart pub global activate --source git \
+  https://github.com/danReynolds/fleury.git \
+  --git-path packages/fleury
+fleury create my_app --dependency-source=git
+cd my_app
+```
+
+Continue at [Run the app](#2-run-the-app). For an existing empty directory, use
+`fleury create . --dependency-source=git`.
+
+The scaffold writes matching Git sources for the framework and testing package,
+including the override needed by the tester's hosted dependency on Fleury. To
+configure an existing application by hand, use:
+
+```yaml
+dependencies:
+  fleury:
+    git:
+      url: https://github.com/danReynolds/fleury.git
+      path: packages/fleury
+
+dev_dependencies:
+  fleury_test:
+    git:
+      url: https://github.com/danReynolds/fleury.git
+      path: packages/fleury_test
+  test: ^1.26.3
+
+dependency_overrides:
+  fleury:
+    git:
+      url: https://github.com/danReynolds/fleury.git
+      path: packages/fleury
+```
+
+Run `dart pub get`. If you pin a Git `ref`, use the same ref in all three entries.
+When moving to a published release, replace the Git dependencies with version
+constraints and remove the override.
+
+For the optional browser bundle, also add the Git browser host to the same
+`dependencies:` section:
+
+```yaml
+dependencies:
+  fleury_web:
+    git:
+      url: https://github.com/danReynolds/fleury.git
+      path: packages/fleury_web
+  web: ^1.1.1
+```
+
+Use the same Git `ref` as the other Fleury entries if pinned. Run `dart pub
+upgrade` to align unpinned Fleury packages to the current repository commit,
+then continue with [the browser bundle](#6-optional-ship-a-browser-bundle).

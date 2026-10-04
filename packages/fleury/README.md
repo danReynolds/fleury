@@ -11,11 +11,11 @@ text, capability detection, and safe input handling.
 
 ## Quick start
 
-After [installing the CLI](https://danreynolds.github.io/fleury/getting-started/),
-create a tested application scaffold:
+Install the CLI and create a tested application scaffold:
 
 ```sh
-fleury create my_app --dependency-source=git
+dart pub global activate fleury
+fleury create my_app
 cd my_app
 ```
 
@@ -26,8 +26,10 @@ save-to-reload session, but the app is compiled once instead of twice (see
 [the hot-reload guide](https://danreynolds.github.io/fleury/guides/hot-reload/)).
 The generated VS Code
 configuration uses the integrated terminal so input, rendering, breakpoints,
-and Dart hot reload share one normal debug session. The Git-source flag is only
-needed until the packages are published together.
+and Dart hot reload share one normal debug session. If the packages are not yet
+available on pub.dev, use the
+[Git installation](https://danreynolds.github.io/fleury/getting-started/#install-from-git)
+instead.
 
 A smaller handwritten application looks like this:
 
@@ -162,9 +164,8 @@ dev_dependencies:
   test: ^1.26.3
 ```
 
-The hosted form above applies after publication; the
-[getting-started guide](https://danreynolds.github.io/fleury/getting-started/)
-shows the pre-release Git source.
+For a Git checkout, use the matching sources described in
+[Install from Git](https://danreynolds.github.io/fleury/getting-started/#install-from-git).
 
 ```dart
 import 'package:fleury/fleury.dart';

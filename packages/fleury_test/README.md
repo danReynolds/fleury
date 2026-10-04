@@ -4,19 +4,18 @@ Deterministic widget tests for [Fleury](https://github.com/danReynolds/fleury).
 Keep the testing package in development dependencies so `package:test`, matcher,
 and golden-file support stay out of the application's production dependencies.
 
-During the pre-release Git installation, use the same checkout as your app:
+Projects created with `fleury create` already include the testing package. For
+an existing app, add:
 
 ```yaml
 dev_dependencies:
-  fleury_test:
-    git:
-      url: https://github.com/danReynolds/fleury.git
-      path: packages/fleury_test
+  fleury_test: ^0.1.0
   test: ^1.26.3
 ```
 
-Keep the `fleury` dependency override from the
-[getting-started guide](https://danreynolds.github.io/fleury/getting-started/).
+Run `dart pub get`, then `dart test`. If the packages are not yet available on
+pub.dev, or the app uses a Git checkout, use the matching sources and override
+from [Install from Git](https://danreynolds.github.io/fleury/getting-started/#install-from-git).
 
 Mount a real widget, find its control, and check the result:
 
