@@ -30,6 +30,7 @@ library;
 import 'dart:convert';
 import 'dart:io';
 
+import 'package:fleury/fleury_dev_io.dart';
 import 'package:test/test.dart';
 import 'package:vm_service/vm_service.dart';
 import 'package:vm_service/vm_service_io.dart';
@@ -548,6 +549,210 @@ Future<void> main() async {
   });
 
   group('fleury run', () {
+    test(
+      'agent reload rejects a queued startup save and reassembles once per save',
+      () async {
+        final repoRoot = _findRepoRoot(Directory.current);
+        final app = await _generateApp(tempDir);
+        final startupGate = File('${tempDir.path}/allow-startup');
+        final reassemblyGate = File('${tempDir.path}/allow-reassembly');
+        final reassemblies = File('${tempDir.path}/reassemblies');
+        app.entrypoint.writeAsStringSync(
+          app.entrypoint
+              .readAsStringSync()
+              .replaceFirst('  @override\n  Widget build', '''
+  int reassemblies = 0;
+  @override
+  void reassemble() {
+    super.reassemble();
+    reassemblies++;
+    File(Platform.environment['FLEURY_TEST_REASSEMBLIES']!)
+        .writeAsStringSync('\$reassemblies');
+    if (reassemblies == 1) {
+      final gate = File(Platform.environment['FLEURY_TEST_REASSEMBLY_GATE']!);
+      final deadline = DateTime.now().add(const Duration(seconds: 20));
+      while (!gate.existsSync() && DateTime.now().isBefore(deadline)) {
+        sleep(const Duration(milliseconds: 20));
+      }
+      if (!gate.existsSync()) throw StateError('Reassembly gate timed out');
+    }
+  }
+  @override
+  Widget build''')
+              .replaceFirst('  final appExit = await runApp', '''
+  File(Platform.environment['FLEURY_TEST_PID_OUT']!).writeAsStringSync('\$pid');
+  while (!File(Platform.environment['FLEURY_TEST_STARTUP_GATE']!).existsSync()) {
+    await Future<void>.delayed(const Duration(milliseconds: 20));
+  }
+  final appExit = await runApp'''),
+        );
+        final session = await _startSession(
+          app: app,
+          timeoutSeconds: 100,
+          environment: {
+            'FLEURY_TEST_STARTUP_GATE': startupGate.path,
+            'FLEURY_TEST_REASSEMBLY_GATE': reassemblyGate.path,
+            'FLEURY_TEST_REASSEMBLIES': reassemblies.path,
+          },
+          scriptArguments: [
+            '${repoRoot.path}/packages/fleury/bin/fleury.dart',
+            'run',
+            '--agent',
+            app.entrypoint.path,
+          ],
+        );
+        DevSessionClient? client;
+        try {
+          client = await _waitFor(
+            () async {
+              try {
+                return await DevSessionClient.connect(
+                  projectDirectory: app.dir.path,
+                );
+              } catch (_) {
+                return null;
+              }
+            },
+            timeout: const Duration(seconds: 30),
+            what: 'the supervisor agent endpoint',
+          );
+          expect(client, isNotNull, reason: session.diagnostics());
+          final connected = client!;
+          expect((await connected.request('status'))['ready'], isFalse);
+          final reload = expectLater(
+            connected.request('reload'),
+            throwsA(
+              isA<DevSessionException>().having(
+                (error) => error.message,
+                'message',
+                contains('already in progress'),
+              ),
+            ),
+          );
+          // Let the request enter its readiness wait before queuing a save.
+          await Future<void>.delayed(const Duration(milliseconds: 200));
+          app.marker.writeAsStringSync(_marker('BETA'));
+          expect(
+            await _waitFor(
+              () async => session.bootstrapLog().contains('watcher fired:')
+                  ? true
+                  : null,
+              timeout: const Duration(seconds: 10),
+              what: 'a queued startup save',
+            ),
+            isTrue,
+            reason: session.diagnostics(),
+          );
+          startupGate.writeAsStringSync('ready');
+          try {
+            // Keep the queued save in flight until the readiness waiter has
+            // resumed, even when source reload itself completes in <50 ms.
+            await reload;
+          } finally {
+            reassemblyGate.writeAsStringSync('ready');
+          }
+
+          Future<void> waitForReload(int sequence) async {
+            final status = await _waitFor(
+              () async {
+                final value = await connected.request('status');
+                final report = value['lastReload'] as Map?;
+                return report?['sequence'] == sequence &&
+                        value['reloading'] == false
+                    ? value
+                    : null;
+              },
+              timeout: const Duration(seconds: 30),
+              what: 'reload $sequence completion',
+            );
+            expect(status, isNotNull, reason: session.diagnostics());
+            expect((status!['lastReload'] as Map)['success'], isTrue);
+          }
+
+          await waitForReload(1);
+          expect(reassemblies.readAsStringSync(), '1');
+          app.marker.writeAsStringSync(_marker('GAMMA'));
+          await waitForReload(2);
+          expect(reassemblies.readAsStringSync(), '2');
+          final explicitReload = await connected.request('reload');
+          expect((explicitReload['lastReload'] as Map)['sequence'], 3);
+          expect(reassemblies.readAsStringSync(), '3');
+
+          Process.killPid(await session.appPid(), ProcessSignal.sigint);
+          final metadata = await session.finish();
+          expect(metadata['timedOut'], isFalse, reason: session.diagnostics());
+          expect(metadata['exitCode'], 77, reason: session.diagnostics());
+        } finally {
+          client?.close();
+          if (!session._exited && session.pidFile.existsSync()) {
+            final childPid = int.tryParse(
+              session.pidFile.readAsStringSync().trim(),
+            );
+            if (childPid != null) {
+              Process.killPid(childPid, ProcessSignal.sigkill);
+            }
+            await session.process.exitCode.timeout(
+              const Duration(seconds: 10),
+              onTimeout: () => -1,
+            );
+          }
+          session.dispose();
+        }
+      },
+    );
+
+    test(
+      'agent endpoint startup failure reaps the app and restores the terminal',
+      () async {
+        final repoRoot = _findRepoRoot(Directory.current);
+        final app = await _generateApp(tempDir);
+        // The child has already started by the time endpoint discovery is
+        // published. A filesystem failure here must unwind the whole session.
+        File('${app.dir.path}/.dart_tool/fleury/sessions')
+          ..createSync(recursive: true)
+          ..writeAsStringSync('not a directory');
+        final launcherTmp = Directory('${tempDir.path}/launcher_tmp')
+          ..createSync();
+        final session = await _startSession(
+          app: app,
+          timeoutSeconds: 45,
+          environment: {'TMPDIR': launcherTmp.path},
+          scriptArguments: [
+            '${repoRoot.path}/packages/fleury/bin/fleury.dart',
+            'run',
+            '--agent',
+            app.entrypoint.path,
+          ],
+          captureArguments: ['--allow-exit-codes', '70'],
+        );
+        try {
+          final metadata = await session.finish();
+          expect(metadata['timedOut'], isFalse, reason: session.diagnostics());
+          expect(metadata['exitCode'], 70, reason: session.diagnostics());
+          expect(session.bootstrapLog(), contains('child up:'));
+          expect(session.output(), contains('fleury run: supervisor failed:'));
+          expect(session.output(), contains('\x1b[?1049l'));
+          expect(
+            launcherTmp.listSync().where(
+              (e) => e.uri.pathSegments.any((s) => s.startsWith('fleury_dev_')),
+            ),
+            isEmpty,
+            reason:
+                'the failed start must release the child metadata directory',
+          );
+          final processes = await Process.run('ps', ['-axo', 'command=']);
+          expect(processes.exitCode, 0);
+          expect(
+            processes.stdout,
+            isNot(contains(app.entrypoint.path)),
+            reason: 'the failed supervisor must not leave its app running',
+          );
+        } finally {
+          session.dispose();
+        }
+      },
+    );
+
     test(
       'an app that fails to compile is reported once and its exit code '
       'comes back',

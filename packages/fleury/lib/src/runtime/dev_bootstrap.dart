@@ -439,34 +439,42 @@ final class DevBootstrap {
 
     unawaited(
       runZonedGuarded(() async {
-        final started = await supervisor._superviseFirstChild();
-        if (!started) {
-          // `_spawnChild` has already reaped whatever it started. A child
-          // that ended on its own (compile error, early exit) already told
-          // the terminal why: mirror its code, never run the app again.
-          // `exit` skips finalizers, so release the watcher and the temp
-          // (inline-lease) directory here, as the fall-through path does.
-          await supervisor._dispose();
-          final code = supervisor._lastChildExit;
-          if (code != null && code >= 0) return endWith(code);
-          stderr.writeln(
-            'fleury run: could not attach to the app; '
-            'run it directly with: dart run $scriptPath',
-          );
-          return endWith(70);
-        }
         try {
+          final started = await supervisor._superviseFirstChild();
+          if (!started) {
+            // `_spawnChild` has already reaped whatever it started. A child
+            // that ended on its own (compile error, early exit) already told
+            // the terminal why: mirror its code, never run the app again.
+            // `exit` skips finalizers, so release the watcher and the temp
+            // (inline-lease) directory here, as the fall-through path does.
+            await supervisor._dispose();
+            final code = supervisor._lastChildExit;
+            if (code != null && code >= 0) return endWith(code);
+            stderr.writeln(
+              'fleury run: could not attach to the app; '
+              'run it directly with: dart run $scriptPath',
+            );
+            return endWith(70);
+          }
           await supervisor._superviseForever();
         } catch (error, stack) {
-          _debugLog('supervisor loop died: $error\n$stack');
-          final child = supervisor._child;
-          if (child != null) {
-            child.kill(ProcessSignal.sigkill);
-            await child.exitCode;
+          _debugLog('supervisor failed: $error\n$stack');
+          // Startup can fail after the child has acquired the terminal (for
+          // example, publishing the private agent descriptor). Reap it and
+          // release every supervisor resource before returning the failure.
+          try {
+            final child = supervisor._child;
+            if (child != null) {
+              child.kill(ProcessSignal.sigkill);
+              await child.exitCode;
+            }
+            await supervisor._dispose();
+          } finally {
+            await supervisor._restoreChildInputFlags();
+            await supervisor._emergencyTtyRestore();
+            stderr.writeln('fleury run: supervisor failed: $error');
+            endWith(70);
           }
-          await supervisor._restoreChildInputFlags();
-          await supervisor._emergencyTtyRestore();
-          endWith(70);
         }
       }, (error, stack) => _debugLog('uncaught: $error\n$stack')),
     );
@@ -984,6 +992,13 @@ final class DevBootstrap {
       _agentMutation = true;
       try {
         await _waitAgentReady();
+        // Readiness can release a queued save reload before this waiter
+        // resumes. Never report that operation's old outcome as our own.
+        if (_restartInFlight || _reloadInFlight) {
+          throw const DevSessionException(
+            'Reload/restart already in progress. Read status before retrying.',
+          );
+        }
         final generation = _childCount;
         if (method == 'restart') {
           await _restart();
@@ -992,6 +1007,11 @@ final class DevBootstrap {
           await _reload();
         }
         final inspection = await _agentRequest('inspect', const {});
+        if (method == 'reload' && inspection['generation'] != generation) {
+          throw const DevSessionException(
+            'App restarted during reload. Inspect again.',
+          );
+        }
         return {
           ..._agentStatus(),
           'stateReset': method == 'restart',

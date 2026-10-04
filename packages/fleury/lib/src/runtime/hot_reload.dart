@@ -156,6 +156,9 @@ class HotReloadController {
   /// external tool can trigger a reassemble. If the VM service is
   /// available, also subscribes to the Isolate stream and reassembles
   /// on `IsolateReload` events.
+  /// Set [listenForReloadEvents] to false when a supervisor explicitly
+  /// invokes the extension after reload and awaits its completion; listening
+  /// as well would reassemble each changed source twice.
   ///
   /// [onReloadReport] receives dev-tooling reload outcomes (the
   /// `ext.fleury.reloadReport` extension, invoked by the dev bootstrap after
@@ -165,6 +168,7 @@ class HotReloadController {
   /// bootstrap to tear this session down before a hot restart.
   static Future<HotReloadController> attach({
     required void Function() onReassemble,
+    bool listenForReloadEvents = true,
     void Function(HotReloadReport report)? onReloadReport,
     void Function()? onShutdownRequested,
   }) async {
@@ -231,7 +235,7 @@ class HotReloadController {
       _extensionRegistered = true;
     }
 
-    if (dev) {
+    if (dev && listenForReloadEvents) {
       await controller._connectVmService(serverUri);
     }
 

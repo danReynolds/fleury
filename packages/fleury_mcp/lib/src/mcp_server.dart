@@ -1702,7 +1702,9 @@ final class McpServer {
         );
       }
     }
-    if (name == 'wait_for_change' && !args.containsKey('sinceRevision')) {
+    if (modern &&
+        name == 'wait_for_change' &&
+        !args.containsKey('sinceRevision')) {
       throw const _ToolFailure(
         'Modern wait_for_change requires sinceRevision from the last UI result.',
         code: _ErrorCode.invalidArguments,
@@ -2189,11 +2191,13 @@ final class McpServer {
     // awaiting settle first would leave an async error temporarily unhandled.
     // Future.wait observes both from the outset.
     final completed = await Future.wait<Object?>(<Future<Object?>>[
-      bridge.settle(sinceRevision: before),
+      bridge is FleuryDevBridge
+          ? Future<SemanticInspectionSnapshot?>.value(bridge.snapshot)
+          : bridge.settle(sinceRevision: before),
       _stillRunningOnTimeout(statusFuture),
     ]);
-    final after = completed[0] as SemanticInspectionSnapshot?;
     final status = completed[1];
+    final after = await _postActionSnapshot(completed[0], status);
     _throwIfBridgeStopped();
     if (status == _stillRunning) {
       return _toolJson(<String, Object?>{
@@ -2404,11 +2408,13 @@ final class McpServer {
           : null,
     );
     final completed = await Future.wait<Object?>(<Future<Object?>>[
-      bridge.settle(sinceRevision: before),
+      bridge is FleuryDevBridge
+          ? Future<SemanticInspectionSnapshot?>.value(bridge.snapshot)
+          : bridge.settle(sinceRevision: before),
       _stillRunningOnTimeout(statusFuture),
     ]);
-    final after = completed[0] as SemanticInspectionSnapshot?;
     final status = completed[1];
+    final after = await _postActionSnapshot(completed[0], status);
     _throwIfBridgeStopped();
     if (status == _stillRunning) {
       return _toolJson(<String, Object?>{
@@ -2439,6 +2445,21 @@ final class McpServer {
       'changed': bridge.revision != before,
       'ui': _uiResult(after),
     });
+  }
+
+  Future<SemanticInspectionSnapshot?> _postActionSnapshot(
+    Object? settled,
+    Object? status,
+  ) async {
+    // Native attachments observe changes by polling. Settle after the action
+    // acknowledgement so a slow handler cannot outlive the observation window.
+    // A pending handler may have opened a dialog that the agent must act on.
+    if (bridge is FleuryDevBridge &&
+        (status == SemanticActionInvocationStatus.completed ||
+            status == _stillRunning)) {
+      return bridge.settle();
+    }
+    return settled as SemanticInspectionSnapshot?;
   }
 
   // A handler that outlives the result wait is still running, not lost: one

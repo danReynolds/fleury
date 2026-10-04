@@ -1870,6 +1870,9 @@ Future<AppExit> _runAppImpl(
               'hot reload startup',
               () async {
                 final controller = await HotReloadController.attach(
+                  // Agent reloads explicitly await reassembly in the
+                  // supervisor before returning an inspection.
+                  listenForReloadEvents: devAgent == null,
                   onReassemble: () {
                     if (disposed) return;
                     runtime.reassembleApplication();
