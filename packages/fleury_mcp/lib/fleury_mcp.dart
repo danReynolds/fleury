@@ -16,6 +16,7 @@ export 'src/app_bridge.dart'
     show
         BridgeLog,
         FleuryAppBridge,
+        FleuryAppConnection,
         FleuryAppBridgeException,
         FleurySemanticActionBusyException,
         FleurySemanticActionTimeoutException;
@@ -27,3 +28,5 @@ export 'src/mcp_server.dart'
         mcpServerName,
         mcpServerVersion,
         runMcpServer;
+
+export 'src/dev_bridge.dart' show FleuryDevBridge;

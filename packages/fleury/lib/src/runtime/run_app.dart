@@ -30,6 +30,8 @@ import '../terminal/diagnostics.dart';
 import '../input/events.dart';
 import '../input/keyboard_latch.dart';
 import 'dev_bootstrap.dart';
+import 'dev_agent_runtime.dart';
+import 'dev_session.dart';
 import 'package:stdio/stdio.dart' as fd;
 
 import '../terminal/native_driver.dart';
@@ -709,6 +711,7 @@ Future<AppExit> _runAppImpl(
   // Constructed after the handshake (the presenter choice depends on the
   // negotiated path) and owns the frame program from then on.
   FrameDriver? frameDriver;
+  DevAgentRuntime? devAgent;
   // The shared semantics engine (structured path only): coverage fallback,
   // retained-leaf updates, and same-task wire flushes.
   FrameSemanticsPipeline? semanticsPipeline;
@@ -1107,6 +1110,7 @@ Future<AppExit> _runAppImpl(
       'debug terminal provider',
       () => debugController.setTerminalDiagnosisProvider(null),
     );
+    captureSync('dev agent', () => devAgent?.dispose());
     captureSync('debug frame log', () => debugFrameLog?.dispose());
     captureSync('debug invalidations', DebugInvalidations.reset);
     captureSync('input dispatcher', dispatcher.dispose);
@@ -1760,10 +1764,10 @@ Future<AppExit> _runAppImpl(
                           ),
                   ),
             planner: presentationPlanner,
-            onFramePresented: activeSurfaceSink == null
-                ? null
-                : (frame, plan) =>
-                      semanticsPipeline?.onFramePresented(frame, plan),
+            onFramePresented: (frame, plan) {
+              semanticsPipeline?.onFramePresented(frame, plan);
+              devAgent?.onFrame(frame.next);
+            },
             // A visually-skipped frame (input changed only semantic state,
             // no repaint) must still flush the owed semantics on serve —
             // otherwise the peer's a11y/agent tree goes stale until an
@@ -1771,10 +1775,10 @@ Future<AppExit> _runAppImpl(
             // this closes the shared-engine parity gap. (While the output
             // is backlogged the producer gate returns before the skip gate,
             // so this stays behind backpressure like frame production.)
-            onFrameSkipped: activeSurfaceSink == null
-                ? null
-                : (reason, size) =>
-                      semanticsPipeline?.onFrameSkippedWithPendingWork(),
+            onFrameSkipped: (reason, size) {
+              semanticsPipeline?.onFrameSkippedWithPendingWork();
+              devAgent?.onFrame(null);
+            },
             isDebugWatching: () =>
                 // Capture per-phase timings only when the debug stream has
                 // live listeners — when no one's watching this
@@ -1789,6 +1793,35 @@ Future<AppExit> _runAppImpl(
             frameInterval: frameInterval,
           );
           driver.mountRoot(buildRoot);
+          if (activeSurfaceSink == null &&
+              !driverInjected &&
+              runsFromSource &&
+              Platform.environment[kDevSupervisorEnv] == '1' &&
+              Platform.environment[devAgentEnvironment] == '1') {
+            debugFrameLog ??= DebugFrameLog();
+            devAgent = DevAgentRuntime(
+              readRoot: () => frameDriver?.rootElement,
+              scheduleFrame: () => scheduleFrame('agent inspection'),
+              reportError: errorReporter.report,
+              readDebug: (kind, limit) =>
+                  (jsonDecode(
+                            utf8.decode(
+                              buildDebugResponseJson(
+                                kind,
+                                limit: limit,
+                                maxBytes: maxRemoteDebugResponseJsonLength(
+                                  kind,
+                                ),
+                                frameLog: debugFrameLog,
+                                logBuffer: logBuffer,
+                                errorReporter: errorReporter,
+                              ),
+                            ),
+                          )
+                          as List)
+                      .cast<Object?>(),
+            );
+          }
           runtimeMarkers?.mark('root.mounted');
           debugController.setSemanticTreeProvider(() {
             final root = frameDriver?.rootElement;

@@ -1,7 +1,8 @@
 /// `fleury run [vm options] [script.dart] [app args]` — argument shape and
 /// entrypoint lookup; the launcher itself is `DevBootstrap.launch`.
 ///
-/// Everything before the first non-flag argument is a VM option for the app's
+/// Except for the launcher's --agent flag, everything before the first
+/// non-flag argument is a VM option for the app's
 /// process (`--enable-asserts`, `--define=…`), the first non-flag argument is
 /// the entrypoint, and everything after it is the app's own argv, verbatim.
 /// `--` ends option parsing early, so an app whose first argument starts with
@@ -15,12 +16,14 @@ import 'dart:io';
 final class RunCommandInvocation {
   const RunCommandInvocation({
     this.scriptPath,
+    this.agent = false,
     this.vmOptions = const [],
     this.args = const [],
   });
 
   /// Null when no script was given: the caller resolves one from `bin/`.
   final String? scriptPath;
+  final bool agent;
   final List<String> vmOptions;
   final List<String> args;
 }
@@ -29,13 +32,19 @@ final class RunCommandInvocation {
 /// for an explicit help flag. No script is a valid invocation.
 RunCommandInvocation? parseRunCommand(List<String> args) {
   final vmOptions = <String>[];
+  var agent = false;
   for (var i = 0; i < args.length; i++) {
     final arg = args[i];
+    if (arg == '--agent') {
+      agent = true;
+      continue;
+    }
     if (arg == '--') {
       if (i + 1 >= args.length) {
-        return RunCommandInvocation(vmOptions: vmOptions);
+        return RunCommandInvocation(agent: agent, vmOptions: vmOptions);
       }
       return RunCommandInvocation(
+        agent: agent,
         scriptPath: args[i + 1],
         vmOptions: vmOptions,
         args: args.sublist(i + 2),
@@ -47,12 +56,13 @@ RunCommandInvocation? parseRunCommand(List<String> args) {
       continue;
     }
     return RunCommandInvocation(
+      agent: agent,
       scriptPath: arg,
       vmOptions: vmOptions,
       args: args.sublist(i + 1),
     );
   }
-  return RunCommandInvocation(vmOptions: vmOptions);
+  return RunCommandInvocation(agent: agent, vmOptions: vmOptions);
 }
 
 /// The script `fleury run` starts when none was named, looked up under
@@ -123,7 +133,9 @@ String? _packageName(Directory projectDir) {
 }
 
 const String runCommandUsage = '''
-usage: fleury run [vm options] [script.dart] [app args...]
+usage: fleury run [--agent] [vm options] [script.dart] [app args...]
+
+Use --agent to allow local MCP attachment to this native development session.
 
 Runs a Fleury app with hot reload from a launcher that never compiles it, so
 the app is compiled once instead of twice. Save a source file to reload; to

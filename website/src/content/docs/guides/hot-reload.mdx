@@ -81,6 +81,18 @@ The app's process can't recover the original arguments by itself, so without
 `args:` it sees an empty list from its first frame. `fleury run` passes the
 arguments for you.
 
+## Let an agent inspect the running session
+
+Start with `fleury run --agent` and configure an MCP host to run
+`dart run fleury_mcp --attach` in the same project. The agent shares your native
+dev app: it can inspect cells and semantics together, check layout constraints,
+and read save-to-reload outcomes through `get_dev_status`. `reload_app` preserves
+surviving widget state; `restart_app` explicitly resets it and invalidates old
+control references. Disconnecting the agent leaves the app running.
+
+See [Driving with an agent](./driving-with-agents/) for setup and the current
+native-session limits.
+
 ## Reload or restart
 
 Reload keeps state and is the default loop. Some valid edits cannot be migrated

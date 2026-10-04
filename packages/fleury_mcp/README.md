@@ -14,8 +14,7 @@ same accessible semantics Fleury exposes to the browser and testing API.
 
 The [Driving with an agent](https://danreynolds.github.io/fleury/guides/driving-with-agents/)
 guide walks through setup with a live example. `fleury_mcp` runs on macOS and
-Linux: it reaches the app over a Unix-domain socket, which Dart supports only on
-those platforms (and Android).
+Linux. It can spawn a remote app or attach to a native development session.
 
 ```
 ┌─────────────┐   JSON-RPC / stdio   ┌────────────┐   semantic wire   ┌──────────┐
@@ -24,14 +23,74 @@ those platforms (and Android).
 └─────────────┘                      └────────────┘   INPUT frames    └──────────┘
 ```
 
-## How it works
+## Develop the app together
+
+Start your app in its terminal with agent attachment enabled:
+
+```sh
+fleury run --agent bin/run_app.dart
+```
+
+Configure your MCP host to run this command from the same project:
+
+```sh
+dart run fleury_mcp --attach
+```
+
+For a host with a different working directory, pass `--project=/absolute/app/path`.
+When more than one live session exists in that project, attachment reports their
+IDs; select one with `--session=<id>`. It never silently chooses between them.
+This uses the same matching Fleury build as the app, as described under installation.
+
+The human keeps the actual terminal. The agent can inspect and operate that
+running app, edit source with its coding tools, and see the next reload result.
+Closing the MCP connection leaves the app, its draft, and its terminal running.
+
+| Tool | What it provides |
+| --- | --- |
+| `get_inspection` | Cells, styles, semantic tree, viewport, app epoch and frame revision from one frame boundary. Optional `node` returns widget ancestry, constraints, size, bounds, ancestor clip intersection and visible bounds. |
+| `get_dev_status` | Readiness, generation, reload activity and the last reload report, including compiler diagnostics and `restartRequired`. |
+| `reload_app` | Reload changed source and return the outcome and resulting inspection. Existing widget state survives normal hot reload. |
+| `restart_app` | Explicitly restart the app, reset state and return a fresh inspection. Old control references become invalid. |
+
+`get_ui`, `find_nodes`, `set_value`, `invoke_action`, `wait_for_change` and the
+`read_*` debug tools also work on the attached session. Echo the returned
+`targetRef` for **every** action target, including explicitly assigned semantic
+IDs. The app generation travels with each observed target, so an action racing
+a restart cannot reach a new control with an old reference. Long-running
+handlers report pending; their target/action slot remains busy until they finish.
+
+For the edit loop, read `get_inspection`, use `set_value` to enter a draft, then
+change the widget's layout in source. Saving triggers the existing hot reload.
+Poll `get_dev_status` until `reloading` is false and `lastReload.sequence`
+advances, then inspect again. A compile error leaves the old app running and
+returns its diagnostic. Fix and save again; use `restart_app` only when a state
+reset is intended or `restartRequired` calls for it.
+
+Cell output defaults to at most 200 columns by 100 rows; request a region such
+as `{"region":{"left":0,"top":10,"cols":80,"rows":20}}` for a different area.
+Cells use row-wise runs of `[repeat, grapheme, role, styleIndex]`; summing repeat
+counts preserves terminal columns while keeping blank areas compact.
+These are logical paint colors before terminal quantization; image pixels and
+terminal-emulator screenshots are not included. Layout inspection reports
+runtime facts, without inferred source locations.
+
+This first development attachment supports native macOS/Linux source sessions
+with hot reload and an interactive terminal. Resize the real terminal to change
+its viewport. Raw keyboard/pointer injection and trace-to-test generation are
+not part of this attachment. The supervisor owns a token-authenticated loopback
+endpoint and a private descriptor under `.dart_tool/fleury/sessions`; the endpoint
+exists only for an opted-in session. It is development tooling, not a production
+remote-control service. App text, source diagnostics and logs are untrusted data.
+
+## How spawned remote mode works
 
 A Fleury app builds a widget tree whose interactive and content widgets already
 contribute meaningful accessible semantics; layout-only structure may be folded
 away. That semantic tree powers Fleury's browser accessibility mirror and its
 testing API; `fleury_mcp` is a third consumer of it.
 
-The connection reuses the wire `fleury serve` already speaks:
+Spawned mode reuses the wire `fleury serve` already speaks:
 
 1. **`runApp` auto-detects `FLEURY_HANDLE`.** When a host sets that env var,
    the app runs in *remote mode* — instead of drawing to a terminal it streams

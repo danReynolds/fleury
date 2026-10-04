@@ -67,6 +67,7 @@ import '../terminal/terminal_sequences.dart';
 import 'dev_signal_ack.dart';
 import 'handle_discovery.dart';
 import 'hot_reload.dart';
+import 'dev_session.dart';
 import 'source_watcher.dart';
 
 /// Environment marker set for the supervised child so it can gate the
@@ -250,6 +251,11 @@ final class DevBootstrap {
   /// inputs of [devEarlyExitHint].
   DateTime _childSpawnedAt = DateTime.now();
   int _childCount = 0;
+  bool _agent = false;
+  DevSessionServer? _agentServer;
+  int _reloadSequence = 0;
+  Map<String, Object?>? _lastReload;
+  bool _agentMutation = false;
   String? _mainIsolateId;
   SourceWatcher? _watcher;
   final List<StreamSubscription<ProcessSignal>> _signalSubs = [];
@@ -369,6 +375,7 @@ final class DevBootstrap {
     List<String> args = const [],
     List<String> vmOptions = const [],
     String? dartExecutable,
+    bool agent = false,
   }) async {
     _debugLog('launch: entry');
     final script = File(scriptPath).absolute;
@@ -396,6 +403,12 @@ final class DevBootstrap {
       }
     }
     if (blocker != null || projectRoot == null) {
+      if (agent) {
+        stderr.writeln(
+          'fleury run --agent requires a supervised native source session: ${blocker ?? "nothing to watch"}.',
+        );
+        exit(64);
+      }
       _debugLog(
         'launch: running once without hot reload '
         '(${blocker ?? 'nothing to watch'})',
@@ -412,6 +425,7 @@ final class DevBootstrap {
 
     _debugLog('launch: roots resolved');
     final supervisor = DevBootstrap._()
+      .._agent = agent
       .._launcher = true
       .._args = args
       .._scriptPath = script.path
@@ -577,6 +591,13 @@ final class DevBootstrap {
     }
     final spawned = await _spawnChild();
     if (!spawned) return false;
+    if (_agent) {
+      _agentServer = await DevSessionServer.start(
+        projectDirectory: _projectRoot ?? Directory.current.path,
+        entrypoint: _scriptPath,
+        handle: _agentRequest,
+      );
+    }
     // Signal ownership. Two delivery shapes reach the supervisor:
     //   - tty-generated (Ctrl+C): the line discipline signals the whole
     //     foreground group, so the child got its own copy — the supervisor
@@ -798,6 +819,7 @@ final class DevBootstrap {
         environment: {
           ...Platform.environment,
           kDevSupervisorEnv: '1',
+          devAgentEnvironment: _agent ? '1' : '0',
           // Fallback URI channel: the child confirms its service here too
           // (see maybeStartSupervisedChildHandshake), guarding against
           // --write-service-info behavior drift across SDKs.
@@ -847,7 +869,8 @@ final class DevBootstrap {
         // mark the NEW session ready off the OLD isolate's registrations.
         if (!identical(vm, _vm)) return;
         final rpcs = isolate.extensionRPCs ?? const [];
-        if (rpcs.contains('ext.fleury.reassemble')) {
+        if (rpcs.contains('ext.fleury.reassemble') &&
+            (!_agent || rpcs.contains('ext.fleury.agent'))) {
           _childReady = true;
           _debugLog('child ready (hot-reload extension registered)');
           if (_reloadQueued) {
@@ -925,6 +948,82 @@ final class DevBootstrap {
     }
   }
 
+  Map<String, Object?> _agentStatus() => {
+    'entrypoint': _scriptPath,
+    'pid': pid,
+    'generation': _childCount,
+    'ready': _childReady && !_restartInFlight,
+    'reloading': _reloadInFlight || _reloadQueued,
+    'restarting': _restartInFlight,
+    'lastReload': _lastReload,
+  };
+
+  Future<void> _waitAgentReady({int? afterGeneration}) async {
+    final deadline = DateTime.now().add(const Duration(seconds: 30));
+    while (!_childReady ||
+        _restartInFlight ||
+        (afterGeneration != null && _childCount <= afterGeneration)) {
+      if (DateTime.now().isAfter(deadline)) {
+        throw const DevSessionException('App did not become ready.');
+      }
+      await Future<void>.delayed(const Duration(milliseconds: 50));
+    }
+  }
+
+  Future<Map<String, Object?>> _agentRequest(
+    String method,
+    Map<String, Object?> params,
+  ) async {
+    if (method == 'status') return _agentStatus();
+    if (method == 'reload' || method == 'restart') {
+      if (_agentMutation || _restartInFlight || _reloadInFlight) {
+        throw const DevSessionException(
+          'Reload/restart already in progress. Read status before retrying.',
+        );
+      }
+      _agentMutation = true;
+      try {
+        await _waitAgentReady();
+        final generation = _childCount;
+        if (method == 'restart') {
+          await _restart();
+          await _waitAgentReady(afterGeneration: generation);
+        } else {
+          await _reload();
+        }
+        final inspection = await _agentRequest('inspect', const {});
+        return {
+          ..._agentStatus(),
+          'stateReset': method == 'restart',
+          'inspection': inspection,
+        };
+      } finally {
+        _agentMutation = false;
+      }
+    }
+    if (!const ['inspect', 'action', 'debug'].contains(method)) {
+      throw const DevSessionException('Unknown development operation.');
+    }
+    await _waitAgentReady();
+    final vm = _vm!;
+    final generation = _childCount;
+    final result = await vm.callServiceExtension(
+      'ext.fleury.agent',
+      isolateId: _mainIsolateId!,
+      args: {'method': method, 'params': jsonEncode(params)},
+    );
+    if (generation != _childCount || !identical(vm, _vm)) {
+      throw const DevSessionException(
+        'App restarted during request. Inspect again.',
+      );
+    }
+    final data = result.json!;
+    if (data['error'] != null) {
+      throw DevSessionException(data['error'].toString());
+    }
+    return {...data, 'generation': generation};
+  }
+
   // ── Reload ───────────────────────────────────────────────────────────────
 
   Future<void> _reload() async {
@@ -937,6 +1036,7 @@ final class DevBootstrap {
     final vm = _vm;
     if (isolateId == null || vm == null) return;
     _reloadInFlight = true;
+    final reloadGeneration = _childCount;
     _debugLog('reload: starting (isolate $isolateId)');
     final stopwatch = Stopwatch()..start();
     var success = false;
@@ -968,7 +1068,6 @@ final class DevBootstrap {
       message = error.toString();
     } finally {
       stopwatch.stop();
-      _reloadInFlight = false;
     }
     _debugLog(
       'reload: done success=$success loaded=$loadedCount '
@@ -977,18 +1076,41 @@ final class DevBootstrap {
     // Deliver the outcome to the app for the debug shell (Logs on success,
     // Errors on failure). Best-effort: the app may be mid-teardown.
     try {
-      await vm.callServiceExtension(
-        'ext.fleury.reloadReport',
-        isolateId: isolateId,
-        args: <String, String>{
-          'success': '$success',
-          'elapsedMs': '${stopwatch.elapsedMilliseconds}',
-          'loadedLibraryCount': '$loadedCount',
-          'restartRequired': '$restartRequired',
-          'message': ?message,
-        },
-      );
+      await vm
+          .callServiceExtension(
+            'ext.fleury.reloadReport',
+            isolateId: isolateId,
+            args: <String, String>{
+              'success': '$success',
+              'elapsedMs': '${stopwatch.elapsedMilliseconds}',
+              'loadedLibraryCount': '$loadedCount',
+              'restartRequired': '$restartRequired',
+              'message': ?message,
+            },
+          )
+          .timeout(const Duration(seconds: 5));
     } catch (_) {}
+    // Explicitly await reassembly before publishing a completed dev outcome.
+    if (success && _agent) {
+      try {
+        await vm
+            .callServiceExtension('ext.fleury.reassemble', isolateId: isolateId)
+            .timeout(const Duration(seconds: 5));
+      } catch (error) {
+        success = false;
+        message = 'Sources reloaded, but reassembly failed: $error';
+      }
+    }
+    _lastReload = {
+      'sequence': ++_reloadSequence,
+      'success': success,
+      'elapsedMs': stopwatch.elapsedMilliseconds,
+      'loadedLibraryCount': loadedCount,
+      'restartRequired': restartRequired,
+      'message': ?message,
+      'generation': reloadGeneration,
+    };
+    _reloadInFlight = false;
     if (_reloadQueued) {
       _reloadQueued = false;
       unawaited(_reload());
@@ -1126,6 +1248,8 @@ final class DevBootstrap {
   }
 
   Future<void> _dispose() async {
+    await _agentServer?.close();
+    _agentServer = null;
     await _watcher?.dispose();
     _watcher = null;
     for (final sub in _signalSubs) {

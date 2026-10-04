@@ -5,6 +5,21 @@ import 'package:test/test.dart';
 
 void main() {
   group('parseRunCommand', () {
+    test('--agent is a launcher opt-in, app argv remains verbatim', () {
+      final run = parseRunCommand([
+        '--agent',
+        '--enable-asserts',
+        'bin/main.dart',
+        '--agent',
+      ])!;
+      expect(run.agent, isTrue);
+      expect(run.vmOptions, ['--enable-asserts']);
+      expect(run.args, ['--agent']);
+      expect(parseRunCommand(['--agent'])!.agent, isTrue);
+      expect(parseRunCommand(['--agent', '--'])!.agent, isTrue);
+      expect(parseRunCommand(['--agent', '--', 'main.dart'])!.agent, isTrue);
+      expect(parseRunCommand(['main.dart', '--agent'])!.agent, isFalse);
+    });
     test('the first non-flag argument is the script, the rest is its argv', () {
       final run = parseRunCommand(['bin/main.dart', 'asteroids', '--fast'])!;
       expect(run.scriptPath, 'bin/main.dart');

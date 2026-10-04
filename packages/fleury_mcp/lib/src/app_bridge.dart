@@ -53,9 +53,51 @@ final class SemanticTreeDelta {
   bool get isEmpty => !full && changedIds.isEmpty && removedIds.isEmpty;
 }
 
+/// A semantic connection to either a spawned app or a native dev session.
+abstract interface class FleuryAppConnection {
+  CellSize get viewport;
+  SemanticInspectionSnapshot? get snapshot;
+  int get revision;
+  String get sessionEpoch;
+  bool get isRunning;
+  bool get renderTimedOut;
+  String? get protocolError;
+  Future<void> get ready;
+  Future<void> get done;
+  Future<void> refresh();
+  set accumulateDeltas(bool value);
+  SemanticTreeDelta takeDelta();
+  Future<SemanticActionInvocationStatus?> invokeAction(
+    SemanticNodeId id,
+    SemanticAction action, {
+    String? targetToken,
+  });
+  Future<SemanticActionInvocationStatus?> setValue(
+    SemanticNodeId id,
+    Object? value, {
+    String? targetToken,
+  });
+  Future<List<Object?>?> queryDebug(String kind, {int limit = 50});
+  void typeText(String text);
+  void pressKey(KeyCode code, {Set<KeyModifier> modifiers = const {}});
+  void resize(CellSize size);
+  Future<SemanticInspectionSnapshot?> settle({
+    int? sinceRevision,
+    Duration quiet = const Duration(milliseconds: 60),
+    Duration timeout = const Duration(seconds: 2),
+    Duration settleCap = const Duration(milliseconds: 500),
+  });
+  Future<void> close();
+}
+
 /// Drives a single Fleury app over the structured remote wire and keeps its
 /// latest semantic snapshot. One bridge per app session.
-final class FleuryAppBridge {
+final class FleuryAppBridge implements FleuryAppConnection {
+  @override
+  String get sessionEpoch => "";
+  @override
+  Future<void> refresh() async {}
+
   /// Wraps an existing transport to the app. Call [start] to handshake and
   /// begin tracking semantics. [onClose] runs during [close] (used by [spawn]
   /// to kill the subprocess and remove its socket).
@@ -109,6 +151,7 @@ final class FleuryAppBridge {
   /// Turns per-frame delta accumulation on/off. The server enables it while a
   /// resource subscription is active. Disabling clears any pending delta, so the
   /// next subscription begins from "now".
+  @override
   set accumulateDeltas(bool enabled) {
     _accumulateDeltas = enabled;
     if (!enabled) {
@@ -124,10 +167,12 @@ final class FleuryAppBridge {
 
   /// The viewport the app lays out against. A taller grid surfaces more rows of
   /// windowed widgets (tables, logs) in the semantic tree.
+  @override
   CellSize get viewport => _viewport;
 
   /// The most recent semantic snapshot, or null before the first frame lands.
   /// Built lazily from the last frame and memoized until the next one.
+  @override
   SemanticInspectionSnapshot? get snapshot {
     final tree = _tree;
     if (tree == null) return null;
@@ -136,12 +181,14 @@ final class FleuryAppBridge {
 
   /// Monotonic counter bumped on every semantics update. Capture it before an
   /// action, then [settle] past it to observe the result.
+  @override
   int get revision => _revision;
 
   /// Returns the net semantic delta accumulated since the last call, and clears
   /// the accumulator. Call once after each [settle] to push exactly one coalesced
   /// delta per settled burst (a continuously-animating app coalesces into one
   /// delta per settle window rather than a per-frame storm).
+  @override
   SemanticTreeDelta takeDelta() {
     final delta = SemanticTreeDelta(
       changedIds: _accChanged.toList(growable: false),
@@ -178,11 +225,13 @@ final class FleuryAppBridge {
 
   /// Whether the app is still connected (false once it sends BYE or the
   /// transport drops).
+  @override
   bool get isRunning => !_exited.isCompleted;
 
   /// True once the app connected but did not render a first frame within
   /// [firstFrameTimeout] (e.g. it never called runApp). Lets tools fail fast
   /// with a clear message instead of each waiting out its own timeout.
+  @override
   bool get renderTimedOut => _renderTimedOut;
 
   /// A fatal wire-negotiation error detected by the bridge, or null while
@@ -191,15 +240,18 @@ final class FleuryAppBridge {
   /// The wire is explicitly lockstep: continuing after a mismatched echoed
   /// [InitFrame] could silently misdecode later frames, so the bridge closes
   /// immediately and records a diagnostic for the MCP server to surface.
+  @override
   String? get protocolError => _protocolError;
 
   /// Completes when the app reaches a settled initial state — the first
   /// semantic snapshot arrived, the app exited, or the first-frame watchdog
   /// fired. Never errors; check [snapshot], [isRunning], [renderTimedOut], and
   /// [protocolError] after it resolves.
+  @override
   Future<void> get ready => _firstSnapshot.future;
 
   /// Completes when the app disconnects.
+  @override
   Future<void> get done => _exited.future;
 
   /// Sends the INIT handshake and starts consuming frames. Idempotent.
@@ -250,6 +302,7 @@ final class FleuryAppBridge {
   /// after the frame was sent but before its result arrives; callers must then
   /// inspect [isRunning] and [protocolError]. A positional id must include the
   /// [targetToken] observed in the semantic snapshot; the app verifies it.
+  @override
   Future<SemanticActionInvocationStatus?> invokeAction(
     SemanticNodeId id,
     SemanticAction action, {
@@ -274,6 +327,7 @@ final class FleuryAppBridge {
   /// `setValue`; observe the visual result with [settle]. Returns the
   /// app-reported invocation status like [invokeAction]. Positional ids use
   /// [targetToken] under the same fail-closed rule.
+  @override
   Future<SemanticActionInvocationStatus?> setValue(
     SemanticNodeId id,
     Object? value, {
@@ -399,6 +453,7 @@ final class FleuryAppBridge {
   /// devtools channel. Returns the decoded JSON records, or null when the app
   /// doesn't answer within the timeout (for example, debug tooling is disabled),
   /// so a tool call degrades to "not available" instead of hanging.
+  @override
   Future<List<Object?>?> queryDebug(String kind, {int limit = 50}) {
     _requireNegotiatedSession();
     // Wrap within the 32-bit range the wire seq round-trips (the response
@@ -430,6 +485,7 @@ final class FleuryAppBridge {
 
   /// Types [text] into the focused widget (a structured text-input event, the
   /// same one a keypress would produce on the serve path).
+  @override
   void typeText(String text) {
     if (text.isEmpty) return;
     _requireNegotiatedSession();
@@ -438,6 +494,7 @@ final class FleuryAppBridge {
 
   /// Presses a key — a special key (enter, tab, arrows…) or a literal
   /// character code — with optional [modifiers].
+  @override
   void pressKey(
     KeyCode code, {
     Set<KeyModifier> modifiers = const <KeyModifier>{},
@@ -448,6 +505,7 @@ final class FleuryAppBridge {
 
   /// Resizes the app's viewport, reflowing the layout (and thus which rows of
   /// windowed widgets are in the tree).
+  @override
   void resize(CellSize size) {
     _requireNegotiatedSession();
     _send(ResizeFrame(size));
@@ -496,6 +554,7 @@ final class FleuryAppBridge {
   /// returns the latest snapshot. The debounce is event-driven — it returns
   /// ~[quiet] after the *last* frame, with no fixed minimum sleep — and returns
   /// the current snapshot immediately if nothing changes within [timeout].
+  @override
   Future<SemanticInspectionSnapshot?> settle({
     int? sinceRevision,
     Duration quiet = const Duration(milliseconds: 60),
@@ -553,6 +612,7 @@ final class FleuryAppBridge {
   ///
   /// Idempotent and non-throwing: every cleanup stage is attempted and lifecycle
   /// futures always settle even if an injected transport/process disposer fails.
+  @override
   Future<void> close() async {
     if (_closed) return;
     _closed = true;

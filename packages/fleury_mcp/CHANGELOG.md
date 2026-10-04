@@ -2,6 +2,12 @@
 
 ## 0.1.0
 
+- Attach to `fleury run --agent` with `--attach`, optional `--project` and
+  `--session`. Adds `get_inspection`, `get_dev_status`, `reload_app` and
+  `restart_app`. Disconnect preserves the native app; restart invalidates all
+  old control references. Render inspection includes compact cell/style runs
+  and widget/layout ancestry from the same frame as the semantic tree.
+
 Initial release.
 
 An MCP (Model Context Protocol) server that drives a running Fleury app through
