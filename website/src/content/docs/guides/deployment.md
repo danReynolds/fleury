@@ -182,28 +182,17 @@ development when the preview needs the host — the filesystem, a process, or re
 
 `fleury create`, `run`, `serve`, `shell`, and `diagnose` come from the `fleury`
 CLI; `serve` and `shell` run on macOS and Linux.
-While Fleury is pre-release it isn't on pub.dev yet. Install it directly from
-Git:
 
 ```sh
-dart pub global activate --source git \
-  https://github.com/danReynolds/fleury.git \
-  --git-path packages/fleury
+dart pub global activate fleury
+fleury create my_app
 ```
 
-That puts `fleury` on your `PATH`. From the root of a local Fleury checkout, you
-can instead use `dart pub global activate --source path packages/fleury`, or run
-the source executable from `packages/fleury`: `dart run bin/fleury.dart serve …`.
+The activation installs `fleury` in Dart's global package directory; add that
+directory to your `PATH` if Dart reports it is missing. Before the first
+publication, or to try unreleased changes, use
+[Install from Git](/fleury/getting-started/#install-from-git).
 
-Until the packages are published, create an app with Git dependencies:
-
-```sh
-fleury create my_app --dependency-source=git
-```
-
-> **Release status.** Fleury is pre-1.0 and not yet published to pub.dev; apps
-> depend on it via git or path dependencies (as in [Getting
-> started](/fleury/getting-started/)). `fleury create` already defaults to
-> hosted dependencies, which resolve only once the packages are published, so
-> pass `--dependency-source=git` until then. The normal
-> `dart pub global activate fleury` path also arrives with publication.
+From the root of a local Fleury checkout, you can instead use
+`dart pub global activate --source path packages/fleury`, or run the source
+executable from `packages/fleury`: `dart run bin/fleury.dart serve …`.

@@ -2,7 +2,12 @@
 
 **Scope:** `main` at #270, framework core through the widget, serve, and semantics packages.
 **Method:** a multi-agent sweep, run twice, with finders split by subsystem. An independent verifier reproduced every finding with its own probe, and none was refuted. Findings are grouped into fix batches, most severe first within each.
-**Tracking:** each batch lands as one reviewed PR. Batch A is the first (#274). Six findings wait on a product decision; they stay open until it is made.
+**Tracking:** the status table was reconciled against `882c6642` on October 4,
+2026. The original findings and probes below are historical evidence, not a
+list of current defects. See [the reconciliation](#october-4-reconciliation)
+for the previously pending decisions and remaining limitations, and the
+[release preparation record](../implementation/release-preparation.md) for
+current qualification and publication work.
 
 ## Status
 
@@ -13,8 +18,8 @@
 | A | high | Unkeyed multi-child reconcile destroys later stateful siblings when a child is inserted or swapped above them (TextInput drafts wiped) | Fixed |
 | A | medium | A setState scheduled from a microtask makes frames chain as microtasks; SIGTERM, Ctrl+C and the grace force-exit never run | Fixed |
 | A | medium | Hot reload permanently stops every Animation.loop(), freezing built-in Animate .pulse()/.shimmer()/repeat effects | Fixed |
-| A | medium | N events delivered in one event-loop turn (one stdin read, one socket chunk) render N full frames | Decision pending: coalesce events into one frame |
-| A | medium | On exit, mouse reports that arrive during teardown stay queued on the tty and the shell reads them as garbage | Decision pending: draining the tty before exit, Ctrl+Z, or handoff reads away typeahead; not draining leaves mouse reports for the shell |
+| A | medium | N events delivered in one event-loop turn (one stdin read, one socket chunk) render N full frames | Open performance follow-up: the default is uncapped; `frameInterval` can cap bursts. Frame-loop starvation is fixed separately. |
+| A | medium | On exit, mouse reports that arrive during teardown stay queued on the tty and the shell reads them as garbage | Mitigated: stop input reports before asynchronous cleanup; preserve typeahead. Reports already in flight can still reach the shell. |
 | A | low | Rebuilds requested during a LayoutBuilder's layout-time build wait for the next frame: a Scope fed from constraints paints the previous size on every resize | Fixed |
 | B | high | RenderText's layout cache goes stale after a single-line fast-path layout, so wrapped lines vanish after narrow→wide→narrow | Fixed |
 | B | high | Soft-wrap drops leading whitespace at the start of every paragraph: multi-line Text and all RichText lose indentation (JsonView tree and nested Markdown lists render flat) | Fixed |
@@ -36,24 +41,24 @@
 | D | medium | Dialog's semantic dismiss calls pop() unconditionally, bypassing barrierDismissible:false and PopScope guards | Fixed |
 | D | medium | FleuryTester.lastCommandResult returns the app registry's stale result instead of the latest (scoped) invocation, so tests assert on the wrong command | Fixed |
 | D | low | renderToString(emptyMark: '') hangs the test process forever, and multi-code-unit marks throw RangeError | Fixed |
-| E | high | DataTable stops virtualizing under an unbounded height (e.g. as a Column child): every row is built each frame and the cursor moves off-screen | Decision pending: unbounded-height DataTable |
+| E | high | DataTable stops virtualizing under an unbounded height (e.g. as a Column child): every row is built each frame and the cursor moves off-screen | Fixed contract in #285: bounded height by default, debug assertion with an `Expanded` hint; explicit `shrinkWrap: true` for small intrinsic tables. |
 | E | high | FileBrowser strands the keyboard in an empty or unreadable directory: Left/Backspace go dead and there is no way back up | Fixed (a clickable parent row is a follow-up) |
 | E | high | Image re-decodes on every parent rebuild and resamples the full source on every paint (19–90 ms/frame); animated images restart and trip the one-ticker assert | Fixed |
 | E | high | Left/Right bubbling out of any control inside a Tabs body switches tabs and drops focus | Fixed: strip navigation requires strip focus; explicit tab-switch shortcuts remain available |
 | E | high | Markdown inline parser treats intraword `_` and spaced `*` as emphasis, deleting characters from identifiers, filenames and math | Fixed |
-| E | medium | Every first-party collection wrapper forces a second full frame per scroll step, undoing ListView's metrics-only no-rebuild guarantee | Decision pending: scroll-step rebuilds in collection widgets |
+| E | medium | Every first-party collection wrapper forces a second full frame per scroll step, undoing ListView's metrics-only no-rebuild guarantee | Fixed in #283: collection view notifications exclude completed viewport metrics while preserving public controller notifications. |
 | E | medium | FileBrowser re-reads the directory from disk and resets the cursor to row 0 on every parent rebuild when entityFilter is an inline closure | Fixed |
 | E | medium | JsonView deep-copies and re-sanitizes the whole JSON document on every build, so each arrow key costs O(document), collapsed parts included | Fixed |
-| E | medium | LogRegion filtered view goes stale (wrong rows shown and copied) when a stable entries list is mutated in place at the same length | Decision pending: in-place list mutation |
+| E | medium | LogRegion filtered view goes stale (wrong rows shown and copied) when a stable entries list is mutated in place at the same length | Fixed in #285: widget updates invalidate cached filtering even when list identity and length are unchanged. |
 | E | medium | SearchPanel reruns the full ranked search 2–4× per arrow key and re-indexes the old results on every update | Fixed |
-| E | medium | Sparkline (also Heatmap, Canvas) skips repaint when handed the same data object, so a history list updated in place freezes inside Panel's default RepaintBoundary | Decision pending: in-place list mutation |
+| E | medium | Sparkline (also Heatmap, Canvas) skips repaint when handed the same data object, so a history list updated in place freezes inside Panel's default RepaintBoundary | Fixed in #285: widget updates refresh mutable data and painters inside repaint boundaries. |
 | E | medium | Toaster, Tooltip, Autocomplete and CompletionTextInput overlays ignore the app Theme and paint the fallback dark surface | Fixed (also ColorPicker, Select, Menu, core Anchored) |
 | E | medium | Tree's top-level semantics (currentIndex, selectedKey, visibleRange) never update during keyboard navigation | Fixed |
 | E | medium | TreeTable selection is positional: expand, collapse, filter or new roots silently move the cursor to a different node, and Enter/Ctrl+C act on it | Fixed |
 | E | low | Any focus change rebuilds every focusable control in the tree, not just the two whose focus changed | Fixed |
 | E | low | Every paint pass re-derives geometry for every mounted Semantics element (every Text), even in terminal-only apps where the result is thrown away | Fixed |
 | E | low | FileBrowser, SearchPanel and DiffView recompute O(n) data on every build and every navigation call | Fixed |
-| E | low | LineChart sorts and dedupes every x value on each series update or parent rebuild, even when not interactive, and repaints all points when the data is unchanged | Fixed: cursor and palette; skipping a fresh series list over the same points waits on the in-place list mutation decision |
+| E | low | LineChart sorts and dedupes every x value on each series update or parent rebuild, even when not interactive, and repaints all points when the data is unchanged | Correctness resolved in #285: updates refresh mutable points. Cursor/palette fixes remain; skipping equivalent series updates is a deferred optimization. |
 | E | low | parseUnifiedDiff reads the `git format-patch` signature line (`-- `) as a deletion: phantom row, wrong counts, corrupt hunk copy | Fixed |
 | F | high | A legal duplicate semantic id on a node with children makes the wire encoder drop the whole semantic tree. Serve's a11y DOM goes empty and MCP reports that the app never rendered. | Fixed: generated paths retain unkeyed ancestor positions and distinguish key types; explicit app-owned duplicates still warn |
 | F | medium | A semantic action whose handler awaits UI (the `await context.present(Confirm())` idiom) blocks the served semantic-action queue, so the dialog can't be confirmed through a11y/MCP | Fixed |
@@ -61,7 +66,52 @@
 | F | medium | The coverage fallback turns border glyphs (Panel, Dialog, Menu…) into hundreds of junk text nodes and keeps the semantics pipeline on its slow path | Fixed (an explicit ASCII border is a follow-up) |
 | F | medium | The semantic wire decoder (browser client and MCP bridge) rebuilds the whole tree for every one-node patch; the wire diff saves bytes but not peer CPU | Fixed for content-only patches (a structural patch still rebuilds) |
 
-A multi-agent sweep of `main` plus #270, run twice. An independent verifier reproduced every finding with a probe, and none were refuted. Findings are grouped into proposed fix batches, most severe first.
+## October 4 reconciliation
+
+Four pending rows were already resolved in landed code:
+
+- **Unbounded DataTable:** [#285](https://github.com/danReynolds/fleury/pull/285)
+  made bounded height the default. Use `Expanded` or a bounded `SizedBox`; opt
+  into `shrinkWrap: true` only for small intrinsic tables. The guard is a debug
+  assertion, not a production row limit: an invalid unbounded layout with
+  assertions disabled can still build every row. See
+  [the contract tests](../../packages/fleury_test/test/catalog/data_table_height_test.dart).
+- **Collection scroll notifications:**
+  [#283](https://github.com/danReynolds/fleury/pull/283) introduced shared
+  [notification forwarding](../../packages/fleury/lib/src/catalog/internal/collection_notifications.dart).
+  Completed layout metrics reach public observers without rebuilding the
+  collection; explicit content refreshes still rebuild it. See
+  [the collection tests](../../packages/fleury_test/test/catalog/collection_metrics_test.dart).
+- **LogRegion and mutable charts:** #285 treats a new widget configuration as
+  an explicit refresh, including a reused list or painter. Mutating data alone
+  still requires rebuilding the widget. The
+  [regression suite](../../packages/fleury_test/test/catalog/mutable_data_refresh_test.dart)
+  covers filtered logs, Sparkline, Heatmap, Canvas, LineChart, and BarChart.
+  LineChart intentionally refreshes on updates rather than assuming reused
+  points are immutable; avoiding equivalent refreshes remains a performance
+  follow-up.
+
+Two runtime limitations remain explicit:
+
+- **Burst frame count:** the
+  [scheduler](../../packages/fleury/lib/src/runtime/frame_scheduler.dart)
+  coalesces requests queued before a flush. It does not guarantee one frame
+  for all asynchronously delivered events from one input chunk. Applications
+  with high-rate streams can set `runApp(frameInterval: Duration(milliseconds:
+  16))`. The frame-chain starvation guard fixes responsiveness, not this
+  default frame-count optimization.
+- **Late input reports:** the
+  [POSIX driver](../../packages/fleury/lib/src/terminal/posix_driver.dart)
+  disables mouse/focus/paste reports before asynchronous teardown, suspension,
+  and handoff. It does not flush away user typeahead. Reports already in flight
+  can still race terminal restoration; the mitigation is not proof that every
+  terminal returns to the shell without stray input. Include this in the
+  release terminal walkthrough.
+
+The original reproductions below retain their original paths, line numbers,
+severity, and proposed fixes. Use the status table and linked current tests
+when assessing what remains open.
+
 
 ## A. Framework core & runtime (8)
 

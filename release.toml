@@ -5,15 +5,15 @@ path = "packages/fleury"
 tag = "fleury-v{version}"
 publish = ["pub.dev", "git-tag"]
 
-[release.fleury_mcp]                 # tag fleury_mcp-v{version}
+[release.fleury_mcp]
 path = "packages/fleury_mcp"
 publish = ["pub.dev"]
 
-[release.fleury_test]                 # tag fleury_test-v{version}
+[release.fleury_test]
 path = "packages/fleury_test"
 publish = ["pub.dev"]
 
-[release.fleury_web]                 # tag fleury_web-v{version}
+[release.fleury_web]
 path = "packages/fleury_web"
 tag = "fleury_web-v{version}"
 publish = ["pub.dev", "git-tag"]

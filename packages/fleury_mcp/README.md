@@ -107,23 +107,35 @@ are unmodified `runApp` apps and drive over MCP as-is.
 
 ### 1. Get the `fleury_mcp` executable
 
-```bash
-# Once published to pub.dev — as a dev-dependency of your app:
-#   dev_dependencies:
-#     fleury_mcp: ^0.1.0
-# then invoke it with `dart run fleury_mcp -- <your app>`.
+Add the server as a development dependency of the app it will drive:
 
-# Today, from a Fleury checkout — put it on your PATH:
+```yaml
+dev_dependencies:
+  fleury_mcp: ^0.1.0
+```
+
+Run `dart pub get`, then start it from the application directory:
+
+```sh
+dart run fleury_mcp -- dart run bin/run_app.dart
+```
+
+`fleury_mcp` uses Fleury's explicitly unstable first-party wire. Each published
+executable package exact-pins its matching Fleury release, so the app dependency
+lets pub resolve one build for both. The INIT handshake rejects mismatches
+instead of decoding incompatible frames.
+
+Before the first publication, or when working from source, use the same Fleury
+checkout as the app. From its root:
+
+```sh
 dart tool/fleury_dev.dart bootstrap
 dart pub global activate --source path packages/fleury_mcp
 ```
 
-`fleury_mcp` uses Fleury's explicitly unstable first-party wire. Each published
-executable package exact-pins its matching Fleury release, so prefer the app
-dev-dependency form and let pub resolve one build for both. A path activation
-uses the checkout's sibling override; reactivate it after that Fleury source
-changes. The INIT handshake rejects mismatches instead of decoding incompatible
-frames.
+This installs `fleury_mcp` on your `PATH` using the checkout's sibling override;
+reactivate it after that Fleury source changes. For this source setup, use
+`fleury_mcp -- <your app command>` in place of `dart run fleury_mcp -- ...`.
 
 The MCP boundary supports stateless `2026-07-28` requests discovered through
 `server/discover`, while retaining the `2025-06-18` initialization flow for
@@ -133,11 +145,12 @@ wire handshake; it remains required in both MCP modes.
 ### 2. Point an MCP host at any app
 
 ```bash
-claude mcp add my-app -- fleury_mcp -- dart run bin/run_app.dart
+claude mcp add my-app -- dart run fleury_mcp -- dart run bin/run_app.dart
 ```
 
-Then ask the agent to read and operate the app — it will `get_ui` to see the
-tree, then `invoke_action` / `set_value` to drive it. Legacy `2025-06-18`
+Configure the host to start the server in your application directory, so Dart
+can find its development dependency and entrypoint. Then ask the agent to read
+and operate the app — it will `get_ui` to see the tree, then `invoke_action` / `set_value` to drive it. Legacy `2025-06-18`
 clients can additionally use focus-relative text and key input. The app needs
 no changes.
 
@@ -149,7 +162,7 @@ near-instant, repeatable launch:
 
 ```bash
 dart compile exe bin/run_app.dart -o my_app
-claude mcp add my-app -- fleury_mcp -- ./my_app
+claude mcp add my-app -- dart run fleury_mcp -- ./my_app
 ```
 
 The trade-off: an AOT executable has Fleury's debug tooling off, so the

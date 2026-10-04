@@ -71,26 +71,18 @@ the button's behavior; use keyboard or pointer tests to check input routing.
 <summary>Set up and run the tests</summary>
 
 Projects created with `fleury create` already include `fleury_test` and
-`test`. To add them to another app during the pre-release Git installation,
-use:
+`test`. To add them to another app, use:
 
 ```yaml
 dev_dependencies:
-  fleury_test:
-    git:
-      url: https://github.com/danReynolds/fleury.git
-      path: packages/fleury_test
+  fleury_test: ^0.1.0
   test: ^1.26.3
-
-dependency_overrides:
-  fleury:
-    git:
-      url: https://github.com/danReynolds/fleury.git
-      path: packages/fleury
 ```
 
-The `fleury` dependency override keeps the app and the tester on the same
-checkout. Run `dart test` from your application package. In a Fleury checkout,
+Run `dart pub get`, then `dart test` from your application package. Before the
+first publication, or when using a Git checkout, follow
+[Install from Git](/fleury/getting-started/#install-from-git) to keep the app
+and tester on matching sources. In a Fleury checkout,
 run every example from this guide with:
 
 ```sh

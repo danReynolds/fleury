@@ -1,5 +1,11 @@
 # Launch audit tracker — 2026-08-28
 
+> Historical audit and triage record. The bucket counts and unchecked items
+> below have not all been reverified against the launch candidate; do not use
+> them as a current blocker count or assume they are all closed. Start with
+> [Release preparation](../implementation/release-preparation.md) and the
+> [reconciled September core sweep](2026-09-23-core-sweep.md).
+
 **Scope:** full framework at `danreynolds/fleury-launch-bug-audit-618d54`, covering the ~267 commits since the 2026-07-17 audit.
 **Method:** 15 area auditors (one per infrastructure area / feature) → 102 findings → **14 independent verification agents that re-derived every finding from the code**, with authority to refute, re-grade in either direction, and correct the original's reasoning. Fixes were compiled or reproduced where cheap.
 **Verification outcome:** 13 severities moved, 6 claims refuted or materially corrected, 4 new findings surfaced that no auditor was looking for.

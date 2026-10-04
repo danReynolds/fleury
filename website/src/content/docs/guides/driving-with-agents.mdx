@@ -42,28 +42,42 @@ stale positional references.
 
 The MCP server is a separate executable so your application has no agent
 dependency. It connects to the app over a Unix-domain socket, so it runs on
-macOS and Linux. While Fleury is pre-release, activate the executable from the
-same checkout as the app. From the checkout's root, bootstrap once so the
-package resolves the checkout's `fleury`, then activate:
+macOS and Linux. Add it as a development dependency of the app it will drive:
+
+```yaml
+dev_dependencies:
+  fleury_mcp: ^0.1.0
+```
+
+Run `dart pub get`. The server exact-pins its matching Fleury version, so pub
+resolves a compatible framework for both the server and app. From the application
+directory, start it with the command that runs your app after `--`:
+
+```sh
+dart run fleury_mcp -- dart run bin/run_app.dart
+```
+
+<details>
+<summary>Before publication or when using a Fleury checkout</summary>
+
+Activate the executable from the same checkout as the app. From that checkout's
+root, bootstrap once and activate:
 
 ```sh
 dart tool/fleury_dev.dart bootstrap
 dart pub global activate --source path packages/fleury_mcp
 ```
 
-Then point an MCP host at `fleury_mcp`, followed by `--` and the command that
-starts your app. From the `packages/samples` directory of a Fleury checkout,
-this runs the example above:
+From `packages/samples`, this runs the example above:
 
 ```sh
 fleury_mcp -- dart run bin/samples.dart agent-guide
 ```
 
-For your own application, replace everything after `--`:
-
-```sh
-fleury_mcp -- dart run bin/run_app.dart
-```
+For your application, use `fleury_mcp -- dart run bin/run_app.dart`. Use the
+installed `fleury_mcp` command in host configuration instead of
+`dart run fleury_mcp`, and reactivate it whenever the checkout's Fleury changes.
+</details>
 
 An MCP host that uses JSON configuration can express the same command as:
 
@@ -71,8 +85,8 @@ An MCP host that uses JSON configuration can express the same command as:
 {
   "mcpServers": {
     "release-app": {
-      "command": "fleury_mcp",
-      "args": ["--", "dart", "run", "bin/run_app.dart"]
+      "command": "dart",
+      "args": ["run", "fleury_mcp", "--", "dart", "run", "bin/run_app.dart"]
     }
   }
 }
@@ -82,7 +96,7 @@ Hosts that add servers from their own command line take the same command. With
 Claude Code, for example:
 
 ```sh
-claude mcp add release-app -- fleury_mcp -- dart run bin/run_app.dart
+claude mcp add release-app -- dart run fleury_mcp -- dart run bin/run_app.dart
 ```
 
 `fleury_mcp` starts the app itself. The app runs in remote mode, sends its
@@ -91,22 +105,21 @@ Its terminal rendering is not part of the agent connection. The app gets an
 80 × 24 viewport; pass `--cols=<n>` and `--rows=<n>` before the `--` to change
 it, or use the `resize` tool during a session.
 
-`fleury_mcp` runs the app's command in its own working directory, so a
-relative path such as `bin/run_app.dart` needs the host to start the server
-from the application package. If the host can't set a working directory, give
-the entrypoint's absolute path.
+Configure the host to start the server from the application package. Both
+`dart run fleury_mcp` and the app's relative entrypoint need that directory.
+If the host cannot set it, globally activate the matching server release with
+`dart pub global activate fleury_mcp 0.1.0`, use the installed `fleury_mcp`
+command, and give it the app entrypoint's absolute path.
 
-Finding the programs is a separate question. Desktop hosts often start servers
-with a minimal `PATH` that includes neither `~/.pub-cache/bin` nor the Dart
-SDK. Give the host the absolute path to `fleury_mcp` (`which fleury_mcp`
-prints it), and put the Dart SDK's `bin` directory on the `PATH` in the
-server's `env` setting, because both the `fleury_mcp` script that
-`dart pub global activate` installs and the app's `dart run` command call
-`dart`.
+Desktop hosts often start servers with a minimal `PATH`. Give the host the
+absolute path to Dart (`which dart` prints it) and include the Dart SDK's `bin`
+directory in the server's `PATH`, since the app command also invokes `dart`.
+For a globally activated server, use the absolute path printed by
+`which fleury_mcp` instead.
 
 `dart run` compiles the app each time the server starts, and `fleury_mcp`
 suggests compiling it once instead: `dart compile exe bin/run_app.dart -o my_app`,
-then `fleury_mcp -- ./my_app`. A compiled app starts faster, but its debug
+then `dart run fleury_mcp -- ./my_app`. A compiled app starts faster, but its debug
 tooling is off, so `read_frames`, `read_logs`, and `read_errors` return
 `available: false` unless the app passes `DebugConfig(enabled: true)` to
 `runApp` (see [Inspect what happened](#inspect-what-happened)).

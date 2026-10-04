@@ -321,22 +321,22 @@ void main() {
       // The browser bundle reuses the same MyApp once lib/app.dart imports the
       // web-safe libraries.
       expect(guide, contains("import 'package:fleury/fleury_core.dart';"));
-      expect(
-        guide,
-        contains("import 'package:fleury/fleury_core.dart';"),
-      );
+      expect(guide, contains("import 'package:fleury/fleury_core.dart';"));
       expect(guide, contains('() => const MyApp()'));
       expect(guide, contains('title="web/index.html"'));
     });
 
-    test('testing guide uses the current Git package boundary', () {
-      final guide = File(
-        p.join(repo.path, 'website/src/content/docs/guides/testing.mdx'),
-      ).readAsStringSync();
-      expect(guide, contains('path: packages/fleury_test'));
-      expect(guide, contains('fleury` dependency override'));
-      expect(guide, contains('pre-release Git installation'));
-    });
+    test(
+      'testing guide uses the published testing package and Git fallback',
+      () {
+        final guide = File(
+          p.join(repo.path, 'website/src/content/docs/guides/testing.mdx'),
+        ).readAsStringSync();
+        expect(guide, contains('fleury_test: ^0.1.0'));
+        expect(guide, contains('test: ^1.26.3'));
+        expect(guide, contains('/fleury/getting-started/#install-from-git'));
+      },
+    );
 
     test('layout guidance preserves cell width-over-height semantics', () {
       final basic = File(
