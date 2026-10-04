@@ -49,6 +49,27 @@ See [Driving with an agent (MCP)](/guides/driving-with-agents/) for the hands-on
 setup: installing the driver, connecting a host, completing a semantic
 workflow, and making custom controls drive well.
 
+## Attach during native development
+
+`fleury run --agent bin/run_app.dart` opts a native source session into local
+agent attachment. Configure the MCP host with `fleury_mcp --attach` in that
+project (or pass `--project=/absolute/path`). The terminal supervisor keeps
+ownership of the app and its reload/restart lifecycle; MCP disconnect leaves it
+running. Multiple sessions require an explicit `--session=<id>`.
+
+`get_inspection` returns logical cells/styles and semantics from a single frame
+boundary, with optional widget/layout ancestry for a semantic node.
+`get_dev_status` reports reload outcomes, including compiler errors and
+`restartRequired`. `reload_app` applies source changes while preserving surviving
+widget state; `restart_app` resets state. Each actionable reference carries its
+observed app epoch, and restart rejects old references even for stable IDs.
+
+This first attachment supports native macOS/Linux development with hot reload
+and an interactive terminal. Semantic actions and diagnostics are available;
+raw input injection, trace-to-test generation and source mapping are subsequent
+work. See the [MCP package README](https://github.com/danReynolds/fleury/tree/main/packages/fleury_mcp#develop-the-app-together)
+for the complete attachment contract.
+
 ## What powers it — the semantic tree
 
 The MCP server is a *thin shim*, not a bolted-on adapter, because **the app

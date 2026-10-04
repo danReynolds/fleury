@@ -18,6 +18,11 @@ Future<void> main(List<String> args) async {
 }
 
 Future<int> _run(List<String> args) async {
+  var attach = false;
+  String? sessionId;
+  var project = Directory.current.path;
+  var projectSpecified = false;
+  var dimensions = false;
   var cols = 80;
   var rows = 24;
   List<String>? command;
@@ -26,7 +31,15 @@ Future<int> _run(List<String> args) async {
     if (arg == '--') {
       command = args.sublist(i + 1);
       break;
+    } else if (arg == '--attach') {
+      attach = true;
+    } else if (arg.startsWith('--session=')) {
+      sessionId = arg.substring('--session='.length);
+    } else if (arg.startsWith('--project=')) {
+      project = arg.substring('--project='.length);
+      projectSpecified = true;
     } else if (arg.startsWith('--cols=')) {
+      dimensions = true;
       final value = int.tryParse(arg.substring('--cols='.length));
       if (value == null || value < 1) {
         stderr.writeln('--cols must be a positive integer.');
@@ -34,6 +47,7 @@ Future<int> _run(List<String> args) async {
       }
       cols = value;
     } else if (arg.startsWith('--rows=')) {
+      dimensions = true;
       final value = int.tryParse(arg.substring('--rows='.length));
       if (value == null || value < 1) {
         stderr.writeln('--rows must be a positive integer.');
@@ -55,7 +69,17 @@ Future<int> _run(List<String> args) async {
     }
   }
 
-  if (command == null || command.isEmpty) {
+  if (attach && (command != null || dimensions)) {
+    stderr.writeln(
+      '--attach uses the running app and its real terminal dimensions; do not supply a command or viewport.',
+    );
+    return 2;
+  }
+  if (!attach && (sessionId != null || projectSpecified)) {
+    stderr.writeln('--project and --session require --attach.');
+    return 2;
+  }
+  if (!attach && (command == null || command.isEmpty)) {
     stderr.writeln(
       'fleury_mcp requires a command to run the app, e.g. '
       '`fleury_mcp -- dart run bin/run_app.dart`.',
@@ -63,7 +87,7 @@ Future<int> _run(List<String> args) async {
     return 2;
   }
 
-  if (_isColdRunCommand(command)) {
+  if (!attach && _isColdRunCommand(command!)) {
     // The bridge spawns whatever command it's given, so it can't AOT-compile
     // the app itself — point the user at the fast path instead.
     stderr.writeln(
@@ -78,25 +102,30 @@ Future<int> _run(List<String> args) async {
   // The app's own stdout/stderr is forwarded to the client as
   // notifications/message (WS-6); the bridge's own diagnostics stay on stderr.
   final appLog = StreamController<String>();
-  final FleuryAppBridge bridge;
+  final FleuryAppConnection bridge;
   try {
-    bridge = await FleuryAppBridge.spawn(
-      command: command,
-      viewport: CellSize(cols, rows),
-      log: (line) {
-        if (line.startsWith('[app ')) {
-          appLog.add(line);
-        } else {
-          stderr.writeln(line);
-        }
-      },
-    );
+    bridge = attach
+        ? await FleuryDevBridge.attach(
+            projectDirectory: project,
+            sessionId: sessionId,
+          )
+        : await FleuryAppBridge.spawn(
+            command: command!,
+            viewport: CellSize(cols, rows),
+            log: (line) {
+              if (line.startsWith('[app ')) {
+                appLog.add(line);
+              } else {
+                stderr.writeln(line);
+              }
+            },
+          );
   } on FleuryAppBridgeException catch (e) {
     stderr.writeln('fleury_mcp: ${e.message}');
     return 1;
   } on ProcessException catch (e) {
     stderr.writeln(
-      'fleury_mcp: could not start ${command.first}: ${e.message}',
+      'fleury_mcp: could not start ${command?.first ?? "dev session"}: ${e.message}',
     );
     return 1;
   }
@@ -164,6 +193,7 @@ bool _isColdRunCommand(List<String> command) {
 }
 
 void _printUsage() {
+  stderr.writeln('fleury_mcp --attach [--project=<path>] [--session=<id>]');
   stderr.writeln('fleury_mcp [--cols=<n>] [--rows=<n>] -- <command ...>');
   stderr.writeln('');
   stderr.writeln(

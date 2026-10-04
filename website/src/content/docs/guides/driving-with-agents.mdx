@@ -14,6 +14,40 @@ guess which keys might work.
 You do not add MCP code to the application. Start with ordinary Fleury widgets,
 then connect an MCP host to the same `runApp` entry point you use in a terminal.
 
+## Work on the app in your terminal
+
+For development, let the agent attach to the native app you are already using:
+
+```sh
+fleury run --agent bin/run_app.dart
+```
+
+Configure your MCP host to start `dart run fleury_mcp --attach` from the app's
+project directory. Add the development dependency described below first. If the
+host runs elsewhere, pass `--project=/absolute/app/path`; if several sessions
+are running, the attachment error lists their IDs for `--session=<id>`.
+
+The agent reads `get_inspection` for rendered cells, styles and semantics from
+one frame boundary. Passing a semantic `node` also returns widget ancestry,
+layout constraints, size, bounds and clipping. It can enter a draft with
+`set_value`, edit source, and check `get_dev_status` for the next completed
+reload before inspecting the result. A normal hot reload preserves existing
+widget state. Compiler errors appear in the reload report while the old app
+keeps running. `reload_app` triggers that loop explicitly; `restart_app` resets
+state and returns a fresh inspection.
+
+Every action in an attached session requires the `targetRef` returned by the
+latest inspection, including controls with stable IDs. Restart invalidates all
+old references. Disconnecting MCP leaves the native app and its draft running.
+
+This attachment supports macOS/Linux source sessions with an interactive
+terminal and hot reload. The supervisor exposes an opted-in, authenticated
+loopback endpoint for development. Resize the actual terminal; raw keyboard and
+pointer injection are not exposed in this first version. Cell inspection
+reports logical paint, including wide-character roles, rather than an emulator
+screenshot or image pixels. Its default region is capped to 200 by 100 cells;
+pass `region` with `left`, `top`, `cols` and `rows` to inspect another area.
+
 ## Build a drivable workflow
 
 This release checklist contains a text field, a checkbox, and a button. Try it
@@ -38,7 +72,7 @@ No extra identity or agent wrapper is needed for this read-and-act workflow.
 The server returns the current target for each control and refuses detectable
 stale positional references.
 
-## Connect an MCP host
+## Spawn an app for an MCP host
 
 The MCP server is a separate executable so your application has no agent
 dependency. It connects to the app over a Unix-domain socket, so it runs on

@@ -2325,6 +2325,7 @@ Future<Never> _runRun(List<String> args) async {
     scriptPath: script,
     args: run.args,
     vmOptions: run.vmOptions,
+    agent: run.agent,
     dartExecutable: dartSdkExecutable,
   );
 }

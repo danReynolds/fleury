@@ -2,6 +2,10 @@
 
 ## 0.1.0
 
+- `fleury run --agent` enables local MCP attachment to a native development
+  session. Inspect cells, semantics and layout together, observe reload errors,
+  and explicitly restart without transferring terminal ownership to the agent.
+
 - Bundle the full widget catalog in `fleury.dart` and `fleury_core.dart`. Apps
   need one UI dependency; catalog sources remain grouped under `src/catalog`.
 
