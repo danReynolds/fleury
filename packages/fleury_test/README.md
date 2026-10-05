@@ -13,8 +13,8 @@ dev_dependencies:
   test: ^1.26.3
 ```
 
-Run `dart pub get`, then `dart test`. If the packages are not yet available on
-pub.dev, or the app uses a Git checkout, use the matching sources and override
+Run `dart pub get`, then `dart test`. If the app uses a Git checkout, use the
+matching sources and override
 from [Install from Git](https://danreynolds.github.io/fleury/getting-started/#install-from-git).
 
 Mount a real widget, find its control, and check the result:

@@ -184,8 +184,8 @@ executable package exact-pins its matching Fleury release, so the app dependency
 lets pub resolve one build for both. The INIT handshake rejects mismatches
 instead of decoding incompatible frames.
 
-Before the first publication, or when working from source, use the same Fleury
-checkout as the app. From its root:
+When working from source, use the same Fleury checkout as the app. From its
+root:
 
 ```sh
 dart tool/fleury_dev.dart bootstrap
