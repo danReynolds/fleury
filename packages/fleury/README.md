@@ -26,10 +26,8 @@ save-to-reload session, but the app is compiled once instead of twice (see
 [the hot-reload guide](https://danreynolds.github.io/fleury/guides/hot-reload/)).
 The generated VS Code
 configuration uses the integrated terminal so input, rendering, breakpoints,
-and Dart hot reload share one normal debug session. If the packages are not yet
-available on pub.dev, use the
-[Git installation](https://danreynolds.github.io/fleury/getting-started/#install-from-git)
-instead.
+and Dart hot reload share one normal debug session. For unreleased changes, use
+the [Git installation](https://danreynolds.github.io/fleury/getting-started/#install-from-git).
 
 A smaller handwritten application looks like this:
 
