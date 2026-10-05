@@ -135,4 +135,61 @@ void main() {
       expect(tester.clipboard.readInProcess(), 'alpha');
     });
   });
+
+  group('Shift+Arrow into a label left with no width', () {
+    // Drag across labels, then one keeps its row but loses every column: its
+    // text was rebuilt as graphemes that take no cells, or its parent left it
+    // no room. Shift+Up or Shift+Down into that row clamped the cursor's
+    // column into the label's columns, of which there were none: an inverted
+    // range, and an `ArgumentError` out of the key binding. A row without
+    // cells holds no boundary, so the cursor stays where it is.
+    Widget labels(Widget beta) => Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [const Text('alpha'), beta, const Text('gamma')],
+    );
+    // Each way to lose the columns, with what the label still copies.
+    final causes = <String, (Widget, String)>{
+      'its text rebuilt with no width': (const Text('\u0301'), '\u0301\n'),
+      'its parent leaving it no room': (
+        const SizedBox(width: 0, child: Text('beta')),
+        '',
+      ),
+    };
+
+    for (final MapEntry(key: cause, value: (beta, copied)) in causes.entries) {
+      testWidgets('Shift+Up after $cause', (tester) {
+        tester.pumpWidget(labels(const Text('beta')));
+        tester.render(size: _wide);
+        // From the start of 'alpha' to after 'gam'.
+        tester.sendMouse(_down(0, 0));
+        tester.sendMouse(_drag(3, 2));
+        tester.sendMouse(_up(3, 2));
+
+        tester.pumpWidget(labels(beta));
+        tester.render(size: _wide);
+        tester.press(KeySequence.shift.up);
+        tester.press(KeySequence.shift.left); // still in 'gamma'
+        tester.press(KeySequence.ctrl.c);
+
+        expect(tester.clipboard.readInProcess(), 'alpha\n${copied}ga');
+      });
+
+      testWidgets('Shift+Down after $cause', (tester) {
+        tester.pumpWidget(labels(const Text('beta')));
+        tester.render(size: _wide);
+        // From after 'gam' back to after 'al'.
+        tester.sendMouse(_down(3, 2));
+        tester.sendMouse(_drag(2, 0));
+        tester.sendMouse(_up(2, 0));
+
+        tester.pumpWidget(labels(beta));
+        tester.render(size: _wide);
+        tester.press(KeySequence.shift.down);
+        tester.press(KeySequence.shift.right); // still in 'alpha'
+        tester.press(KeySequence.ctrl.c);
+
+        expect(tester.clipboard.readInProcess(), 'ha\n${copied}gam');
+      });
+    }
+  });
 }
