@@ -580,20 +580,21 @@ Future<void> main() async {
         );
         DevSessionClient? client;
         try {
-          expect(
-            await _waitFor(
-              () async =>
-                  session.bootstrapLog().contains('child up:') ? true : null,
-              timeout: const Duration(seconds: 90),
-              what: 'the supervisor waiting for the first frame',
-            ),
-            isTrue,
-            reason: session.diagnostics(),
+          client = await _waitFor(
+            () async {
+              try {
+                return await DevSessionClient.connect(
+                  projectDirectory: app.dir.path,
+                );
+              } catch (_) {
+                return null;
+              }
+            },
+            timeout: const Duration(seconds: 90),
+            what: 'the supervisor agent endpoint during gated startup',
           );
-          client = await DevSessionClient.connect(
-            projectDirectory: app.dir.path,
-          );
-          final connected = client;
+          expect(client, isNotNull, reason: session.diagnostics());
+          final connected = client!;
           expect((await connected.request('status'))['ready'], isFalse);
           // A slow first frame must not permanently disable reload after the
           // supervisor's former 30-second readiness deadline. Keep the app
