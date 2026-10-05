@@ -1,6 +1,7 @@
 ---
 import { Code, Icon } from '@astrojs/starlight/components';
 import sample from '../../../experiments/fleury_pad/lib/main.dart?raw';
+import PadProgress from './pad/PadProgress.astro';
 const proxyTarget = import.meta.env.DEV ? import.meta.env.FLEURY_PAD_PROXY_TARGET?.replace(/\/$/, '') : undefined;
 const compilerUrl = proxyTarget ? '/fleury/__pad' : (import.meta.env.PUBLIC_FLEURY_PAD_COMPILER_URL?.replace(/\/$/, '') ?? '');
 if (compilerUrl && !proxyTarget) {
@@ -47,6 +48,7 @@ const frameUrl = `${compilerUrl}/frame.html`;
   </header>
 
   <div class="pad-surface">
+    <PadProgress />
     <div class="pad-mobile-tabs" role="tablist" aria-label="Workspace">
       <button role="tab" id="pad-editor-tab" aria-controls="pad-editor-pane" aria-selected="true" data-view="editor">Code</button>
       <button role="tab" id="pad-app-tab" aria-controls="pad-app-pane" aria-selected="false" tabindex="-1" data-view="app">App<span class="app-indicator" aria-hidden="true"></span></button>
@@ -105,7 +107,7 @@ const frameUrl = `${compilerUrl}/frame.html`;
   .fleury-pad::backdrop { background: var(--sl-color-black); }
   .pad-expand-icon, .fleury-pad:modal .pad-restore-icon { display: block; }
   .pad-restore-icon, .fleury-pad:modal .pad-expand-icon { display: none; }
-  .pad-surface { display: flex; flex-direction: column; flex: 1; min-height: 0; overflow: hidden; border: 1px solid var(--sl-color-gray-5); border-radius: 0.65rem; }
+  .pad-surface { position: relative; display: flex; flex-direction: column; flex: 1; min-height: 0; overflow: hidden; border: 1px solid var(--sl-color-gray-5); border-radius: 0.65rem; }
   .fleury-pad * { box-sizing: border-box; }
   .fleury-pad [hidden] { display: none !important; }
   .pad-toolbar { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 0.8rem; padding: 1.15rem 0; position: relative; }

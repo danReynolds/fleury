@@ -93,6 +93,22 @@ export function mountPad(root, { monaco, sample, createWorker, compilerUrl = '',
   const themeObserver = new MutationObserver(syncTheme);
   themeObserver.observe(document.documentElement, { attributes: true, attributeFilter: ['data-theme'] });
   let checkpoint = null, busy = false, lastSource = null, analysisTimer, sourceHasErrors = false, reverting = false;
+  const progress = $('progress');
+  let progressTimer;
+  function updateProgress(phase, label) {
+    if (disposed || !progress) return;
+    clearTimeout(progressTimer);
+    progress.hidden = phase === 'idle';
+    progress.dataset.phase = phase;
+    progress.setAttribute('aria-valuetext', label ?? '');
+    if (phase === 'complete') progress.setAttribute('aria-valuenow', '100');
+    else progress.removeAttribute('aria-valuenow');
+    if (phase === 'complete' || phase === 'error') {
+      // Let completion register, but never let an earlier update's timer hide
+      // a new reload. Status and diagnostics remain after the bar fades.
+      progressTimer = setTimeout(() => { progress.hidden = true; }, 1600);
+    }
+  }
   const diagnostic = message => { if (disposed) return; $('diagnostics').textContent = message; $('diagnostics').hidden = false; };
   const createPreview = () => new Preview($('preview'), { frameUrl, onError(error) {
     checkpoint = null;
@@ -104,6 +120,8 @@ export function mountPad(root, { monaco, sample, createWorker, compilerUrl = '',
   const dispose = () => {
     if (disposed) return;
     disposed = true;
+    clearTimeout(progressTimer);
+    if (progress) progress.hidden = true;
     clearTimeout(analysisTimer); lifetime.abort(); themeObserver.disconnect(); preview.dispose();
     for (const disposable of disposables) disposable.dispose();
     editor.dispose(); for (const model of models.values()) model.dispose();
@@ -235,15 +253,18 @@ export function mountPad(root, { monaco, sample, createWorker, compilerUrl = '',
     const snap = snapshot();
     let applying = false;
     $('status').textContent = mode === 'reload' ? 'Compiling changes…' : 'Compiling app…';
+    updateProgress('compiling', $('status').textContent);
     try {
       const result = await api(mode === 'reload' ? 'compileNewDDCReload' : 'compileNewDDC', {
         ...payload(snap), ...(mode === 'reload' ? { deltaDill: checkpoint } : {}),
       });
+      if (disposed) return;
       if (typeof result.result !== 'string' || typeof result.deltaDill !== 'string' || !result.deltaDill) {
         throw new Error('The compiler returned an incomplete update. Try running again.');
       }
       $('metrics').textContent = result.elapsed ? `Compiled in ${result.elapsed} ms` : '';
       $('status').textContent = mode === 'reload' ? 'Applying hot reload…' : 'Starting app…';
+      updateProgress('applying', $('status').textContent);
       applying = true;
       if (mode !== 'reload') onPreviewStart();
       await preview.apply({ javascript: result.result,
@@ -255,6 +276,7 @@ export function mountPad(root, { monaco, sample, createWorker, compilerUrl = '',
       onRun();
       lastSource = snap.fingerprint;
       $('status').textContent = mode === 'reload' ? 'Hot reloaded. The app is ready.' : 'Running. Try the app, then edit the Dart source.';
+      updateProgress('complete', $('status').textContent);
     } catch (error) {
       if (disposed) return;
       const issues = error.issues?.map(issue => {
@@ -273,6 +295,7 @@ export function mountPad(root, { monaco, sample, createWorker, compilerUrl = '',
       } else {
         $('status').textContent = error.code === 'unavailable' ? 'Not compiled. Try Run again in a moment.' : 'Could not compile. Fix the error or try Run again.';
       }
+      updateProgress('error', $('status').textContent);
     } finally {
       busy = false; controls();
     }
@@ -295,6 +318,7 @@ export function mountPad(root, { monaco, sample, createWorker, compilerUrl = '',
     const hadApp = preview.hasFrame;
     preview.dispose(); preview = createPreview();
     checkpoint = null; lastSource = null; sourceHasErrors = false;
+    updateProgress('idle');
     $('diagnostics').hidden = true; $('metrics').textContent = ''; $('status').textContent = '';
     if (hadApp) onReset();
     controls();
