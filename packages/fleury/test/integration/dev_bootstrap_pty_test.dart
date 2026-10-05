@@ -550,6 +550,120 @@ Future<void> main() async {
 
   group('fleury run', () {
     test(
+      'a late first frame releases queued saves and remains reloadable',
+      timeout: const Timeout(Duration(minutes: 6)),
+      () async {
+        final repoRoot = _findRepoRoot(Directory.current);
+        final app = await _generateApp(tempDir);
+        final startupGate = File('${tempDir.path}/allow-startup');
+        app.entrypoint.writeAsStringSync(
+          app.entrypoint.readAsStringSync().replaceFirst(
+            '  final appExit = await runApp',
+            '''
+  File(Platform.environment['FLEURY_TEST_PID_OUT']!).writeAsStringSync('\$pid');
+  while (!File(Platform.environment['FLEURY_TEST_STARTUP_GATE']!).existsSync()) {
+    await Future<void>.delayed(const Duration(milliseconds: 20));
+  }
+  final appExit = await runApp''',
+          ),
+        );
+        final session = await _startSession(
+          app: app,
+          timeoutSeconds: 240,
+          environment: {'FLEURY_TEST_STARTUP_GATE': startupGate.path},
+          scriptArguments: [
+            '${repoRoot.path}/packages/fleury/bin/fleury.dart',
+            'run',
+            '--agent',
+            app.entrypoint.path,
+          ],
+        );
+        DevSessionClient? client;
+        try {
+          expect(
+            await _waitFor(
+              () async =>
+                  session.bootstrapLog().contains('child up:') ? true : null,
+              timeout: const Duration(seconds: 90),
+              what: 'the supervisor waiting for the first frame',
+            ),
+            isTrue,
+            reason: session.diagnostics(),
+          );
+          client = await DevSessionClient.connect(
+            projectDirectory: app.dir.path,
+          );
+          final connected = client;
+          expect((await connected.request('status'))['ready'], isFalse);
+          // A slow first frame must not permanently disable reload after the
+          // supervisor's former 30-second readiness deadline. Keep the app
+          // responsive to VM requests while initialization is still pending.
+          await Future<void>.delayed(const Duration(seconds: 32));
+          expect((await connected.request('status'))['ready'], isFalse);
+          app.marker.writeAsStringSync(_marker('BETA'));
+          expect(
+            await _waitFor(
+              () async => session.bootstrapLog().contains('watcher fired:')
+                  ? true
+                  : null,
+              timeout: const Duration(seconds: 10),
+              what: 'a source save queued during startup',
+            ),
+            isTrue,
+            reason: session.diagnostics(),
+          );
+          startupGate.writeAsStringSync('ready');
+
+          Future<void> waitForReload(int sequence) async {
+            final status = await _waitFor(
+              () async {
+                final value = await connected.request('status');
+                final report = value['lastReload'] as Map?;
+                return value['ready'] == true &&
+                        value['reloading'] == false &&
+                        report?['sequence'] == sequence
+                    ? value
+                    : null;
+              },
+              timeout: const Duration(seconds: 30),
+              what: 'late-start reload $sequence completion',
+            );
+            expect(status, isNotNull, reason: session.diagnostics());
+            expect((status!['lastReload'] as Map)['success'], isTrue);
+          }
+
+          await waitForReload(1);
+          app.marker.writeAsStringSync(_marker('GAMMA'));
+          await waitForReload(2);
+          final snapshot = jsonEncode(await connected.request('inspect'));
+          expect(snapshot, contains('live:MARK-GAMMA'));
+          expect(snapshot, contains('boot:MARK-ALPHA'));
+          expect(snapshot, isNot(contains('boot:MARK-GAMMA')));
+          Process.killPid(await session.appPid(), ProcessSignal.sigint);
+          final metadata = await session.finish();
+          expect(metadata['timedOut'], isFalse, reason: session.diagnostics());
+          expect(metadata['exitCode'], 77, reason: session.diagnostics());
+          expect(session.output(), contains('\x1b[?1049l'));
+        } finally {
+          client?.close();
+          if (!session._exited && session.pidFile.existsSync()) {
+            final childPid = int.tryParse(
+              session.pidFile.readAsStringSync().trim(),
+            );
+            if (childPid != null) {
+              Process.killPid(childPid, ProcessSignal.sigkill);
+            }
+            await session.process.exitCode.timeout(
+              const Duration(seconds: 10),
+              onTimeout: () => -1,
+            );
+          }
+          session.dispose();
+        }
+      },
+    );
+
+    test(
       'agent reload rejects a queued startup save and reassembles once per save',
       () async {
         final repoRoot = _findRepoRoot(Directory.current);

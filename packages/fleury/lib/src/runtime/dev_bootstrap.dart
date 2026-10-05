@@ -868,9 +868,11 @@ final class DevBootstrap {
   /// registered — which happens only after the app's first frame is
   /// mounted — then releases any queued save.
   Future<void> _awaitChildReady(VmService vm, String isolateId) async {
-    final deadline = DateTime.now().add(const Duration(seconds: 30));
-    while (DateTime.now().isBefore(deadline)) {
-      if (!identical(vm, _vm)) return; // Superseded by a respawn.
+    // The first frame can take arbitrarily long (initialization, JIT on a
+    // busy machine). Abandoning readiness after a fixed deadline strands all
+    // future saves in the startup queue even after the app becomes usable.
+    // Follow this VM connection until readiness, exit, or replacement instead.
+    while (identical(vm, _vm)) {
       try {
         final isolate = await vm.getIsolate(isolateId);
         // Re-check after the await: a respawn during the RPC would otherwise
@@ -888,11 +890,10 @@ final class DevBootstrap {
           return;
         }
       } catch (_) {
-        // Transient (isolate mid-boot) — keep polling until the deadline.
+        // Transient (isolate mid-boot) — retry while this VM is current.
       }
       await Future<void>.delayed(const Duration(milliseconds: 100));
     }
-    _debugLog('child never became reload-ready');
   }
 
   Future<Uri?> _readServiceInfo(File infoFile, Process child) async {
