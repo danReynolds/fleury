@@ -1,0 +1,26 @@
+<!-- A busy bar, not an estimated percentage. Only an acknowledged app update
+     fills the track; the existing status message announces the outcome. -->
+<div class="pad-progress" data-pad="progress" role="progressbar" aria-label="Updating app" aria-valuemin="0" aria-valuemax="100" hidden>
+  <span class="pad-progress-fill"></span>
+</div>
+
+<style>
+  .pad-progress { position: absolute; inset: 0 0 auto; height: 4px; z-index: 3; overflow: hidden; pointer-events: none; background: color-mix(in srgb, var(--sl-color-text-accent) 16%, transparent); }
+  .pad-progress[hidden] { display: none; }
+  .pad-progress-fill { display: block; width: 38%; height: 100%; border-radius: 999px; background: var(--sl-color-text-accent); box-shadow: 0 0 10px color-mix(in srgb, var(--sl-color-text-accent) 45%, transparent); animation: pad-progress-sweep 1.3s ease-in-out infinite; }
+  .pad-progress[data-phase='applying'] .pad-progress-fill { animation-duration: .85s; }
+  .pad-progress:is([data-phase='complete'], [data-phase='error']) .pad-progress-fill { width: 100%; border-radius: 0; animation: none; }
+  .pad-progress:is([data-phase='complete'], [data-phase='error']) { animation: pad-progress-finish 1.6s ease-out forwards; }
+  .pad-progress[data-phase='error'] .pad-progress-fill { background: var(--sl-color-red); box-shadow: none; }
+  @keyframes pad-progress-sweep {
+    from { transform: translateX(-110%); }
+    to { transform: translateX(270%); }
+  }
+  @keyframes pad-progress-finish {
+    0%, 70% { opacity: 1; }
+    100% { opacity: 0; }
+  }
+  @media (prefers-reduced-motion: reduce) {
+    .pad-progress, .pad-progress .pad-progress-fill { animation: none !important; }
+  }
+</style>
