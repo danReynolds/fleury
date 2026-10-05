@@ -1,111 +1,94 @@
-# Fleury 0.1 release preparation
+# Fleury 0.1.0 release qualification
 
-**Reviewed:** October 4, 2026. **Qualification baseline:** `882c6642`.
-**Disposition:** ready for a scoped public 0.1 launch after the final terminal
-walkthrough and publication checks below. No packages or release tags were
-published during this assessment.
+**Published:** October 5, 2026. **Release commit:**
+[`8f5c33ca`](https://github.com/danReynolds/fleury/commit/8f5c33cad593ed210cb1f8c078e53b1088552c6f).
+All four packages are public on pub.dev. The release preparation merged in
+[PR #307](https://github.com/danReynolds/fleury/pull/307).
 
-## Scope and package boundaries
-
-The terminal launch target is modern UTF-8, xterm-compatible POSIX terminals.
-Windows remains a preview; the extended real-terminal matrix remains incomplete.
-The browser embedding package is supported by compile/browser tests. `fleury
-serve` is a development preview, not a hardened public hosting layer. Native
-Sixel remains experimental.
+## Packages and tags
 
 | Package | Version | Relationship to Fleury |
 | --- | --- | --- |
-| `fleury` | 0.1.0 | Framework, bundled widgets/themes, and CLI |
-| `fleury_test` | 0.1.0 | Development-only testing helpers; `fleury: ^0.1.0` |
-| `fleury_mcp` | 0.1.0 | Optional agent executable; exact `fleury: 0.1.0` |
-| `fleury_web` | 0.1.0 | Optional browser host; exact `fleury: 0.1.0` |
+| [fleury](https://pub.dev/packages/fleury/versions/0.1.0) | 0.1.0 | Framework, bundled widgets/themes, and CLI |
+| [fleury_test](https://pub.dev/packages/fleury_test/versions/0.1.0) | 0.1.0 | Development-only testing helpers; `fleury: ^0.1.0` |
+| [fleury_mcp](https://pub.dev/packages/fleury_mcp/versions/0.1.0) | 0.1.0 | Optional agent executable; exact `fleury: 0.1.0` |
+| [fleury_web](https://pub.dev/packages/fleury_web/versions/0.1.0) | 0.1.0 | Optional browser host; exact `fleury: 0.1.0` |
+
+The annotated `fleury-v0.1.0` and `fleury_web-v0.1.0` tags both resolve to the
+release commit. MCP and testing have no tag target in `release.toml`.
 
 MCP and web use Fleury's lockstep wire. Their exact requirements are intentional;
-do not widen them just to suppress Pub's dependency-range warning. Ordinary apps
-need only `fleury`, plus `fleury_test` for tests.
+the two corresponding `RK-PUB-012` dependency-range warnings were explicitly
+accepted during publication. Ordinary apps need only `fleury`, plus
+`fleury_test` for tests.
 
-## Evidence at the qualification baseline
+## Publication and consumer evidence
 
-- [Main CI](https://github.com/danReynolds/fleury/actions/runs/37092867896)
-  passed analysis, package/integration tests, hot reload, repaint-cache checks,
-  performance/scenario gates, native Linux/macOS PTY checks, and fresh-project
-  smoke tests. Windows scaffold tests do not establish native terminal support.
-- [Docs CI](https://github.com/danReynolds/fleury/actions/runs/37092867884)
-  checked the live Pad compiler before successfully deploying the site.
-- RK [#95](https://github.com/danReynolds/release-kit/pull/95), merged as
-  `16dbfc7`, staged all four packages together using Dart 3.13.5. A second
-  `rk stage --json` run restored the same four stages. Both exited zero with
-  no problems and only the two expected `RK-PUB-012` exact-pin warnings.
-- Each staged package archive retained its original pubspec and excluded
-  `pubspec_overrides.yaml`, `pubspec.lock`, and `.dart_tool` files. This proves
-  local package preparation, not public registry authentication or installation.
-- 301 focused tests passed locally on Dart 3.12.2: overlay ownership, lazy-list
-  state and semantic identity, text layout, input parsing, DataTable height,
-  LogRegion, Sparkline, mutable-data refresh, and focus/scroll rebuild behavior.
-- `dart tool/fleury_dev.dart mvp-readiness --strict --json` passed, but it reads
-  the two June 2 Terminal.app/tmux captures. Both are `readyForReview`, not a
-  fresh acceptance of this candidate. All four Windows targets remain deferred.
+RK 0.1.13 at `45b39e8a`, including release-kit
+[PR #95](https://github.com/danReynolds/release-kit/pull/95), staged and published
+the stack in dependency order using Dart 3.12.2. The release completed without
+problems or unfinished targets. Final public status also passed.
+
+- All four downloaded public archives match their staged SHA-256 hashes.
+  Archived pubspecs, READMEs, changelogs, and library sources match the release
+  checkout. Local overrides, lockfiles, caches, and Git metadata are excluded.
+- A new temporary `PUB_CACHE` outside the repository activated the hosted
+  `fleury 0.1.0` CLI and generated an app without Git or path overrides.
+  Analysis, generated tests, and native AOT compilation passed.
+- The hosted native app rendered, incremented through keyboard input, and exited
+  cleanly inside an isolated tmux PTY. Terminal modes, cursor visibility, and
+  mouse modes restored correctly.
+- Adding hosted `fleury_mcp 0.1.0` to that app passed the real stdio MCP handshake,
+  UI inspection, semantic button activation, and observation of the updated count.
+- A separate minimal app resolved hosted `fleury` and `fleury_web 0.1.0`, passed
+  analysis, and compiled to JavaScript. Chromium verified the first frame, mouse
+  and keyboard input, semantic activation, and updated rendering without page
+  errors.
+
+The first-publication notices are removed from the installation, tutorial, and
+testing guides after the successful public-install checks. The Git installation
+path remains available for unreleased changes.
+
+## Runtime and deployment qualification
+
+The release commit changes only changelogs and package READMEs from `b7c4e9c`.
+Runtime files are identical to the qualified and deployed build.
+
+- [Runtime baseline CI](https://github.com/danReynolds/fleury/actions/runs/37362146668)
+  passed all eight jobs: framework analysis/tests, browser/integration checks,
+  hot reload, repaint-cache checks, performance/scenario gates, native Linux/macOS
+  PTY checks, and fresh-project smoke tests.
+- [Release-commit CI](https://github.com/danReynolds/fleury/actions/runs/37377800014)
+  records the automatic rerun for the documentation-only release commit.
+- [Release docs deployment](https://github.com/danReynolds/fleury/actions/runs/37377800098)
+  passed its site build, deployment, and live Pad compiler check.
+- The deployed Pad compiler is revision `fleury-pad-staging-00021-hoy`, build
+  `292860c2d73490b5`, from `b7c4e9c`. Its image passed 11 API tests, all 129 guide
+  projects, shutdown/checkpoint recovery, stalled-worker recovery, and startup
+  fault injection before promotion. A published-site compile and state-preserving
+  reload passed; the progress bar completed after the preview acknowledged it.
+- Tag-triggered Pad image verification is tracked for
+  [fleury-v0.1.0](https://github.com/danReynolds/fleury/actions/runs/37378473113) and
+  [fleury_web-v0.1.0](https://github.com/danReynolds/fleury/actions/runs/37378614740).
+  Automated Cloud Run deployment is disabled; the runtime-equivalent image was
+  already deployed and verified directly.
+
+## Supported scope and remaining qualification
+
+Native launch support targets modern UTF-8, xterm-compatible POSIX terminals.
+Windows remains a preview; scaffold CI does not establish native Windows terminal
+support. The extended physical-terminal matrix remains incomplete. October 5
+native PTY/tmux and fish dogfooding passed after the slow-start reload fix;
+physical Terminal.app clipboard, mouse, and rendering acceptance is not inferred
+from those automated checks.
+
+Browser embedding is covered by compile/browser tests. `fleury serve` is a
+development preview, not a hardened public hosting layer. Native MCP attachment
+is local development tooling, not production shared-session authorization.
+Native Sixel remains experimental.
 
 The [September core sweep](../audits/2026-09-23-core-sweep.md#october-4-reconciliation)
-records the landed fixes and remaining performance/input-report limitations.
-The [docs launch audit](../audits/2026-09-30-docs-launch-readiness.md) records
-its resolved findings. Earlier milestone reports retain historical evidence;
-they do not supersede qualification of the final release commit.
-
-## Preparation changes
-
-The release instructions now lead with pub.dev installation, with a shared Git
-fallback while publication is pending. MCP setup uses the app's development
-dependency so pub resolves the matching framework. Stale audit statuses and
-release-config tag comments have been reconciled without widening support claims.
-
-Local validation of this preparation change passed 153 Dart documentation tests,
-28 JavaScript tests, the production site build (163 pages), 925 internal links
-and anchors across the edited site pages, and 26 audit regression tests covering
-DataTable height, collection metrics, and mutable-data refresh. Formatting,
-`git diff --check`, and all 19 local audit/release-document links also passed.
-This supplements the baseline evidence; repeat staging after committing the
-package README changes.
-
-## Before publication
-
-- [ ] Merge the release-preparation changes and verify CI for the final commit.
-  The evidence above is tied to the baseline, not automatically to later edits.
-- [ ] Refresh the walkthrough in Terminal.app and inside tmux at that commit:
-  create/run an app, edit and hot reload while preserving state, resize narrow
-  and wide, type/paste, navigate by keyboard and mouse, suspend/resume, and quit.
-  Check that the shell restores correctly and receives no stray mouse reports.
-  Record the commit, SDK, terminal, results, and remaining fallbacks. Capture
-  capabilities with `dart tool/fleury_dev.dart terminal-matrix
-  --label=macos-terminal-release-0.1.0` and the corresponding
-  `--label=tmux-terminal-release-0.1.0` from inside tmux. Review captures using
-  the [terminal review packet](terminal-matrix-review-packet.md); the diagnostic
-  alone does not replace the interaction walkthrough.
-- [ ] Run `rk stage --json` from a clean checkout of the final commit using RK
-  with #95 or later. Confirm four complete stages and only the two intended
-  exact-pin warnings. README/config changes require new stage identities.
-- [ ] Review `rk plan` and publish with `rk release` in a terminal. Omit the unit
-  to process the whole stack in dependency order. Review the exact-pin warnings
-  explicitly. Staging uses local dependencies; publication still waits for
-  dependencies to become publicly available.
-- [ ] Verify all four 0.1.0 packages on pub.dev and the `fleury-v0.1.0` and
-  `fleury_web-v0.1.0` tags. MCP and testing have no tag target in `release.toml`.
-  Verify the tag-triggered Pad workflow and its live compiler check complete.
-
-## Immediately after publication
-
-- [ ] From a fresh temporary `PUB_CACHE`, run `dart pub global activate fleury`,
-  invoke the installed `fleury create` in a directory outside the checkout,
-  and run `dart analyze`, `dart test`, and `dart compile exe bin/run_app.dart`.
-  Use no Git/path dependency overrides. Launch the result in a real terminal.
-- [ ] In that hosted app, add `fleury_mcp` as a dev dependency and exercise a
-  read/action cycle through `dart run fleury_mcp -- dart run bin/run_app.dart`.
-  Check a minimal `fleury_web` embed resolves and compiles with hosted packages.
-- [ ] Remove the temporary “Before the first publication” notice from Getting
-  started and the corresponding tutorial sentence. Keep the Git installation
-  section for unreleased changes. Verify the deployed getting-started journey
-  and live Pad against the published release.
-
-Keep these items open until their actual results are recorded. Neither a
-successful stage nor the historical MVP gate establishes public-install or
-current real-terminal acceptance.
+records remaining performance/input-report limitations. The
+[docs launch audit](../audits/2026-09-30-docs-launch-readiness.md) records resolved
+findings. Earlier readiness reports are historical evidence, not substitutes for
+these release and public-consumer checks.

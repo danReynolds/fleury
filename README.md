@@ -57,9 +57,9 @@ cd my_app
 
 The generated project includes a runnable counter, a widget test, and the
 minimal VS Code configuration needed for F5 to launch into an interactive
-terminal. If the packages are not yet available on pub.dev, use the
-[Git installation](https://danreynolds.github.io/fleury/getting-started/#install-from-git)
-instead. Under the scaffold, the application remains ordinary Dart:
+terminal. For unreleased changes, use the
+[Git installation](https://danreynolds.github.io/fleury/getting-started/#install-from-git).
+Under the scaffold, the application remains ordinary Dart:
 
 ```dart
 import 'package:fleury/fleury.dart';
