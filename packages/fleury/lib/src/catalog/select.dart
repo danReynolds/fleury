@@ -94,6 +94,11 @@ class _SelectState<T> extends State<Select<T>> {
   late FocusNode _triggerFocus;
   bool _ownsFocus = false;
   OverlayEntry? _entry;
+
+  /// The manager the open list traps focus in, kept from [_open] so [_close]
+  /// needs no lookup through [context], which finds nothing once this State
+  /// has left the tree (see [deactivate]).
+  FocusManager? _manager;
   FocusNode? _priorFocus;
   FormControlRegistration? _formRegistration;
   bool _hovered = false;
@@ -217,6 +222,8 @@ class _SelectState<T> extends State<Select<T>> {
           borderStyle: Theme.of(context).borderStyle,
           onHighlighted: widget.onHighlightChanged,
           onPicked: (value) {
+            // A list that outlived its close applies nothing.
+            if (!_isOpen) return;
             _close();
             _commit(value);
           },
@@ -225,15 +232,21 @@ class _SelectState<T> extends State<Select<T>> {
       ),
     );
     _entry = entry;
+    _manager = manager;
     manager.requestFocus(null); // let the list's autofocus claim focus
     overlay.insert(entry);
     setState(() {}); // flip the open indicator
   }
 
+  /// Takes the open list down and returns focus to where it was. Closing a
+  /// closed Select does nothing.
   void _close({bool rebuild = true}) {
-    FocusManager.of(context).releaseFocusTrapIn(_trapContentKey.currentContext);
-    _entry?.remove();
+    final entry = _entry;
+    if (entry == null) return;
     _entry = null;
+    _manager?.releaseFocusTrapIn(_trapContentKey.currentContext);
+    _manager = null;
+    entry.remove();
     final prior = _priorFocus;
     _priorFocus = null;
     if (prior != null && prior.isAttached) prior.requestFocus();
@@ -241,6 +254,7 @@ class _SelectState<T> extends State<Select<T>> {
   }
 
   void _dismiss() {
+    if (!_isOpen) return;
     _close();
     // Undo any live preview the list drove, so dismissing leaves the consumer
     // showing `value` again rather than the last highlight.
@@ -275,9 +289,24 @@ class _SelectState<T> extends State<Select<T>> {
   }
 
   @override
+  void deactivate() {
+    // The list floats in the overlay, outside this Select, and reaches its
+    // scopes through it. Left open on a State that has left the tree (a
+    // parent rebuild replaced it, its route was popped, a GlobalKey moved
+    // it), it took input until the frame ended, and closing it from there
+    // threw. Close it before anything else can reach it.
+    _close(rebuild: false);
+    super.deactivate();
+  }
+
+  @override
   void dispose() {
     _formRegistration?.release(this);
+    // [deactivate] closed the list, or an unmount without one (the whole
+    // tree going away) took it down with this State, which owns its entry.
+    // Either way it stays closed: no later path may close it again.
     _entry?.remove();
+    _entry = null;
     if (_ownsFocus) _triggerFocus.dispose();
     super.dispose();
   }

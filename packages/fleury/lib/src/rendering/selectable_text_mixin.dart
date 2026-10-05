@@ -285,7 +285,10 @@ mixin SelectableTextMixin on RenderObject implements Selectable {
     // (A future "scroll to keep cursor visible" feature would lift
     // that boundary back into the visible window.)
     final bounds = selectionPaintRect;
-    if (bounds == null) return null;
+    // No cells, no boundary. A label can keep its row with no columns (its
+    // text takes no cells, or its parent left it no room), and clamping a
+    // column into zero columns below would be an inverted range, which throws.
+    if (bounds == null || bounds.size.isEmpty) return null;
     final lines = selectionLines;
 
     // Vertical motion: only the DESTINATION row needs to live inside

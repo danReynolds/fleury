@@ -24,6 +24,24 @@ String _screen(FleuryTester tester, {int cols = 16, int rows = 8}) =>
   return null;
 }
 
+/// One way to close an open list, given where its Blue option is.
+typedef _ClosePath =
+    void Function(FleuryTester tester, ({int col, int row}) blue);
+
+/// Presses and releases the left button at [at].
+void _click(FleuryTester tester, ({int col, int row}) at) {
+  for (final kind in [MouseEventKind.down, MouseEventKind.up]) {
+    tester.sendMouse(
+      MouseEvent(
+        kind: kind,
+        button: MouseButton.left,
+        col: at.col,
+        row: at.row,
+      ),
+    );
+  }
+}
+
 const _options = <SelectOption<String>>[
   SelectOption(value: 'red', label: 'Red'),
   SelectOption(value: 'green', label: 'Green'),
@@ -102,6 +120,41 @@ class _EnabledHost extends StatelessWidget {
 }
 
 void _noop() {}
+
+/// A picker replaced, State and all, whenever [revision] changes: the way an
+/// editor's toolbar keys its "Paragraph style" picker by the document
+/// revision, so an open list can never apply an old choice to new content.
+class _RevisionHost extends StatelessWidget {
+  const _RevisionHost({required this.revision, required this.picks});
+
+  final ValueNotifier<int> revision;
+  final List<String> picks;
+
+  @override
+  Widget build(BuildContext context) => NotifierBuilder<ValueNotifier<int>>(
+    notifier: revision,
+    builder: (context, revision) => Select<String>(
+      key: ValueKey(revision.value),
+      value: 'red',
+      options: _options,
+      semanticLabel: 'Color',
+      onChanged: picks.add,
+    ),
+  );
+}
+
+/// A navigator's first screen, handing out its context.
+class _Home extends StatelessWidget {
+  const _Home(this.onBuild);
+
+  final void Function(BuildContext context) onBuild;
+
+  @override
+  Widget build(BuildContext context) {
+    onBuild(context);
+    return const Text('Home');
+  }
+}
 
 class _MultiHost extends StatefulWidget {
   const _MultiHost({this.initial = const <String>{}});
@@ -624,6 +677,78 @@ void main() {
       expect(tester.semantics().where(role: SemanticRole.menu), isEmpty);
       expect(behindPressed, isFalse);
       expect(tester.focusManager.focusedNode?.debugLabel, 'select-trigger');
+    });
+
+    group('replaced while its list is open', () {
+      // The list floats in the overlay, outside its Select. Input that reached
+      // it after a rebuild replaced the Select, and before the next frame,
+      // closed it through the replaced State: `FocusManager.of` found no
+      // manager above a State that had left the tree, and threw. The list
+      // must leave with its Select, and any close after that must do nothing.
+      const outside = (col: 15, row: 7);
+      final paths = <String, _ClosePath>{
+        // Input dispatches before the build it causes, so one key lands the
+        // rebuild and the next reaches whatever list is left.
+        'Enter on an option': (tester, _) {
+          tester.sendKey(const KeyEvent(KeyCode.arrowDown));
+          tester.sendKey(const KeyEvent(KeyCode.enter));
+        },
+        'Esc': (tester, _) {
+          tester.sendKey(const KeyEvent(KeyCode.arrowDown));
+          tester.sendKey(const KeyEvent(KeyCode.escape));
+        },
+        // The press lands the rebuild, and its release completes the tap.
+        'a click on an option': _click,
+        'a click outside the list': (tester, _) => _click(tester, outside),
+      };
+      for (final MapEntry(key: path, value: close) in paths.entries) {
+        testWidgets('$path neither throws nor picks', (tester) {
+          final revision = ValueNotifier(0);
+          final picks = <String>[];
+          tester.pumpWidget(_RevisionHost(revision: revision, picks: picks));
+          _click(tester, _find(tester, 'Red')!);
+          final blue = _find(tester, 'Blue')!;
+
+          revision.value++; // the parent rebuilds with a new Select
+          close(tester, blue);
+          expect(picks, isEmpty, reason: 'an old list applies nothing');
+          expect(tester.target(role: SemanticRole.menu), hasCount(0));
+
+          // The frame after disposes the replaced State. Nothing reaches it.
+          tester.pump();
+          close(tester, blue);
+          expect(picks, isEmpty);
+
+          _click(tester, _find(tester, 'Red')!);
+          _click(tester, _find(tester, 'Blue')!);
+          expect(picks, ['blue'], reason: 'the new Select picks as usual');
+        });
+      }
+
+      testWidgets('popping its route takes the list down', (tester) {
+        late BuildContext home;
+        final picks = <String>[];
+        tester.pumpWidget(Navigator(home: _Home((context) => home = context)));
+        Navigator.of(home).push<void>(
+          Select<String>(
+            value: 'red',
+            options: _options,
+            semanticLabel: 'Color',
+            onChanged: picks.add,
+          ),
+          transition: RouteTransition.none,
+        );
+        tester.pump();
+        _click(tester, _find(tester, 'Red')!);
+        expect(_screen(tester), contains('Blue'), reason: 'the list is open');
+
+        Navigator.of(home).pop();
+        // The press lands the pop, and the release is a click outside.
+        _click(tester, outside);
+        expect(tester.target(role: SemanticRole.menu), hasCount(0));
+        expect(_screen(tester), contains('Home'));
+        expect(picks, isEmpty);
+      });
     });
 
     group('semantics', () {
