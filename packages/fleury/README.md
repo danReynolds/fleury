@@ -304,6 +304,8 @@ than interpolating palette indices.
 Use a controller policy for short names, search terms, or confirmation fields:
 
 ```dart
+// Declare this top-level or static: a const policy can't refer to a local
+// function (in build()) or an instance method (on your State).
 bool printableAscii(int point) => point >= 32 && point <= 126;
 
 final controller = TextEditingController(
