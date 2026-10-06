@@ -1,4 +1,8 @@
+// One entry point for the Testing guide's checks. The guide shows each test
+// under testing/ whole, as the reader's own test file, and each also runs
+// independently; this file adds the cases the guide only mentions.
 import 'dart:async';
+import 'dart:io';
 
 import 'package:fleury/fleury.dart';
 import 'package:fleury_test/fleury_test.dart';
@@ -6,9 +10,48 @@ import 'package:test/test.dart';
 
 import '../lib/testing_guide.dart';
 import 'scenarios/preferences_tests.dart';
+import 'testing/animated_upload_test.dart' as animated_upload;
+import 'testing/counter_test.dart' as counter;
+import 'testing/draft_editor_test.dart' as draft_editor;
+import 'testing/preferences_test.dart' as preferences;
+import 'testing/save_status_test.dart' as save_status;
 
 void main() {
-  testWidgets('edits only the work preferences', (tester) async {
+  group('counter_test.dart', counter.main);
+  group('preferences_test.dart', preferences.main);
+  group('save_status_test.dart', save_status.main);
+  group('animated_upload_test.dart', animated_upload.main);
+  group('draft_editor_test.dart', draft_editor.main);
+
+  // The guide's "Run test" button replays the shared scenario, pausing on each
+  // step, beside the test the guide shows. Both must be the same steps.
+  test('the walkthrough runs the preferences test the guide shows', () {
+    final scenario =
+        RegExp(
+              r'// #docregion preferences-test\n([\s\S]*?)\n *// #enddocregion',
+            )
+            .firstMatch(
+              File('test/scenarios/preferences_tests.dart').readAsStringSync(),
+            )!
+            .group(1)!;
+    final shown =
+        RegExp(
+              r"testWidgets\('edits only the work preferences', \(tester\) async \{\n"
+              r'([\s\S]*?)\n  \}\);',
+            )
+            .firstMatch(
+              File('test/testing/preferences_test.dart').readAsStringSync(),
+            )!
+            .group(1)!;
+    final steps = scenario
+        .split('\n')
+        .where((line) => !line.trim().startsWith('yield '))
+        .join('\n');
+
+    expect(_dedent(shown), _dedent(steps));
+  });
+
+  testWidgets('the walkthrough scenario runs to completion', (tester) async {
     await runPreferencesTest(tester, expect: expect).drain<void>();
   });
 
@@ -59,20 +102,6 @@ void main() {
     expect(personal.field('Name'), hasValue(''));
   });
 
-  testWidgets('chooses when the save finishes', (tester) async {
-    final request = Completer<void>();
-    tester.pumpWidget(SaveStatus(save: () => request.future));
-
-    await tester.button('Save').press();
-    expect(tester.exists(text('Saving…')), isTrue);
-    expect(tester.button('Save'), isDisabled);
-
-    request.complete();
-    await tester.settle();
-    expect(tester.exists(text('Saved')), isTrue);
-    expect(tester.button('Save'), isEnabled);
-  });
-
   testWidgets('shows a failed save and allows retry', (tester) async {
     var request = Completer<void>();
     tester.pumpWidget(SaveStatus(save: () => request.future));
@@ -89,20 +118,6 @@ void main() {
     request.complete();
     await tester.settle();
     expect(tester.exists(text('Saved')), isTrue);
-  });
-
-  testWidgets('inspects the upload halfway through its animation', (
-    tester,
-  ) async {
-    tester.pumpWidget(const AnimatedUpload());
-    await tester.button('Animate').press();
-    final upload = tester.target(role: SemanticRole.progress, label: 'Upload');
-
-    tester.pump(const Duration(milliseconds: 500));
-    expect(upload, hasValue(0.5));
-
-    tester.pumpAndSettle();
-    expect(upload, hasValue(1.0));
   });
 
   testWidgets('observes a custom async handler before it completes', (
@@ -128,19 +143,6 @@ void main() {
     expect(publish, isEnabled);
   });
 
-  testWidgets('adds one', (tester) async {
-    tester.pumpWidget(const Counter());
-    await tester.button('Add one').press();
-    expect(tester.exists(text('Count: 1')), isTrue);
-  });
-
-  testWidgets('adds one using the keyboard', (tester) {
-    tester.pumpWidget(const Counter());
-    expect(tester.button('Add one'), isFocused);
-    tester.press(KeySequence.enter);
-    expect(tester.exists(text('Count: 1')), isTrue);
-  });
-
   testWidgets('fills and saves a draft', (tester) async {
     String? saved;
     tester.pumpWidget(
@@ -157,47 +159,6 @@ void main() {
     expect(saved, 'Ready for review.');
     expect(editor.button('Save'), isDisabled);
   });
-
-  // #docregion command-test
-  testWidgets('saves the draft by its command ID', (tester) async {
-    String? saved;
-    tester.pumpWidget(
-      FleuryApp(
-        title: 'Draft editor',
-        home: DraftEditor(save: (text) async => saved = text),
-      ),
-    );
-    await tester.field('Draft').fill('Ready for review.');
-
-    final result = await tester.invokeCommand(const CommandId('editor.save'));
-    expect(result.completed, isTrue);
-    expect(saved, 'Ready for review.');
-
-    final again = await tester.invokeCommand(const CommandId('editor.save'));
-    expect(again.status, CommandInvocationStatus.disabled);
-  });
-  // #enddocregion command-test
-
-  // #docregion shortcut-test
-  testWidgets('saves the draft with Ctrl+S', (tester) async {
-    String? saved;
-    tester.pumpWidget(
-      FleuryApp(
-        title: 'Draft editor',
-        home: DraftEditor(save: (text) async => saved = text),
-      ),
-    );
-    final editor = tester.target(type: DraftEditor);
-    expect(editor.field('Draft'), isFocused);
-    tester.type(' Ready for review.');
-    tester.press(KeySequence.ctrl.s);
-    await tester.settle();
-
-    expect(saved, 'Ship the testing guide. Ready for review.');
-    expect(tester.exists(text('All changes saved')), isTrue);
-    expect(editor.button('Save'), isDisabled);
-  });
-  // #enddocregion shortcut-test
 
   testWidgets('keeps the draft after a failed save, then retries', (
     tester,
@@ -316,4 +277,17 @@ void main() {
     tester.pumpAndSettle();
     expect(tester.exists(text('100%')), isTrue);
   });
+}
+
+/// [code] without the indentation its lines share.
+String _dedent(String code) {
+  final lines = code.split('\n');
+  final indent = lines
+      .where((line) => line.trim().isNotEmpty)
+      .map((line) => line.length - line.trimLeft().length)
+      .fold<int?>(null, (min, n) => min == null || n < min ? n : min);
+  return [
+    for (final line in lines)
+      line.trim().isEmpty ? '' : line.substring(indent ?? 0),
+  ].join('\n');
 }

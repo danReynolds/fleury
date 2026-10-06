@@ -599,6 +599,11 @@ const hiddenByDesign = <String, Map<String, String>>{
   },
   'input.scrolling': {'examples/input/scroll_panes.dart': _excerpt},
   'input.splitter': {'examples/input/split_pane.dart': _excerpt},
+  'testing.editor': {
+    'example':
+        "the embed's Navigator, which the Discard dialog opens on; an app's "
+        'FleuryApp supplies one, as the guide\'s tests show',
+  },
 };
 
 /// Registry categories that are not widget reference pages.

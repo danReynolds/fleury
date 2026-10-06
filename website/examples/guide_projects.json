@@ -475,40 +475,33 @@
   ],
   "testing.counter": [
     {
-      "label": "counter.dart",
-      "source": "website/examples/lib/testing_guide.dart",
-      "declaration": "_CounterState"
+      "source": "website/examples/lib/testing/counter.dart"
     }
   ],
   "testing.preferences": [
     {
-      "label": "preferences.dart",
-      "source": "website/examples/lib/testing_guide.dart",
-      "declaration": "_PreferencesState"
-    },
-    {
-      "label": "preferences_pair.dart",
-      "source": "website/examples/lib/testing_guide.dart",
-      "declaration": "preferencesPair"
+      "source": "website/examples/lib/testing/preferences.dart"
     }
   ],
   "testing.save": [
     {
-      "label": "save_status.dart",
-      "source": "website/examples/lib/testing_guide.dart",
-      "declaration": "_SaveStatusState"
+      "source": "website/examples/lib/testing/save_status.dart"
     },
     {
-      "label": "save_demo.dart",
-      "source": "website/examples/lib/testing_guide.dart",
-      "declaration": "TestingSaveDemo"
+      "source": "website/examples/lib/testing/save_demo.dart"
     }
   ],
   "testing.animation": [
     {
-      "label": "animated_upload.dart",
-      "source": "website/examples/lib/testing_guide.dart",
-      "declaration": "_AnimatedUploadState"
+      "source": "website/examples/lib/testing/animated_upload.dart"
+    }
+  ],
+  "testing.editor": [
+    {
+      "source": "website/examples/lib/testing/draft_editor.dart"
+    },
+    {
+      "source": "website/examples/lib/testing/editor_demo.dart"
     }
   ],
   "themes.custom": [

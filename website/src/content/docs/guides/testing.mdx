@@ -5,10 +5,10 @@ description: Test buttons, forms, asynchronous work, and animations with small r
 
 import FleuryExample from '../../../components/FleuryExample.astro';
 import GuidePad from '../../../components/GuidePad.astro';
-import PreferencesTestCode from '../../../components/PreferencesTestCode.astro';
 import SourceExcerpt from '../../../components/SourceExcerpt.astro';
-import testingSource from '../../../../examples/lib/testing_guide.dart?raw';
-import testingTests from '../../../../examples/test/testing_guide_test.dart?raw';
+import TestingGuideCode from '../../../components/TestingGuideCode.astro';
+import draftEditorSource from '../../../../examples/lib/testing/draft_editor.dart?raw';
+import draftEditorTests from '../../../../examples/test/testing/draft_editor_test.dart?raw';
 
 A widget test runs your UI without opening a terminal, so `dart test` runs the
 same way in CI. Tests drive the UI through a tester instead of calling
@@ -21,42 +21,13 @@ can try.
 `button('Add one')` finds the button by its **role** (the kind of control) and
 **label** (its name). `Button` supplies both automatically.
 
-The **Logical test** invokes its action with `press()`. The **Keyboard test**
-sends Enter through the focus system. Try the counter, then compare the two:
+The first test invokes the button's action with `press()`. The second sends
+Enter through the focus system. Try the counter, then compare the two:
 
 <GuidePad id="testing.counter" layout="code-wide" codeMaxHeight="26rem" codeLabel="Source" demoLabel="Try it" referencesLabel="Tests" referencesOpen={true}>
 <FleuryExample slot="demo" id="testing.counter" cols={32} rows={5} interactive />
 <Fragment slot="references">
-
-**Logical test**
-
-```dart wrap
-import 'dart:async';
-
-import 'package:fleury/fleury.dart';
-import 'package:fleury_test/fleury_test.dart';
-import 'package:my_app/counter.dart';
-import 'package:test/test.dart';
-
-void main() {
-  testWidgets('adds one', (tester) async {
-    tester.pumpWidget(const Counter());
-    await tester.button('Add one').press();
-    expect(tester.exists(text('Count: 1')), isTrue);
-  });
-}
-```
-
-**Keyboard test**
-
-```dart wrap
-testWidgets('adds one using the keyboard', (tester) {
-  tester.pumpWidget(const Counter());
-  expect(tester.button('Add one'), isFocused);
-  tester.press(KeySequence.enter);
-  expect(tester.exists(text('Count: 1')), isTrue);
-});
-```
+<TestingGuideCode file="counter_test.dart" />
 </Fragment>
 </GuidePad>
 
@@ -91,8 +62,11 @@ dart test test/testing_guide_test.dart
 ```
 </details>
 
-Keep the imports and `main` from the first test. The remaining tests show
-individual cases to add inside it.
+Each **Source** tab and **Tests** file on this page is a complete file. Save a
+source tab in your app's `lib/` folder under the tab's name, and a test under
+the name in its title. The tests import the source by that name:
+`package:my_app/counter.dart` is `lib/counter.dart` in a package named
+`my_app`; use your package's name.
 
 ## Find a component, then edit its controls
 
@@ -103,10 +77,7 @@ to watch the actions and assertions, or type into Work and use Tab to explore:
 <GuidePad id="testing.preferences" layout="code-wide" codeMaxHeight="26rem" codeLabel="Source" demoLabel="Try it" referencesLabel="Tests" referencesOpen={true}>
 <FleuryExample slot="demo" id="testing.preferences" test="preferences" cols={32} rows={11} interactive />
 <Fragment slot="references">
-
-**Test**
-
-<PreferencesTestCode />
+<TestingGuideCode file="preferences_test.dart" />
 </Fragment>
 </GuidePad>
 
@@ -122,24 +93,7 @@ delay; the test uses a `Completer` from `dart:async` to finish the request itsel
 <GuidePad id="testing.save" layout="code-wide" codeMaxHeight="26rem" codeLabel="Source" demoLabel="Try it" referencesLabel="Tests" referencesOpen={true}>
 <FleuryExample slot="demo" id="testing.save" cols={32} rows={5} interactive />
 <Fragment slot="references">
-
-**Test**
-
-```dart wrap
-testWidgets('chooses when the save finishes', (tester) async {
-  final request = Completer<void>();
-  tester.pumpWidget(SaveStatus(save: () => request.future));
-
-  await tester.button('Save').press();
-  expect(tester.exists(text('Saving…')), isTrue);
-  expect(tester.button('Save'), isDisabled);
-
-  request.complete();
-  await tester.settle();
-  expect(tester.exists(text('Saved')), isTrue);
-  expect(tester.button('Save'), isEnabled);
-});
-```
+<TestingGuideCode file="save_status_test.dart" />
 </Fragment>
 </GuidePad>
 
@@ -156,24 +110,7 @@ animation clock to the halfway point, then finishes the animation:
 <GuidePad id="testing.animation" layout="code-wide" codeMaxHeight="26rem" codeLabel="Source" demoLabel="Try it" referencesLabel="Tests" referencesOpen={true}>
 <FleuryExample slot="demo" id="testing.animation" cols={32} rows={6} interactive />
 <Fragment slot="references">
-
-**Test**
-
-```dart wrap
-testWidgets('inspects the upload halfway through its animation', (
-  tester,
-) async {
-  tester.pumpWidget(const AnimatedUpload());
-  await tester.button('Animate').press();
-  final upload = tester.target(role: SemanticRole.progress, label: 'Upload');
-
-  tester.pump(const Duration(milliseconds: 500));
-  expect(upload, hasValue(0.5));
-
-  tester.pumpAndSettle();
-  expect(upload, hasValue(1.0));
-});
-```
+<TestingGuideCode file="animated_upload_test.dart" />
 </Fragment>
 </GuidePad>
 
@@ -189,15 +126,20 @@ This draft editor registers **Save** as a [command](/fleury/guides/commands/)
 with a `Ctrl+S` shortcut. Edit the draft, then save with the button or
 `Ctrl+S`:
 
-<FleuryExample id="testing.editor" cols={58} rows={16} interactive />
+<GuidePad id="testing.editor" compact codeMaxHeight="26rem" codeLabel="Source" demoLabel="Try it" referencesLabel="Tests">
+<FleuryExample slot="demo" id="testing.editor" cols={58} rows={16} interactive />
+<Fragment slot="references">
+<TestingGuideCode file="draft_editor_test.dart" />
+</Fragment>
+</GuidePad>
 
-<SourceExcerpt code={testingSource} region="save-command" />
+<SourceExcerpt code={draftEditorSource} region="save-command" />
 
 The editor registers the command in a `CommandScope` around its content, and
 its **Save** button is a `CommandButton` for the same ID. A test can run the
 command by that ID, without finding the button:
 
-<SourceExcerpt code={testingTests} region="command-test" />
+<SourceExcerpt code={draftEditorTests} region="command-test" />
 
 `invokeCommand` waits for the command to finish and returns its result.
 `completed` is false when the command was disabled, missing, or threw; `status`
@@ -207,16 +149,17 @@ save.
 To check that the shortcut reaches the command from the focused field, press it
 the way a user would:
 
-<SourceExcerpt code={testingTests} region="shortcut-test" />
+<SourceExcerpt code={draftEditorTests} region="shortcut-test" />
 
 A shortcut starts the command without waiting for it, so the test calls
-`settle()` before checking the save.
+`settle()` before checking the save. Both tests are in the editor's
+**Tests** file above, with the imports they need.
 
 ## Go further
 
-The [complete test file](https://github.com/danReynolds/fleury/blob/main/website/examples/test/testing_guide_test.dart)
-behind this guide also covers failed saves and a dialog that restores focus
-when it closes. For custom controls, see
+The [guide's test suite](https://github.com/danReynolds/fleury/blob/main/website/examples/test/testing_guide_test.dart)
+also covers failed saves and a dialog that restores focus when it closes. For
+custom controls, see
 [how widgets publish semantics](/fleury/architecture/agents-and-semantics/#what-the-graph-contains).
 
 The [testing API reference](https://github.com/danReynolds/fleury/blob/main/packages/fleury_test/README.md)

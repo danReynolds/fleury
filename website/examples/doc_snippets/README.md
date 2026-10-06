@@ -35,7 +35,7 @@ changes underneath a doc, the build goes red instead of the docs going stale.
 | `shared_state.dart`, `../lib/state_management_guide.dart` | [State management](../../src/content/docs/guides/state-management.mdx); the guide shows `#docregion` excerpts and the live demos render the same widgets |
 | `loading_data.dart`, `../lib/loading_data_guide.dart` | [Loading data](../../src/content/docs/guides/loading-data.mdx); the guide shows `#docregion` excerpts and the live demos render the same widgets |
 | `animation.dart` | [Animation](../../src/content/docs/guides/animation.mdx)'s hand-written fences; its live demos and editable code come from `../lib/registry.dart` |
-| `testing.dart`, `../lib/testing_guide.dart`, `../test/testing_guide_test.dart` | [Testing](../../src/content/docs/guides/testing.mdx); the live widgets and the tests shown in the guide share the same source |
+| `testing.dart`, `../lib/testing/`, `../test/testing/`, `../test/testing_guide_test.dart` | [Testing](../../src/content/docs/guides/testing.mdx); the guide shows each library under `lib/testing/` and each test under `test/testing/` whole, and `testing_guide_test.dart` runs them all |
 | `semantic_actions.dart` | [Built for agents](../../../docs/agents-and-semantics.md) |
 
 Keep each entrypoint a complete program with real imports and a `main`; shared

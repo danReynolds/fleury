@@ -1,6 +1,7 @@
 @TestOn('vm')
 library;
 
+import 'dart:convert';
 import 'dart:io';
 
 import 'package:path/path.dart' as p;
@@ -368,6 +369,39 @@ void main() {
         expect(guide, contains('/fleury/getting-started/#install-from-git'));
       },
     );
+
+    // The Testing guide once showed only State classes beside hand-copied
+    // test fragments, which did not compile as copied: the widgets, their
+    // fields, and the imports the later tests needed were nowhere on the page.
+    // Its code now comes from compiled files: whole example libraries in the
+    // Source tabs, and whole test files the docs gate runs.
+    test('testing guide shows whole, compiled files', () {
+      final guide = File(
+        p.join(repo.path, 'website/src/content/docs/guides/testing.mdx'),
+      ).readAsStringSync();
+      final projects =
+          jsonDecode(
+                File(
+                  p.join(repo.path, 'website/examples/guide_projects.json'),
+                ).readAsStringSync(),
+              )
+              as Map<String, Object?>;
+      final pads = RegExp(
+        r'<GuidePad id="(testing\.[\w-]+)"',
+      ).allMatches(guide).map((match) => match.group(1)!).toList();
+
+      expect(guide, isNot(contains('```dart')));
+      expect(pads, isNotEmpty);
+      for (final id in pads) {
+        for (final view in projects[id]! as List<Object?>) {
+          expect(
+            (view! as Map<String, Object?>).keys,
+            ['source'],
+            reason: '$id must show each of its files whole',
+          );
+        }
+      }
+    });
 
     test('layout guidance preserves cell width-over-height semantics', () {
       final basic = File(
