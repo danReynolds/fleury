@@ -1,6 +1,7 @@
 @TestOn('vm')
 library;
 
+import 'dart:convert';
 import 'dart:io';
 
 import 'package:path/path.dart' as p;
@@ -223,22 +224,58 @@ void main() {
       );
     });
 
-    test('fleury_web README embeds the compile-checked mountApp example', () {
+    // The README's test fence used to be a fragment: `testWidgets` at top
+    // level, with no `main` and no import of the `CounterApp` it pumps, so it
+    // failed to compile as copied. Pin it to a test file the docs gate runs
+    // against that same counter.
+    test('fleury README embeds the compiled counter test', () {
       final readme = File(
-        p.join(repo.path, 'packages/fleury_web/README.md'),
+        p.join(repo.path, 'packages/fleury/README.md'),
       ).readAsStringSync();
+      final compiledTest = File(
+        p.join(repo.path, 'website/examples/test/counter_quickstart_test.dart'),
+      ).readAsStringSync();
+      final firstImport = compiledTest.indexOf(
+        "import 'package:fleury/fleury.dart';",
+      );
+
+      expect(firstImport, isNonNegative);
+      expect(
+        _dartFences(
+          readme,
+        ).singleWhere((fence) => fence.contains('testWidgets(')).trim(),
+        compiledTest.substring(firstImport).trim(),
+      );
+    });
+
+    // App entry points and Coming from Flutter showed the browser entry point
+    // without the MyHomeScreen it mounts, so it did not compile as copied.
+    // Every page that shows it now shows the compiled program whole.
+    test('browser entry points embed the compile-checked mountApp example', () {
       final compiledSnippet = File(
         p.join(repo.path, 'website/examples/doc_snippets/web_app_shell.dart'),
       ).readAsStringSync();
       final firstImport = compiledSnippet.indexOf(
         "import 'package:fleury/fleury_core.dart';",
       );
-
       expect(firstImport, isNonNegative);
-      expect(
-        _firstDartFence(readme).trim(),
-        compiledSnippet.substring(firstImport).trim(),
-      );
+      final program = compiledSnippet.substring(firstImport).trim();
+
+      final readme = File(
+        p.join(repo.path, 'packages/fleury_web/README.md'),
+      ).readAsStringSync();
+      expect(_firstDartFence(readme).trim(), program);
+      for (final page in const <String>[
+        'website/src/content/docs/concepts/app-entry.md',
+        'website/src/content/docs/coming-from-flutter.mdx',
+      ]) {
+        final fences = _dartFences(
+          File(p.join(repo.path, page)).readAsStringSync(),
+          title: 'web/main.dart',
+        );
+        expect(fences, hasLength(1), reason: page);
+        expect(fences.single.trim(), program, reason: page);
+      }
     });
 
     test('agent guide keeps custom semantic ids typed', () {
@@ -294,7 +331,45 @@ void main() {
       expect(readme, isNot(contains('publish_to: none')));
       expect(readme, isNot(contains('path dependency on')));
       expect(readme, isNot(contains('"id": "increment"')));
-      expect(readme, contains('"targetRef": "target:…"'));
+      // "What the agent sees" is real output for the README's counter
+      // (fleury_mcp's mcp_e2e_test checks it against the server): a
+      // positional `auto:` id and an opaque targetRef that the invoke_action
+      // example echoes back. The targetRef stays fully elided so internal tree
+      // numbering can change without staling the README.
+      expect(readme, contains('"id": "auto:…/button"'));
+      expect(readme, contains('"targetRef": "…"'));
+      expect(readme, contains('"targetRef":"…"}'));
+      expect(readme, isNot(contains('element-…')));
+    });
+
+    // A globally activated server must be the release that matches the app's
+    // Fleury: the INIT handshake rejects any other. Docs that pin the version
+    // to activate must name the one this checkout publishes.
+    test('documented fleury_mcp activations pin its pubspec version', () {
+      final version = RegExp(r'^version:\s*(\S+)\s*$', multiLine: true)
+          .firstMatch(
+            File(
+              p.join(repo.path, 'packages/fleury_mcp/pubspec.yaml'),
+            ).readAsStringSync(),
+          )!
+          .group(1)!;
+      final activation = RegExp(
+        r'dart pub global activate fleury_mcp(?![\w-])(?:[ \t]+([^\s`]+))?',
+      );
+      final found = <String>[];
+      final wrong = <String>[];
+      for (final file in _publicDocs(repo)) {
+        for (final match in activation.allMatches(file.readAsStringSync())) {
+          final where = p.relative(file.path, from: repo.path);
+          found.add(where);
+          if (match.group(1) != version) {
+            wrong.add('$where: "${match.group(0)}" (pubspec: $version)');
+          }
+        }
+      }
+
+      expect(found, isNotEmpty);
+      expect(wrong, isEmpty, reason: wrong.join('\n'));
     });
 
     test('getting started follows the generated project contract', () {
@@ -337,6 +412,83 @@ void main() {
         expect(guide, contains('/fleury/getting-started/#install-from-git'));
       },
     );
+
+    // The Testing guide once showed only State classes beside hand-copied
+    // test fragments, which did not compile as copied: the widgets, their
+    // fields, and the imports the later tests needed were nowhere on the page.
+    // Its code now comes from compiled files: whole example libraries in the
+    // Source tabs, and whole test files the docs gate runs.
+    test('testing guide shows whole, compiled files', () {
+      final guide = File(
+        p.join(repo.path, 'website/src/content/docs/guides/testing.mdx'),
+      ).readAsStringSync();
+      final projects =
+          jsonDecode(
+                File(
+                  p.join(repo.path, 'website/examples/guide_projects.json'),
+                ).readAsStringSync(),
+              )
+              as Map<String, Object?>;
+      final pads = RegExp(
+        r'<GuidePad id="(testing\.[\w-]+)"',
+      ).allMatches(guide).map((match) => match.group(1)!).toList();
+
+      expect(guide, isNot(contains('```dart')));
+      expect(pads, isNotEmpty);
+      for (final id in pads) {
+        for (final view in projects[id]! as List<Object?>) {
+          expect(
+            (view! as Map<String, Object?>).keys,
+            ['source'],
+            reason: '$id must show each of its files whole',
+          );
+        }
+      }
+
+      // TestingGuideCode shows any test under test/testing/, so both docs
+      // gates run that directory, not a list of its files.
+      final checkTool = File(
+        p.join(repo.path, 'tool/fleury_dev.dart'),
+      ).readAsStringSync();
+      final checkDocs =
+          (jsonDecode(
+                    File(
+                      p.join(repo.path, 'website/package.json'),
+                    ).readAsStringSync(),
+                  )
+                  as Map<String, Object?>)['scripts']!
+              as Map<String, Object?>;
+      expect(checkTool, contains("'test/testing',"));
+      expect('${checkDocs['check:docs']}'.split(' '), contains('test/testing'));
+    });
+
+    // The tutorial rewrites lib/app.dart, which Getting started's optional
+    // browser bundle imports from web/main.dart, so it must stay on the
+    // web-safe library: dart2js rejects package:fleury/fleury.dart.
+    test('tutorial keeps lib/app.dart web-safe', () {
+      final tutorial = File(
+        p.join(repo.path, 'website/src/content/docs/tutorial.mdx'),
+      ).readAsStringSync();
+      final finished = File(
+        p.join(repo.path, 'website/examples/doc_snippets/filterable_list.dart'),
+      ).readAsStringSync();
+
+      for (final (name, text) in [
+        ('tutorial.mdx', tutorial),
+        ('filterable_list.dart', finished),
+      ]) {
+        expect(
+          text,
+          contains("import 'package:fleury/fleury_core.dart';"),
+          reason: name,
+        );
+        expect(
+          text,
+          isNot(contains("import 'package:fleury/fleury.dart';")),
+          reason: name,
+        );
+      }
+    });
 
     test('layout guidance preserves cell width-over-height semantics', () {
       final basic = File(
@@ -583,6 +735,16 @@ String _firstDartFence(String markdown) {
   }
   return match.group(1)!;
 }
+
+/// The bodies of [markdown]'s Dart fences, or only those whose meta names the
+/// file [title] (```dart title="web/main.dart").
+List<String> _dartFences(String markdown, {String? title}) => [
+  for (final match in RegExp(
+    r'```dart([^\n]*)\n([\s\S]*?)\n```',
+  ).allMatches(markdown))
+    if (title == null || match.group(1)!.contains('title="$title"'))
+      match.group(2)!,
+];
 
 extension on String {
   bool containsPattern(Pattern pattern) {

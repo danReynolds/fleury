@@ -165,17 +165,24 @@ dev_dependencies:
 For a Git checkout, use the matching sources described in
 [Install from Git](https://danreynolds.github.io/fleury/getting-started/#install-from-git).
 
+With the counter above saved as `example/counter_quickstart.dart`, this test
+goes in `test/counter_quickstart_test.dart`:
+
 ```dart
 import 'package:fleury/fleury.dart';
 import 'package:fleury_test/fleury_test.dart';
 import 'package:test/test.dart';
 
-testWidgets('space increments the counter', (tester) {
-  tester.pumpWidget(const CounterApp());
-  tester.sendKey(const KeyEvent(KeyCode.char(' ')));
-  tester.pump();
-  expect(tester.renderToString(), contains('count: 1'));
-});
+import '../example/counter_quickstart.dart';
+
+void main() {
+  testWidgets('space increments the counter', (tester) {
+    tester.pumpWidget(const CounterApp());
+    tester.sendKey(const KeyEvent(KeyCode.char(' ')));
+    tester.pump();
+    expect(tester.renderToString(), contains('count: 1'));
+  });
+}
 ```
 
 For whole-screen regression, assert against a golden:
@@ -304,6 +311,8 @@ than interpolating palette indices.
 Use a controller policy for short names, search terms, or confirmation fields:
 
 ```dart
+// Declare this top-level or static: a const policy can't refer to a local
+// function (in build()) or an instance method (on your State).
 bool printableAscii(int point) => point >= 32 && point <= 126;
 
 final controller = TextEditingController(
