@@ -24,8 +24,10 @@ fleury run --agent bin/run_app.dart
 
 Configure your MCP host to start `dart run fleury_mcp --attach` from the app's
 project directory. Add the development dependency described below first. If the
-host runs elsewhere, pass `--project=/absolute/app/path`; if several sessions
-are running, the attachment error lists their IDs for `--session=<id>`.
+host runs elsewhere, `dart run` can't find the server: use a globally activated
+`fleury_mcp --attach` (described below) with `--project=/absolute/app/path`. If
+several sessions are running, the attachment error lists their IDs for
+`--session=<id>`.
 
 The agent reads `get_inspection` for rendered cells, styles and semantics from
 one frame boundary. Passing a semantic `node` also returns widget ancestry,

@@ -37,7 +37,10 @@ Configure your MCP host to run this command from the same project:
 dart run fleury_mcp --attach
 ```
 
-For a host with a different working directory, pass `--project=/absolute/app/path`.
+`dart run` needs the app's directory. For a host with a different working
+directory, run a globally activated `fleury_mcp --attach` (see
+[Get the `fleury_mcp` executable](#1-get-the-fleury_mcp-executable)) and pass
+`--project=/absolute/app/path`.
 When more than one live session exists in that project, attachment reports their
 IDs; select one with `--session=<id>`. It never silently chooses between them.
 This uses the same matching Fleury build as the app, as described under installation.
@@ -159,8 +162,9 @@ Two things to notice:
   controls already contribute their role, label, value, and supported actions.
   Manual `Semantics` belongs on custom controls, not around these widgets.
 
-Want a real app to try right now? The runnable apps under `packages/samples`
-are unmodified `runApp` apps and drive over MCP as-is.
+Want a real app to try right now? The runnable apps under
+[`packages/samples`](https://github.com/danReynolds/fleury/tree/main/packages/samples)
+in the Fleury repository are unmodified `runApp` apps and drive over MCP as-is.
 
 ## Drive it
 
@@ -184,6 +188,19 @@ executable package exact-pins its matching Fleury release, so the app dependency
 lets pub resolve one build for both. The INIT handshake rejects mismatches
 instead of decoding incompatible frames.
 
+A development dependency does not put a `fleury_mcp` command on your `PATH`.
+To run the server as a bare `fleury_mcp` command, such as for a host that
+cannot start it in the application directory, globally activate the release
+that matches the app's Fleury:
+
+```sh
+dart pub global activate fleury_mcp 0.1.0
+```
+
+Pub installs the command in its global `bin` directory (`~/.pub-cache/bin` by
+default), which must be on your `PATH`. Then use
+`fleury_mcp -- <your app command>` in place of `dart run fleury_mcp -- ...`.
+
 When working from source, use the same Fleury checkout as the app. From its
 root:
 
@@ -192,9 +209,8 @@ dart tool/fleury_dev.dart bootstrap
 dart pub global activate --source path packages/fleury_mcp
 ```
 
-This installs `fleury_mcp` on your `PATH` using the checkout's sibling override;
-reactivate it after that Fleury source changes. For this source setup, use
-`fleury_mcp -- <your app command>` in place of `dart run fleury_mcp -- ...`.
+This installs the same `fleury_mcp` command, built with the checkout's sibling
+override; reactivate it after that Fleury source changes.
 
 The MCP boundary supports stateless `2026-07-28` requests discovered through
 `server/discover`, while retaining the `2025-06-18` initialization flow for
@@ -233,14 +249,14 @@ them.
 
 `fleury_mcp` speaks newline-delimited JSON-RPC on stdio. Current MCP requests
 carry protocol metadata in every `params` object, so an MCP host or inspector is
-the most representative probe. For a short raw-pipe smoke test, the legacy
-initialization path remains available:
+the most representative probe. For a short raw-pipe smoke test from the
+application directory, the legacy initialization path remains available:
 
 ```bash
 printf '%s\n' \
   '{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2025-06-18","capabilities":{}}}' \
   '{"jsonrpc":"2.0","id":2,"method":"tools/call","params":{"name":"get_ui","arguments":{}}}' \
-  | fleury_mcp -- dart run bin/run_app.dart
+  | dart run fleury_mcp -- dart run bin/run_app.dart
 ```
 
 A cold `dart run` JIT-compiles the app first, which can take a few seconds — if
@@ -310,6 +326,10 @@ read. Results come back both as text JSON (the model-facing channel) and as MCP
 ```
 fleury_mcp [--cols=<n>] [--rows=<n>] -- <command ...>
 ```
+
+Prefix it with `dart run` from an app that has the development dependency, or
+run it bare once it is globally activated (see
+[Get the `fleury_mcp` executable](#1-get-the-fleury_mcp-executable)).
 
 - `--cols` / `--rows` — the viewport the app lays out against (default `80×24`).
   A taller grid surfaces more rows of windowed widgets in the tree.
