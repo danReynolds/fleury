@@ -175,7 +175,8 @@ final class ThemeData {
   final List<Object> extensions;
 
   /// Base style a [Theme] cascades onto the `Text` below it, as the
-  /// [DefaultTextStyle].
+  /// [DefaultTextStyle]. Without a foreground of its own, that text takes
+  /// [ColorScheme.foreground].
   final CellStyle textStyle;
 
   /// Attribute cue for de-emphasized text (dim) — separators, hints, disabled
@@ -294,7 +295,9 @@ final class ThemeData {
 ///
 /// Wrapping a subtree in a [Theme] also cascades [ThemeData.textStyle] as
 /// the [DefaultTextStyle], so a base text color/dim can be set app-wide in
-/// one place.
+/// one place. Text it leaves uncolored takes [ColorScheme.foreground], so text
+/// on a theme's own background or surface uses the theme's text color rather
+/// than the terminal's.
 class Theme extends StatelessWidget {
   const Theme({super.key, required this.data, required this.child});
 
@@ -327,8 +330,16 @@ class Theme extends StatelessWidget {
   @override
   Widget build(BuildContext context) => Scope<ThemeData>(
     data,
-    child: DefaultTextStyle(style: data.textStyle, child: child),
+    child: DefaultTextStyle(style: _textDefault(data), child: child),
   );
+
+  static CellStyle _textDefault(ThemeData data) {
+    final foreground = data.colorScheme.foreground;
+    if (foreground == null || data.textStyle.foreground != null) {
+      return data.textStyle;
+    }
+    return CellStyle(foreground: foreground).merge(data.textStyle);
+  }
 }
 
 /// Cascades a base [CellStyle] onto descendant `Text` widgets, which merge

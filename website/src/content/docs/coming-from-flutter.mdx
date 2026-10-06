@@ -132,11 +132,20 @@ Future<void> main() async {
     into: host,
   );
 }
+
+class MyHomeScreen extends StatelessWidget {
+  const MyHomeScreen({super.key});
+
+  @override
+  Widget build(BuildContext context) => const Text('Hello from Fleury');
+}
 ```
 
-Client-side browser bundles can only use web-safe code: dart2js compiles
-`dart:io` imports, but that code throws when it runs in the browser. Import
-`package:fleury/fleury_core.dart` for shared UI, including every widget.
+Client-side browser bundles can only use web-safe code. Import
+`package:fleury/fleury_core.dart` for shared UI, including every widget. The
+native `package:fleury/fleury.dart` imports `dart:ffi`, so dart2js rejects a
+bundle that imports it at compile time. Your own `dart:io` code fails later:
+dart2js compiles it, but it throws when it runs in the browser.
 Explicit local filesystem access uses `package:fleury/fleury.dart`. `FileBrowser` and
 `FilePicker` work with a browser-safe `FileSource`, such as `MemoryFileSource`;
 `LogRegion` displays log entries supplied by your app. `LocalFileSource` and

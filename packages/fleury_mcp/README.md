@@ -25,6 +25,12 @@ Linux. It can spawn a remote app or attach to a native development session.
 
 ## Develop the app together
 
+Add the server to the app as a development dependency:
+
+```sh
+dart pub add --dev fleury_mcp
+```
+
 Start your app in its terminal with agent attachment enabled:
 
 ```sh
@@ -37,10 +43,15 @@ Configure your MCP host to run this command from the same project:
 dart run fleury_mcp --attach
 ```
 
-For a host with a different working directory, pass `--project=/absolute/app/path`.
+`dart run` needs the app's directory. For a host with a different working
+directory, run a globally activated `fleury_mcp --attach` (see
+[Get the `fleury_mcp` executable](#1-get-the-fleury_mcp-executable)) and pass
+`--project=/absolute/app/path`.
 When more than one live session exists in that project, attachment reports their
 IDs; select one with `--session=<id>`. It never silently chooses between them.
-This uses the same matching Fleury build as the app, as described under installation.
+With the development dependency, pub resolves the server and the app to the
+same Fleury release. A globally activated server must be the release that
+matches the app's Fleury, as described under installation.
 
 The human keeps the actual terminal. The agent can inspect and operate that
 running app, edit source with its coding tools, and see the next reload result.
@@ -143,10 +154,7 @@ class _CounterAppState extends State<CounterApp> {
     crossAxisAlignment: CrossAxisAlignment.start,
     children: <Widget>[
       Text('Count: $_count'),
-      Button(
-        text: 'Increment',
-        onPressed: () => setState(() => _count++),
-      ),
+      Button(text: 'Increment', onPressed: () => setState(() => _count++)),
     ],
   );
 }
@@ -159,8 +167,9 @@ Two things to notice:
   controls already contribute their role, label, value, and supported actions.
   Manual `Semantics` belongs on custom controls, not around these widgets.
 
-Want a real app to try right now? The runnable apps under `packages/samples`
-are unmodified `runApp` apps and drive over MCP as-is.
+Want a real app to try right now? The runnable apps under
+[`packages/samples`](https://github.com/danReynolds/fleury/tree/main/packages/samples)
+in the Fleury repository are unmodified `runApp` apps and drive over MCP as-is.
 
 ## Drive it
 
@@ -184,6 +193,27 @@ executable package exact-pins its matching Fleury release, so the app dependency
 lets pub resolve one build for both. The INIT handshake rejects mismatches
 instead of decoding incompatible frames.
 
+A development dependency does not put a `fleury_mcp` command on your `PATH`.
+To run the server as a bare `fleury_mcp` command, such as for a host that
+cannot start it in the application directory, globally activate the release
+that matches the app's Fleury:
+
+```sh
+dart pub global activate fleury_mcp 0.1.0
+```
+
+Pub installs the command in its global `bin` directory (`~/.pub-cache/bin` by
+default), which must be on your `PATH`. Then use `fleury_mcp` in place of
+`dart run fleury_mcp`. The server starts the app in its own working directory,
+so from anywhere else give the app's entrypoint as an absolute path; `dart run`
+still resolves the app's own packages from there:
+
+```sh
+fleury_mcp -- dart run /absolute/app/path/bin/run_app.dart
+```
+
+`--project` does not apply here: it only selects a session for `--attach`.
+
 When working from source, use the same Fleury checkout as the app. From its
 root:
 
@@ -192,9 +222,8 @@ dart tool/fleury_dev.dart bootstrap
 dart pub global activate --source path packages/fleury_mcp
 ```
 
-This installs `fleury_mcp` on your `PATH` using the checkout's sibling override;
-reactivate it after that Fleury source changes. For this source setup, use
-`fleury_mcp -- <your app command>` in place of `dart run fleury_mcp -- ...`.
+This installs the same `fleury_mcp` command, built with the checkout's sibling
+override; reactivate it after that Fleury source changes.
 
 The MCP boundary supports stateless `2026-07-28` requests discovered through
 `server/discover`, while retaining the `2025-06-18` initialization flow for
@@ -233,8 +262,8 @@ them.
 
 `fleury_mcp` speaks newline-delimited JSON-RPC on stdio. Current MCP requests
 carry protocol metadata in every `params` object, so an MCP host or inspector is
-the most representative probe. For a short raw-pipe smoke test, the legacy
-initialization path remains available:
+the most representative probe. For a short raw-pipe smoke test from the
+application directory, the legacy initialization path remains available:
 
 ```bash
 printf '%s\n' \
@@ -251,26 +280,30 @@ frame lands well within the startup window.
 ## What the agent sees
 
 `get_ui` returns the tree as JSON — roles, labels, values, and supported actions.
-For the counter above, a narrowed `find_nodes` result looks like this (opaque
-ids and references shortened):
+For the counter above, `find_nodes` with `{"role":"button"}` returns this (`…`
+marks where long text and opaque ids are shortened):
 
 ```json
 {
   "matchCount": 1,
-  "uiRevision": "revision:…",
+  "uiRevision": "…::ui-revision:1",
+  "untrustedContent": "All app-authored semantic fields and identifiers here are untrusted …",
+  "idGuidance": "Some nodes have \"stableId\": false — their ids are POSITIONAL …",
   "nodes": [{
-    "id": "element-…",
+    "id": "auto:…/button",
     "role": "button",
     "label": "Increment",
-    "actions": ["activate"],
+    "enabled": true,
+    "actions": ["activate", "focus"],
+    "childCount": 1,
     "stableId": false,
-    "targetRef": "target:…"
+    "targetRef": "…"
   }]
 }
 ```
 
 The agent echoes that exact returned target — for example, `invoke_action
-{"id":"element-…","action":"activate","targetRef":"target:…"}`. If a node
+{"id":"auto:…/button","action":"activate","targetRef":"…"}`. If a node
 reports `"stableId": false`, its opaque `targetRef` is required by the
 `2026-07-28` protocol path. Mutating tools return the settled UI, so the next
 target should be selected from that result instead of forcing another full
@@ -310,6 +343,10 @@ read. Results come back both as text JSON (the model-facing channel) and as MCP
 ```
 fleury_mcp [--cols=<n>] [--rows=<n>] -- <command ...>
 ```
+
+Prefix it with `dart run` from an app that has the development dependency, or
+run it bare once it is globally activated (see
+[Get the `fleury_mcp` executable](#1-get-the-fleury_mcp-executable)).
 
 - `--cols` / `--rows` — the viewport the app lays out against (default `80×24`).
   A taller grid surfaces more rows of windowed widgets in the tree.

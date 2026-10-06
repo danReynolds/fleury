@@ -12,13 +12,13 @@ import 'package:web/web.dart' as web;
 Future<void> main() async {
   final host = web.document.getElementById('app')!;
   await mountApp(
-    () => const FleuryApp(title: 'My app', home: HomeScreen()),
+    () => const FleuryApp(title: 'My app', home: MyHomeScreen()),
     into: host,
   );
 }
 
-class HomeScreen extends StatelessWidget {
-  const HomeScreen({super.key});
+class MyHomeScreen extends StatelessWidget {
+  const MyHomeScreen({super.key});
 
   @override
   Widget build(BuildContext context) => const Text('Hello from Fleury');

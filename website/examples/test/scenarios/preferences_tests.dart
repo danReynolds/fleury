@@ -1,9 +1,8 @@
 // One scenario drives both dart test and the guide's visible test runner.
 import 'package:fleury/fleury_core.dart';
+import 'package:fleury_doc_examples/testing/preferences.dart';
 import 'package:fleury_test/fleury_test.dart';
 import 'package:test/test.dart' show Matcher;
-
-import '../../lib/testing_guide.dart';
 
 enum PreferencesTestStep {
   mounted(

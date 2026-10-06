@@ -14,10 +14,10 @@ looks like. A Fleury agent never scrapes. Here's how, and what makes it possible
 ## Drive it with an agent — `fleury_mcp`
 
 The `fleury_mcp` package runs a Model Context Protocol server over a private wire
-to your app:
+to your app. From an app that has it as a development dependency:
 
 ```sh
-fleury_mcp -- dart run bin/run_app.dart
+dart run fleury_mcp -- dart run bin/run_app.dart
 ```
 
 It spawns your app, tracks its live semantic tree, and exposes it as MCP: the
@@ -52,8 +52,9 @@ workflow, and making custom controls drive well.
 ## Attach during native development
 
 `fleury run --agent bin/run_app.dart` opts a native source session into local
-agent attachment. Configure the MCP host with `fleury_mcp --attach` in that
-project (or pass `--project=/absolute/path`). The terminal supervisor keeps
+agent attachment. Configure the MCP host with `dart run fleury_mcp --attach` in
+that project, or from elsewhere with a globally activated
+`fleury_mcp --attach --project=/absolute/path`. The terminal supervisor keeps
 ownership of the app and its reload/restart lifecycle; MCP disconnect leaves it
 running. Multiple sessions require an explicit `--session=<id>`.
 

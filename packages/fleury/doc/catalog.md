@@ -32,7 +32,7 @@ browser apps pass a `FileSource` such as `MemoryFileSource`.
 A custom widget library can use `package:fleury/fleury_widget_support.dart` for
 unstyled `FocusableControl`, form registration, and interactive style contracts.
 It follows core's compatibility guarantees. See
-[Core and targets](../../../docs/core-and-targets.md#implementing-a-widget-library).
+[Core and targets](https://github.com/danReynolds/fleury/blob/main/docs/core-and-targets.md#implementing-a-widget-library).
 
 Documentation: [Fleury docs](https://danreynolds.github.io/fleury/) ·
 [widget reference](https://danreynolds.github.io/fleury/widgets/).

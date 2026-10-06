@@ -1,0 +1,33 @@
+---
+// Shows one of the Testing guide's tests as the reader's own test file. The
+// source is the real test under examples/test/testing/, which the docs gate
+// runs as a directory. Its imports of the guide's example libraries are
+// respelled as the `package:my_app/` imports a reader's app uses, with the
+// package imports kept sorted; DemoSource drops the docregion markers.
+//
+//   <TestingGuideCode file="counter_test.dart" />
+import DemoSource from './DemoSource.astro';
+
+const tests = import.meta.glob<string>('../../examples/test/testing/*_test.dart', {
+  query: '?raw', import: 'default', eager: true,
+});
+interface Props { file: string }
+const { file } = Astro.props;
+const source = tests[`../../examples/test/testing/${file}`]?.replace(/\r\n?/g, '\n');
+if (!source) throw new Error(`Testing guide test is missing: ${file}`);
+const respelled = source.replace(
+  /^import 'package:fleury_doc_examples\/testing\/(\w+\.dart)';$/gm,
+  "import 'package:my_app/$1';",
+);
+if (respelled === source || respelled.includes('package:fleury_doc_examples/')) {
+  throw new Error(
+    `${file} must import the guide's examples, and only as ` +
+      'package:fleury_doc_examples/testing/<file>.dart',
+  );
+}
+const code = respelled
+  .replace(/(?:^import 'package:[^']+';\n)+/gm, (block) =>
+    block.trimEnd().split('\n').sort().join('\n') + '\n')
+  .trimEnd();
+---
+<DemoSource code={code} title={`test/${file}`} />

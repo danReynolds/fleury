@@ -240,6 +240,102 @@ void main() {
     );
   }, tags: ['integration']);
 
+  group(
+    'fleury serve --spawn with a slow-starting app',
+    () {
+      final slowApp = [
+        Platform.resolvedExecutable,
+        'run',
+        '${Directory.current.path}/test/fixtures/spawn_app.dart',
+        'slow-app',
+        '--connect-delay-ms=2500',
+      ];
+
+      test(
+        'a browser arriving during warmup is paired with the standby',
+        () async {
+          final (port, lines) = await _startServe(const [], slowApp);
+          final ws = await WebSocket.connect('ws://127.0.0.1:$port/ws');
+          final inbound = BytesBuilder();
+          final sub = ws.listen((d) {
+            if (d is List<int>) inbound.add(d);
+          });
+          await _waitFor(
+            () => _hasHelloFrame(inbound.toBytes(), 'slow-app'),
+            timeout: const Duration(seconds: 30),
+            what: 'hello from the warm standby',
+          );
+          expect(
+            lines,
+            anyElement(contains('[serve s1] paired browser to warm standby')),
+            reason: lines.join('\n'),
+          );
+
+          await sub.cancel();
+          await ws.close();
+        },
+      );
+
+      test(
+        'a page reloaded during warmup hands the standby to the reload',
+        () async {
+          final (port, lines) = await _startServe(const [], slowApp);
+          final first = await WebSocket.connect('ws://127.0.0.1:$port/ws');
+          await Future<void>.delayed(const Duration(milliseconds: 300));
+          await first.close();
+
+          final reload = await WebSocket.connect('ws://127.0.0.1:$port/ws');
+          final inbound = BytesBuilder();
+          final sub = reload.listen((d) {
+            if (d is List<int>) inbound.add(d);
+          });
+          await _waitFor(
+            () => _hasHelloFrame(inbound.toBytes(), 'slow-app'),
+            timeout: const Duration(seconds: 30),
+            what: 'hello on the reloaded page',
+          );
+
+          // The first page claimed s1 and left before it was ready; s1 stayed
+          // warm, so the reload resumed its start instead of beginning another.
+          expect(
+            lines,
+            anyElement(contains('[serve s1] paired browser to warm standby')),
+            reason: lines.join('\n'),
+          );
+
+          await sub.cancel();
+          await reload.close();
+        },
+      );
+    },
+    tags: ['integration'],
+    timeout: const Timeout(Duration(seconds: 90)),
+  );
+
+  test(
+    'a browser whose app exits before connecting is told why',
+    () async {
+      final (port, _) = await _startServe(const [], [
+        Platform.resolvedExecutable,
+        'run',
+        '${Directory.current.path}/test/fixtures/spawn_app.dart',
+        'exit-app',
+        '--connect-delay-ms=2000',
+        '--exit-before-connect',
+      ]);
+
+      // The browser claims the standby while it is still starting. When it
+      // exits, the browser is told why rather than made to wait for a retry
+      // that would only exit the same way.
+      final ws = await WebSocket.connect('ws://127.0.0.1:$port/ws');
+      await ws.drain<void>().timeout(const Duration(seconds: 40));
+      expect(ws.closeCode, WebSocketStatus.internalServerError);
+      expect(ws.closeReason, contains('exited before connecting'));
+    },
+    tags: ['integration'],
+    timeout: const Timeout(Duration(seconds: 90)),
+  );
+
   group('fleury serve --spawn with a real runApp app', () {
     late Directory tempDir;
     late Process serveProcess;
@@ -332,60 +428,6 @@ void main() {
   group(
     'fleury serve --spawn hardening (integration)',
     () {
-      /// Starts a fresh `fleury serve --spawn` with [serveArgs] and [appCmd],
-      /// returning its port + stderr lines. Teardown is registered here.
-      Future<(int, List<String>)> startServe(
-        List<String> serveArgs,
-        List<String> appCmd,
-      ) async {
-        final tempDir = Directory.systemTemp.createTempSync(
-          'fleury_spawn_hard_',
-        );
-        final port = await _unusedLoopbackPort();
-        final pkgRoot = Directory.current.path;
-        final stderrLines = <String>[];
-        final process = await Process.start(Platform.resolvedExecutable, [
-          'run',
-          '$pkgRoot/bin/fleury.dart',
-          'serve',
-          '--port=$port',
-          ...serveArgs,
-          '--spawn',
-          ...appCmd,
-        ], workingDirectory: tempDir.path);
-        final ready = Completer<void>();
-        final sub = process.stderr
-            .transform(utf8.decoder)
-            .transform(const LineSplitter())
-            .listen((line) {
-              stderrLines.add(line);
-              if (line.contains('spawn mode') && !ready.isCompleted) {
-                ready.complete();
-              }
-            });
-        addTearDown(() async {
-          process.kill(ProcessSignal.sigint);
-          await process.exitCode.timeout(
-            const Duration(seconds: 5),
-            onTimeout: () {
-              process.kill(ProcessSignal.sigkill);
-              return process.exitCode;
-            },
-          );
-          await sub.cancel();
-          try {
-            tempDir.deleteSync(recursive: true);
-          } catch (_) {}
-        });
-        await ready.future.timeout(
-          const Duration(seconds: 10),
-          onTimeout: () => throw StateError(
-            'serve did not start within 10s. stderr:\n${stderrLines.join('\n')}',
-          ),
-        );
-        return (port, stderrLines);
-      }
-
       void sendInit(WebSocket ws) {
         ws.add(
           encodeFrame(
@@ -404,7 +446,7 @@ void main() {
         final pkgRoot = Directory.current.path;
         final childCwd = Directory.systemTemp.createTempSync('fleury_cap_cwd_');
         addTearDown(() => childCwd.deleteSync(recursive: true));
-        final (port, stderrLines) = await startServe(
+        final (port, stderrLines) = await _startServe(
           ['--max-sessions=1'],
           [
             Platform.resolvedExecutable,
@@ -466,7 +508,7 @@ void main() {
           final pkgRoot = Directory.current.path;
           final childCwd = Directory.systemTemp.createTempSync('fleury_burst_');
           addTearDown(() => childCwd.deleteSync(recursive: true));
-          final (port, _) = await startServe(
+          final (port, _) = await _startServe(
             ['--max-sessions=1'],
             [
               Platform.resolvedExecutable,
@@ -569,7 +611,7 @@ void main() {
 
         // Default: no --debug. The JIT app has debug tooling on, but the WIRE
         // must stay silent — a shared URL must not pull logs/stacks by default.
-        final (portOff, _) = await startServe(const [], appCmd);
+        final (portOff, _) = await _startServe(const [], appCmd);
         final (wsOff, inboundOff) = await connectAndInit(portOff);
         wsOff.add(encodeFrame(const DebugRequestFrame(7, 'errors', limit: 5)));
         await Future<void>.delayed(const Duration(milliseconds: 1500));
@@ -581,7 +623,7 @@ void main() {
         await wsOff.close();
 
         // Opt-in: --debug re-enables the wire (the local-dev loop).
-        final (portOn, _) = await startServe(const ['--debug'], appCmd);
+        final (portOn, _) = await _startServe(const ['--debug'], appCmd);
         final (wsOn, inboundOn) = await connectAndInit(portOn);
         wsOn.add(encodeFrame(const DebugRequestFrame(7, 'errors', limit: 5)));
         await _waitFor(
@@ -657,4 +699,56 @@ Future<int> _unusedLoopbackPort() async {
   final port = socket.port;
   await socket.close();
   return port;
+}
+
+/// Starts a fresh `fleury serve --spawn` with [serveArgs] and [appCmd],
+/// returning its port + stderr lines. Teardown is registered here.
+Future<(int, List<String>)> _startServe(
+  List<String> serveArgs,
+  List<String> appCmd,
+) async {
+  final tempDir = Directory.systemTemp.createTempSync('fleury_spawn_hard_');
+  final port = await _unusedLoopbackPort();
+  final pkgRoot = Directory.current.path;
+  final stderrLines = <String>[];
+  final process = await Process.start(Platform.resolvedExecutable, [
+    'run',
+    '$pkgRoot/bin/fleury.dart',
+    'serve',
+    '--port=$port',
+    ...serveArgs,
+    '--spawn',
+    ...appCmd,
+  ], workingDirectory: tempDir.path);
+  final ready = Completer<void>();
+  final sub = process.stderr
+      .transform(utf8.decoder)
+      .transform(const LineSplitter())
+      .listen((line) {
+        stderrLines.add(line);
+        if (line.contains('spawn mode') && !ready.isCompleted) {
+          ready.complete();
+        }
+      });
+  addTearDown(() async {
+    process.kill(ProcessSignal.sigint);
+    await process.exitCode.timeout(
+      const Duration(seconds: 5),
+      onTimeout: () {
+        process.kill(ProcessSignal.sigkill);
+        return process.exitCode;
+      },
+    );
+    await sub.cancel();
+    try {
+      tempDir.deleteSync(recursive: true);
+    } catch (_) {}
+  });
+  await ready.future.timeout(
+    const Duration(seconds: 10),
+    onTimeout: () => throw StateError(
+      'serve did not start within 10s. stderr:\n${stderrLines.join('\n')}',
+    ),
+  );
+  return (port, stderrLines);
 }

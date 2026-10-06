@@ -4,9 +4,11 @@
 // lib/app.dart. It is guarded by `dart analyze` (see
 // ../test/doc_snippets_test.dart) so the tutorial can't drift from a real,
 // compiling Fleury app. Keep the step fences in sync when this file changes.
+// It imports the web-safe library, like Getting started's lib/app.dart, so
+// the tutorial keeps that file compiling for the optional browser bundle.
 
 // #docregion app
-import 'package:fleury/fleury.dart';
+import 'package:fleury/fleury_core.dart';
 
 const _languages = [
   'Dart',

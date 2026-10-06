@@ -81,7 +81,8 @@ class _ThemingShowcaseAppState extends State<ThemingShowcaseApp> {
     return ThemeData(
       brightness: _brightness,
       textStyle: CellStyle(foreground: foreground),
-      mutedStyle: const CellStyle(foreground: AnsiColor(8), dim: true),
+      // Bright black is already muted; dimming it too fades it out.
+      mutedStyle: const CellStyle(foreground: AnsiColor(8)),
       selectionStyle: const CellStyle(inverse: true, bold: true),
       focusedStyle: CellStyle(foreground: _focus, bold: true),
       errorStyle: CellStyle(foreground: _error, underline: true),

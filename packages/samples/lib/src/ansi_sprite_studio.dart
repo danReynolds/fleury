@@ -2,6 +2,7 @@
 // portable asset that was previewed.
 
 import 'dart:async' show unawaited;
+import 'dart:math' as math;
 
 import 'package:fleury/fleury_core.dart';
 
@@ -10,7 +11,27 @@ import 'scaffold.dart';
 
 const _transparentA = RgbColor(0x16, 0x1c, 0x24);
 const _transparentB = RgbColor(0x20, 0x28, 0x32);
-const _cursor = RgbColor(0xff, 0xff, 0xff);
+const _lightInk = RgbColor(0xff, 0xff, 0xff);
+const _darkInk = RgbColor(0x0b, 0x0f, 0x14);
+
+/// The marker ink that stays visible on [background]: white vanishes on a
+/// light swatch, so light colors take dark ink.
+RgbColor _inkOn(Color background) {
+  final rgb = background.toRgb();
+  double channel(int value) {
+    final c = value / 255;
+    return c <= 0.03928
+        ? c / 12.92
+        : math.pow((c + 0.055) / 1.055, 2.4).toDouble();
+  }
+
+  final luminance =
+      0.2126 * channel(rgb.r) +
+      0.7152 * channel(rgb.g) +
+      0.0722 * channel(rgb.b);
+  // Above this, black text out-contrasts white (WCAG relative luminance).
+  return luminance > 0.179 ? _darkInk : _lightInk;
+}
 
 /// A self-contained sprite editor that runs unchanged in a terminal or the
 /// browser host.
@@ -840,7 +861,7 @@ class _PaletteChip extends StatelessWidget {
       child: Text(
         selected ? ' ◆  ' : '    ',
         allowSelect: false,
-        style: const CellStyle(foreground: _cursor, bold: true),
+        style: CellStyle(foreground: _inkOn(color), bold: true),
       ),
     );
     return Semantics(
@@ -978,7 +999,7 @@ class _RenderSpriteGrid extends RenderObject {
         final onionColor = value == 0 ? _colorAt(onionValue) : null;
         final isCursor = x == _cursorX && y == _cursorY;
         final style = CellStyle(
-          foreground: isCursor ? _cursor : onionColor,
+          foreground: isCursor ? _inkOn(color ?? checker) : onionColor,
           background: color ?? checker,
           bold: isCursor,
           dim: onionColor != null,
