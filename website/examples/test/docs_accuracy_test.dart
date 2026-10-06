@@ -614,6 +614,9 @@ List<File> _publicDocs(Directory repo) {
     File(p.join(repo.path, 'packages/fleury_web/README.md')),
     File(p.join(repo.path, 'packages/fleury_mcp/README.md')),
     File(p.join(repo.path, 'packages/fleury_test/README.md')),
+    // pub.dev's Example tabs.
+    File(p.join(repo.path, 'packages/fleury/example/README.md')),
+    File(p.join(repo.path, 'packages/fleury_mcp/example/README.md')),
     File(p.join(repo.path, 'packages/fleury/doc/themes.md')),
     for (final name in const <String>[
       'architecture.md',
