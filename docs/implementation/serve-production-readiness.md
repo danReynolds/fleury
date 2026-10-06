@@ -454,9 +454,15 @@ startup themselves (Claude Code after 30 s).
 - `spawnFleuryApp` cleans up its child and socket on every failure, including
   an abort future that errors and a failed accept, and serve treats any error
   bringing a session up as a failed start rather than an unhandled one.
+- An app that exits before connecting gets its output delivered before the
+  failure is reported. The exit can be seen before that output is read, and
+  cancelling the forwarders then lost the lines that say why it stopped (the
+  first spawn in a fresh process lost them outright). fleury_mcp, which holds an
+  app's output for its MCP client, prints it when the attach fails.
 
-Covered by `spawn_test` (no-deadline slow start, failure messages, cleanup after
-a failing abort) and `serve_spawn_test` (pairing during warmup, reload handoff,
-the browser's failure reason). Reviewed in ten angles before merge; the review
+Covered by `spawn_test` (no-deadline slow start, failure messages and the output
+before them, cleanup after a failing abort), `serve_spawn_test` (pairing during
+warmup, reload handoff, the browser's failure reason) and `mcp_host_e2e_test`
+(a failed attach shows the app's output). Reviewed in ten angles before merge; the review
 found the first version's fixed 60 s deadline, its deferred replacement and its
 cold retry after a failed start, all replaced by the rules above.

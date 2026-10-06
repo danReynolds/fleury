@@ -48,18 +48,30 @@ void main() {
     );
   });
 
-  test('an app that exits before connecting says so', () async {
-    final error = await _spawnError(
-      command: [Platform.resolvedExecutable, '--version'],
-    );
-    expect(
-      error.message,
-      allOf(
-        contains('exited (code 0) before connecting'),
-        contains('FLEURY_HANDLE'),
-      ),
-    );
-  });
+  test(
+    'an app that exits before connecting says so, after its output',
+    () async {
+      final lines = <String>[];
+      // The last line is written after the exit is observed, the race that lost
+      // a stopped app's output.
+      final error = await _spawnError(
+        command: const [
+          'sh',
+          '-c',
+          'echo FIRST-WORDS; (sleep 0.3; echo LAST-WORDS >&2) & exit 3',
+        ],
+        onLog: (tag, line) => lines.add('$tag $line'),
+      );
+      expect(
+        error.message,
+        allOf(
+          contains('exited (code 3) before connecting'),
+          contains('FLEURY_HANDLE'),
+        ),
+      );
+      expect(lines, ['out FIRST-WORDS', 'err LAST-WORDS']);
+    },
+  );
 
   test('an abort that fails still tears the app down', () async {
     final dir = Directory.systemTemp.createTempSync('fleury_spawn_abort_');
@@ -102,6 +114,7 @@ Future<FleurySpawnException> _spawnError({
   Future<void>? abort,
   Duration slowStartAfter = const Duration(seconds: 10),
   void Function()? onSlowStart,
+  void Function(String tag, String line)? onLog,
 }) async {
   try {
     final app = await spawnFleuryApp(
@@ -110,6 +123,7 @@ Future<FleurySpawnException> _spawnError({
       abort: abort,
       slowStartAfter: slowStartAfter,
       onSlowStart: onSlowStart,
+      onLog: onLog,
     );
     await app.dispose();
   } on FleurySpawnException catch (error) {

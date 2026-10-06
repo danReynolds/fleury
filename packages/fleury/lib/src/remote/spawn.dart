@@ -157,6 +157,7 @@ Future<SpawnedFleuryApp> spawnFleuryApp({
   // The app renders to the socket; its stdout/stderr is its own log output.
   // OutputCapture bounds an unterminated line before it reaches the host log;
   // LineSplitter would retain an attacker-controlled line until EOF/newline.
+  final forwarded = <Future<void>>[];
   StreamSubscription<String> forward(
     String tag,
     LogSource sourceTag,
@@ -167,19 +168,25 @@ Future<SpawnedFleuryApp> spawnFleuryApp({
       sanitizeForTerminal: true,
       onLine: (line) => onLog?.call(tag, line.text),
     );
+    final done = Completer<void>();
+    forwarded.add(done.future);
     return source
         // A child's logs are arbitrary bytes, independent of the render wire.
         // Bad encoding must not terminate the process hosting other sessions.
         .transform(const Utf8Decoder(allowMalformed: true))
         .listen(
           (chunk) => capture.addChunk(chunk, sourceTag),
-          onDone: capture.flushPartials,
+          onDone: () {
+            capture.flushPartials();
+            done.complete();
+          },
           onError: (Object error, StackTrace stack) {
             capture.flushPartials();
             capture.addChunk(
               'subprocess log stream failed: $error\n',
               sourceTag,
             );
+            done.complete();
           },
           cancelOnError: true,
         );
@@ -241,6 +248,14 @@ Future<SpawnedFleuryApp> spawnFleuryApp({
   }
 
   if (connection is! Socket) {
+    if (connection is _AppExited) {
+      // The exit can be observed before its output is read. Let the app's last
+      // lines (usually why it stopped) reach onLog before the forwarders are
+      // cancelled, bounded because a descendant may hold the pipes open.
+      await Future.wait(
+        forwarded,
+      ).timeout(killGrace, onTimeout: () => const <void>[]);
+    }
     await outSub.cancel();
     await errSub.cancel();
     // SIGTERM→grace→SIGKILL and, crucially, AWAIT exitCode — a bare fire-and-
