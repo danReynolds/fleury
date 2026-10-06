@@ -102,6 +102,99 @@ void main() {
       expect(buf.atColRow(0, 0).style.foreground, const AnsiColor(5));
     });
 
+    testWidgets('uncolored text takes the color scheme foreground', (tester) {
+      // A light theme on a dark terminal: text left to the terminal's own
+      // (light) foreground would vanish into the theme's light background.
+      tester.pumpWidget(
+        const Theme(
+          data: ThemeData(
+            textStyle: CellStyle(bold: true),
+            colorScheme: ColorScheme(
+              foreground: RgbColor(0x65, 0x7B, 0x83),
+              background: RgbColor(0xFD, 0xF6, 0xE3),
+            ),
+          ),
+          child: Row(
+            children: [
+              Text('ab'),
+              Text('cd', style: CellStyle(foreground: AnsiColor(1))),
+            ],
+          ),
+        ),
+      );
+      final buf = tester.render(size: const CellSize(4, 1));
+      final plain = buf.atColRow(0, 0).style;
+      expect(plain.foreground, const RgbColor(0x65, 0x7B, 0x83));
+      expect(plain.bold, isTrue, reason: 'textStyle still applies');
+      expect(buf.atColRow(2, 0).style.foreground, const AnsiColor(1));
+    });
+
+    testWidgets('text fields take the theme text color like Text does', (
+      tester,
+    ) {
+      const ink = RgbColor(0x65, 0x7B, 0x83);
+      final single = TextEditingController(text: 'ab');
+      final multi = TextEditingController(text: 'cd');
+      addTearDown(single.dispose);
+      addTearDown(multi.dispose);
+      tester.pumpWidget(
+        Theme(
+          data: const ThemeData(colorScheme: ColorScheme(foreground: ink)),
+          child: Column(
+            children: [
+              SizedBox(width: 6, child: TextInput(controller: single)),
+              SizedBox(width: 6, height: 1, child: TextArea(controller: multi)),
+            ],
+          ),
+        ),
+      );
+      final buf = tester.render(size: const CellSize(6, 2));
+      expect(buf.atColRow(0, 0).grapheme, 'a');
+      expect(buf.atColRow(0, 0).style.foreground, ink);
+      expect(buf.atColRow(0, 1).grapheme, 'c');
+      expect(buf.atColRow(0, 1).style.foreground, ink);
+    });
+
+    testWidgets('text fields take the ambient color but not its attributes', (
+      tester,
+    ) {
+      // A highlighted list row cascades inverse: inheriting it would make the
+      // field's inverse cursor cue a no-op.
+      final controller = TextEditingController(text: 'ab');
+      addTearDown(controller.dispose);
+      tester.pumpWidget(
+        DefaultTextStyle(
+          style: const CellStyle(
+            foreground: AnsiColor(2),
+            inverse: true,
+            dim: true,
+          ),
+          child: SizedBox(width: 6, child: TextInput(controller: controller)),
+        ),
+      );
+      final style = tester
+          .render(size: const CellSize(6, 1))
+          .atColRow(0, 0)
+          .style;
+      expect(style.foreground, const AnsiColor(2));
+      expect(style.inverse, isFalse);
+      expect(style.dim, isFalse);
+    });
+
+    testWidgets('a textStyle foreground wins over the color scheme', (tester) {
+      tester.pumpWidget(
+        const Theme(
+          data: ThemeData(
+            textStyle: CellStyle(foreground: AnsiColor(5)),
+            colorScheme: ColorScheme(foreground: AnsiColor(2)),
+          ),
+          child: Text('hi'),
+        ),
+      );
+      final buf = tester.render(size: const CellSize(4, 1));
+      expect(buf.atColRow(0, 0).style.foreground, const AnsiColor(5));
+    });
+
     testWidgets('DefaultTextStyle.merge layers without dropping the outer', (
       tester,
     ) {

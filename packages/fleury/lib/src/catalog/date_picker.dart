@@ -2,6 +2,7 @@ import '../primitives.dart';
 import 'package:fleury/fleury_widget_support.dart';
 
 import 'calendar_heatmap.dart' show CalendarWeekStart;
+import 'component_theme.dart' show focusCueOnSelection;
 
 /// A month-at-a-time date picker. Renders a header (`< January 2024 >`),
 /// the day-of-week row, and a 7-column day grid. The current selection
@@ -363,7 +364,9 @@ class _DatePickerState extends State<DatePicker> implements TextInputClaimant {
         CellStyle.interactive(
           base: base,
           selected: theme.selectionStyle,
-          focused: theme.focusedStyle,
+          focused: selected
+              ? focusCueOnSelection(theme.focusedStyle)
+              : theme.focusedStyle,
           disabled: theme.mutedStyle,
           invalid: theme.errorStyle,
         ),

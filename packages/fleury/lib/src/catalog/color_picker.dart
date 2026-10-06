@@ -1,6 +1,8 @@
 import '../primitives.dart';
 import 'package:fleury/fleury_widget_support.dart';
 
+import 'component_theme.dart' show focusCueOnSelection;
+
 /// A grid of color swatches: the arrow keys preview a color, and Enter,
 /// Space, or a click commits one.
 ///
@@ -383,7 +385,8 @@ class _ColorPickerState extends State<ColorPicker>
           cascade: [
             CellStyle.interactive(
               base: isCursor ? theme.selectionStyle : theme.mutedStyle,
-              focused: theme.focusedStyle,
+              // Focus lands only on the cursor, which wears the selection.
+              focused: focusCueOnSelection(theme.focusedStyle),
               disabled: theme.mutedStyle,
               invalid: theme.errorStyle,
             ),

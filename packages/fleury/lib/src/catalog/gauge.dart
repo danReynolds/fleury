@@ -93,6 +93,7 @@ class Gauge extends StatelessWidget {
         value: value,
         label: label,
         showPercentage: showPercentage,
+        textStyle: DefaultTextStyle.of(context),
         filledStyle: filled,
         trackStyle: track,
         glyphTier: drawingGlyphTierOf(context),
@@ -106,6 +107,7 @@ class _RawGauge extends LeafRenderObjectWidget {
     required this.value,
     required this.label,
     required this.showPercentage,
+    required this.textStyle,
     required this.filledStyle,
     required this.trackStyle,
     required this.glyphTier,
@@ -114,6 +116,7 @@ class _RawGauge extends LeafRenderObjectWidget {
   final double value;
   final String? label;
   final bool showPercentage;
+  final CellStyle textStyle;
   final CellStyle filledStyle;
   final CellStyle trackStyle;
   final GlyphTier glyphTier;
@@ -124,6 +127,7 @@ class _RawGauge extends LeafRenderObjectWidget {
     value: value,
     label: label,
     showPercentage: showPercentage,
+    textStyle: textStyle,
     filledStyle: filledStyle,
     trackStyle: trackStyle,
     glyphTier: glyphTier,
@@ -138,6 +142,7 @@ class _RawGauge extends LeafRenderObjectWidget {
       ..value = value
       ..label = label
       ..showPercentage = showPercentage
+      ..textStyle = textStyle
       ..filledStyle = filledStyle
       ..trackStyle = trackStyle
       ..glyphTier = glyphTier
@@ -152,6 +157,7 @@ class RenderGauge extends RenderObject {
     required double value,
     required String? label,
     required bool showPercentage,
+    CellStyle textStyle = CellStyle.none,
     required CellStyle filledStyle,
     required CellStyle trackStyle,
     required GlyphTier glyphTier,
@@ -159,6 +165,7 @@ class RenderGauge extends RenderObject {
        _value = value,
        _label = label,
        _showPercentage = showPercentage,
+       _textStyle = textStyle,
        _filledStyle = filledStyle,
        _trackStyle = trackStyle,
        _glyphTier = glyphTier;
@@ -191,6 +198,14 @@ class RenderGauge extends RenderObject {
     if (_showPercentage == v) return;
     _showPercentage = v;
     markNeedsLayout();
+  }
+
+  /// Style of the label and percentage text.
+  CellStyle _textStyle;
+  set textStyle(CellStyle v) {
+    if (_textStyle == v) return;
+    _textStyle = v;
+    markNeedsPaintOnly();
   }
 
   CellStyle _filledStyle;
@@ -249,11 +264,11 @@ class RenderGauge extends RenderObject {
     if (trackWidth < 1) {
       // Degraded: too narrow for chrome + bar. Render just the prefix,
       // truncated to fit.
-      prefix.clip(w).paint(buffer, offset, CellStyle.none);
+      prefix.clip(w).paint(buffer, offset, _textStyle);
       return;
     }
 
-    prefix.paint(buffer, offset, CellStyle.none);
+    prefix.paint(buffer, offset, _textStyle);
     var col = offset.col + prefix.width;
 
     // Track + fill.
@@ -277,6 +292,6 @@ class RenderGauge extends RenderObject {
       col++;
     }
 
-    suffix.paint(buffer, CellOffset(col, offset.row), CellStyle.none);
+    suffix.paint(buffer, CellOffset(col, offset.row), _textStyle);
   }
 }
