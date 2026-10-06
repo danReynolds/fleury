@@ -138,11 +138,13 @@ void main() {
             'test/docs_accuracy_test.dart test/doc_snippets_test.dart',
           ),
         );
-        // fleury_web's pub.dev example is compiled, not just analyzed.
+        // fleury_web's pub.dev example is compiled, not just analyzed, at the
+        // README's -O2.
         expect(
           fullCheck.stdout,
           contains('(packages/fleury_web) dart compile js example/main.dart'),
         );
+        expect(fullCheck.stdout, contains('fleury-check-web-example.js -O2'));
 
         final coverage = await _runTool(['--dry-run', 'coverage', '--strict']);
         expect(coverage.exitCode, 0, reason: coverage.stderr.toString());

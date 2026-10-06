@@ -497,7 +497,7 @@ class _Runner {
         'example/main.dart',
         '-o',
         '${Directory.systemTemp.path}/fleury-check-web-example.js',
-        '-O1',
+        '-O2',
       ], workingDirectory: web);
 
       // The fleury integration batch runs LAST so every other package's
