@@ -23,6 +23,24 @@ void main() {
     },
   );
 
+  // The Markdown report is meant to be pasted into public issues, so it
+  // describes the platform without naming the machine. `--json` is a separate,
+  // stable contract and never carried a hostname.
+  test('diagnose Markdown leaves out the local hostname', () async {
+    final result = await Process.run(Platform.resolvedExecutable, <String>[
+      'run',
+      'bin/fleury.dart',
+      'diagnose',
+    ], workingDirectory: Directory.current.path);
+
+    expect(result.exitCode, 0, reason: result.stderr.toString());
+    final markdown = result.stdout.toString();
+    expect(markdown, contains('Paste this block into your GitHub issue.'));
+    expect(markdown, contains('| OS |'));
+    expect(markdown, contains('| Dart version |'));
+    expect(markdown.toLowerCase(), isNot(contains('hostname')));
+  });
+
   test('diagnose writes JSON to a file without piping stdout', () async {
     final temp = Directory.systemTemp.createTempSync('fleury_diagnose_cli_');
     try {

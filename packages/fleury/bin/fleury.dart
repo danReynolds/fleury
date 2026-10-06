@@ -221,6 +221,19 @@ bool _isFleuryRepoRoot(Directory directory) {
 }
 
 Future<int> _runShell(List<String> args) async {
+  // Help needs no terminal, so it is answered before the checks below.
+  if (args.contains('-h') || args.contains('--help')) {
+    stderr.write('''
+usage: fleury shell
+
+Gives a Fleury app that runs elsewhere, such as under an IDE debugger, a
+terminal to draw in. Start the shell from the app's package directory, then
+run the app: it finds the shell through .fleury/handle, draws here, and takes
+its input from this terminal. Each run attaches in turn; with no app attached,
+Ctrl+C quits the shell. Runs on macOS and Linux.
+''');
+    return 0;
+  }
   // The shell proxies a real terminal to a remote app: it forwards local
   // keystrokes (so it puts its own stdin into raw mode) and writes the app's
   // frames to stdout. Refuse a non-tty stdin up front — otherwise a
@@ -1870,7 +1883,7 @@ Future<int> _runDiagnose(List<String> args) async {
     platform?.operatingSystemVersion ?? Platform.operatingSystemVersion,
   );
   row('Dart version', platform?.dartVersion ?? Platform.version);
-  row('Local hostname', Platform.localHostname);
+  // No hostname: this block is pasted into public issues.
   row('Executable', Platform.executable);
   stdout.writeln();
   stdout.writeln('## Terminal');
@@ -2309,8 +2322,9 @@ String _basename(String path) {
 Future<Never> _runRun(List<String> args) async {
   final run = parseRunCommand(args);
   if (run == null) {
+    // Help was asked for, so printing it is success.
     stderr.write(runCommandUsage);
-    exit(64);
+    exit(0);
   }
   var script = run.scriptPath;
   if (script == null) {
