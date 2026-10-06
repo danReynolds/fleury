@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.1.1
+
+- Adds a runnable example test.
+
 ## 0.1.0
 
 Initial public release, October 5, 2026. Requires Dart 3.10.4 or later and

@@ -10,7 +10,7 @@ Add it as a development dependency of the app it will drive:
 
 ```yaml
 dev_dependencies:
-  fleury_mcp: ^0.1.0
+  fleury_mcp: ^0.1.1
 ```
 
 Then run `dart pub get`. `dart pub add --dev fleury_mcp` does both steps.

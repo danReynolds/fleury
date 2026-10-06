@@ -1,6 +1,6 @@
 name: fleury
 description: A Dart-native terminal UI framework with Flutter ergonomics and terminal-native internals.
-version: 0.1.0
+version: 0.1.1
 repository: https://github.com/danReynolds/fleury
 issue_tracker: https://github.com/danReynolds/fleury/issues
 topics:

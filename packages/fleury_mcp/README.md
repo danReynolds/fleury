@@ -199,7 +199,7 @@ cannot start it in the application directory, globally activate the release
 that matches the app's Fleury:
 
 ```sh
-dart pub global activate fleury_mcp 0.1.0
+dart pub global activate fleury_mcp 0.1.1
 ```
 
 Pub installs the command in its global `bin` directory (`~/.pub-cache/bin` by
@@ -429,7 +429,7 @@ The app works with zero effort; these make the agent's job easier:
 ## Status
 
 Developed in the Fleury monorepo and packaged for publication with an exact
-dependency on the matching Fleury release (`fleury: 0.1.0`). That pairing covers
+dependency on the matching Fleury release (`fleury: 0.1.1`). That pairing covers
 Fleury's supported host/process SPI and its explicitly unstable, lockstep wire.
 Local development uses `pubspec_overrides.yaml` to resolve the sibling package.
 Run `dart tool/fleury_dev.dart bootstrap` from the repository root to create it

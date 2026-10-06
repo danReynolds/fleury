@@ -1,6 +1,6 @@
 name: fleury_test
 description: Deterministic widget testing, semantic assertions, and golden helpers for Fleury applications.
-version: 0.1.0
+version: 0.1.1
 repository: https://github.com/danReynolds/fleury/tree/main/packages/fleury_test
 issue_tracker: https://github.com/danReynolds/fleury/issues
 topics:

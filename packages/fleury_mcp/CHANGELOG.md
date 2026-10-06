@@ -1,5 +1,18 @@
 # Changelog
 
+## 0.1.1
+
+Requires exactly `fleury 0.1.1`.
+
+- When an app exits before it can be attached, its output is printed before
+  the error.
+- Suggestions work however the server was launched, and the README's setup
+  runs as written: add the development dependency first, give a globally
+  activated server the app's absolute path, and activate the release that
+  matches the app's Fleury.
+- Declares macOS and Linux support, and adds an example covering setup, host
+  configuration, and a smoke test.
+
 ## 0.1.0
 
 Initial public release, October 5, 2026. Requires Dart 3.10.4 or later and

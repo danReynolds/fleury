@@ -400,7 +400,8 @@ void main() {
         p.join(repo.path, 'packages/fleury_mcp/README.md'),
       ).readAsStringSync();
 
-      expect(readme, contains('fleury: 0.1.0'));
+      // The exact pin names the Fleury release this checkout publishes.
+      expect(readme, contains('fleury: ${_pubspecVersion(repo, 'fleury')}'));
       expect(readme, contains('pubspec_overrides.yaml'));
       expect(readme, isNot(contains('publish_to: none')));
       expect(readme, isNot(contains('path dependency on')));
@@ -420,13 +421,7 @@ void main() {
     // Fleury: the INIT handshake rejects any other. Docs that pin the version
     // to activate must name the one this checkout publishes.
     test('documented fleury_mcp activations pin its pubspec version', () {
-      final version = RegExp(r'^version:\s*(\S+)\s*$', multiLine: true)
-          .firstMatch(
-            File(
-              p.join(repo.path, 'packages/fleury_mcp/pubspec.yaml'),
-            ).readAsStringSync(),
-          )!
-          .group(1)!;
+      final version = _pubspecVersion(repo, 'fleury_mcp');
       final activation = RegExp(
         r'dart pub global activate fleury_mcp(?![\w-])(?:[ \t]+([^\s`]+))?',
       );
@@ -804,6 +799,16 @@ List<File> _publicDocs(Directory repo) {
   ];
   return files.where((file) => file.existsSync()).toList(growable: false);
 }
+
+/// The `version:` that [package]'s pubspec declares.
+String _pubspecVersion(Directory repo, String package) =>
+    RegExp(r'^version:\s*(\S+)\s*$', multiLine: true)
+        .firstMatch(
+          File(
+            p.join(repo.path, 'packages/$package/pubspec.yaml'),
+          ).readAsStringSync(),
+        )!
+        .group(1)!;
 
 String _firstDartFence(String markdown) {
   final match = RegExp(r'```dart[^\n]*\n([\s\S]*?)\n```').firstMatch(markdown);
