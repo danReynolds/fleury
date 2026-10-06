@@ -113,8 +113,11 @@ class _AgentBodyState extends State<_AgentBody>
       children: <Widget>[
         _banner(theme),
         Expanded(
+          // A transcript scrolls but has no current row: a selectable list
+          // would highlight the newest block, the one still streaming.
           child: ListView.builder(
             controller: _scroll,
+            selectable: false,
             itemCount: _blocks.length,
             itemBuilder: (context, i, selected) =>
                 _blocks[i].build(context, theme),
