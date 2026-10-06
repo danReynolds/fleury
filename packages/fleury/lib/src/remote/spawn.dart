@@ -55,21 +55,28 @@ final class FleurySpawnException implements Exception {
 /// [onLog] receives the app's own stdout/stderr line by line (sanitized), tagged
 /// `out`/`err`, so the host can forward it without it polluting the wire.
 ///
-/// [abort], if given and it completes before the app connects, abandons the
-/// spawn (tears the process + socket down and throws) — e.g. `fleury serve`
-/// passes the browser-closed signal so a vanished browser doesn't leave an
-/// orphan app.
+/// [abort], if given and it completes (or fails) before the app connects,
+/// abandons the spawn (tears the process + socket down and throws). A host
+/// whose waits all have an owner, such as `fleury serve`, whose browser or
+/// shutdown ends each one, passes a null [connectTimeout] to wait for a slow
+/// start instead of failing it: a cold `dart run` compiles the whole app
+/// before `runApp` can connect, which takes far longer on a busy machine.
+///
+/// [onSlowStart] runs once if the app is still starting after
+/// [slowStartAfter], so a host can say it is waiting rather than look stuck.
 ///
 /// Throws [FleurySpawnException] on exit-before-connect, timeout, or abort, and
 /// rethrows a [ProcessException] if the command can't be launched.
 Future<SpawnedFleuryApp> spawnFleuryApp({
   required List<String> command,
   String? socketPath,
-  Duration connectTimeout = const Duration(seconds: 20),
+  Duration? connectTimeout = const Duration(seconds: 20),
   Duration killGrace = const Duration(seconds: 2),
   Map<String, String>? environment,
   void Function(String tag, String line)? onLog,
   Future<void>? abort,
+  Duration slowStartAfter = const Duration(seconds: 10),
+  void Function()? onSlowStart,
 }) async {
   if (command.isEmpty) {
     throw ArgumentError.value(command, 'command', 'must be non-empty');
@@ -150,6 +157,7 @@ Future<SpawnedFleuryApp> spawnFleuryApp({
   // The app renders to the socket; its stdout/stderr is its own log output.
   // OutputCapture bounds an unterminated line before it reaches the host log;
   // LineSplitter would retain an attacker-controlled line until EOF/newline.
+  final forwarded = <Future<void>>[];
   StreamSubscription<String> forward(
     String tag,
     LogSource sourceTag,
@@ -160,19 +168,25 @@ Future<SpawnedFleuryApp> spawnFleuryApp({
       sanitizeForTerminal: true,
       onLine: (line) => onLog?.call(tag, line.text),
     );
+    final done = Completer<void>();
+    forwarded.add(done.future);
     return source
         // A child's logs are arbitrary bytes, independent of the render wire.
         // Bad encoding must not terminate the process hosting other sessions.
         .transform(const Utf8Decoder(allowMalformed: true))
         .listen(
           (chunk) => capture.addChunk(chunk, sourceTag),
-          onDone: capture.flushPartials,
+          onDone: () {
+            capture.flushPartials();
+            done.complete();
+          },
           onError: (Object error, StackTrace stack) {
             capture.flushPartials();
             capture.addChunk(
               'subprocess log stream failed: $error\n',
               sourceTag,
             );
+            done.complete();
           },
           cancelOnError: true,
         );
@@ -200,21 +214,48 @@ Future<SpawnedFleuryApp> spawnFleuryApp({
     }
   }
 
-  // A cancellable timeout arm, so a successful connect doesn't leave a timer
-  // armed for the rest of connectTimeout.
+  // Cancellable timer arms, so a connect doesn't leave them armed for the rest
+  // of their durations.
   final timedOut = Completer<Object>();
-  final timer = Timer(connectTimeout, () {
-    if (!timedOut.isCompleted) timedOut.complete(const _ConnectTimedOut());
-  });
-  final connection = await Future.any<Object>([
-    server.first,
-    process.exitCode.then((code) => _AppExited(code)),
-    timedOut.future,
-    if (abort != null) abort.then((_) => const _Aborted()),
-  ]);
-  timer.cancel();
+  final timer = connectTimeout == null
+      ? null
+      : Timer(connectTimeout, () {
+          if (!timedOut.isCompleted) {
+            timedOut.complete(const _ConnectTimedOut());
+          }
+        });
+  final slowStartTimer = onSlowStart == null
+      ? null
+      : Timer(slowStartAfter, onSlowStart);
+  Object connection;
+  try {
+    connection = await Future.any<Object>([
+      server.first,
+      process.exitCode.then((code) => _AppExited(code)),
+      if (timer != null) timedOut.future,
+      if (abort != null)
+        abort.then(
+          (_) => const _Aborted(),
+          onError: (Object _) => const _Aborted(),
+        ),
+    ]);
+  } catch (error) {
+    // The listening socket failed, so nothing can connect any more.
+    connection = _AcceptFailed(error);
+  } finally {
+    timer?.cancel();
+    slowStartTimer?.cancel();
+  }
 
   if (connection is! Socket) {
+    if (connection is _AppExited) {
+      // The exit can be observed before its output is read. Let the app's last
+      // lines (usually why it stopped) reach onLog before the forwarders are
+      // cancelled, bounded because a descendant may hold the pipes open.
+      await Future.wait(
+        forwarded,
+      ).timeout(killGrace, onTimeout: () => const <void>[]);
+    }
     await outSub.cancel();
     await errSub.cancel();
     // SIGTERM→grace→SIGKILL and, crucially, AWAIT exitCode — a bare fire-and-
@@ -223,14 +264,24 @@ Future<SpawnedFleuryApp> spawnFleuryApp({
     // process is already gone, so this resolves instantly.
     await killProcess();
     await removeSocket();
+    const connects =
+        'A Fleury app connects through FLEURY_HANDLE when it calls '
+        'runApp(...)';
     final reason = switch (connection) {
-      _AppExited(:final code) => 'app exited (code $code) before connecting',
-      _Aborted() => 'aborted before the app connected',
-      _ => 'app did not connect within ${connectTimeout.inSeconds}s',
+      _AppExited(:final code) =>
+        'the app exited (code $code) before connecting. $connects; its output '
+            'may say why it stopped.',
+      _Aborted() => 'aborted before the app connected.',
+      _AcceptFailed(:final error) =>
+        "could not accept the app's connection: $error",
+      _ =>
+        'the app did not connect within ${_describe(connectTimeout!)}. '
+            '$connects, so a command that never calls it, or that clears the '
+            'environment, cannot connect. A `dart run` command compiles the '
+            'app first, which takes longer on a busy machine.',
     };
     throw FleurySpawnException(
-      'Failed to attach to `${command.join(' ')}`: $reason. '
-      'Make sure it calls runApp(...) so it auto-discovers FLEURY_HANDLE.',
+      'Failed to attach to `${command.join(' ')}`: $reason',
     );
   }
 
@@ -267,9 +318,19 @@ Directory _createHandleDir() {
   return base.createTempSync('fleury-host-');
 }
 
+/// [duration] for a message, without rounding a sub-second deadline to "0s".
+String _describe(Duration duration) => duration.inMilliseconds % 1000 == 0
+    ? '${duration.inSeconds}s'
+    : '${duration.inMilliseconds}ms';
+
 final class _AppExited {
   const _AppExited(this.code);
   final int code;
+}
+
+final class _AcceptFailed {
+  const _AcceptFailed(this.error);
+  final Object error;
 }
 
 final class _ConnectTimedOut {

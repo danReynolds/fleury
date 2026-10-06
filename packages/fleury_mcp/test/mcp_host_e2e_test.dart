@@ -157,6 +157,29 @@ void main() {
     },
     timeout: const Timeout(Duration(seconds: 120)),
   );
+
+  test(
+    'an app that stops before attaching shows its output with the error',
+    () async {
+      final result = await Process.run('dart', <String>[
+        'run',
+        binary,
+        '--',
+        'sh',
+        '-c',
+        'echo OUT-LINE; (sleep 0.3; echo WHY-IT-STOPPED >&2) & exit 3',
+      ]);
+      final err = result.stderr as String;
+      expect(result.exitCode, 1, reason: err);
+      expect(err, contains('[app err] WHY-IT-STOPPED'));
+      expect(err, contains('[app out] OUT-LINE'));
+      expect(
+        err.indexOf('WHY-IT-STOPPED'),
+        lessThan(err.indexOf('exited (code 3) before connecting')),
+      );
+    },
+    timeout: const Timeout(Duration(seconds: 120)),
+  );
 }
 
 Map<String, Object?> _toolJson(Map<String, Object?> response) {

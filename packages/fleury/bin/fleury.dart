@@ -1263,15 +1263,16 @@ Future<int> _runServeSpawn({
   // app) is paid here, not on the connection. Each connect claims the standby
   // and prepares the next, so sequential reloads stay warm.
   _SpawnSession? warm;
-  Future<bool>? warmReady;
 
-  void prepareWarm() {
-    if (shuttingDown) return;
+  // Every session, standby or not, starts the same way: unpaired, waiting for
+  // its app to connect with no deadline. Each wait has an owner that ends it
+  // (the browser leaving, or shutdown), so a slow cold compile is waited out,
+  // never failed.
+  _SpawnSession startSession() {
     final id = ++sessionCounter;
     final s = _SpawnSession(id: id);
-    warm = s;
     sessions.add(s);
-    warmReady = s.bringUp(
+    s.bringUp(
       command: command,
       handleDir: handleDir.path,
       tag: 's$id',
@@ -1280,15 +1281,36 @@ Future<int> _runServeSpawn({
     unawaited(
       s.done.then((_) {
         sessions.remove(s);
-        if (identical(warm, s)) {
-          warm = null;
-          warmReady = null;
-        }
+        if (identical(warm, s)) warm = null;
         stderr.writeln(
           '[serve s${s.id}] session ended (active: ${sessions.length})',
         );
       }),
     );
+    return s;
+  }
+
+  void prepareWarm() {
+    if (shuttingDown || warm != null) return;
+    warm = startSession();
+  }
+
+  // A browser left before its session's app was ready, typically a reload
+  // during a slow start. Keep the starting app as the warm standby, so the
+  // reload resumes its compile instead of starting over; if a standby already
+  // exists, keep whichever started first, since it is further along.
+  void keepAsStandby(_SpawnSession s) {
+    final current = warm;
+    if (shuttingDown || s.isDead) {
+      unawaited(s.shutdown());
+    } else if (current == null) {
+      warm = s;
+    } else if (s.id < current.id) {
+      warm = s;
+      unawaited(current.shutdown());
+    } else {
+      unawaited(s.shutdown());
+    }
   }
 
   Future<void> handleRequest(HttpRequest req) async {
@@ -1391,71 +1413,62 @@ Future<int> _runServeSpawn({
       return;
     }
 
-    // Claim the warm standby and immediately prepare the next one.
-    final claimed = warm;
-    final claimedReady = warmReady;
+    // A WebSocket can be listened to once, so this buffer holds the browser's
+    // INIT (sent as soon as the socket opens) until the app is paired, and
+    // reports the browser leaving in the meantime.
+    final browserInput = BufferedBrowserInput(ws);
+
+    // Claim the warm standby (or start a session when there is none) and
+    // immediately prepare the next one.
+    final standby = warm;
     warm = null;
-    warmReady = null;
+    final session = standby == null || standby.isDead
+        ? startSession()
+        : standby;
     prepareWarm();
 
-    if (claimed != null && claimedReady != null) {
-      // Usually already complete (instant); if a connect races the warmup,
-      // this waits out the remainder — still no worse than a cold spawn, and
-      // it avoids spawning a second process for the same browser.
-      final ready = await claimedReady;
-      if (shuttingDown) {
-        release();
-        try {
-          await ws.close();
-        } catch (_) {}
-        return;
-      }
-      if (ready && claimed.isReady) {
-        stderr.writeln('[serve s${claimed.id}] paired browser to warm standby');
-        claimed.attach(ws);
-        unawaited(claimed.done.then((_) => release()));
-        return; // cleanup runs via the done handler wired in prepareWarm
-      }
-      // The standby failed to come up; fall through to a cold spawn.
-    }
-
-    // Cold fallback: bind + spawn while the browser waits (legacy behavior).
-    final id = ++sessionCounter;
-    final session = _SpawnSession(id: id);
-    sessions.add(session);
-    final ok = await session.start(
-      command: command,
-      handleDir: handleDir.path,
-      browser: ws,
-      tag: 's$id',
-      environment: spawnEnv,
-    );
+    // Usually already complete (instant) for a standby; otherwise this waits
+    // out the app's cold start, however long it takes.
+    final ready = await Future.any<bool?>([
+      session.ready,
+      browserInput.closed.then((_) => null),
+    ]);
     if (shuttingDown) {
-      await session.shutdown();
-      sessions.remove(session);
+      await browserInput.dispose();
       release();
       try {
         await ws.close();
       } catch (_) {}
       return;
     }
-    if (!ok) {
-      try {
-        await ws.close();
-      } catch (_) {}
-      sessions.remove(session);
+    if (ready == null) {
+      await browserInput.dispose();
       release();
+      keepAsStandby(session);
       return;
     }
-    unawaited(
-      session.done.then((_) {
-        sessions.remove(session);
-        release();
-        stderr.writeln(
-          '[serve s$id] session ended (active: ${sessions.length})',
-        );
-      }),
-    );
+    if (ready && session.isReady) {
+      stderr.writeln(
+        '[serve s${session.id}] paired browser to '
+        '${identical(session, standby) ? 'warm standby' : 'its session'}',
+      );
+      session.attach(ws, browserInput);
+      unawaited(session.done.then((_) => release()));
+      return; // cleanup runs via the done handler wired in startSession
+    }
+    // The app never came up: it could not start, or exited before connecting
+    // (usually a compile error). Starting it again would only repeat that, so
+    // tell the browser why; reloading tries again.
+    await browserInput.dispose();
+    release();
+    try {
+      await ws.close(
+        WebSocketStatus.internalServerError,
+        session.startupFailure ?? _appStoppedBeforePairing,
+      );
+    } catch (_) {
+      // The browser may have left already.
+    }
   }
 
   // Everything that can throw on a hostile or misconfigured request — the
@@ -1538,11 +1551,6 @@ Directory _createSpawnHandleDir() {
 
 /// One spawn-mode session: a subprocess, its session socket, and the
 /// browser WebSocket that paired with it. Owns the full lifecycle.
-/// Unified connect deadline for a spawned session's app (warm + cold). The MCP
-/// bridge uses its own (longer) default; serve's interactive sessions want a
-/// snappier give-up.
-const Duration _spawnConnectTimeout = Duration(seconds: 10);
-
 class _SpawnSession {
   _SpawnSession({required this.id});
 
@@ -1554,12 +1562,22 @@ class _SpawnSession {
   Future<bool>? _startup;
   Future<void>? _shutdownFuture;
   var _shuttingDown = false;
+  String? _startupFailure;
 
   Future<void> get done => _done.future;
+
+  /// Completes true once the app has connected, or false if it never will.
+  Future<bool> get ready => _startup ?? Future.value(false);
+
+  /// What a waiting browser is told when the app never came up, or null.
+  String? get startupFailure => _startupFailure;
 
   /// Whether this session's subprocess is up and connected (a warm standby
   /// brought up ahead of a browser), so [attach] can pair instantly.
   bool get isReady => _app != null && !_shuttingDown;
+
+  /// Whether this session failed to come up or has been shut down.
+  bool get isDead => _shuttingDown;
 
   /// Whether a browser is paired with this session (the warm standby is not).
   bool get isAttached => _browser != null;
@@ -1574,11 +1592,13 @@ class _SpawnSession {
   String _socketPathFor(String handleDir) =>
       '${Directory(handleDir).absolute.path}/spawn-$pid-$id.sock';
 
-  /// Brings the subprocess up *ahead of a browser* — a warm standby. The app
-  /// connects to its session socket and (for a runApp app) blocks awaiting
-  /// INIT, so the expensive `dart run`/VM cold start is paid here, before any
-  /// connection, and a later [attach] pairs instantly. Returns false if the
-  /// process couldn't start or never connected.
+  /// Brings the subprocess up, unpaired: as a warm standby ahead of any
+  /// browser, or for a browser that is already waiting. The app connects to its
+  /// session socket and (for a runApp app) blocks awaiting INIT, so a later
+  /// [attach] pairs instantly. There is no connect deadline, because a cold
+  /// `dart run` can take a long time to compile and every wait already ends
+  /// when its owner leaves: the browser goes, or serve shuts down. Returns
+  /// false if the process couldn't start or exited before connecting.
   Future<bool> bringUp({
     required List<String> command,
     required String handleDir,
@@ -1606,17 +1626,29 @@ class _SpawnSession {
       _app = await spawnFleuryApp(
         command: command,
         socketPath: _socketPathFor(handleDir),
-        connectTimeout: _spawnConnectTimeout,
+        connectTimeout: null,
         environment: environment,
         abort: _abortStartup.future,
         onLog: (stream, line) => stderr.writeln('[$tag $stream] $line'),
+        onSlowStart: () => stderr.writeln(
+          '[serve $tag] still waiting for `${command.join(' ')}` to connect. '
+          'A `dart run` command compiles the app before it starts; an app '
+          'connects through FLEURY_HANDLE when it calls runApp(...).',
+        ),
       );
-    } on ProcessException catch (e) {
-      stderr.writeln('[serve $tag] failed to spawn ${command.first}: $e');
+    } on FleurySpawnException catch (e) {
+      stderr.writeln('[serve $tag] subprocess never connected: $e');
+      _startupFailure =
+          'The app exited before connecting. Its output is in the fleury '
+          'serve terminal.';
       _markDead();
       return false;
-    } on FleurySpawnException catch (e) {
-      stderr.writeln('[serve $tag] warm subprocess never connected: $e');
+    } catch (e) {
+      // ProcessException (the command could not launch), or a socket error
+      // binding the session's handle; either way nothing will connect.
+      stderr.writeln('[serve $tag] failed to spawn ${command.first}: $e');
+      _startupFailure =
+          'The app could not start. Details are in the fleury serve terminal.';
       _markDead();
       return false;
     }
@@ -1627,23 +1659,15 @@ class _SpawnSession {
     return true;
   }
 
-  /// Pairs a browser with this (warm, [isReady]) session and starts pumping.
-  /// The browser's INIT — buffered by the WebSocket until listened — flows to
-  /// the waiting app, which renders its first frame straight away.
-  void attach(WebSocket browser) {
+  /// Pairs a browser with this ([isReady]) session and starts pumping. The
+  /// browser's INIT — held by [browserInput] since the browser connected —
+  /// flows to the waiting app, which renders its first frame straight away.
+  void attach(WebSocket browser, BufferedBrowserInput browserInput) {
     _browser = browser;
-    _attachPump(browser, BufferedBrowserInput(browser), _app!.socket);
-  }
-
-  void _attachPump(
-    WebSocket browser,
-    BufferedBrowserInput browserInput,
-    Socket app,
-  ) {
     _pumpBytes(
       // Spawn mode pairs on attach, so the link forwards from its first byte;
       // the drain-while-pending half is bridge mode's concern.
-      app: BridgeAppLink(app),
+      app: BridgeAppLink(_app!.socket),
       browser: browser,
       browserInput: browserInput.stream,
       onDone: () {
@@ -1651,69 +1675,6 @@ class _SpawnSession {
         shutdown();
       },
     );
-  }
-
-  /// Cold path: bind, spawn, and bridge to an already-connected browser, all
-  /// while the browser waits. Used as the fallback when no warm standby is
-  /// ready. Returns false if the subprocess didn't come up.
-  Future<bool> start({
-    required List<String> command,
-    required String handleDir,
-    required WebSocket browser,
-    required String tag,
-    Map<String, String>? environment,
-  }) {
-    final operation = _start(
-      command: command,
-      handleDir: handleDir,
-      browser: browser,
-      tag: tag,
-      environment: environment,
-    );
-    _startup = operation;
-    return operation;
-  }
-
-  Future<bool> _start({
-    required List<String> command,
-    required String handleDir,
-    required WebSocket browser,
-    required String tag,
-    Map<String, String>? environment,
-  }) async {
-    if (_shuttingDown) return false;
-    _browser = browser;
-    // The browser sends INIT immediately after the WebSocket opens, before the
-    // subprocess can connect back. Listen + buffer now so the handshake isn't
-    // missed — and pass its close as the spawn's abort, so a browser that leaves
-    // before the app connects doesn't orphan the process.
-    final browserInput = BufferedBrowserInput(browser);
-    try {
-      _app = await spawnFleuryApp(
-        command: command,
-        socketPath: _socketPathFor(handleDir),
-        connectTimeout: _spawnConnectTimeout,
-        environment: environment,
-        abort: Future.any<void>([browserInput.closed, _abortStartup.future]),
-        onLog: (stream, line) => stderr.writeln('[$tag $stream] $line'),
-      );
-    } on ProcessException catch (e) {
-      stderr.writeln('[serve $tag] failed to spawn ${command.first}: $e');
-      await browserInput.dispose();
-      _markDead();
-      return false;
-    } on FleurySpawnException catch (e) {
-      stderr.writeln('[serve $tag] subprocess never connected: $e');
-      await browserInput.dispose();
-      _markDead();
-      return false;
-    }
-    stderr.writeln(
-      '[serve $tag] spawned ${command.first} (pid ${_app!.process.pid})',
-    );
-    _attachPump(browser, browserInput, _app!.socket);
-    unawaited(_app!.process.exitCode.then((_) => shutdown()));
-    return true;
   }
 
   Future<void> shutdown() => _shutdownFuture ??= _shutdown();
@@ -1751,6 +1712,12 @@ class _SpawnSession {
     if (!_done.isCompleted) _done.complete();
   }
 }
+
+/// What a waiting browser is told when its app connected but stopped before
+/// the page could be paired with it.
+const String _appStoppedBeforePairing =
+    'The app stopped before the page connected. Details are in the fleury '
+    'serve terminal.';
 
 /// `fleury diagnose` prints terminal environment, capabilities, and
 /// shell/serve state. Markdown remains the default; `--json` is the stable

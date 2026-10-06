@@ -40,6 +40,18 @@ Future<void> main(List<String> args) async {
       await sink.flush();
     }
   }
+  // A slow start: announce the launch, then wait before connecting, the way a
+  // cold `dart run` compiles the app before runApp can connect. With
+  // --exit-before-connect the app stops after the wait instead of connecting.
+  for (final arg in args) {
+    if (arg.startsWith('--connect-delay-ms=')) {
+      stderr.writeln('$tag started');
+      await stderr.flush();
+      final delay = int.parse(arg.substring('--connect-delay-ms='.length));
+      await Future<void>.delayed(Duration(milliseconds: delay));
+      if (args.contains('--exit-before-connect')) exit(3);
+    }
+  }
   final transport = await UnixSocketFrameTransport.connect(handle);
 
   // Signal "I'm alive and connected to the right session socket"

@@ -419,3 +419,50 @@ takes the reload a human feels from ~5 s to a few hundred ms.
 
 Covered by `serve_spawn_test` (a warm standby is pre-spawned and pairs the first
 browser; isolation preserved). Suites green: spawn + serve integration pass.
+
+## Update — spawn connect deadline (2026-10-06)
+
+A smoke test of the published 0.1.0 packages ran the scaffold's preview command
+(`dart run fleury serve --spawn dart --enable-vm-service=0 run bin/run_app.dart`)
+on an M1 Pro at load average ~17. Every session failed with "app did not connect
+within 10s", and the page showed only "Disconnected". A cold `dart run` of the
+scaffold reached its first frame in 5–8 s at that load (14–22 s in a Linux
+container on the same machine). Serve's three concurrent compiles at startup
+(the claimed standby, its replacement, and a cold retry) pushed each past the
+fixed 10 s deadline.
+
+**Fix.** Serve's waits all have owners, so the deadline is gone rather than
+raised. A spawned app gets no connect deadline: every wait ends when its owner
+leaves (the browser goes, or serve shuts down), so a slow compile is waited
+out, never failed. `spawnFleuryApp` takes a null `connectTimeout` for that, and
+reports a slow start through `onSlowStart` after 10 s. Other hosts keep their
+deadlines; the MCP bridge stays at 20 s because MCP hosts time out server
+startup themselves (Claude Code after 30 s).
+
+- Every session starts the same way, unpaired. A browser that leaves before its
+  app is ready (a reload during a slow start) leaves that app as the warm
+  standby, keeping whichever standby started first, so the reload resumes the
+  compile instead of starting over.
+- The replacement standby is still prepared when a connection claims one: on
+  this machine three concurrent compiles took 7.2 s against 5.0 s for one, so
+  overlapping them makes a reload right after the first frame instant (0.03 s,
+  against 3.7 s when the replacement waits for pairing).
+- An app that never comes up (it could not start, or exited, usually on a
+  compile error) is reported to the waiting browser at once, with a 1011 close
+  and a reason the page shows; it is not retried, since a retry would only
+  repeat it after another compile.
+- `spawnFleuryApp` cleans up its child and socket on every failure, including
+  an abort future that errors and a failed accept, and serve treats any error
+  bringing a session up as a failed start rather than an unhandled one.
+- An app that exits before connecting gets its output delivered before the
+  failure is reported. The exit can be seen before that output is read, and
+  cancelling the forwarders then lost the lines that say why it stopped (the
+  first spawn in a fresh process lost them outright). fleury_mcp, which holds an
+  app's output for its MCP client, prints it when the attach fails.
+
+Covered by `spawn_test` (no-deadline slow start, failure messages and the output
+before them, cleanup after a failing abort), `serve_spawn_test` (pairing during
+warmup, reload handoff, the browser's failure reason) and `mcp_host_e2e_test`
+(a failed attach shows the app's output). Reviewed in ten angles before merge; the review
+found the first version's fixed 60 s deadline, its deferred replacement and its
+cold retry after a failed start, all replaced by the rules above.

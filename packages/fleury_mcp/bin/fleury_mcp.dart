@@ -121,6 +121,11 @@ Future<int> _run(List<String> args) async {
             },
           );
   } on FleuryAppBridgeException catch (e) {
+    // The app's output waits in appLog for a client that never comes. An app
+    // that fails to attach usually printed why (a compile error, say), so show
+    // that output before the error that points at it.
+    unawaited(appLog.close());
+    await appLog.stream.forEach(stderr.writeln);
     stderr.writeln('fleury_mcp: ${e.message}');
     return 1;
   } on ProcessException catch (e) {
