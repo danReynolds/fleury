@@ -1,9 +1,9 @@
-// Compiled to JavaScript by test/widgets/route_label_minified_test.dart at
-// several dart2js optimization levels and run under Node. Prints the active
-// route's semantic label and routeName ("null" when unnamed).
+// Compiled to JavaScript by test/widgets/route_label_minified_test.dart and
+// run under Node. Prints the active route's semantic label and routeName
+// ("null" when unnamed).
 
-import 'package:fleury/fleury_core.dart';
 import 'package:fleury/fleury_test_support.dart';
+import 'package:fleury/src/primitives.dart';
 
 class SettingsScreen extends StatelessWidget {
   const SettingsScreen({super.key});
@@ -20,5 +20,5 @@ void main() {
     role: SemanticRole.route,
     selected: true,
   );
-  print('${route.label} ${route.state.routeName}');
+  print('label=${route.label} routeName=${route.state.routeName}');
 }

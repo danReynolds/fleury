@@ -76,7 +76,8 @@ Routes are widgets, not named route strings: Fleury has no Flutter-style
 `RouteSettings` or named-route table. The navigator stores the screen widget
 itself, so screen data travels through its ordinary, typed constructor, and
 `popUntil<ProjectScreen>()` finds a route by its widget type. Otherwise the
-type only labels the route in diagnostics and semantics.
+type only identifies the route in diagnostics and in its semantic label and
+`routeName`; optimized web builds, which minify class names, leave both out.
 
 Use `present` for a temporary decision or tool that belongs over the current
 screen. The covered screen remains painted, while focus and unhandled keys stay
