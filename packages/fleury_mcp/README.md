@@ -154,10 +154,7 @@ class _CounterAppState extends State<CounterApp> {
     crossAxisAlignment: CrossAxisAlignment.start,
     children: <Widget>[
       Text('Count: $_count'),
-      Button(
-        text: 'Increment',
-        onPressed: () => setState(() => _count++),
-      ),
+      Button(text: 'Increment', onPressed: () => setState(() => _count++)),
     ],
   );
 }

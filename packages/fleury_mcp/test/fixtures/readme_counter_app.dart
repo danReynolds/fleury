@@ -1,6 +1,6 @@
 // The README's "Your app needs no MCP code" counter, from its first import to
-// the end, verbatim: readme_example_e2e_test.dart fails if the two differ, and
-// drives this app to check the README's "What the agent sees" output.
+// the end, verbatim: mcp_e2e_test.dart fails if the two differ, and drives
+// this app to check the README's "What the agent sees" output.
 
 import 'package:fleury/fleury.dart';
 
@@ -20,10 +20,7 @@ class _CounterAppState extends State<CounterApp> {
     crossAxisAlignment: CrossAxisAlignment.start,
     children: <Widget>[
       Text('Count: $_count'),
-      Button(
-        text: 'Increment',
-        onPressed: () => setState(() => _count++),
-      ),
+      Button(text: 'Increment', onPressed: () => setState(() => _count++)),
     ],
   );
 }

@@ -331,10 +331,10 @@ void main() {
       expect(readme, isNot(contains('publish_to: none')));
       expect(readme, isNot(contains('path dependency on')));
       expect(readme, isNot(contains('"id": "increment"')));
-      // "What the agent sees" is real output for the README's counter (its
-      // readme_example_e2e_test checks it against the server): a positional
-      // `auto:` id and an opaque targetRef that the invoke_action example
-      // echoes back. The targetRef stays fully elided so internal tree
+      // "What the agent sees" is real output for the README's counter
+      // (fleury_mcp's mcp_e2e_test checks it against the server): a
+      // positional `auto:` id and an opaque targetRef that the invoke_action
+      // example echoes back. The targetRef stays fully elided so internal tree
       // numbering can change without staling the README.
       expect(readme, contains('"id": "auto:…/button"'));
       expect(readme, contains('"targetRef": "…"'));
