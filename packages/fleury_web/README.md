@@ -14,8 +14,8 @@ For deployment and security options, see the
 
 ```yaml
 dependencies:
-  fleury: 0.1.0
-  fleury_web: ^0.1.0
+  fleury: 0.1.1
+  fleury_web: ^0.1.1
   web: ^1.1.1
 ```
 

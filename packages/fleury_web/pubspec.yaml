@@ -1,7 +1,7 @@
 name: fleury_web
 description: >-
   Run fleury in a browser through the retained DOM host.
-version: 0.1.0
+version: 0.1.1
 repository: https://github.com/danReynolds/fleury/tree/main/packages/fleury_web
 issue_tracker: https://github.com/danReynolds/fleury/issues
 topics:
@@ -16,7 +16,7 @@ dependencies:
   # The browser host consumes Fleury's explicitly lockstep remote wire.
   # Keep this exact; pubspec_overrides.yaml resolves the monorepo sibling
   # during development.
-  fleury: 0.1.0
+  fleury: 0.1.1
   web: ^1.1.1
 
 dev_dependencies:

@@ -1,5 +1,14 @@
 # Changelog
 
+## 0.1.1
+
+Requires exactly `fleury 0.1.1`.
+
+- Adds a browser example under `example/` and stops shipping the leftover
+  spike page, screenshot, and generator.
+- The wire negotiation error no longer names an internal frame type, which
+  optimized builds minify.
+
 ## 0.1.0
 
 Initial public release, October 5, 2026. Requires Dart 3.10.4 or later and

@@ -1,5 +1,30 @@
 # Changelog
 
+## 0.1.1
+
+- `fleury serve --spawn` no longer gives up on an app that is slow to start.
+  It waits until the app connects or the browser leaves, says when an app is
+  still starting after 10 seconds, and shows the browser why a session failed
+  to start. A page reloaded during a slow start reuses the app that was
+  starting.
+- An app spawned by `fleury serve` or `fleury_mcp` that exits before it
+  connects has its output shown before the error. `spawnFleuryApp` accepts a
+  null `connectTimeout` (no deadline) and an `onSlowStart` callback.
+- Optimized web builds (`dart compile js -O2` and up) no longer give routes a
+  minified class name such as `minified:jg` as their accessible name; those
+  routes are left unnamed. Native, test, and unminified builds still name a
+  route after its screen class.
+- `fleury create` writes sources that `dart format` leaves unchanged, whatever
+  the project's name. Its README points to the published CLI, gives the
+  activation command for a Git checkout, and adds `fleury_mcp` as a
+  development dependency for agents.
+- `fleury run --help` and `fleury shell --help` print their usage and exit 0.
+- The `fleury diagnose` Markdown report leaves out the local hostname and
+  shows the home directory as `~`.
+- The README's test example is a complete file, and the pub.dev Example tab
+  shows the counter and how to run each example. The dashboard example no
+  longer fails on every tick.
+
 ## 0.1.0
 
 Initial public release, October 5, 2026. Requires Dart 3.10.4 or later.

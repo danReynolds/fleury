@@ -34,7 +34,7 @@ const String mcpLegacyProtocolVersion = '2025-06-18';
 
 /// Server identity reported by legacy `initialize` and modern result metadata.
 const String mcpServerName = 'fleury';
-const String mcpServerVersion = '0.1.0';
+const String mcpServerVersion = '0.1.1';
 
 /// JSON-RPC 2.0 error codes used by this server.
 const int _parseError = -32700;
