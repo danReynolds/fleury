@@ -23,6 +23,26 @@ Future<void> main(List<String> args) async {
   if (args.length > 1 && !args[1].startsWith('--')) {
     Directory.current = args[1];
   }
+  // A slow start: announce the launch, then wait before connecting, the way a
+  // cold `dart run` compiles the app before runApp can connect.
+  for (final arg in args) {
+    if (arg.startsWith('--connect-delay-ms=')) {
+      stderr.writeln('$tag started');
+      await stderr.flush();
+      final delay = int.parse(arg.substring('--connect-delay-ms='.length));
+      await Future<void>.delayed(Duration(milliseconds: delay));
+    }
+    // A slow start that fails: the app stops before it ever connects.
+    if (arg.startsWith('--exit-before-connect-ms=')) {
+      stderr.writeln('$tag started');
+      await stderr.flush();
+      final delay = int.parse(
+        arg.substring('--exit-before-connect-ms='.length),
+      );
+      await Future<void>.delayed(Duration(milliseconds: delay));
+      exit(3);
+    }
+  }
   if (args.contains('--hostile-log')) {
     stderr.writeln('HOSTILE \x1b]52;c;SECRET\x07 after \x1b[2J end');
   }

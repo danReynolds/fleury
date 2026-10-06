@@ -419,3 +419,36 @@ takes the reload a human feels from ~5 s to a few hundred ms.
 
 Covered by `serve_spawn_test` (a warm standby is pre-spawned and pairs the first
 browser; isolation preserved). Suites green: spawn + serve integration pass.
+
+## Update — spawn connect deadline (2026-10-06)
+
+A smoke test of the published 0.1.0 packages ran the scaffold's preview command
+(`dart run fleury serve --spawn dart --enable-vm-service=0 run bin/run_app.dart`)
+on an M1 Pro at load average ~17. Every session failed with "app did not connect
+within 10s", and the page showed only "Disconnected". A cold `dart run` of the
+scaffold reached its first frame in 5–8 s at that load (14–22 s in a Linux
+container on the same machine), and serve made it worse: a browser that claimed
+a standby still warming immediately started a replacement beside it, and a
+failed claim cold-started a third, so up to three compiles shared the CPU under
+one fixed wall-clock deadline.
+
+**Fix.**
+- The connect deadline is a leak guard for commands that never connect, not a
+  responsiveness target: `defaultSpawnConnectTimeout` is 60 s for serve and the
+  MCP bridge. Both print a note when an app is still starting after 10 s.
+- The replacement standby is prepared once a connection is served, never beside
+  a cold start that is still in flight.
+- A page reloaded during a slow start hands its claimed standby to the reload
+  instead of leaving it to warm for a closed tab while the reload cold-starts.
+- A standby that timed out is not retried cold for the same browser (the retry
+  would add another full deadline).
+- A browser whose session fails is closed with 1011 and a reason the page shows
+  ("The app exited before connecting…", "…did not connect within 60s…").
+- `FleurySpawnException.failure` says why an attach failed, and its message no
+  longer blames `runApp` for a timeout that may only be a compile.
+
+Covered by `spawn_test` (failure kinds, slow-start notice) and `serve_spawn_test`
+(no second app during warmup, reload handoff, failure reason via a standby that
+exits before connecting, which also caught a double-listen of the WebSocket in
+the claimed-standby fallback). The timed-out path was checked by hand with the
+deadline lowered to 12 s: one standby, the 10 s note, a 1011 close, no retry.

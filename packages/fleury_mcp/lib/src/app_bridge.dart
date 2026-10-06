@@ -775,7 +775,7 @@ final class FleuryAppBridge implements FleuryAppConnection {
   static Future<FleuryAppBridge> spawn({
     required List<String> command,
     CellSize viewport = const CellSize(80, 24),
-    Duration connectTimeout = const Duration(seconds: 20),
+    Duration connectTimeout = defaultSpawnConnectTimeout,
     Duration firstFrameTimeout = const Duration(seconds: 10),
     BridgeLog? log,
   }) async {
@@ -786,6 +786,10 @@ final class FleuryAppBridge implements FleuryAppConnection {
         command: command,
         connectTimeout: connectTimeout,
         onLog: (tag, line) => logLine('[app $tag] $line'),
+        onSlowStart: () => logLine(
+          '[fleury_mcp] still waiting for `${command.join(' ')}` to connect; '
+          'a cold `dart run` compiles the app before it starts.',
+        ),
       );
     } on FleurySpawnException catch (e) {
       // Preserve the bridge's exception type for existing callers/tests.

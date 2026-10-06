@@ -130,13 +130,16 @@ void main() {
 
       Process? serve;
       WebSocket? browser;
+      WebSocket? secondBrowser;
       StreamSubscription<String>? stderrSub;
       Future<void>? stdoutDone;
 
       addTearDown(() async {
-        try {
-          await browser?.close().timeout(const Duration(seconds: 1));
-        } catch (_) {}
+        for (final socket in [browser, secondBrowser]) {
+          try {
+            await socket?.close().timeout(const Duration(seconds: 1));
+          } catch (_) {}
+        }
         final process = serve;
         if (process != null) {
           process.kill(ProcessSignal.sigkill);
@@ -195,11 +198,16 @@ void main() {
         what: 'initial warm child',
       );
 
+      // The first browser claims the warming child (session 1), which never
+      // connects; serve prepares no replacement until that browser is served.
+      // A second browser finds no standby and cold-starts session 2, which
+      // takes the full SIGTERM grace to die (see the fixture).
       browser = await WebSocket.connect('ws://127.0.0.1:$port/ws');
+      secondBrowser = await WebSocket.connect('ws://127.0.0.1:$port/ws');
       await _waitFor(
         () async => _readChildStates(childStateDirectory).length >= 2,
         timeout: const Duration(seconds: 10),
-        what: 'replacement warm child after WebSocket upgrade',
+        what: 'a cold child for the second browser',
       );
       expect(_readChildStates(childStateDirectory), hasLength(2));
 

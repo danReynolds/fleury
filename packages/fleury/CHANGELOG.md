@@ -1,5 +1,16 @@
 # Changelog
 
+## Unreleased
+
+- `fleury serve --spawn` waits up to 60 seconds for an app to connect (was 10),
+  says when an app is still starting after 10 seconds, and shows the browser why
+  a session failed to start. A browser that arrives while the warm standby is
+  still starting waits for it instead of starting a second app beside it, and a
+  page reloaded during a slow start reuses that standby.
+- `spawnFleuryApp` defaults to `defaultSpawnConnectTimeout` (60 seconds), takes
+  an `onSlowStart` callback, and reports why an attach failed through
+  `FleurySpawnException.failure`.
+
 ## 0.1.0
 
 Initial public release, October 5, 2026. Requires Dart 3.10.4 or later.

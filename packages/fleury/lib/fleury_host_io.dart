@@ -10,4 +10,9 @@ library;
 
 export 'fleury_host.dart';
 export 'src/remote/spawn.dart'
-    show FleurySpawnException, SpawnedFleuryApp, spawnFleuryApp;
+    show
+        FleurySpawnException,
+        FleurySpawnFailure,
+        SpawnedFleuryApp,
+        defaultSpawnConnectTimeout,
+        spawnFleuryApp;

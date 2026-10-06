@@ -240,6 +240,125 @@ void main() {
     );
   }, tags: ['integration']);
 
+  group(
+    'fleury serve --spawn with a slow-starting app',
+    () {
+      late _ServeUnderTest serve;
+
+      setUp(() async {
+        serve = await _ServeUnderTest.start([
+          Platform.resolvedExecutable,
+          'run',
+          '${Directory.current.path}/test/fixtures/spawn_app.dart',
+          'slow-app',
+          '--connect-delay-ms=2500',
+        ]);
+      });
+
+      tearDown(() => serve.stop());
+
+      test('a browser arriving during warmup waits for the standby instead of '
+          'starting a second app', () async {
+        final ws = await WebSocket.connect('ws://127.0.0.1:${serve.port}/ws');
+        final inbound = BytesBuilder();
+        final sub = ws.listen((d) {
+          if (d is List<int>) inbound.add(d);
+        });
+        await _waitFor(
+          () => _hasHelloFrame(inbound.toBytes(), 'slow-app'),
+          timeout: const Duration(seconds: 30),
+          what: 'hello from the warm standby',
+        );
+        final paired = serve.indexOf('[serve s1] paired browser');
+        expect(paired, isNonNegative, reason: serve.log);
+
+        // The replacement standby still comes up, but only once this
+        // browser is served — never as a second compile beside the first.
+        await _waitFor(
+          () => serve.indexOf('[s2 err] slow-app started') >= 0,
+          timeout: const Duration(seconds: 15),
+          what: 'the replacement standby to launch',
+        );
+        expect(
+          serve.indexOf('[s2 err] slow-app started'),
+          greaterThan(paired),
+          reason: serve.log,
+        );
+
+        await sub.cancel();
+        await ws.close();
+      });
+
+      test(
+        'a page reloaded during warmup hands the standby to the reload',
+        () async {
+          final first = await WebSocket.connect(
+            'ws://127.0.0.1:${serve.port}/ws',
+          );
+          await Future<void>.delayed(const Duration(milliseconds: 300));
+          await first.close();
+
+          final reload = await WebSocket.connect(
+            'ws://127.0.0.1:${serve.port}/ws',
+          );
+          final inbound = BytesBuilder();
+          final sub = reload.listen((d) {
+            if (d is List<int>) inbound.add(d);
+          });
+          await _waitFor(
+            () => _hasHelloFrame(inbound.toBytes(), 'slow-app'),
+            timeout: const Duration(seconds: 30),
+            what: 'hello on the reloaded page',
+          );
+
+          // The reload was served by the standby the first page claimed, and no
+          // app was launched for it while that standby was still warming.
+          final paired = serve.indexOf('[serve s1] paired browser');
+          expect(paired, isNonNegative, reason: serve.log);
+          final secondLaunch = serve.indexOf('[s2 err] slow-app started');
+          expect(
+            secondLaunch < 0 || secondLaunch > paired,
+            isTrue,
+            reason: serve.log,
+          );
+
+          await sub.cancel();
+          await reload.close();
+        },
+      );
+    },
+    tags: ['integration'],
+    timeout: const Timeout(Duration(seconds: 90)),
+  );
+
+  test(
+    'a browser whose app exits before connecting is told why',
+    () async {
+      final serve = await _ServeUnderTest.start([
+        Platform.resolvedExecutable,
+        'run',
+        '${Directory.current.path}/test/fixtures/spawn_app.dart',
+        'exit-app',
+        '--exit-before-connect-ms=2000',
+      ]);
+      addTearDown(serve.stop);
+
+      // The browser claims the standby while it is still starting; when that
+      // fails, the same browser falls back to a cold start, which fails too.
+      final ws = await WebSocket.connect('ws://127.0.0.1:${serve.port}/ws');
+      await ws.drain<void>().timeout(const Duration(seconds: 40));
+      expect(ws.closeCode, WebSocketStatus.internalServerError);
+      expect(ws.closeReason, contains('exited before connecting'));
+      expect(
+        serve.indexOf('[s2 err] exit-app started'),
+        isNonNegative,
+        reason: serve.log,
+      );
+    },
+    tags: ['integration'],
+    timeout: const Timeout(Duration(seconds: 90)),
+  );
+
   group('fleury serve --spawn with a real runApp app', () {
     late Directory tempDir;
     late Process serveProcess;
@@ -657,4 +776,64 @@ Future<int> _unusedLoopbackPort() async {
   final port = socket.port;
   await socket.close();
   return port;
+}
+
+/// A `fleury serve --spawn <command>` process and its stderr log.
+final class _ServeUnderTest {
+  _ServeUnderTest._(this.process, this.port, this._tempDir);
+
+  static Future<_ServeUnderTest> start(List<String> command) async {
+    final tempDir = Directory.systemTemp.createTempSync('fleury_serve_slow_');
+    final port = await _unusedLoopbackPort();
+    final process = await Process.start(Platform.resolvedExecutable, [
+      'run',
+      '${Directory.current.path}/bin/fleury.dart',
+      'serve',
+      '--port=$port',
+      '--spawn',
+      ...command,
+    ], workingDirectory: tempDir.path);
+    final serve = _ServeUnderTest._(process, port, tempDir);
+    final ready = Completer<void>();
+    serve._stderr = process.stderr
+        .transform(utf8.decoder)
+        .transform(const LineSplitter())
+        .listen((line) {
+          serve._lines.add(line);
+          if (line.contains('fleury serve ready (spawn mode)') &&
+              !ready.isCompleted) {
+            ready.complete();
+          }
+        });
+    unawaited(process.stdout.drain<void>());
+    await ready.future.timeout(
+      const Duration(seconds: 30),
+      onTimeout: () => throw StateError('serve did not start:\n${serve.log}'),
+    );
+    return serve;
+  }
+
+  final Process process;
+  final int port;
+  final Directory _tempDir;
+  final _lines = <String>[];
+  late final StreamSubscription<String> _stderr;
+
+  String get log => _lines.join('\n');
+
+  /// The index of the first stderr line containing [text], or -1.
+  int indexOf(String text) => _lines.indexWhere((l) => l.contains(text));
+
+  Future<void> stop() async {
+    process.kill(ProcessSignal.sigint);
+    await process.exitCode.timeout(
+      const Duration(seconds: 10),
+      onTimeout: () {
+        process.kill(ProcessSignal.sigkill);
+        return -9;
+      },
+    );
+    await _stderr.cancel();
+    if (_tempDir.existsSync()) _tempDir.deleteSync(recursive: true);
+  }
 }

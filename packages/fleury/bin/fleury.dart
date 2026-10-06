@@ -1260,13 +1260,14 @@ Future<int> _runServeSpawn({
 
   // A single warm standby: its subprocess is spawned and connected ahead of
   // the browser, so the expensive cold start (Dart VM + JIT compile of the
-  // app) is paid here, not on the connection. Each connect claims the standby
-  // and prepares the next, so sequential reloads stay warm.
+  // app) is paid here, not on the connection. Each connect claims the standby,
+  // and the next one is prepared once that connection is served, so
+  // sequential reloads stay warm.
   _SpawnSession? warm;
   Future<bool>? warmReady;
 
   void prepareWarm() {
-    if (shuttingDown) return;
+    if (shuttingDown || warm != null) return;
     final id = ++sessionCounter;
     final s = _SpawnSession(id: id);
     warm = s;
@@ -1391,32 +1392,67 @@ Future<int> _runServeSpawn({
       return;
     }
 
-    // Claim the warm standby and immediately prepare the next one.
+    // Claim the warm standby. Its replacement is prepared only once this
+    // connection is served: a standby that is still warming is a cold compile
+    // in flight, and starting another beside it would split the machine
+    // between two compiles and slow both.
     final claimed = warm;
     final claimedReady = warmReady;
     warm = null;
     warmReady = null;
-    prepareWarm();
+
+    // A WebSocket can be listened to once, so this one buffer holds the
+    // browser's input from here on, whichever session ends up serving it.
+    final browserInput = BufferedBrowserInput(ws);
 
     if (claimed != null && claimedReady != null) {
       // Usually already complete (instant); if a connect races the warmup,
       // this waits out the remainder — still no worse than a cold spawn, and
-      // it avoids spawning a second process for the same browser.
-      final ready = await claimedReady;
+      // it avoids spawning a second process for the same browser. Watch for
+      // the browser leaving meanwhile: a page reloaded during a slow start
+      // hands the standby back, so the reload claims it instead of
+      // cold-starting a second app beside it.
+      final ready = await Future.any<bool?>([
+        claimedReady,
+        browserInput.closed.then((_) => null),
+      ]);
       if (shuttingDown) {
+        await browserInput.dispose();
         release();
         try {
           await ws.close();
         } catch (_) {}
         return;
       }
+      if (ready == null) {
+        await browserInput.dispose();
+        release();
+        if (warm == null && !claimed.isDead) {
+          warm = claimed;
+          warmReady = claimedReady;
+        } else {
+          unawaited(claimed.shutdown());
+        }
+        return;
+      }
       if (ready && claimed.isReady) {
         stderr.writeln('[serve s${claimed.id}] paired browser to warm standby');
-        claimed.attach(ws);
+        claimed.attach(ws, browserInput);
         unawaited(claimed.done.then((_) => release()));
+        prepareWarm();
         return; // cleanup runs via the done handler wired in prepareWarm
       }
-      // The standby failed to come up; fall through to a cold spawn.
+      final failure = claimed.startupFailure;
+      if (failure == _StartupFailure.timedOut) {
+        // The same command just had the whole connect deadline; a cold retry
+        // would only make this browser wait that long again.
+        await browserInput.dispose();
+        release();
+        await _closeBrowserForFailedStartup(ws, failure);
+        return;
+      }
+      // The standby failed some other way (for example, it exited); fall
+      // through to a cold spawn.
     }
 
     // Cold fallback: bind + spawn while the browser waits (legacy behavior).
@@ -1427,11 +1463,13 @@ Future<int> _runServeSpawn({
       command: command,
       handleDir: handleDir.path,
       browser: ws,
+      browserInput: browserInput,
       tag: 's$id',
       environment: spawnEnv,
     );
     if (shuttingDown) {
       await session.shutdown();
+      await browserInput.dispose();
       sessions.remove(session);
       release();
       try {
@@ -1440,9 +1478,7 @@ Future<int> _runServeSpawn({
       return;
     }
     if (!ok) {
-      try {
-        await ws.close();
-      } catch (_) {}
+      await _closeBrowserForFailedStartup(ws, session.startupFailure);
       sessions.remove(session);
       release();
       return;
@@ -1456,6 +1492,7 @@ Future<int> _runServeSpawn({
         );
       }),
     );
+    prepareWarm();
   }
 
   // Everything that can throw on a hostile or misconfigured request — the
@@ -1538,11 +1575,6 @@ Directory _createSpawnHandleDir() {
 
 /// One spawn-mode session: a subprocess, its session socket, and the
 /// browser WebSocket that paired with it. Owns the full lifecycle.
-/// Unified connect deadline for a spawned session's app (warm + cold). The MCP
-/// bridge uses its own (longer) default; serve's interactive sessions want a
-/// snappier give-up.
-const Duration _spawnConnectTimeout = Duration(seconds: 10);
-
 class _SpawnSession {
   _SpawnSession({required this.id});
 
@@ -1554,12 +1586,20 @@ class _SpawnSession {
   Future<bool>? _startup;
   Future<void>? _shutdownFuture;
   var _shuttingDown = false;
+  _StartupFailure? _startupFailure;
 
   Future<void> get done => _done.future;
+
+  /// Why this session's subprocess failed to come up, or null if it has not
+  /// failed.
+  _StartupFailure? get startupFailure => _startupFailure;
 
   /// Whether this session's subprocess is up and connected (a warm standby
   /// brought up ahead of a browser), so [attach] can pair instantly.
   bool get isReady => _app != null && !_shuttingDown;
+
+  /// Whether this session failed to come up or has been shut down.
+  bool get isDead => _shuttingDown;
 
   /// Whether a browser is paired with this session (the warm standby is not).
   bool get isAttached => _browser != null;
@@ -1573,6 +1613,11 @@ class _SpawnSession {
 
   String _socketPathFor(String handleDir) =>
       '${Directory(handleDir).absolute.path}/spawn-$pid-$id.sock';
+
+  void _reportSlowStart(String tag) => stderr.writeln(
+    '[serve $tag] still waiting for the app to connect; a cold `dart run` '
+    'compiles the app before it starts.',
+  );
 
   /// Brings the subprocess up *ahead of a browser* — a warm standby. The app
   /// connects to its session socket and (for a runApp app) blocks awaiting
@@ -1606,17 +1651,19 @@ class _SpawnSession {
       _app = await spawnFleuryApp(
         command: command,
         socketPath: _socketPathFor(handleDir),
-        connectTimeout: _spawnConnectTimeout,
         environment: environment,
         abort: _abortStartup.future,
         onLog: (stream, line) => stderr.writeln('[$tag $stream] $line'),
+        onSlowStart: () => _reportSlowStart(tag),
       );
     } on ProcessException catch (e) {
       stderr.writeln('[serve $tag] failed to spawn ${command.first}: $e');
+      _startupFailure = _StartupFailure.launch;
       _markDead();
       return false;
     } on FleurySpawnException catch (e) {
       stderr.writeln('[serve $tag] warm subprocess never connected: $e');
+      _startupFailure = _StartupFailure.of(e);
       _markDead();
       return false;
     }
@@ -1628,11 +1675,11 @@ class _SpawnSession {
   }
 
   /// Pairs a browser with this (warm, [isReady]) session and starts pumping.
-  /// The browser's INIT — buffered by the WebSocket until listened — flows to
-  /// the waiting app, which renders its first frame straight away.
-  void attach(WebSocket browser) {
+  /// The browser's INIT — held by [browserInput] since the browser connected —
+  /// flows to the waiting app, which renders its first frame straight away.
+  void attach(WebSocket browser, BufferedBrowserInput browserInput) {
     _browser = browser;
-    _attachPump(browser, BufferedBrowserInput(browser), _app!.socket);
+    _attachPump(browser, browserInput, _app!.socket);
   }
 
   void _attachPump(
@@ -1656,10 +1703,16 @@ class _SpawnSession {
   /// Cold path: bind, spawn, and bridge to an already-connected browser, all
   /// while the browser waits. Used as the fallback when no warm standby is
   /// ready. Returns false if the subprocess didn't come up.
+  ///
+  /// The browser sends INIT immediately after the WebSocket opens, before the
+  /// subprocess can connect back, so [browserInput] has been buffering it since
+  /// the connection arrived. Its close is the spawn's abort, so a browser that
+  /// leaves before the app connects doesn't orphan the process.
   Future<bool> start({
     required List<String> command,
     required String handleDir,
     required WebSocket browser,
+    required BufferedBrowserInput browserInput,
     required String tag,
     Map<String, String>? environment,
   }) {
@@ -1667,6 +1720,7 @@ class _SpawnSession {
       command: command,
       handleDir: handleDir,
       browser: browser,
+      browserInput: browserInput,
       tag: tag,
       environment: environment,
     );
@@ -1678,32 +1732,30 @@ class _SpawnSession {
     required List<String> command,
     required String handleDir,
     required WebSocket browser,
+    required BufferedBrowserInput browserInput,
     required String tag,
     Map<String, String>? environment,
   }) async {
     if (_shuttingDown) return false;
     _browser = browser;
-    // The browser sends INIT immediately after the WebSocket opens, before the
-    // subprocess can connect back. Listen + buffer now so the handshake isn't
-    // missed — and pass its close as the spawn's abort, so a browser that leaves
-    // before the app connects doesn't orphan the process.
-    final browserInput = BufferedBrowserInput(browser);
     try {
       _app = await spawnFleuryApp(
         command: command,
         socketPath: _socketPathFor(handleDir),
-        connectTimeout: _spawnConnectTimeout,
         environment: environment,
         abort: Future.any<void>([browserInput.closed, _abortStartup.future]),
         onLog: (stream, line) => stderr.writeln('[$tag $stream] $line'),
+        onSlowStart: () => _reportSlowStart(tag),
       );
     } on ProcessException catch (e) {
       stderr.writeln('[serve $tag] failed to spawn ${command.first}: $e');
+      _startupFailure = _StartupFailure.launch;
       await browserInput.dispose();
       _markDead();
       return false;
     } on FleurySpawnException catch (e) {
       stderr.writeln('[serve $tag] subprocess never connected: $e');
+      _startupFailure = _StartupFailure.of(e);
       await browserInput.dispose();
       _markDead();
       return false;
@@ -1749,6 +1801,54 @@ class _SpawnSession {
       await _browser?.close();
     } catch (_) {}
     if (!_done.isCompleted) _done.complete();
+  }
+}
+
+/// Why a spawn-mode session's subprocess never came up.
+enum _StartupFailure {
+  launch,
+  exited,
+  timedOut,
+  aborted;
+
+  static _StartupFailure of(FleurySpawnException error) =>
+      switch (error.failure) {
+        FleurySpawnFailure.exited => exited,
+        FleurySpawnFailure.timedOut => timedOut,
+        FleurySpawnFailure.aborted => aborted,
+        null => launch,
+      };
+
+  /// What the browser that waited on the session shows in place of the
+  /// generic disconnect line. A WebSocket close reason is capped at 123 bytes.
+  String get browserReason => switch (this) {
+    launch =>
+      'The app could not start. Details are in the fleury serve terminal.',
+    exited =>
+      'The app exited before connecting. Its output is in the fleury serve '
+          'terminal.',
+    timedOut =>
+      'The app did not connect within '
+          '${defaultSpawnConnectTimeout.inSeconds}s. Details are in the '
+          'fleury serve terminal.',
+    aborted => 'The app was stopped before it connected.',
+  };
+}
+
+/// Closes a browser whose session never came up, with a reason its page shows.
+/// 1011 is the standard close code for an unexpected server-side condition,
+/// and the page still offers a reload to retry.
+Future<void> _closeBrowserForFailedStartup(
+  WebSocket browser,
+  _StartupFailure? failure,
+) async {
+  try {
+    await browser.close(
+      WebSocketStatus.internalServerError,
+      (failure ?? _StartupFailure.launch).browserReason,
+    );
+  } catch (_) {
+    // The browser may have left already.
   }
 }
 
