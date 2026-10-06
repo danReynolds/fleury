@@ -24,9 +24,10 @@ void main() {
   );
 
   // The Markdown report is meant to be pasted into public issues, so it
-  // describes the platform without naming the machine. `--json` is a separate,
-  // stable contract and never carried a hostname.
-  test('diagnose Markdown leaves out the local hostname', () async {
+  // describes the platform without naming the machine or the user: it has no
+  // hostname, and paths under the home directory start with ~. `--json` is a
+  // separate, stable contract and never carried a hostname.
+  test('diagnose Markdown names neither the machine nor the user', () async {
     final result = await Process.run(Platform.resolvedExecutable, <String>[
       'run',
       'bin/fleury.dart',
@@ -38,7 +39,17 @@ void main() {
     expect(markdown, contains('Paste this block into your GitHub issue.'));
     expect(markdown, contains('| OS |'));
     expect(markdown, contains('| Dart version |'));
-    expect(markdown.toLowerCase(), isNot(contains('hostname')));
+    final hostname = Platform.localHostname;
+    if (hostname.isNotEmpty) expect(markdown, isNot(contains(hostname)));
+    final home = Platform.environment['HOME'] ?? '';
+    if (home.length > 1) {
+      expect(markdown, isNot(contains(home)));
+      // The working directory is still reported, relative to ~.
+      final cwd = Directory.current.path;
+      if (cwd.startsWith('$home/')) {
+        expect(markdown, contains('| CWD | ~${cwd.substring(home.length)} |'));
+      }
+    }
   });
 
   test('diagnose writes JSON to a file without piping stdout', () async {

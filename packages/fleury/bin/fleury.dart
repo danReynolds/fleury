@@ -1844,7 +1844,10 @@ Future<int> _runDiagnose(List<String> args) async {
     return 0;
   }
 
-  void row(String k, Object? v) => stdout.writeln('| $k | ${v ?? '(unset)'} |');
+  // This report is pasted into public issues, where a path under the home
+  // directory would name the user, so every value shows that directory as ~.
+  void row(String k, Object? v) =>
+      stdout.writeln('| $k | ${_homeAsTilde('${v ?? '(unset)'}')} |');
 
   void messages(String title, List<TerminalDiagnosticMessage> items) {
     stdout.writeln();
@@ -1968,6 +1971,20 @@ Future<int> _runDiagnose(List<String> args) async {
   if (handleContents != null) row('.fleury/handle ->', handleContents);
   row('FLEURY_HANDLE env', env['FLEURY_HANDLE']);
   return 0;
+}
+
+/// [text] with the user's home directory written as `~`.
+String _homeAsTilde(String text) {
+  var home =
+      Platform.environment[Platform.isWindows ? 'USERPROFILE' : 'HOME'] ?? '';
+  while (home.length > 1 && (home.endsWith('/') || home.endsWith(r'\'))) {
+    home = home.substring(0, home.length - 1);
+  }
+  // No home, or a home of `/`, names nobody.
+  if (home.length < 2) return text;
+  // Not followed by a name character: `/home/ann` must not match inside
+  // `/home/anna`.
+  return text.replaceAll(RegExp('${RegExp.escape(home)}(?![\\w.-])'), '~');
 }
 
 TerminalPlatformReport _diagnosisPlatform() {

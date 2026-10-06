@@ -10,8 +10,8 @@ import 'package:test/test.dart';
 void main() {
   final packageRoot = Directory.current.absolute.path;
 
+  // `create --help` has its own test beside the create command's.
   for (final (subcommand, usage) in const [
-    ('create', 'fleury create <directory>'),
     ('run', 'usage: fleury run'),
     ('shell', 'usage: fleury shell'),
     ('serve', 'fleury serve [--port=<n>]'),
