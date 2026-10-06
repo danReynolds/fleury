@@ -186,6 +186,13 @@ Future<void> main() async {
     into: host,
   );
 }
+
+class MyHomeScreen extends StatelessWidget {
+  const MyHomeScreen({super.key});
+
+  @override
+  Widget build(BuildContext context) => const Text('Hello from Fleury');
+}
 ```
 
 Two host-API differences from `runApp` worth flagging:

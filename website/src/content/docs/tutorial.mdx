@@ -37,7 +37,7 @@ Start with a stateless screen that just renders some data — replace everything
 in `lib/app.dart`:
 
 ```dart title="lib/app.dart"
-import 'package:fleury/fleury.dart';
+import 'package:fleury/fleury_core.dart';
 
 const _languages = [
   'Dart', 'Rust', 'Go', 'Python', 'TypeScript',
@@ -69,12 +69,13 @@ class FilterApp extends StatelessWidget {
 }
 ```
 
-If you built Getting started's optional
+The file imports the web-safe `package:fleury/fleury_core.dart`, which has
+every widget this tutorial uses; `bin/run_app.dart` keeps the native library
+that `runApp` needs. That keeps `lib/app.dart` working with Getting started's
+optional
 [browser bundle](/fleury/getting-started/#6-optional-ship-a-browser-bundle),
-`web/main.dart` imports this file too. Keep
-`import 'package:fleury/fleury_core.dart';` at the top of `lib/app.dart`, here
-and in the finished file at the end: every widget in this tutorial is part of
-it, and `dart compile js` rejects the native `fleury.dart`.
+whose `web/main.dart` imports it: `dart compile js` rejects the native
+`fleury.dart`.
 
 The existing test also needs to follow the screen you just replaced. Use this
 small smoke test for the rest of the tutorial:

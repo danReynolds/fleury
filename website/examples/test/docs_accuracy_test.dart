@@ -248,22 +248,34 @@ void main() {
       );
     });
 
-    test('fleury_web README embeds the compile-checked mountApp example', () {
-      final readme = File(
-        p.join(repo.path, 'packages/fleury_web/README.md'),
-      ).readAsStringSync();
+    // App entry points and Coming from Flutter showed the browser entry point
+    // without the MyHomeScreen it mounts, so it did not compile as copied.
+    // Every page that shows it now shows the compiled program whole.
+    test('browser entry points embed the compile-checked mountApp example', () {
       final compiledSnippet = File(
         p.join(repo.path, 'website/examples/doc_snippets/web_app_shell.dart'),
       ).readAsStringSync();
       final firstImport = compiledSnippet.indexOf(
         "import 'package:fleury/fleury_core.dart';",
       );
-
       expect(firstImport, isNonNegative);
-      expect(
-        _firstDartFence(readme).trim(),
-        compiledSnippet.substring(firstImport).trim(),
-      );
+      final program = compiledSnippet.substring(firstImport).trim();
+
+      final readme = File(
+        p.join(repo.path, 'packages/fleury_web/README.md'),
+      ).readAsStringSync();
+      expect(_firstDartFence(readme).trim(), program);
+      for (final page in const <String>[
+        'website/src/content/docs/concepts/app-entry.md',
+        'website/src/content/docs/coming-from-flutter.mdx',
+      ]) {
+        final fences = _dartFences(
+          File(p.join(repo.path, page)).readAsStringSync(),
+          title: 'web/main.dart',
+        );
+        expect(fences, hasLength(1), reason: page);
+        expect(fences.single.trim(), program, reason: page);
+      }
     });
 
     test('agent guide keeps custom semantic ids typed', () {
@@ -401,6 +413,34 @@ void main() {
             reason: '$id must show each of its files whole',
           );
         }
+      }
+    });
+
+    // The tutorial rewrites lib/app.dart, which Getting started's optional
+    // browser bundle imports from web/main.dart, so it must stay on the
+    // web-safe library: dart2js rejects package:fleury/fleury.dart.
+    test('tutorial keeps lib/app.dart web-safe', () {
+      final tutorial = File(
+        p.join(repo.path, 'website/src/content/docs/tutorial.mdx'),
+      ).readAsStringSync();
+      final finished = File(
+        p.join(repo.path, 'website/examples/doc_snippets/filterable_list.dart'),
+      ).readAsStringSync();
+
+      for (final (name, text) in [
+        ('tutorial.mdx', tutorial),
+        ('filterable_list.dart', finished),
+      ]) {
+        expect(
+          text,
+          contains("import 'package:fleury/fleury_core.dart';"),
+          reason: name,
+        );
+        expect(
+          text,
+          isNot(contains("import 'package:fleury/fleury.dart';")),
+          reason: name,
+        );
       }
     });
 
@@ -650,11 +690,14 @@ String _firstDartFence(String markdown) {
   return match.group(1)!;
 }
 
-List<String> _dartFences(String markdown) => [
+/// The bodies of [markdown]'s Dart fences, or only those whose meta names the
+/// file [title] (```dart title="web/main.dart").
+List<String> _dartFences(String markdown, {String? title}) => [
   for (final match in RegExp(
-    r'```dart[^\n]*\n([\s\S]*?)\n```',
+    r'```dart([^\n]*)\n([\s\S]*?)\n```',
   ).allMatches(markdown))
-    match.group(1)!,
+    if (title == null || match.group(1)!.contains('title="$title"'))
+      match.group(2)!,
 ];
 
 extension on String {
