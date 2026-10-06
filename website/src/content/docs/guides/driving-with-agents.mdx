@@ -296,14 +296,14 @@ small and explicit:
 | `rate_limited` | Too many actions in a short window | Pause, then re-read with `get_ui` or `wait_for_change` |
 | `not_ready` | The app connected but hasn't rendered a UI | Retry after a moment. If it persists, check that the command's entrypoint calls `runApp` |
 | `app_exited` | The app quit or crashed | Restart the server. If the app keeps exiting, run its command in a terminal to see why |
-| `protocol_mismatch` | The app and `fleury_mcp` were built against different Fleury versions | Activate `fleury_mcp` from the same checkout as the app's `fleury` dependency, then restart the server |
+| `protocol_mismatch` | The app and `fleury_mcp` were built against different Fleury versions | Run the app's own development dependency with `dart run fleury_mcp`, or globally activate the `fleury_mcp` release that matches the app's `fleury` (from the same checkout, for an app on a checkout), then restart the server |
 
 A server that stops as soon as it starts couldn't attach to the app. Its
 standard error, which hosts usually keep in a log, says why: the app exited
 before connecting (with its exit code), or didn't connect within 20 seconds.
 Run the same command in a terminal, from the same directory, to see the app's
 error. A host that can't find `fleury_mcp` or `dart` needs the `PATH` fix in
-[Connect an MCP host](#connect-an-mcp-host).
+[Spawn an app for an MCP host](#spawn-an-app-for-an-mcp-host).
 
 An action whose handler is still running after two seconds, most often one
 that opened a dialog and awaits its answer, is not a failure: `invoke_action`

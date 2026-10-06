@@ -25,6 +25,12 @@ Linux. It can spawn a remote app or attach to a native development session.
 
 ## Develop the app together
 
+Add the server to the app as a development dependency:
+
+```sh
+dart pub add --dev fleury_mcp
+```
+
 Start your app in its terminal with agent attachment enabled:
 
 ```sh
@@ -43,7 +49,9 @@ directory, run a globally activated `fleury_mcp --attach` (see
 `--project=/absolute/app/path`.
 When more than one live session exists in that project, attachment reports their
 IDs; select one with `--session=<id>`. It never silently chooses between them.
-This uses the same matching Fleury build as the app, as described under installation.
+With the development dependency, pub resolves the server and the app to the
+same Fleury release. A globally activated server must be the release that
+matches the app's Fleury, as described under installation.
 
 The human keeps the actual terminal. The agent can inspect and operate that
 running app, edit source with its coding tools, and see the next reload result.
@@ -198,8 +206,16 @@ dart pub global activate fleury_mcp 0.1.0
 ```
 
 Pub installs the command in its global `bin` directory (`~/.pub-cache/bin` by
-default), which must be on your `PATH`. Then use
-`fleury_mcp -- <your app command>` in place of `dart run fleury_mcp -- ...`.
+default), which must be on your `PATH`. Then use `fleury_mcp` in place of
+`dart run fleury_mcp`. The server starts the app in its own working directory,
+so from anywhere else give the app's entrypoint as an absolute path; `dart run`
+still resolves the app's own packages from there:
+
+```sh
+fleury_mcp -- dart run /absolute/app/path/bin/run_app.dart
+```
+
+`--project` does not apply here: it only selects a session for `--attach`.
 
 When working from source, use the same Fleury checkout as the app. From its
 root:

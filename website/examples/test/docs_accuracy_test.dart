@@ -342,6 +342,36 @@ void main() {
       expect(readme, isNot(contains('element-…')));
     });
 
+    // A globally activated server must be the release that matches the app's
+    // Fleury: the INIT handshake rejects any other. Docs that pin the version
+    // to activate must name the one this checkout publishes.
+    test('documented fleury_mcp activations pin its pubspec version', () {
+      final version = RegExp(r'^version:\s*(\S+)\s*$', multiLine: true)
+          .firstMatch(
+            File(
+              p.join(repo.path, 'packages/fleury_mcp/pubspec.yaml'),
+            ).readAsStringSync(),
+          )!
+          .group(1)!;
+      final activation = RegExp(
+        r'dart pub global activate fleury_mcp(?![\w-])(?:[ \t]+([^\s`]+))?',
+      );
+      final found = <String>[];
+      final wrong = <String>[];
+      for (final file in _publicDocs(repo)) {
+        for (final match in activation.allMatches(file.readAsStringSync())) {
+          final where = p.relative(file.path, from: repo.path);
+          found.add(where);
+          if (match.group(1) != version) {
+            wrong.add('$where: "${match.group(0)}" (pubspec: $version)');
+          }
+        }
+      }
+
+      expect(found, isNotEmpty);
+      expect(wrong, isEmpty, reason: wrong.join('\n'));
+    });
+
     test('getting started follows the generated project contract', () {
       final guide = File(
         p.join(repo.path, 'website/src/content/docs/getting-started.mdx'),
