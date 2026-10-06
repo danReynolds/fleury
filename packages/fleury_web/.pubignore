@@ -8,3 +8,6 @@ pubspec_overrides.yaml.template
 web/*.dart.js
 web/*.dart.js.deps
 web/*.dart.js.map
+example/*.js
+example/*.js.deps
+example/*.js.map

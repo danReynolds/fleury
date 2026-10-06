@@ -221,6 +221,19 @@ bool _isFleuryRepoRoot(Directory directory) {
 }
 
 Future<int> _runShell(List<String> args) async {
+  // Help needs no terminal, so it is answered before the checks below.
+  if (args.contains('-h') || args.contains('--help')) {
+    stderr.write('''
+usage: fleury shell
+
+Gives a Fleury app that runs elsewhere, such as under an IDE debugger, a
+terminal to draw in. Start the shell from the app's package directory, then
+run the app: it finds the shell through .fleury/handle, draws here, and takes
+its input from this terminal. Each run attaches in turn; with no app attached,
+Ctrl+C quits the shell. Runs on macOS and Linux.
+''');
+    return 0;
+  }
   // The shell proxies a real terminal to a remote app: it forwards local
   // keystrokes (so it puts its own stdin into raw mode) and writes the app's
   // frames to stdout. Refuse a non-tty stdin up front — otherwise a
@@ -1798,7 +1811,10 @@ Future<int> _runDiagnose(List<String> args) async {
     return 0;
   }
 
-  void row(String k, Object? v) => stdout.writeln('| $k | ${v ?? '(unset)'} |');
+  // This report is pasted into public issues, where a path under the home
+  // directory would name the user, so every value shows that directory as ~.
+  void row(String k, Object? v) =>
+      stdout.writeln('| $k | ${_homeAsTilde('${v ?? '(unset)'}')} |');
 
   void messages(String title, List<TerminalDiagnosticMessage> items) {
     stdout.writeln();
@@ -1837,7 +1853,7 @@ Future<int> _runDiagnose(List<String> args) async {
     platform?.operatingSystemVersion ?? Platform.operatingSystemVersion,
   );
   row('Dart version', platform?.dartVersion ?? Platform.version);
-  row('Local hostname', Platform.localHostname);
+  // No hostname: this block is pasted into public issues.
   row('Executable', Platform.executable);
   stdout.writeln();
   stdout.writeln('## Terminal');
@@ -1922,6 +1938,20 @@ Future<int> _runDiagnose(List<String> args) async {
   if (handleContents != null) row('.fleury/handle ->', handleContents);
   row('FLEURY_HANDLE env', env['FLEURY_HANDLE']);
   return 0;
+}
+
+/// [text] with the user's home directory written as `~`.
+String _homeAsTilde(String text) {
+  var home =
+      Platform.environment[Platform.isWindows ? 'USERPROFILE' : 'HOME'] ?? '';
+  while (home.length > 1 && (home.endsWith('/') || home.endsWith(r'\'))) {
+    home = home.substring(0, home.length - 1);
+  }
+  // No home, or a home of `/`, names nobody.
+  if (home.length < 2) return text;
+  // Not followed by a name character: `/home/ann` must not match inside
+  // `/home/anna`.
+  return text.replaceAll(RegExp('${RegExp.escape(home)}(?![\\w.-])'), '~');
 }
 
 TerminalPlatformReport _diagnosisPlatform() {
@@ -2276,8 +2306,9 @@ String _basename(String path) {
 Future<Never> _runRun(List<String> args) async {
   final run = parseRunCommand(args);
   if (run == null) {
+    // Help was asked for, so printing it is success.
     stderr.write(runCommandUsage);
-    exit(64);
+    exit(0);
   }
   var script = run.scriptPath;
   if (script == null) {

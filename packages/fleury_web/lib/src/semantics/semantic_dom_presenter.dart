@@ -300,8 +300,7 @@ final class SemanticDomPresenter
       'data-fleury-semantic-id': node.id.value,
       'data-fleury-semantic-role': node.role.name,
       'data-fleury-semantic-core-role': ?node.role.wireCoreRole,
-      if (_actionTargetToken(node) case final token?)
-        'data-fleury-action-target-token': token,
+      'data-fleury-action-target-token': ?_actionTargetToken(node),
     };
     final ariaRole = _ariaRoleFor(core);
     if (ariaRole != null) attributes['role'] = ariaRole;

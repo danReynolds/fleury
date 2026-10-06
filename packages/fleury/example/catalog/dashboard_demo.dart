@@ -65,7 +65,8 @@ class _DashboardAppState extends State<DashboardApp> {
   // Current values for gauges / sparkline.
   double _diskPct = 0.62;
   double _netPct = 0.34;
-  final List<num> _rps = List.filled(24, 0);
+  // Growable: each tick drops the oldest sample and appends a new one.
+  final List<num> _rps = List.filled(24, 0, growable: true);
 
   // 8 weeks of synthetic incident counts for the calendar heatmap.
   late final Map<DateTime, num> _incidents;

@@ -142,7 +142,7 @@ final class _SuitePlan {
   final _Command scoreboardCommand;
 
   List<_Command> get commands => [
-    if (compileCommand != null) compileCommand!,
+    ?compileCommand,
     ...captureCommands,
     scoreboardCommand,
   ];

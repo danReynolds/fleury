@@ -14,17 +14,19 @@ import 'package:fleury/fleury_wire.dart';
 import 'package:fleury_mcp/fleury_mcp.dart';
 import 'package:test/test.dart';
 
+import 'support/fake_app.dart';
+
 void main() {
-  late _FakeTransport transport;
+  late FakeAppTransport transport;
   late FleuryAppBridge bridge;
   late SemanticsWireEncoder encoder;
   late List<String> out;
   late McpServer server;
 
   setUp(() async {
-    transport = _FakeTransport();
+    transport = FakeAppTransport();
     bridge = FleuryAppBridge(transport)..start();
-    transport.addIncoming(_appInit(remoteProtocolVersion));
+    transport.addIncoming(appInit(remoteProtocolVersion));
     encoder = SemanticsWireEncoder();
     out = <String>[];
     server = McpServer(bridge: bridge, send: out.add);
@@ -53,7 +55,7 @@ void main() {
   }
 
   /// Pushes a fresh semantic snapshot (counter at [count]) to the bridge.
-  void pushCount(int count) => pushRoot(_counterRoot(count));
+  void pushCount(int count) => pushRoot(counterRoot(count));
 
   /// Pushes a snapshot and waits until the bridge has decoded it (the revision
   /// advances), so a following read observes the new tree.
@@ -142,7 +144,7 @@ void main() {
   test(
     'wire version mismatches are surfaced as a specific tool error',
     () async {
-      transport.addIncoming(_appInit(remoteProtocolVersion - 1));
+      transport.addIncoming(appInit(remoteProtocolVersion - 1));
       await bridge.done;
 
       await server.handleLine(
@@ -180,7 +182,7 @@ void main() {
         () => transport.sent.whereType<SemanticActionFrame>().isNotEmpty,
       );
 
-      transport.addIncoming(_appInit(remoteProtocolVersion - 1));
+      transport.addIncoming(appInit(remoteProtocolVersion - 1));
       await pending;
 
       final result = lastResult();
@@ -222,7 +224,7 @@ void main() {
         }),
       );
       await Future<void>.delayed(Duration.zero);
-      transport.addIncoming(_appInit(remoteProtocolVersion - 1));
+      transport.addIncoming(appInit(remoteProtocolVersion - 1));
       await pending;
 
       final message = jsonDecode(out.removeLast()) as Map<String, Object?>;
@@ -3004,7 +3006,7 @@ void main() {
     final read = toolJson(lastResult());
     final sinceRevision = read['uiRevision'] as String;
 
-    await pushAndAwait(_counterRoot(9));
+    await pushAndAwait(counterRoot(9));
     await server.handleLine(
       _modernRpc(421, 'tools/call', <String, Object?>{
         'name': 'wait_for_change',
@@ -3112,7 +3114,7 @@ void main() {
         }),
       );
       await Future<void>.delayed(Duration.zero);
-      transport.addIncoming(_appInit(remoteProtocolVersion - 1));
+      transport.addIncoming(appInit(remoteProtocolVersion - 1));
       await pending;
 
       final result = lastResult();
@@ -3590,7 +3592,7 @@ void main() {
           }),
         );
         await Future<void>.delayed(Duration.zero);
-        transport.addIncoming(_appInit(remoteProtocolVersion - 1));
+        transport.addIncoming(appInit(remoteProtocolVersion - 1));
         await pending;
 
         final result = lastResult();
@@ -3614,15 +3616,6 @@ void main() {
     });
   });
 }
-
-InitFrame _appInit(int protocolVersion) => InitFrame(
-  size: const CellSize(80, 24),
-  colorMode: ColorMode.truecolor,
-  glyphTier: GlyphTier.unicode,
-  imageProtocol: ImageProtocol.halfBlock,
-  tmuxPassthrough: false,
-  protocolVersion: protocolVersion,
-);
 
 String _rpc(int id, String method, [Map<String, Object?>? params]) {
   return jsonEncode(<String, Object?>{
@@ -3655,78 +3648,6 @@ String _modernRpc(
       },
     },
   });
-}
-
-Map<String, Object?> _counterRoot(int count) => <String, Object?>{
-  'id': 'root',
-  'role': 'app',
-  'label': 'Counter',
-  'children': <Object?>[
-    <String, Object?>{
-      'id': 'count',
-      'role': 'text',
-      'label': 'Count',
-      'value': count,
-    },
-    <String, Object?>{
-      'id': 'increment',
-      'role': 'button',
-      'label': 'Increment',
-      'actions': <String>['activate'],
-    },
-    <String, Object?>{
-      'id': 'reset',
-      'role': 'button',
-      'label': 'Reset',
-      'actions': <String>['activate'],
-    },
-  ],
-};
-
-final class _FakeTransport
-    with SynchronousSendTransport
-    implements RemoteFrameTransport {
-  final StreamController<RemoteFrame> _incoming =
-      StreamController<RemoteFrame>.broadcast();
-  final List<RemoteFrame> sent = <RemoteFrame>[];
-  bool autoCompleteSemanticActions = true;
-
-  @override
-  Stream<RemoteFrame> get incoming => _incoming.stream;
-
-  @override
-  void send(RemoteFrame frame) {
-    // Mirror UnixSocketFrameTransport.send: encode synchronously, so an over-cap
-    // outgoing frame throws RemoteProtocolException exactly as the real wire does
-    // (and is therefore never recorded as "sent").
-    encodeFrame(frame);
-    sent.add(frame);
-    if (autoCompleteSemanticActions && frame is SemanticActionFrame) {
-      scheduleMicrotask(() {
-        if (_incoming.isClosed) return;
-        _incoming.add(
-          SemanticActionResultFrame(
-            frame.id,
-            frame.action,
-            SemanticActionInvocationStatus.completed,
-          ),
-        );
-      });
-    }
-  }
-
-  @override
-  Future<void> close() async {
-    if (!_incoming.isClosed) await _incoming.close();
-  }
-
-  void addIncoming(RemoteFrame frame) => _incoming.add(frame);
-
-  /// Simulates the app disconnecting — the bridge sees `onDone` and exits.
-  Future<void> dropPeer() async {
-    if (!_incoming.isClosed) await _incoming.close();
-    await Future<void>.delayed(Duration.zero);
-  }
 }
 
 /// A minimal [IOSink] that captures whole written lines. Only `write`/`flush`

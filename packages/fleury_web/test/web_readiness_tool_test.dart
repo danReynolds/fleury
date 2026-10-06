@@ -911,17 +911,12 @@ Map<String, Object?> _scoreboard({
     'kind': 'fleuryWebFrameScoreboard',
     'generatedAt': '2026-06-08T12:00:00.000000Z',
     'minRuns': minRuns,
-    if (thresholdPolicyPath != null) 'thresholdPolicyPath': thresholdPolicyPath,
-    if (thresholdPolicyReviewState != null)
-      'thresholdPolicyReviewState': thresholdPolicyReviewState,
-    if (thresholdPolicyReviewedBy != null)
-      'thresholdPolicyReviewedBy': thresholdPolicyReviewedBy,
-    if (thresholdPolicyReviewedAt != null)
-      'thresholdPolicyReviewedAt': thresholdPolicyReviewedAt,
-    if (thresholdPolicyReviewContext != null)
-      'thresholdPolicyReviewContext': thresholdPolicyReviewContext,
-    if (thresholdPolicyFingerprint != null)
-      'thresholdPolicyFingerprint': thresholdPolicyFingerprint,
+    'thresholdPolicyPath': ?thresholdPolicyPath,
+    'thresholdPolicyReviewState': ?thresholdPolicyReviewState,
+    'thresholdPolicyReviewedBy': ?thresholdPolicyReviewedBy,
+    'thresholdPolicyReviewedAt': ?thresholdPolicyReviewedAt,
+    'thresholdPolicyReviewContext': ?thresholdPolicyReviewContext,
+    'thresholdPolicyFingerprint': ?thresholdPolicyFingerprint,
     if (thresholdPolicyPath != null) 'thresholdPolicyScenarioCount': 1,
     'requireComparableRunEnvironment': true,
     'scenarioCount': 1,

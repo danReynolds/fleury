@@ -821,8 +821,8 @@ void _writeCapture(
       'capturedFrameCount': frames.length,
       'extraFrameCount': frames.length - effectiveRequestedSteps,
       'framesPerStep': frames.length / effectiveRequestedSteps,
-      if (browserMetrics != null) 'browserMetrics': browserMetrics,
-      if (runEnvironment != null) 'runEnvironment': runEnvironment,
+      'browserMetrics': ?browserMetrics,
+      'runEnvironment': ?runEnvironment,
       'frames': frames,
     })}\n',
   );

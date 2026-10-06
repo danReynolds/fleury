@@ -380,7 +380,7 @@ Map<String, Object?> _buildScoreboard(
     'generatedAt': DateTime.now().toUtc().toIso8601String(),
     'minRuns': minRuns,
     'steadySkipFrames': steadySkipFrames,
-    if (thresholdsPath != null) 'thresholdPolicyPath': thresholdsPath,
+    'thresholdPolicyPath': ?thresholdsPath,
     if (thresholdPolicy.reviewState != null)
       'thresholdPolicyReviewState': thresholdPolicy.reviewState,
     if (thresholdPolicy.reviewedBy != null)
@@ -1478,17 +1478,13 @@ final class _ThresholdPolicy {
       exit(2);
     }
     final rawReviewState = json['reviewState'];
-    final reviewState = rawReviewState == null
-        ? null
-        : rawReviewState.toString();
+    final reviewState = rawReviewState?.toString();
     final rawReviewedBy = json['reviewedBy'];
-    final reviewedBy = rawReviewedBy == null ? null : rawReviewedBy.toString();
+    final reviewedBy = rawReviewedBy?.toString();
     final rawReviewedAt = json['reviewedAt'];
-    final reviewedAt = rawReviewedAt == null ? null : rawReviewedAt.toString();
+    final reviewedAt = rawReviewedAt?.toString();
     final rawReviewContext = json['reviewContext'];
-    final reviewContext = rawReviewContext == null
-        ? null
-        : rawReviewContext.toString();
+    final reviewContext = rawReviewContext?.toString();
     final defaults = _readGateOptions(json['defaults'], 'defaults');
     final scenarios = <String, _GateOptions>{};
     final rawScenarios = json['scenarios'];

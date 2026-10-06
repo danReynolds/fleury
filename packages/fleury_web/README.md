@@ -112,7 +112,12 @@ explains where their host boundaries differ.
 
 ## Package examples
 
-This package includes a counter and a retained-DOM demo under
+[`example/`](https://github.com/danReynolds/fleury/tree/main/packages/fleury_web/example)
+holds the app above with its page. Compile it with
+`dart compile js example/main.dart -o example/app.js -O2`, then serve
+`example/` and open `index.html`.
+
+The package also includes a counter and a retained-DOM demo under
 [`web/`](https://github.com/danReynolds/fleury/tree/main/packages/fleury_web/web).
 From a Fleury framework checkout:
 

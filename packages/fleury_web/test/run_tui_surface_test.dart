@@ -674,8 +674,9 @@ void main() {
         expect(Overlay.of(context!).entries, hasLength(1));
         var render = context!.findRenderObject();
         while (render != null) {
-          if (render is RenderRepaintBoundary)
+          if (render is RenderRepaintBoundary) {
             expect(render.cachingEnabled, isFalse);
+          }
           render = render.parent;
         }
       }
@@ -832,8 +833,9 @@ void main() {
       for (var i = 1; i <= 2; i++) {
         final reported = Completer<void>();
         void onError() {
-          if (errors.history.length == i && !reported.isCompleted)
+          if (errors.history.length == i && !reported.isCompleted) {
             reported.complete();
+          }
         }
 
         errors.addListener(onError);

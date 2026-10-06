@@ -8,7 +8,8 @@ Known spike files:
 
 - `packages/fleury_web/lib/src/dom_grid/cell_grid_html.dart`
 - `packages/fleury_web/test/cell_grid_html_test.dart`
-- `packages/fleury_web/tool/spike_gallery.dart`
+- `packages/fleury_web/tool/spike_gallery.dart` (removed after the 0.1.0
+  release, with the `spike.html` page it generated)
 
 Companion RFC:
 

@@ -86,10 +86,7 @@ void main() {
 
     final pubspec = File('${target.path}/pubspec.yaml').readAsStringSync();
     expect(pubspec, contains('name: my_app'));
-    for (final package in const <String>[
-      'fleury',
-      'fleury_test',
-    ]) {
+    for (final package in const <String>['fleury', 'fleury_test']) {
       final packagePubspec = File(
         '$repoRoot/packages/$package/pubspec.yaml',
       ).readAsStringSync();
@@ -111,6 +108,67 @@ void main() {
     expect(
       File('${target.path}/bin/run_app.dart').readAsStringSync(),
       contains('TerminalMode(mouse: true)'),
+    );
+
+    // Hosted projects install the published tools.
+    final readme = File('${target.path}/README.md').readAsStringSync();
+    expect(readme, contains('dart pub global activate fleury'));
+    expect(readme, contains('dart pub add --dev fleury_mcp'));
+    expect(
+      readme,
+      contains('dart run fleury_mcp -- dart run bin/run_app.dart'),
+    );
+    expect(readme, isNot(contains('on pub.dev')));
+    expect(readme, isNot(contains('`fleury_mcp --')));
+    // The browser preview and the MCP server run on macOS and Linux only.
+    expect('(macOS and Linux)'.allMatches(readme), hasLength(2));
+  });
+
+  // A fresh project must survive `dart format` untouched, whatever its name,
+  // on the SDK floor and on the current SDK alike: CI's create smoke runs this
+  // file on both. A long project name makes a long class name, which pushes
+  // template lines past 80 columns until `create` formats what it writes.
+  test('generates sources that dart format leaves unchanged', () async {
+    final projects = <Directory>[];
+    for (final (name, source) in const [
+      ('my_app', 'hosted'),
+      ('customer_support_operations_dashboard_tool', 'git'),
+    ]) {
+      final target = Directory('${tempDir.path}/$name');
+      final result = await _runCreate(packageRoot, [
+        target.path,
+        '--no-pub',
+        '--dependency-source=$source',
+      ]);
+      expect(result.exitCode, 0, reason: result.stderr.toString());
+      projects.add(target);
+    }
+    // The long name's `createState` line no longer fits, so it was rewrapped.
+    expect(
+      File('${projects.last.path}/lib/app.dart').readAsStringSync(),
+      contains(
+        '  State<CustomerSupportOperationsDashboardToolApp> createState() =>\n'
+        '      _CustomerSupportOperationsDashboardToolAppState();\n',
+      ),
+    );
+
+    // Without `pub get` there is no package config to read the language
+    // version from, so pass the one pub derives from the generated SDK floor.
+    final pubspec = File(
+      '${projects.first.path}/pubspec.yaml',
+    ).readAsStringSync();
+    final floor = RegExp(r'sdk: \^(\d+)\.(\d+)\.').firstMatch(pubspec)!;
+    final format = await Process.run(Platform.resolvedExecutable, [
+      'format',
+      '--language-version=${floor[1]}.${floor[2]}',
+      '--output=none',
+      '--set-exit-if-changed',
+      for (final project in projects) project.path,
+    ]);
+    expect(
+      format.exitCode,
+      0,
+      reason: 'stdout:\n${format.stdout}\nstderr:\n${format.stderr}',
     );
   });
 
@@ -197,6 +255,28 @@ void main() {
     expect(pubspec, isNot(contains('fleury_widgets')));
     expect(pubspec, contains('path: packages/fleury_test'));
     expect(pubspec, contains('dependency_overrides:'));
+
+    // Git projects take their tools from the same repository as Fleury: the
+    // published server would exact-pin a different framework build.
+    final readme = File('${target.path}/README.md').readAsStringSync();
+    expect(readme, contains('activated globally from the same Git repository'));
+    // The activation command needs the package's path inside the repository.
+    expect(
+      readme,
+      contains(
+        'dart pub global activate --source git \\\n'
+        '  https://github.com/danReynolds/fleury.git \\\n'
+        '  --git-path packages/fleury\n',
+      ),
+    );
+    expect(readme, contains('path: packages/fleury_mcp'));
+    expect(
+      readme,
+      contains('dart run fleury_mcp -- dart run bin/run_app.dart'),
+    );
+    expect(readme, isNot(contains('dart pub add --dev fleury_mcp')));
+    expect(readme, isNot(contains('dart pub global activate fleury')));
+    expect('(macOS and Linux)'.allMatches(readme), hasLength(2));
   });
 
   test('rejects names that would make the app depend on itself', () async {

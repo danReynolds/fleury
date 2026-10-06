@@ -190,7 +190,7 @@ TraceMap _serializeEvent(TuiEvent event) => switch (event) {
   KeyEvent() => {
     'type': 'key',
     if (event.code.special case final special?) 'keyCode': special.name,
-    if (event.code.character case final char?) 'char': char,
+    'char': ?event.code.character,
     'keyEventType': event.type.name,
     'modifiers': _modifierNames(event.modifiers),
     if (event.position case final position?) 'position': position.name,
@@ -200,14 +200,14 @@ TraceMap _serializeEvent(TuiEvent event) => switch (event) {
   InputBatch() => {
     'type': 'batch',
     if (event.key case final key?) 'keyEventType': key.type.name,
-    if (event.key?.code.character case final char?) 'char': char,
-    if (event.committedText case final text?) 'text': text,
+    'char': ?event.key?.code.character,
+    'text': ?event.committedText,
   },
   SignalEvent() => {'type': 'signal', 'signal': event.signal.name},
   TextCompositionEvent() => {
     'type': 'composition',
     'kind': event.kind.name,
-    if (event.text case final text?) 'text': text,
+    'text': ?event.text,
   },
   PasteEvent() => {'type': 'paste', 'text': event.text},
   MouseEvent() => {

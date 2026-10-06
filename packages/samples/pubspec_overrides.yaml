@@ -5,3 +5,5 @@ dependency_overrides:
     path: ../fleury
   fleury_test:
     path: ../fleury_test
+  fleury_mcp:
+    path: ../fleury_mcp

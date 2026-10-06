@@ -550,20 +550,17 @@ void _writeCandidatePolicy(
           'observedMaxRuntimePaintP95Ms': observedMaxRuntimePaintP95Ms ?? 3,
         }
       : <String, Object?>{
-          if (observedMaxRuntimeBuildP95Ms != null)
-            'observedMaxRuntimeBuildP95Ms': observedMaxRuntimeBuildP95Ms,
-          if (observedMaxRuntimeLayoutP95Ms != null)
-            'observedMaxRuntimeLayoutP95Ms': observedMaxRuntimeLayoutP95Ms,
-          if (observedMaxRuntimePaintP95Ms != null)
-            'observedMaxRuntimePaintP95Ms': observedMaxRuntimePaintP95Ms,
+          'observedMaxRuntimeBuildP95Ms': ?observedMaxRuntimeBuildP95Ms,
+          'observedMaxRuntimeLayoutP95Ms': ?observedMaxRuntimeLayoutP95Ms,
+          'observedMaxRuntimePaintP95Ms': ?observedMaxRuntimePaintP95Ms,
         };
   final policy = <String, Object?>{
     'schemaVersion': 1,
     'kind': 'fleuryWebFrameThresholds',
     'generatedAt': '2026-06-08T12:00:00.000Z',
     'reviewState': reviewState,
-    if (reviewedBy != null) 'reviewedBy': reviewedBy,
-    if (reviewedAt != null) 'reviewedAt': reviewedAt,
+    'reviewedBy': ?reviewedBy,
+    'reviewedAt': ?reviewedAt,
     'reviewNote':
         'Generated from observed retained DOM web frame captures; review before using as a release gate.',
     'generatedFrom': <String, Object?>{

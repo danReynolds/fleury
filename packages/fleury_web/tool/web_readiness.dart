@@ -205,8 +205,7 @@ _ReadinessCheck _scoreboardCheck(_Options options) {
         'thresholdPolicyFingerprint': json['thresholdPolicyFingerprint'],
       if (json['thresholdPolicyScenarioCount'] != null)
         'thresholdPolicyScenarioCount': json['thresholdPolicyScenarioCount'],
-      if (thresholdReviewPath != null)
-        'thresholdReviewPath': thresholdReviewPath,
+      'thresholdReviewPath': ?thresholdReviewPath,
       if (missingScenarioThresholdPolicy.isNotEmpty)
         'missingScenarioThresholdPolicy': missingScenarioThresholdPolicy,
     },

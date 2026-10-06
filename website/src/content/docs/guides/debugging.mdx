@@ -225,10 +225,11 @@ Fleury. The shell turns away an app that speaks another version and says why.
 ## Share a reproducible investigation
 
 An agent can drive the same playground and read frame, log, and error records.
-From `packages/samples`:
+From `packages/samples` in a Fleury checkout, after
+`dart tool/fleury_dev.dart bootstrap`:
 
 ```sh
-fleury_mcp -- dart run bin/samples.dart debug
+dart run fleury_mcp -- dart run bin/samples.dart debug
 ```
 
 Use `read_frames`, `read_logs`, and `read_errors` after the triggering action;

@@ -11,6 +11,14 @@ const _lintsVersion = '^6.0.0';
 const _testVersion = '^1.26.3';
 const _repositoryUrl = 'https://github.com/danReynolds/fleury.git';
 
+/// The Dart SDK floor every generated project declares; the create tests keep
+/// it equal to the framework's own.
+const _sdkFloor = '3.10.4';
+
+/// The language version pub derives from [_sdkFloor], which `dart format`
+/// uses to lay out the generated sources.
+final _languageVersion = _sdkFloor.substring(0, _sdkFloor.lastIndexOf('.'));
+
 /// Generates a new Fleury application project.
 ///
 /// Kept outside the executable entrypoint so the scaffold contract remains a
@@ -89,6 +97,7 @@ Future<int> runCreateCommand(List<String> args) async {
     stderr.writeln('fleury create: could not write the project: $error');
     return 1;
   }
+  await _formatSources(target);
 
   if (options.runPubGet) {
     stdout.writeln('Resolving dependencies...');
@@ -121,8 +130,8 @@ Future<int> runCreateCommand(List<String> args) async {
       );
       if (options.dependencySource == _DependencySource.hosted) {
         stderr.writeln(
-          "If the Fleury packages aren't on pub.dev yet, use Git dependencies "
-          'in a different, empty directory: '
+          "If Fleury $fleuryVersion isn't on pub.dev yet, use Git "
+          'dependencies in a different, empty directory: '
           '`fleury create another_app --dependency-source=git`.',
         );
       }
@@ -150,6 +159,28 @@ Future<int> runCreateCommand(List<String> args) async {
     '  Edit and save while it runs — hot reload keeps your state.',
   );
   return 0;
+}
+
+/// Formats the generated Dart sources with the SDK's own formatter.
+///
+/// The templates are laid out for typical names, but a project name sets the
+/// app's class name, and a long one pushes lines past 80 columns. Formatting
+/// here keeps every new project `dart format`-clean whatever its name. It is
+/// best effort: unformatted sources still compile, and without a runnable
+/// SDK the `dart pub get` that follows reports the problem.
+Future<void> _formatSources(Directory target) async {
+  try {
+    await Process.run(dartSdkExecutable, [
+      'format',
+      // Before `dart pub get` there is no package config to read it from.
+      '--language-version=$_languageVersion',
+      'bin',
+      'lib',
+      'test',
+    ], workingDirectory: target.path);
+  } on ProcessException {
+    // No runnable SDK: the sources stay as written.
+  }
 }
 
 void _printCreateUsage() {
@@ -192,7 +223,11 @@ Map<String, String> _projectFiles({
       description: description,
       dependencySource: dependencySource,
     ),
-    'README.md': _readme(projectName, includeEditorConfig: includeEditorConfig),
+    'README.md': _readme(
+      projectName,
+      includeEditorConfig: includeEditorConfig,
+      dependencySource: dependencySource,
+    ),
     'lib/app.dart': _appSource(className: className, displayName: displayName),
     'bin/run_app.dart': _entrypointSource(
       projectName: projectName,
@@ -256,7 +291,7 @@ version: 0.1.0
 publish_to: none
 
 environment:
-  sdk: ^3.10.4
+  sdk: ^$_sdkFloor
 
 $dependencies''';
 }
@@ -287,11 +322,7 @@ class _${className}State extends State<$className> {
           children: [
             Text('Count: \$_count'),
             const SizedBox(height: 1),
-            Button(
-              text: 'Increment',
-              autofocus: true,
-              onPressed: _increment,
-            ),
+            Button(text: 'Increment', autofocus: true, onPressed: _increment),
             const SizedBox(height: 1),
             const Text('Press Enter or click the button.'),
           ],
@@ -302,6 +333,9 @@ class _${className}State extends State<$className> {
 }
 ''';
 
+// The comment inside the argument list says why mouse mode is on, and, as a
+// line comment, keeps the list split: the formatter leaves this layout alone
+// for a short class name, even where [_formatSources] could not run.
 String _entrypointSource({
   required String projectName,
   required String className,
@@ -313,6 +347,7 @@ import 'package:$projectName/app.dart';
 void main(List<String> args) => runApp(
   const $className(),
   args: args,
+  // Mouse reporting lets the Increment button respond to clicks.
   mode: const TerminalMode(mouse: true),
 );
 ''';
@@ -368,7 +403,11 @@ void main() {
 }
 ''';
 
-String _readme(String projectName, {required bool includeEditorConfig}) {
+String _readme(
+  String projectName, {
+  required bool includeEditorConfig,
+  required _DependencySource dependencySource,
+}) {
   final runLead = includeEditorConfig
       ? 'Press F5 in VS Code, or run directly from an interactive terminal:'
       : 'Run directly from an interactive terminal:';
@@ -379,6 +418,37 @@ in `.vscode/settings.json`); the F5 flow requires the official Dart extension
 (`Dart-Code.dart-code`). Fleury needs no custom editor extension.
 '''
       : '';
+  // Each source names the CLI and MCP server that match its framework: a Git
+  // project resolves Fleury from the repository, so its tools come from there
+  // too.
+  final globalCli = switch (dependencySource) {
+    _DependencySource.hosted =>
+      '''
+With the CLI activated globally (`dart pub global activate fleury`), the
+launcher is just `fleury run`.''',
+    _DependencySource.git =>
+      '''
+With the CLI activated globally from the same Git repository, the launcher is
+just `fleury run`:
+
+```sh
+dart pub global activate --source git \\
+  $_repositoryUrl \\
+  --git-path packages/fleury
+```''',
+  };
+  final agentSetup = switch (dependencySource) {
+    _DependencySource.hosted =>
+      '''
+- **Driven by an AI agent** (macOS and Linux) — add the MCP server as a
+  development dependency (`dart pub add --dev fleury_mcp`), then have your MCP
+  host run''',
+    _DependencySource.git =>
+      '''
+- **Driven by an AI agent** (macOS and Linux) — add `fleury_mcp` to
+  `dev_dependencies` with the same Git source as `fleury_test`
+  (`path: packages/fleury_mcp`), then have your MCP host run''',
+  };
   return '''
 # $projectName
 
@@ -393,10 +463,10 @@ dart run fleury run
 ```
 
 The launcher finds `bin/run_app.dart` on its own and compiles the app once.
-With `fleury` activated globally (`dart pub global activate fleury` once the
-packages are on pub.dev, or `--source git` before then) it is just
-`fleury run`. A plain `dart run bin/run_app.dart` also works, with the same
-hot-reload session, but compiles the app twice on a cold start.
+A plain `dart run bin/run_app.dart` also works, with the same hot-reload
+session, but compiles the app twice on a cold start.
+
+$globalCli
 
 Press Enter or click **Increment**. Press Ctrl+C to quit.
 
@@ -414,13 +484,14 @@ dart test
 
 ## The same app, elsewhere
 
-- **In a browser** — run
+- **In a browser** (macOS and Linux) — run
   `dart run fleury serve --spawn dart --enable-vm-service=0 run bin/run_app.dart`
   and open the printed URL. This streams the unchanged app to a browser tab
   and reloads it when you save. Stop the preview with Ctrl+C in the terminal
   running `serve` (hot restart is unavailable under a serve handle).
-- **Driven by an AI agent** — `fleury_mcp -- dart run bin/run_app.dart` exposes
-  the running UI over the Model Context Protocol, so an agent reads and
+$agentSetup
+  `dart run fleury_mcp -- dart run bin/run_app.dart` from this directory. It
+  exposes the running UI over the Model Context Protocol, so an agent reads and
   operates it by meaning instead of screen-scraping.
 
 Both come from the same widget tree you edit in `lib/app.dart`. Guides, live

@@ -541,8 +541,9 @@ Future<MountedApp> _runTuiSurface(
                 : null;
             if (key != null && tryConsumeDebugKey(debug, key)) continue;
             if (text != null &&
-                tryConsumeDebugText(debug, TextInputEvent(text)))
+                tryConsumeDebugText(debug, TextInputEvent(text))) {
               continue;
+            }
             // A browser has no job control: a Ctrl+Z the expanded shell
             // withholds from the hidden app simply ends here.
             if (key != null && debugShellWithholdsKey(debug, key)) continue;
