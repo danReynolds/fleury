@@ -867,7 +867,7 @@ final class _CdpPage {
 
 double? _secondsToMillis(double? value) => value == null ? null : value * 1000;
 
-int? _optionalInt(double? value) => value == null ? null : value.round();
+int? _optionalInt(double? value) => value?.round();
 
 final class _CdpClient {
   _CdpClient._(this._socket) {
@@ -906,7 +906,7 @@ final class _CdpClient {
       jsonEncode(<String, Object?>{
         'id': id,
         'method': method,
-        if (params != null) 'params': params,
+        'params': ?params,
       }),
     );
     return completer.future;

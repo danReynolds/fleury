@@ -98,7 +98,7 @@ _LoadedWebCapture _loadCapture(String inputPath) {
       browserMetrics = _readBrowserMetrics(map['browserMetrics']);
       return map['frames']! as List<Object?>;
     }(),
-    Map map when map['frames'] is List => () {
+    Map<Object?, Object?> map when map['frames'] is List => () {
       browserMetrics = _readBrowserMetrics(map['browserMetrics']);
       return (map['frames']! as List).cast<Object?>();
     }(),

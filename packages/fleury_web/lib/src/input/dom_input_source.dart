@@ -566,8 +566,9 @@ final class DomInputSource implements TuiInputSource, KeyboardCaptureTarget {
 
   void _handlePointerDown(web.Event raw) {
     final event = raw as web.PointerEvent;
-    if (_pressedPointerId != null && _pressedPointerId != event.pointerId)
+    if (_pressedPointerId != null && _pressedPointerId != event.pointerId) {
       return;
+    }
     if (_pressedButton != MouseButton.none) _cancelPointer();
     // A new physical gesture supersedes any orphaned compatibility-click
     // marker left by a prior gesture (for example, if the browser omitted its
@@ -613,8 +614,9 @@ final class DomInputSource implements TuiInputSource, KeyboardCaptureTarget {
     if (_cellGridLinkAnchor(raw) != null) return;
     _forgetLastMove();
     final event = raw as web.PointerEvent;
-    if (_pressedPointerId != null && _pressedPointerId != event.pointerId)
+    if (_pressedPointerId != null && _pressedPointerId != event.pointerId) {
       return;
+    }
     var button = _buttonFor(event.button);
     if (button == MouseButton.none && _pressedButton != MouseButton.none) {
       button = _pressedButton;
@@ -670,8 +672,9 @@ final class DomInputSource implements TuiInputSource, KeyboardCaptureTarget {
 
   void _handlePointerCancel(web.Event raw) {
     final event = raw as web.PointerEvent;
-    if (_pressedPointerId != null && _pressedPointerId != event.pointerId)
+    if (_pressedPointerId != null && _pressedPointerId != event.pointerId) {
       return;
+    }
     _cancelPointer();
     try {
       if (_pointerTarget.hasPointerCapture(event.pointerId)) {
@@ -689,8 +692,9 @@ final class DomInputSource implements TuiInputSource, KeyboardCaptureTarget {
 
   void _handlePointerMove(web.Event raw) {
     final event = raw as web.PointerEvent;
-    if (_pressedPointerId != null && _pressedPointerId != event.pointerId)
+    if (_pressedPointerId != null && _pressedPointerId != event.pointerId) {
       return;
+    }
     final heldMask = switch (_pressedButton) {
       MouseButton.left => 1,
       MouseButton.right => 2,

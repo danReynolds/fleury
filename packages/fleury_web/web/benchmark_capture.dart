@@ -159,8 +159,9 @@ void _driveStep({
 }
 
 void _dispatchTextInput(String text) {
-  final textarea = web.document.querySelector('textarea');
-  if (textarea is! web.HTMLTextAreaElement) return;
+  final element = web.document.querySelector('textarea');
+  if (element == null || !element.isA<web.HTMLTextAreaElement>()) return;
+  final textarea = element as web.HTMLTextAreaElement;
   textarea.focus();
   textarea.dispatchEvent(
     web.InputEvent(

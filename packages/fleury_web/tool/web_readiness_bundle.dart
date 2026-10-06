@@ -271,8 +271,7 @@ void main(List<String> args) async {
       'minRuns': options.minRuns,
       if (options.thresholdsPath != null)
         'thresholdPolicyPath': options.thresholdsPath,
-      if (thresholdReviewPath != null)
-        'thresholdReviewPath': thresholdReviewPath,
+      'thresholdReviewPath': ?thresholdReviewPath,
       'targetPreset': options.targetPreset,
       if (options.targetIds.isNotEmpty) 'targetIds': options.targetIds,
       'requireComparableRunEnvironment':
@@ -938,18 +937,16 @@ Map<String, Object?> _thresholdReviewAction({
     'blockingChecks': const ['frameScoreboard'],
     'blockers': actionBlockers,
     'details': <String, Object?>{
-      if (thresholdPolicyPath != null)
-        'candidateThresholdPolicyPath': thresholdPolicyPath,
-      if (outputPath != null) 'reviewedThresholdPolicyPath': outputPath,
-      if (jsonOutput != null) 'thresholdReviewPath': jsonOutput,
-      if (planOutput != null) 'thresholdReviewPlanPath': planOutput,
-      if (reviewState != null) 'currentReviewState': reviewState,
-      if (fingerprint != null) 'currentThresholdPolicyFingerprint': fingerprint,
-      if (fingerprint != null) 'expectedInputFingerprint': fingerprint,
+      'candidateThresholdPolicyPath': ?thresholdPolicyPath,
+      'reviewedThresholdPolicyPath': ?outputPath,
+      'thresholdReviewPath': ?jsonOutput,
+      'thresholdReviewPlanPath': ?planOutput,
+      'currentReviewState': ?reviewState,
+      'currentThresholdPolicyFingerprint': ?fingerprint,
+      'expectedInputFingerprint': ?fingerprint,
       if (captureEnvironment.isNotEmpty)
         'captureEnvironment': captureEnvironment,
-      if (candidateReviewContextHint != null)
-        'candidateReviewContextHint': candidateReviewContextHint,
+      'candidateReviewContextHint': ?candidateReviewContextHint,
       if (candidateReviewContextHint != null)
         'planCommandUsesCandidateCapturedContext': true,
       if (hasReviewContextHint) 'suggestedReviewContext': reviewContextHint,
@@ -1051,8 +1048,9 @@ String? _thresholdPolicyReviewContextHint(String? path) {
 }
 
 List<Map<String, Object?>> _thresholdPolicyOverBudgetScenarios(String? path) {
-  if (path == null || path.trim().isEmpty)
+  if (path == null || path.trim().isEmpty) {
     return const <Map<String, Object?>>[];
+  }
   final file = File(path);
   if (!file.existsSync()) return const <Map<String, Object?>>[];
   Object? decoded;
@@ -1233,8 +1231,7 @@ Map<String, Object?> _thresholdReviewPlanDetails(
       : 'stale';
   return <String, Object?>{
     'thresholdReviewPlanStatus': status,
-    if (inputFingerprint != null)
-      'thresholdReviewPlanInputFingerprint': inputFingerprint,
+    'thresholdReviewPlanInputFingerprint': ?inputFingerprint,
   };
 }
 
@@ -1745,15 +1742,12 @@ Map<String, Object?> _regenerateBundleAction({
       'outputDir': outputDir,
       'bundleJsonPath': bundleJsonPath,
       'readinessJsonPath': readinessJsonPath,
-      if (thresholdPolicyPath != null)
-        'thresholdPolicyPath': thresholdPolicyPath,
-      if (thresholdReviewPath != null)
-        'thresholdReviewPath': thresholdReviewPath,
+      'thresholdPolicyPath': ?thresholdPolicyPath,
+      'thresholdReviewPath': ?thresholdReviewPath,
       'maxFallbackCells': 0,
       if (targetIds.isEmpty) 'targetPreset': targetPreset,
       if (targetIds.isNotEmpty) 'targetIds': targetIds,
-      if (completionAuditPath != null)
-        'completionAuditPath': completionAuditPath,
+      'completionAuditPath': ?completionAuditPath,
       'writeDefaultPreflights': true,
       'strictRequired': true,
       'jsonOutput': true,
@@ -2102,7 +2096,7 @@ Map<String, Object?> _buildCompletionAudit({
             : automatedStrictPass
             ? 'pass'
             : 'fail',
-        if (automatedValidationPath != null) 'path': automatedValidationPath,
+        'path': ?automatedValidationPath,
         'checks': [
           for (final check in _maps(automatedValidation['checks']))
             <String, Object?>{
@@ -2343,7 +2337,7 @@ Map<String, Object?> _completionDefaultPreflightSummary(
         : preflight['diagnosticOnly'] == true
         ? 'diagnostic-only'
         : 'fail',
-    if (path != null) 'path': path,
+    'path': ?path,
     if (preflight.isNotEmpty) ...<String, Object?>{
       'strictPass': preflight['strictPass'] == true,
       'bundleBound': preflight['bundleBound'] == true,
@@ -2455,11 +2449,9 @@ List<Map<String, Object?>> _completionPhaseStatus({
           : 'instrumentation-and-candidate-baseline-landed-threshold-review-blocked',
       'releaseBlocking': !frameReady,
       'evidence': <String>[
-        if (_string(artifacts['scoreboard']) case final path?) path,
-        if (_string(input['thresholdPolicyPath']) case final path?) path,
-        if (_string(thresholdActionDetails['thresholdReviewPlanPath'])
-            case final path?)
-          path,
+        ?_string(artifacts['scoreboard']),
+        ?_string(input['thresholdPolicyPath']),
+        ?_string(thresholdActionDetails['thresholdReviewPlanPath']),
       ],
       if (!frameReady)
         'remainingGate':
@@ -2479,13 +2471,9 @@ List<Map<String, Object?>> _completionPhaseStatus({
         'packages/fleury_web/tool/web_readiness_bundle.dart',
         'packages/fleury_web/tool/web_automated_validation.dart',
         'packages/fleury_web/tool/web_default_preflight.dart',
-        if (_string(artifacts['readinessJson']) case final path?) path,
-        if (_string(_map(defaultPreflights['make-dom-default'])['json'])
-            case final path?)
-          path,
-        if (_string(_map(defaultPreflights['retire-temporary-paths'])['json'])
-            case final path?)
-          path,
+        ?_string(artifacts['readinessJson']),
+        ?_string(_map(defaultPreflights['make-dom-default'])['json']),
+        ?_string(_map(defaultPreflights['retire-temporary-paths'])['json']),
       ],
       if (!releaseReady)
         'remainingGate':

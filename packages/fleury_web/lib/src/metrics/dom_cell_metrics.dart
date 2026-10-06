@@ -165,7 +165,7 @@ final class DomCellMetrics implements CellMetrics {
     _removeWindowResizeListener();
     _onMetricsDirty = onMetricsDirty;
     _resizeObserver = web.ResizeObserver(
-      ((JSArray<web.ResizeObserverEntry> _, web.ResizeObserver __) {
+      ((JSArray<web.ResizeObserverEntry> _, web.ResizeObserver _) {
         _notifyMetricsDirty();
       }).toJS,
     )..observe(_container);
