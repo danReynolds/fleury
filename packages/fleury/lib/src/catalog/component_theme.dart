@@ -1,6 +1,19 @@
 import '../primitives.dart';
 import 'package:fleury/fleury_widget_support.dart';
 
+/// [focused] as a cue on an item that is also selected: its attributes
+/// without its colors. The selection style chose its colors as a readable
+/// pair; a focus color layered over them can match the selection fill (a
+/// theme whose focus color is its selection background) and hide the text.
+CellStyle focusCueOnSelection(CellStyle focused) => CellStyle(
+  bold: focused.boldOrNull,
+  dim: focused.dimOrNull,
+  italic: focused.italicOrNull,
+  underline: focused.underlineOrNull,
+  inverse: focused.inverseOrNull,
+  strikethrough: focused.strikethroughOrNull,
+);
+
 /// Component-level defaults for the bundled widget catalog.
 ///
 /// Core [ThemeData] intentionally stays small. This extension carries

@@ -8,6 +8,27 @@ String _row(FleuryTester tester, int cols) => tester
 
 void main() {
   group('Gauge', () {
+    testWidgets('paints its label and percentage in the ambient text style', (
+      tester,
+    ) {
+      const ink = RgbColor(0x65, 0x7B, 0x83);
+      tester.pumpWidget(
+        const Theme(
+          data: ThemeData(colorScheme: ColorScheme(foreground: ink)),
+          child: SizedBox(
+            width: 16,
+            height: 1,
+            child: Gauge(value: 0.5, label: 'CPU'),
+          ),
+        ),
+      );
+      final buffer = tester.render(size: const CellSize(16, 1));
+      expect(buffer.atColRow(0, 0).grapheme, 'C');
+      expect(buffer.atColRow(0, 0).style.foreground, ink);
+      expect(buffer.atColRow(15, 0).grapheme, '%');
+      expect(buffer.atColRow(15, 0).style.foreground, ink);
+    });
+
     testWidgets('fills exactly half the track at value=0.5', (tester) {
       tester.pumpWidget(
         const SizedBox(

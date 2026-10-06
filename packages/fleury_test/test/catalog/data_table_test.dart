@@ -522,6 +522,38 @@ void main() {
     expect(selected, 3);
   });
 
+  testWidgets('the current-row cue keeps the selection colors it lands on', (
+    tester,
+  ) {
+    // A theme whose focus color is its selection fill: layering the focus
+    // color over the selected row would paint the row's text invisible.
+    const ink = RgbColor(0x0B, 0x0F, 0x14);
+    const accent = RgbColor(0x3D, 0xDC, 0x97);
+    tester.pumpWidget(
+      Theme(
+        data: const ThemeData(
+          selectionStyle: CellStyle(foreground: ink, background: accent),
+          focusedStyle: CellStyle(foreground: accent, bold: true),
+        ),
+        child: DataTable(
+          rowCount: 3,
+          columns: _columns(),
+          autofocus: true,
+          cellBuilder: _cell,
+        ),
+      ),
+    );
+
+    final buffer = tester.render(size: const CellSize(20, 5));
+    final current = buffer.atColRow(0, 2);
+    expect(current.grapheme, 'r');
+    expect(current.style.foreground, ink);
+    expect(current.style.background, accent);
+    expect(current.style.bold, isTrue);
+    expect(current.style.underline, isTrue);
+    expect(buffer.atColRow(0, 3).style.background, isNull);
+  });
+
   testWidgets('typeahead jumps the selection; typeahead: false lets the '
       'printable bubble to ancestor bindings', (tester) {
     // A focused table with grid type-ahead on consumes every printable,

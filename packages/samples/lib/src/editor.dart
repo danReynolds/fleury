@@ -452,8 +452,15 @@ class _EditorBodyState extends State<_EditorBody> implements TextInputClaimant {
       return Container(
         color: theme.colorScheme.foreground,
         padding: const EdgeInsets.symmetric(horizontal: 1),
+        // The strip is light, so the chords take its dark ink too (the
+        // default focus accent is chosen for a dark background); bold keeps
+        // them apart from their labels.
         child: KeyHintBar(
           style: CellStyle(foreground: theme.colorScheme.background),
+          keyStyle: CellStyle(
+            foreground: theme.colorScheme.background,
+            bold: true,
+          ),
         ),
       );
     }

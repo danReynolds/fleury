@@ -1091,6 +1091,8 @@ class TextInput extends StatefulWidget {
   ///
   /// Pass a plain [CellStyle] for the common case. Use [CellStyle.interactive] only
   /// when focus, hover, disabled, or invalid should look different locally.
+  /// Text without a foreground of its own takes the ambient
+  /// [DefaultTextStyle]'s color, as `Text` does.
   final CellStyle style;
 
   /// Style merged on top of [style] at the cursor cell. Defaults to
@@ -2021,7 +2023,15 @@ class _TextInputState extends State<TextInput>
       if (!widget.enabled) CellStyleState.disabled,
       if (validationError != null) CellStyleState.invalid,
     };
-    final cascade = [defaultStyle, theme.interactiveStyle, widget.style];
+    // The text takes the ambient text color, as a Text would, so a themed
+    // subtree's color reaches the field too. Only the color: an inherited
+    // inverse or dim (a highlighted list row) would hide the cursor cue.
+    final cascade = [
+      CellStyle(foreground: DefaultTextStyle.of(context).foreground),
+      defaultStyle,
+      theme.interactiveStyle,
+      widget.style,
+    ];
     final displayStyle = resolveCellStyle(cascade: cascade, states: states);
     // Placeholder paint is a base-layer customization. Active state patches
     // still win, so an empty invalid field does not hide its invalid cue.

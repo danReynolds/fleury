@@ -1865,6 +1865,7 @@ class RenderDataTable extends RenderObject {
        _visibleFirst = viewportStart,
        _revealRevision = revealRevision,
        _currentStyle = currentStyle,
+       _currentOnSelectedStyle = focusCueOnSelection(currentStyle),
        _selectionRange = selectionRange,
        _selectionMode = selectionMode,
        _columnSpacing = columnSpacing,
@@ -1914,6 +1915,7 @@ class RenderDataTable extends RenderObject {
   int _revealRevision;
   int _currentColumn;
   CellStyle _currentStyle;
+  CellStyle _currentOnSelectedStyle;
   bool _revealCurrent = true;
   int _visibleRows = 0;
   int _tableWidth = 0;
@@ -1974,6 +1976,7 @@ class RenderDataTable extends RenderObject {
   set currentStyle(CellStyle value) {
     if (_currentStyle == value) return;
     _currentStyle = value;
+    _currentOnSelectedStyle = focusCueOnSelection(value);
     markNeedsPaintOnly();
   }
 
@@ -2209,7 +2212,10 @@ class RenderDataTable extends RenderObject {
         if (rowIndex == _selectedRow &&
             (_selectionMode == DataTableSelectionMode.row ||
                 col == _currentColumn)) {
-          style = style.merge(_currentStyle);
+          // On a selected cell the current cue adds emphasis only.
+          style = style.merge(
+            selectedCell ? _currentOnSelectedStyle : _currentStyle,
+          );
         }
         _writeCell(
           buffer,
