@@ -4,7 +4,6 @@
 // dependency provides it, and the hand-run smoke test sends requests that this
 // server answers.
 
-import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 
@@ -12,6 +11,8 @@ import 'package:fleury/fleury_host.dart';
 import 'package:fleury/fleury_wire.dart';
 import 'package:fleury_mcp/fleury_mcp.dart';
 import 'package:test/test.dart';
+
+import 'support/fake_app.dart';
 
 void main() {
   final example = File('example/README.md').readAsStringSync();
@@ -54,21 +55,18 @@ void main() {
       );
       expect(smokeTest.requests, hasLength(2));
 
-      final transport = _AppTransport();
+      final transport = FakeAppTransport();
       final bridge = FleuryAppBridge(transport)..start();
       addTearDown(bridge.close);
-      transport.add(
-        InitFrame(
-          size: const CellSize(80, 24),
-          colorMode: ColorMode.truecolor,
-          glyphTier: GlyphTier.unicode,
-          imageProtocol: ImageProtocol.halfBlock,
-          tmuxPassthrough: false,
-          protocolVersion: remoteProtocolVersion,
-        ),
-      );
+      transport.addIncoming(appInit(remoteProtocolVersion));
+      final counter = SemanticInspectionSnapshot.fromJson(<String, Object?>{
+        'schemaVersion': 1,
+        'root': counterRoot(0),
+      });
       final before = bridge.revision;
-      transport.add(SemanticsFrame(SemanticsWireEncoder().encode(_counter)!));
+      transport.addIncoming(
+        SemanticsFrame(SemanticsWireEncoder().encode(counter)!),
+      );
       while (bridge.revision == before) {
         await Future<void>.delayed(Duration.zero);
       }
@@ -118,49 +116,4 @@ void main() {
     ],
     pipe: lines.last.trim(),
   );
-}
-
-/// The app's first frame: a counter with an Increment button.
-final _counter = SemanticInspectionSnapshot.fromJson(<String, Object?>{
-  'schemaVersion': 1,
-  'root': <String, Object?>{
-    'id': 'root',
-    'role': 'app',
-    'label': 'Counter',
-    'children': <Object?>[
-      <String, Object?>{
-        'id': 'count',
-        'role': 'text',
-        'label': 'Count',
-        'value': 0,
-      },
-      <String, Object?>{
-        'id': 'increment',
-        'role': 'button',
-        'label': 'Increment',
-        'actions': <String>['activate'],
-      },
-    ],
-  },
-});
-
-/// An in-memory wire standing in for the spawned app's socket.
-final class _AppTransport
-    with SynchronousSendTransport
-    implements RemoteFrameTransport {
-  final StreamController<RemoteFrame> _incoming =
-      StreamController<RemoteFrame>.broadcast();
-
-  @override
-  Stream<RemoteFrame> get incoming => _incoming.stream;
-
-  @override
-  void send(RemoteFrame frame) {}
-
-  @override
-  Future<void> close() async {
-    if (!_incoming.isClosed) await _incoming.close();
-  }
-
-  void add(RemoteFrame frame) => _incoming.add(frame);
 }
