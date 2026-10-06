@@ -284,13 +284,13 @@ marks where long text and opaque ids are shortened):
     "actions": ["activate", "focus"],
     "childCount": 1,
     "stableId": false,
-    "targetRef": "…:16.1"
+    "targetRef": "…"
   }]
 }
 ```
 
 The agent echoes that exact returned target — for example, `invoke_action
-{"id":"auto:…/button","action":"activate","targetRef":"…:16.1"}`. If a node
+{"id":"auto:…/button","action":"activate","targetRef":"…"}`. If a node
 reports `"stableId": false`, its opaque `targetRef` is required by the
 `2026-07-28` protocol path. Mutating tools return the settled UI, so the next
 target should be selected from that result instead of forcing another full

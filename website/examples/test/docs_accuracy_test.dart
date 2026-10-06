@@ -322,10 +322,11 @@ void main() {
       // "What the agent sees" is real output for the README's counter (its
       // readme_example_e2e_test checks it against the server): a positional
       // `auto:` id and an opaque targetRef that the invoke_action example
-      // echoes back.
+      // echoes back. The targetRef stays fully elided so internal tree
+      // numbering can change without staling the README.
       expect(readme, contains('"id": "auto:…/button"'));
-      expect(readme, contains('"targetRef": "…:16.1"'));
-      expect(readme, contains('"targetRef":"…:16.1"}'));
+      expect(readme, contains('"targetRef": "…"'));
+      expect(readme, contains('"targetRef":"…"}'));
       expect(readme, isNot(contains('element-…')));
     });
 
