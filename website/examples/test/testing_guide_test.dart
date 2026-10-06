@@ -1,28 +1,18 @@
-// One entry point for the Testing guide's checks. The guide shows each test
-// under testing/ whole, as the reader's own test file, and each also runs
-// independently; this file adds the cases the guide only mentions.
+// The Testing guide's checks beyond the tests it shows. The guide shows each
+// file under testing/ whole, as the reader's own test, and the docs gate runs
+// that directory alongside this file. Like those tests, this file imports the
+// examples through package: URIs only, so each library loads once.
 import 'dart:async';
 import 'dart:io';
 
 import 'package:fleury/fleury.dart';
+import 'package:fleury_doc_examples/testing_guide.dart';
 import 'package:fleury_test/fleury_test.dart';
 import 'package:test/test.dart';
 
-import '../lib/testing_guide.dart';
 import 'scenarios/preferences_tests.dart';
-import 'testing/animated_upload_test.dart' as animated_upload;
-import 'testing/counter_test.dart' as counter;
-import 'testing/draft_editor_test.dart' as draft_editor;
-import 'testing/preferences_test.dart' as preferences;
-import 'testing/save_status_test.dart' as save_status;
 
 void main() {
-  group('counter_test.dart', counter.main);
-  group('preferences_test.dart', preferences.main);
-  group('save_status_test.dart', save_status.main);
-  group('animated_upload_test.dart', animated_upload.main);
-  group('draft_editor_test.dart', draft_editor.main);
-
   // The guide's "Run test" button replays the shared scenario, pausing on each
   // step, beside the test the guide shows. Both must be the same steps.
   test('the walkthrough runs the preferences test the guide shows', () {

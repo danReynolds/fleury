@@ -444,6 +444,22 @@ void main() {
           );
         }
       }
+
+      // TestingGuideCode shows any test under test/testing/, so both docs
+      // gates run that directory, not a list of its files.
+      final checkTool = File(
+        p.join(repo.path, 'tool/fleury_dev.dart'),
+      ).readAsStringSync();
+      final checkDocs =
+          (jsonDecode(
+                    File(
+                      p.join(repo.path, 'website/package.json'),
+                    ).readAsStringSync(),
+                  )
+                  as Map<String, Object?>)['scripts']!
+              as Map<String, Object?>;
+      expect(checkTool, contains("'test/testing',"));
+      expect('${checkDocs['check:docs']}'.split(' '), contains('test/testing'));
     });
 
     // The tutorial rewrites lib/app.dart, which Getting started's optional
