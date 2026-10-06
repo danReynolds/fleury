@@ -47,6 +47,7 @@ import 'dart:async';
 import '../animation/animation.dart';
 import '../animation/curves.dart';
 import '../foundation/key.dart';
+import '../foundation/type_names.dart';
 import '../rendering/cell.dart' show Color;
 import '../rendering/render_navigator.dart';
 import '../rendering/render_object.dart';
@@ -1017,7 +1018,9 @@ class _RouteHost extends StatelessWidget {
     content = coveredFadeProgress == null
         ? coveredFade.buildSettled(content)
         : coveredFade.build(content, coveredFadeProgress);
-    final routeName = route.screen.runtimeType.toString();
+    // The screen's class name tells routes apart, in builds that keep class
+    // names; a minified web build leaves the route unnamed.
+    final routeName = readableTypeName(route.screen);
     return Semantics(
       role: SemanticRole.route,
       label: routeName,
@@ -1034,7 +1037,7 @@ class _RouteHost extends StatelessWidget {
             }
           : const <SemanticAction>{},
       state: SemanticState({
-        'routeName': routeName,
+        'routeName': ?routeName,
         'routeIndex': routeIndex,
         'routeDepth': navigator.depth,
         'active': active,

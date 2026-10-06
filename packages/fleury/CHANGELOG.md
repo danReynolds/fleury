@@ -1,5 +1,12 @@
 # Changelog
 
+## Unreleased
+
+- Optimized web builds (`dart compile js -O2` and up) no longer give routes a
+  minified class name such as `minified:jg` as their accessible name, which a
+  screen reader announced for every page; those routes are left unnamed.
+  Native, test, and unminified builds still name a route after its screen class.
+
 ## 0.1.0
 
 Initial public release, October 5, 2026. Requires Dart 3.10.4 or later.
