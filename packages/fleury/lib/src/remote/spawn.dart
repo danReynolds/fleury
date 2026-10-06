@@ -30,37 +30,11 @@ final class SpawnedFleuryApp {
   Future<int> dispose() => _dispose();
 }
 
-/// How long [spawnFleuryApp] waits by default for a spawned app to connect.
-///
-/// The deadline guards against a command that will never connect; it is not a
-/// responsiveness target. A cold `dart run` compiles the whole app before
-/// `runApp` can connect, which takes seconds on a fast machine and several
-/// times longer on a slow or busy one, so a tight deadline fails healthy apps.
-/// Hosts report a slow start through `onSlowStart` instead of giving up early.
-const Duration defaultSpawnConnectTimeout = Duration(seconds: 60);
-
-/// Why [spawnFleuryApp] could not attach to an app it launched.
-enum FleurySpawnFailure {
-  /// The app process exited before it connected.
-  exited,
-
-  /// The app did not connect within the connect deadline.
-  timedOut,
-
-  /// The caller's abort signal fired before the app connected.
-  aborted,
-}
-
 /// Thrown when an app can't be attached — failed to spawn, never connected, or
 /// exited before connecting.
 final class FleurySpawnException implements Exception {
-  const FleurySpawnException(this.message, {this.failure});
+  const FleurySpawnException(this.message);
   final String message;
-
-  /// Why the attach failed, or null when the failure is not one of
-  /// [FleurySpawnFailure].
-  final FleurySpawnFailure? failure;
-
   @override
   String toString() => 'FleurySpawnException: $message';
 }
@@ -81,21 +55,22 @@ final class FleurySpawnException implements Exception {
 /// [onLog] receives the app's own stdout/stderr line by line (sanitized), tagged
 /// `out`/`err`, so the host can forward it without it polluting the wire.
 ///
-/// [abort], if given and it completes before the app connects, abandons the
-/// spawn (tears the process + socket down and throws) — e.g. `fleury serve`
-/// passes the browser-closed signal so a vanished browser doesn't leave an
-/// orphan app.
+/// [abort], if given and it completes (or fails) before the app connects,
+/// abandons the spawn (tears the process + socket down and throws). A host
+/// whose waits all have an owner, such as `fleury serve`, whose browser or
+/// shutdown ends each one, passes a null [connectTimeout] to wait for a slow
+/// start instead of failing it: a cold `dart run` compiles the whole app
+/// before `runApp` can connect, which takes far longer on a busy machine.
 ///
 /// [onSlowStart] runs once if the app is still starting after
-/// [slowStartAfter], so a host can say it is waiting on a compile rather than
-/// look stuck.
+/// [slowStartAfter], so a host can say it is waiting rather than look stuck.
 ///
 /// Throws [FleurySpawnException] on exit-before-connect, timeout, or abort, and
 /// rethrows a [ProcessException] if the command can't be launched.
 Future<SpawnedFleuryApp> spawnFleuryApp({
   required List<String> command,
   String? socketPath,
-  Duration connectTimeout = defaultSpawnConnectTimeout,
+  Duration? connectTimeout = const Duration(seconds: 20),
   Duration killGrace = const Duration(seconds: 2),
   Map<String, String>? environment,
   void Function(String tag, String line)? onLog,
@@ -232,23 +207,38 @@ Future<SpawnedFleuryApp> spawnFleuryApp({
     }
   }
 
-  // Cancellable timer arms, so a successful connect doesn't leave them armed
-  // for the rest of their durations.
+  // Cancellable timer arms, so a connect doesn't leave them armed for the rest
+  // of their durations.
   final timedOut = Completer<Object>();
-  final timer = Timer(connectTimeout, () {
-    if (!timedOut.isCompleted) timedOut.complete(const _ConnectTimedOut());
-  });
-  final slowStartTimer = onSlowStart == null || slowStartAfter >= connectTimeout
+  final timer = connectTimeout == null
+      ? null
+      : Timer(connectTimeout, () {
+          if (!timedOut.isCompleted) {
+            timedOut.complete(const _ConnectTimedOut());
+          }
+        });
+  final slowStartTimer = onSlowStart == null
       ? null
       : Timer(slowStartAfter, onSlowStart);
-  final connection = await Future.any<Object>([
-    server.first,
-    process.exitCode.then((code) => _AppExited(code)),
-    timedOut.future,
-    if (abort != null) abort.then((_) => const _Aborted()),
-  ]);
-  timer.cancel();
-  slowStartTimer?.cancel();
+  Object connection;
+  try {
+    connection = await Future.any<Object>([
+      server.first,
+      process.exitCode.then((code) => _AppExited(code)),
+      if (timer != null) timedOut.future,
+      if (abort != null)
+        abort.then(
+          (_) => const _Aborted(),
+          onError: (Object _) => const _Aborted(),
+        ),
+    ]);
+  } catch (error) {
+    // The listening socket failed, so nothing can connect any more.
+    connection = _AcceptFailed(error);
+  } finally {
+    timer?.cancel();
+    slowStartTimer?.cancel();
+  }
 
   if (connection is! Socket) {
     await outSub.cancel();
@@ -259,26 +249,25 @@ Future<SpawnedFleuryApp> spawnFleuryApp({
     // process is already gone, so this resolves instantly.
     await killProcess();
     await removeSocket();
-    final attempt = 'Failed to attach to `${command.join(' ')}`';
-    throw switch (connection) {
-      _AppExited(:final code) => FleurySpawnException(
-        '$attempt: the app exited (code $code) before connecting. A Fleury '
-        'app connects when it calls runApp(...); its output may say why it '
-        'stopped.',
-        failure: FleurySpawnFailure.exited,
-      ),
-      _Aborted() => FleurySpawnException(
-        '$attempt: aborted before the app connected.',
-        failure: FleurySpawnFailure.aborted,
-      ),
-      _ => FleurySpawnException(
-        '$attempt: the app did not connect within '
-        '${connectTimeout.inSeconds}s. A Fleury app connects when it calls '
-        'runApp(...). A cold `dart run` compiles the app before it starts; an '
-        'executable from `dart compile exe` starts in well under a second.',
-        failure: FleurySpawnFailure.timedOut,
-      ),
+    const connects =
+        'A Fleury app connects through FLEURY_HANDLE when it calls '
+        'runApp(...)';
+    final reason = switch (connection) {
+      _AppExited(:final code) =>
+        'the app exited (code $code) before connecting. $connects; its output '
+            'may say why it stopped.',
+      _Aborted() => 'aborted before the app connected.',
+      _AcceptFailed(:final error) =>
+        "could not accept the app's connection: $error",
+      _ =>
+        'the app did not connect within ${_describe(connectTimeout!)}. '
+            '$connects, so a command that never calls it, or that clears the '
+            'environment, cannot connect. A `dart run` command compiles the '
+            'app first, which takes longer on a busy machine.',
     };
+    throw FleurySpawnException(
+      'Failed to attach to `${command.join(' ')}`: $reason',
+    );
   }
 
   // Connected: stop accepting, so the host only ever reads this one socket. A
@@ -314,9 +303,19 @@ Directory _createHandleDir() {
   return base.createTempSync('fleury-host-');
 }
 
+/// [duration] for a message, without rounding a sub-second deadline to "0s".
+String _describe(Duration duration) => duration.inMilliseconds % 1000 == 0
+    ? '${duration.inSeconds}s'
+    : '${duration.inMilliseconds}ms';
+
 final class _AppExited {
   const _AppExited(this.code);
   final int code;
+}
+
+final class _AcceptFailed {
+  const _AcceptFailed(this.error);
+  final Object error;
 }
 
 final class _ConnectTimedOut {

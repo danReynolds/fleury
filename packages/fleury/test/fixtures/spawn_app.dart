@@ -23,26 +23,6 @@ Future<void> main(List<String> args) async {
   if (args.length > 1 && !args[1].startsWith('--')) {
     Directory.current = args[1];
   }
-  // A slow start: announce the launch, then wait before connecting, the way a
-  // cold `dart run` compiles the app before runApp can connect.
-  for (final arg in args) {
-    if (arg.startsWith('--connect-delay-ms=')) {
-      stderr.writeln('$tag started');
-      await stderr.flush();
-      final delay = int.parse(arg.substring('--connect-delay-ms='.length));
-      await Future<void>.delayed(Duration(milliseconds: delay));
-    }
-    // A slow start that fails: the app stops before it ever connects.
-    if (arg.startsWith('--exit-before-connect-ms=')) {
-      stderr.writeln('$tag started');
-      await stderr.flush();
-      final delay = int.parse(
-        arg.substring('--exit-before-connect-ms='.length),
-      );
-      await Future<void>.delayed(Duration(milliseconds: delay));
-      exit(3);
-    }
-  }
   if (args.contains('--hostile-log')) {
     stderr.writeln('HOSTILE \x1b]52;c;SECRET\x07 after \x1b[2J end');
   }
@@ -58,6 +38,18 @@ Future<void> main(List<String> args) async {
       await Future<void>.delayed(const Duration(milliseconds: 20));
       sink.add([0x99, 0x82, 0x0a]);
       await sink.flush();
+    }
+  }
+  // A slow start: announce the launch, then wait before connecting, the way a
+  // cold `dart run` compiles the app before runApp can connect. With
+  // --exit-before-connect the app stops after the wait instead of connecting.
+  for (final arg in args) {
+    if (arg.startsWith('--connect-delay-ms=')) {
+      stderr.writeln('$tag started');
+      await stderr.flush();
+      final delay = int.parse(arg.substring('--connect-delay-ms='.length));
+      await Future<void>.delayed(Duration(milliseconds: delay));
+      if (args.contains('--exit-before-connect')) exit(3);
     }
   }
   final transport = await UnixSocketFrameTransport.connect(handle);
