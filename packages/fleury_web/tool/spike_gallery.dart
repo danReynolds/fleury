@@ -1,11 +1,12 @@
 // Spike artifact generator: paints a few representative frames into real
-// CellBuffers and emits a self-contained `spike.html` you can open in any
+// CellBuffers and emits a self-contained `build/spike.html` you can open in any
 // browser. This is pure Dart (no browser needed to GENERATE it); opening the
 // result shows exactly what the live DOM presenter will paint, since it uses
-// the same markup + CSS.
+// the same markup + CSS. The page lands in `build/`, which git and pub ignore,
+// so it never ships with the package.
 //
 //   dart run tool/spike_gallery.dart
-//   open spike.html
+//   open build/spike.html
 
 import 'dart:io';
 
@@ -167,6 +168,8 @@ void main() {
     ..writeln(renderScreenHtml(buffer))
     ..writeln('</body></html>');
 
-  final file = File('spike.html')..writeAsStringSync(doc.toString());
+  final file = File('build/spike.html')
+    ..parent.createSync(recursive: true)
+    ..writeAsStringSync(doc.toString());
   stdout.writeln('Wrote ${file.absolute.path}');
 }
