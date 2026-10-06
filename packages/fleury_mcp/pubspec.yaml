@@ -15,6 +15,12 @@ topics:
 executables:
   fleury_mcp: fleury_mcp
 
+# The server reaches its app over a Unix-domain socket and spawns the app as a
+# child process, so it runs on macOS and Linux only.
+platforms:
+  linux:
+  macos:
+
 environment:
   sdk: ^3.10.4
 
