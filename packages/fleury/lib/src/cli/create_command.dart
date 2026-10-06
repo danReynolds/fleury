@@ -121,8 +121,8 @@ Future<int> runCreateCommand(List<String> args) async {
       );
       if (options.dependencySource == _DependencySource.hosted) {
         stderr.writeln(
-          "If the Fleury packages aren't on pub.dev yet, use Git dependencies "
-          'in a different, empty directory: '
+          "If Fleury $fleuryVersion isn't on pub.dev yet, use Git "
+          'dependencies in a different, empty directory: '
           '`fleury create another_app --dependency-source=git`.',
         );
       }
@@ -192,7 +192,11 @@ Map<String, String> _projectFiles({
       description: description,
       dependencySource: dependencySource,
     ),
-    'README.md': _readme(projectName, includeEditorConfig: includeEditorConfig),
+    'README.md': _readme(
+      projectName,
+      includeEditorConfig: includeEditorConfig,
+      dependencySource: dependencySource,
+    ),
     'lib/app.dart': _appSource(className: className, displayName: displayName),
     'bin/run_app.dart': _entrypointSource(
       projectName: projectName,
@@ -287,11 +291,7 @@ class _${className}State extends State<$className> {
           children: [
             Text('Count: \$_count'),
             const SizedBox(height: 1),
-            Button(
-              text: 'Increment',
-              autofocus: true,
-              onPressed: _increment,
-            ),
+            Button(text: 'Increment', autofocus: true, onPressed: _increment),
             const SizedBox(height: 1),
             const Text('Press Enter or click the button.'),
           ],
@@ -302,6 +302,9 @@ class _${className}State extends State<$className> {
 }
 ''';
 
+// The comment inside the argument list keeps this layout `dart format`-stable
+// for short and long class names alike: a line comment forces the list to
+// split, so the formatter never collapses a short name's call onto one line.
 String _entrypointSource({
   required String projectName,
   required String className,
@@ -313,6 +316,7 @@ import 'package:$projectName/app.dart';
 void main(List<String> args) => runApp(
   const $className(),
   args: args,
+  // Mouse reporting lets the Increment button respond to clicks.
   mode: const TerminalMode(mouse: true),
 );
 ''';
@@ -368,7 +372,11 @@ void main() {
 }
 ''';
 
-String _readme(String projectName, {required bool includeEditorConfig}) {
+String _readme(
+  String projectName, {
+  required bool includeEditorConfig,
+  required _DependencySource dependencySource,
+}) {
   final runLead = includeEditorConfig
       ? 'Press F5 in VS Code, or run directly from an interactive terminal:'
       : 'Run directly from an interactive terminal:';
@@ -379,6 +387,30 @@ in `.vscode/settings.json`); the F5 flow requires the official Dart extension
 (`Dart-Code.dart-code`). Fleury needs no custom editor extension.
 '''
       : '';
+  // Each source names the CLI and MCP server that match its framework: a Git
+  // project resolves Fleury from the repository, so its tools come from there
+  // too.
+  final globalCli = switch (dependencySource) {
+    _DependencySource.hosted =>
+      '''
+With the CLI activated globally (`dart pub global activate fleury`), it is
+just `fleury run`.''',
+    _DependencySource.git =>
+      '''
+With the CLI activated globally from the same Git repository, it is just
+`fleury run`.''',
+  };
+  final agentSetup = switch (dependencySource) {
+    _DependencySource.hosted =>
+      '''
+- **Driven by an AI agent** — add the MCP server as a development dependency
+  (`dart pub add --dev fleury_mcp`), then have your MCP host run''',
+    _DependencySource.git =>
+      '''
+- **Driven by an AI agent** — add `fleury_mcp` to `dev_dependencies` with the
+  same Git source as `fleury_test` (`path: packages/fleury_mcp`), then have
+  your MCP host run''',
+  };
   return '''
 # $projectName
 
@@ -393,10 +425,9 @@ dart run fleury run
 ```
 
 The launcher finds `bin/run_app.dart` on its own and compiles the app once.
-With `fleury` activated globally (`dart pub global activate fleury` once the
-packages are on pub.dev, or `--source git` before then) it is just
-`fleury run`. A plain `dart run bin/run_app.dart` also works, with the same
-hot-reload session, but compiles the app twice on a cold start.
+$globalCli
+A plain `dart run bin/run_app.dart` also works, with the same hot-reload
+session, but compiles the app twice on a cold start.
 
 Press Enter or click **Increment**. Press Ctrl+C to quit.
 
@@ -419,8 +450,9 @@ dart test
   and open the printed URL. This streams the unchanged app to a browser tab
   and reloads it when you save. Stop the preview with Ctrl+C in the terminal
   running `serve` (hot restart is unavailable under a serve handle).
-- **Driven by an AI agent** — `fleury_mcp -- dart run bin/run_app.dart` exposes
-  the running UI over the Model Context Protocol, so an agent reads and
+$agentSetup
+  `dart run fleury_mcp -- dart run bin/run_app.dart` from this directory. It
+  exposes the running UI over the Model Context Protocol, so an agent reads and
   operates it by meaning instead of screen-scraping.
 
 Both come from the same widget tree you edit in `lib/app.dart`. Guides, live
