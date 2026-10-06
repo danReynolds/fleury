@@ -546,9 +546,11 @@ final class WireFrameSource implements BrowserFrameSource {
     if (_appProtocolVersion == null &&
         frame is! InitFrame &&
         frame is! ByeFrame) {
+      // No frame type in the message: the serve client is an optimized build,
+      // where a class name is a minified token.
       _teardown(
-        'Fleury wire negotiation failed: the app sent ${frame.runtimeType} '
-        'before echoing INIT.',
+        'Fleury wire negotiation failed: the app sent a frame before echoing '
+        'INIT.',
       );
       return;
     }
