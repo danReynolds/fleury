@@ -80,9 +80,11 @@ Future<int> _run(List<String> args) async {
     return 2;
   }
   if (!attach && (command == null || command.isEmpty)) {
+    // Whether this process came from `dart run fleury_mcp` or a global
+    // `fleury_mcp`, the suggestion only names what follows `--`.
     stderr.writeln(
-      'fleury_mcp requires a command to run the app, e.g. '
-      '`dart run fleury_mcp -- dart run bin/run_app.dart`.',
+      'fleury_mcp requires the command that runs the app after `--`, e.g. '
+      '`-- dart run bin/run_app.dart`.',
     );
     return 2;
   }
@@ -93,10 +95,10 @@ Future<int> _run(List<String> args) async {
     stderr.writeln(
       'fleury_mcp: launching via `dart run` JIT-compiles the app on startup '
       '(seconds). For a faster, repeatable launch, AOT-compile once '
-      '(`dart compile exe bin/run_app.dart -o my_app`) and run '
-      '`dart run fleury_mcp -- ./my_app`. A compiled app turns off '
-      'read_frames, read_logs, and read_errors unless it passes '
-      'DebugConfig(enabled: true) to runApp.',
+      '(`dart compile exe bin/run_app.dart -o my_app`) and give `./my_app` '
+      'as the app command after `--`. A compiled app turns off read_frames, '
+      'read_logs, and read_errors unless it passes DebugConfig(enabled: true) '
+      'to runApp.',
     );
   }
 
@@ -205,5 +207,10 @@ void _printUsage() {
     'through its semantic tree, so an MCP host can read and operate it.',
   );
   stderr.writeln('');
+  stderr.writeln(
+    'From an app that has fleury_mcp as a dev dependency, start it with '
+    '`dart run fleury_mcp`;',
+  );
+  stderr.writeln('once it is globally activated, `fleury_mcp` works alone.');
   stderr.writeln('Example: dart run fleury_mcp -- dart run bin/run_app.dart');
 }
