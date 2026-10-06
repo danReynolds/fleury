@@ -453,6 +453,8 @@ class _Runner {
         'test/api_extract_test.dart',
         'test/docs_accuracy_test.dart',
         'test/doc_snippets_test.dart',
+        // The fleury README's test fence, verbatim (docs_accuracy pins it).
+        'test/counter_quickstart_test.dart',
         'test/testing_guide_test.dart',
         'test/input_guide_test.dart',
         'test/lists_guide_test.dart',

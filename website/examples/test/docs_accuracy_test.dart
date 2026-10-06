@@ -223,6 +223,30 @@ void main() {
       );
     });
 
+    // The README's test fence used to be a fragment: `testWidgets` at top
+    // level, with no `main` and no import of the `CounterApp` it pumps, so it
+    // failed to compile as copied. Pin it to a test file the docs gate runs
+    // against that same counter.
+    test('fleury README embeds the compiled counter test', () {
+      final readme = File(
+        p.join(repo.path, 'packages/fleury/README.md'),
+      ).readAsStringSync();
+      final compiledTest = File(
+        p.join(repo.path, 'website/examples/test/counter_quickstart_test.dart'),
+      ).readAsStringSync();
+      final firstImport = compiledTest.indexOf(
+        "import 'package:fleury/fleury.dart';",
+      );
+
+      expect(firstImport, isNonNegative);
+      expect(
+        _dartFences(
+          readme,
+        ).singleWhere((fence) => fence.contains('testWidgets(')).trim(),
+        compiledTest.substring(firstImport).trim(),
+      );
+    });
+
     test('fleury_web README embeds the compile-checked mountApp example', () {
       final readme = File(
         p.join(repo.path, 'packages/fleury_web/README.md'),
@@ -583,6 +607,13 @@ String _firstDartFence(String markdown) {
   }
   return match.group(1)!;
 }
+
+List<String> _dartFences(String markdown) => [
+  for (final match in RegExp(
+    r'```dart[^\n]*\n([\s\S]*?)\n```',
+  ).allMatches(markdown))
+    match.group(1)!,
+];
 
 extension on String {
   bool containsPattern(Pattern pattern) {
