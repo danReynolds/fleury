@@ -223,52 +223,6 @@ void main() {
       );
     });
 
-    // pub.dev shows example/README.md on the package's Example tab, so it gets
-    // the same byte-for-byte pin as the package README's quickstart.
-    test('fleury example README embeds the compile-checked counter', () {
-      final readme = File(
-        p.join(repo.path, 'packages/fleury/example/README.md'),
-      ).readAsStringSync();
-      final compiledExample = File(
-        p.join(repo.path, 'packages/fleury/example/counter_quickstart.dart'),
-      ).readAsStringSync();
-      final firstImport = compiledExample.indexOf(
-        "import 'package:fleury/fleury.dart';",
-      );
-
-      expect(firstImport, isNonNegative);
-      expect(
-        _firstDartFence(readme).trim(),
-        compiledExample.substring(firstImport).trim(),
-      );
-    });
-
-    // The run list names every example, only examples that exist, and runs
-    // the file each line names.
-    test('fleury example README lists exactly the shipped examples', () {
-      final package = p.join(repo.path, 'packages/fleury');
-      final readme = File(
-        p.join(package, 'example/README.md'),
-      ).readAsStringSync();
-      final shipped = Directory(p.join(package, 'example'))
-          .listSync(recursive: true)
-          .whereType<File>()
-          .where((file) => file.path.endsWith('.dart'))
-          .map((file) => p.relative(file.path, from: package))
-          .map((path) => p.split(path).join('/'))
-          .toSet();
-      final entries = RegExp(
-        r'^- `(example/[\w/]+\.dart)`, .+: '
-        r'`dart run (?:fleury run )?(example/[\w/]+\.dart)`$',
-        multiLine: true,
-      ).allMatches(readme).toList();
-
-      expect(entries.map((entry) => entry.group(1)).toSet(), shipped);
-      for (final entry in entries) {
-        expect(entry.group(2), entry.group(1), reason: entry.group(0));
-      }
-    });
-
     test('fleury_web README embeds the compile-checked mountApp example', () {
       final readme = File(
         p.join(repo.path, 'packages/fleury_web/README.md'),
@@ -313,6 +267,52 @@ void main() {
         example.substring(firstImport).trim(),
       );
       expect(collapse(page), contains(collapse(htmlFence)));
+    });
+
+    // pub.dev shows example/README.md on the package's Example tab, so it gets
+    // the same byte-for-byte pin as the package README's quickstart.
+    test('fleury example README embeds the compile-checked counter', () {
+      final readme = File(
+        p.join(repo.path, 'packages/fleury/example/README.md'),
+      ).readAsStringSync();
+      final compiledExample = File(
+        p.join(repo.path, 'packages/fleury/example/counter_quickstart.dart'),
+      ).readAsStringSync();
+      final firstImport = compiledExample.indexOf(
+        "import 'package:fleury/fleury.dart';",
+      );
+
+      expect(firstImport, isNonNegative);
+      expect(
+        _firstDartFence(readme).trim(),
+        compiledExample.substring(firstImport).trim(),
+      );
+    });
+
+    // The run list names every example, only examples that exist, and runs
+    // the file each line names.
+    test('fleury example README lists exactly the shipped examples', () {
+      final package = p.join(repo.path, 'packages/fleury');
+      final readme = File(
+        p.join(package, 'example/README.md'),
+      ).readAsStringSync();
+      final shipped = Directory(p.join(package, 'example'))
+          .listSync(recursive: true)
+          .whereType<File>()
+          .where((file) => file.path.endsWith('.dart'))
+          .map((file) => p.relative(file.path, from: package))
+          .map((path) => p.split(path).join('/'))
+          .toSet();
+      final entries = RegExp(
+        r'^- `(example/[\w/]+\.dart)`, .+: '
+        r'`dart run (?:fleury run )?(example/[\w/]+\.dart)`$',
+        multiLine: true,
+      ).allMatches(readme).toList();
+
+      expect(entries.map((entry) => entry.group(1)).toSet(), shipped);
+      for (final entry in entries) {
+        expect(entry.group(2), entry.group(1), reason: entry.group(0));
+      }
     });
 
     test('agent guide keeps custom semantic ids typed', () {
