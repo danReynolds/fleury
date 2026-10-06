@@ -244,8 +244,10 @@ Stop the preview with `Ctrl+C` in the terminal running `serve`.
 `serve` needs the native process running. To ship the app as a static page with
 no backend, compile it to JavaScript instead. The app code in the bundle must
 use the **web-safe** `fleury_core.dart` library, which includes the entire
-widget catalog, instead of the native `fleury.dart` library: dart2js compiles
-code that imports `dart:io`, but that code throws when it runs in the browser.
+widget catalog, instead of the native `fleury.dart` library. The native library
+imports `dart:ffi` for its terminal driver, so dart2js rejects a bundle that
+imports it at compile time, with `Dart library 'dart:ffi' is not available on
+this platform`.
 
 Add `fleury_web` and `web` to `pubspec.yaml`, merging these entries into the
 existing `dependencies:` section (do not add a second section):
