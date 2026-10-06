@@ -1,10 +1,5 @@
 # Changelog
 
-## Unreleased
-
-- Waits up to 60 seconds for a spawned app to connect (was 20) and logs a note
-  when a cold `dart run` is still compiling the app after 10 seconds.
-
 ## 0.1.0
 
 Initial public release, October 5, 2026. Requires Dart 3.10.4 or later and
