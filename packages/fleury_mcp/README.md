@@ -240,7 +240,7 @@ initialization path remains available:
 printf '%s\n' \
   '{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2025-06-18","capabilities":{}}}' \
   '{"jsonrpc":"2.0","id":2,"method":"tools/call","params":{"name":"get_ui","arguments":{}}}' \
-  | fleury_mcp -- dart run bin/run_app.dart
+  | dart run fleury_mcp -- dart run bin/run_app.dart
 ```
 
 A cold `dart run` JIT-compiles the app first, which can take a few seconds — if

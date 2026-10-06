@@ -138,6 +138,11 @@ void main() {
             'test/docs_accuracy_test.dart test/doc_snippets_test.dart',
           ),
         );
+        // fleury_web's pub.dev example is compiled, not just analyzed.
+        expect(
+          fullCheck.stdout,
+          contains('(packages/fleury_web) dart compile js example/main.dart'),
+        );
 
         final coverage = await _runTool(['--dry-run', 'coverage', '--strict']);
         expect(coverage.exitCode, 0, reason: coverage.stderr.toString());

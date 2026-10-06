@@ -489,6 +489,16 @@ class _Runner {
         '${Directory.systemTemp.path}/fleury-check-examples.js',
         '-O1',
       ], workingDirectory: webExamples);
+      // fleury_web's pub.dev example — the README's mountApp app — compiles
+      // the way the README tells users to build it.
+      await _run('dart', [
+        'compile',
+        'js',
+        'example/main.dart',
+        '-o',
+        '${Directory.systemTemp.path}/fleury-check-web-example.js',
+        '-O1',
+      ], workingDirectory: web);
 
       // The fleury integration batch runs LAST so every other package's
       // analysis and tests have reported by the time it can abort the run.
