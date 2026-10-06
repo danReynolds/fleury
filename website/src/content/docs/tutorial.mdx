@@ -69,6 +69,13 @@ class FilterApp extends StatelessWidget {
 }
 ```
 
+If you built Getting started's optional
+[browser bundle](/fleury/getting-started/#6-optional-ship-a-browser-bundle),
+`web/main.dart` imports this file too. Keep
+`import 'package:fleury/fleury_core.dart';` at the top of `lib/app.dart`, here
+and in the finished file at the end: every widget in this tutorial is part of
+it, and `dart compile js` rejects the native `fleury.dart`.
+
 The existing test also needs to follow the screen you just replaced. Use this
 small smoke test for the rest of the tutorial:
 
