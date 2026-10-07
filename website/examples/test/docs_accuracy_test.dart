@@ -420,6 +420,31 @@ void main() {
     // A globally activated server must be the release that matches the app's
     // Fleury: the INIT handshake rejects any other. Docs that pin the version
     // to activate must name the one this checkout publishes.
+    // Fleury Pad's image build runs `dart pub get --enforce-lockfile` against
+    // this lock, which names the in-repo packages by version. The 0.1.1 bump
+    // left it at 0.1.0, and both release tags then failed to build the Pad.
+    test('the Fleury Pad lock pins the checked-out Fleury packages', () {
+      final lock = File(
+        p.join(
+          repo.path,
+          'experiments/fleury_pad/dartpad/project.pubspec.lock',
+        ),
+      ).readAsStringSync();
+      for (final package in const ['fleury', 'fleury_web']) {
+        final entry = RegExp(
+          '\\n  $package:\\n(?:    .*\\n)*?    version: "([^"]+)"',
+        ).firstMatch(lock);
+        expect(entry, isNotNull, reason: '$package is missing from the lock');
+        expect(
+          entry!.group(1),
+          _pubspecVersion(repo, package),
+          reason:
+              'regenerate experiments/fleury_pad/dartpad/project.pubspec.lock '
+              'after a version bump',
+        );
+      }
+    });
+
     test('documented fleury_mcp activations pin its pubspec version', () {
       final version = _pubspecVersion(repo, 'fleury_mcp');
       final activation = RegExp(
