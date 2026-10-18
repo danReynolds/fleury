@@ -1,4 +1,4 @@
-schema = 2
+schema = 3
 
 [release.fleury]                 # tag also verifies/deploys the matching Pad build
 path = "packages/fleury"
